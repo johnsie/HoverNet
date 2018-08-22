@@ -80,6 +80,11 @@ MainMenuScene::MainMenuScene(Display::Display &display, GameDirector &director,
 		Vec2(1280, sliderHeight));
 	menuContainer->SetPos(0, 720 - sliderHeight + 2);
 
+
+
+	AddButton(_("Test Button"), true, true)->GetClickedSignal().connect(
+		std::bind(&MainMenuScene::OnPracticeClicked, this));
+
 	AddButton(_("Practice"), true, true)->GetClickedSignal().connect(
 		std::bind(&MainMenuScene::OnPracticeClicked, this));
 	AddButton(_("Multiplayer"), false)->GetClickedSignal().connect(
