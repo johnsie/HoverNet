@@ -82,8 +82,6 @@ MainMenuScene::MainMenuScene(Display::Display &display, GameDirector &director,
 
 
 
-	AddButton(_("Test Button"), true, true)->GetClickedSignal().connect(
-		std::bind(&MainMenuScene::OnPracticeClicked, this));
 
 	AddButton(_("Practice"), true, true)->GetClickedSignal().connect(
 		std::bind(&MainMenuScene::OnPracticeClicked, this));
