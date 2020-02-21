@@ -40,13 +40,13 @@ Download the boost libraries from http://sourceforge.net/projects/boost/files/bo
  
 Run the exe and install it
 
-Download the latest version of Cmake for Windows (known to work with Cmake 3.1) from https://cmake.org/download/ and install that
+Download the latest version of Cmake for Windows (known to work with Cmake 3.1) from https://cmake.org/download/ and install that. It's a Windows front end, you you wont have to do any command line magic.
 
-Clone this repository to your computer whatever way you want. Open from Github in Visual Studio works ok for this, but dont bother buidling it just yet... There's no solution file or project files anyway
+Clone this repository to your computer whatever way you want (Open from Github in Visual Studio works ok for this, but dont bother buidling it just yet... There's no solution file or project files anyway. You could also use a git client to do this, that's up to you)
 
-If you've cloned it in  Visual Studio, now close Visual Studio
+If you've cloned it in  Visual Studio, now close Visual Studio. Changing files outside of Visual Studio makes it go bezerk.
 
-Now Fire up cmake and enter the following details:
+Now fire up Cmake and enter the following details:
 
 Where is the source code?  Wherever you cloned the github to eg: C:/Users/johnise/Source/Repos/HoverRace 
 
