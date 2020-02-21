@@ -1,4 +1,4 @@
-HoverRace
+aHoverRace
 =========
 
 <http://www.hoverrace.com/>
@@ -31,7 +31,7 @@ Source documentation: <http://hoverrace.github.io/API/>
 
 HoverRace wiki: <https://github.com/HoverRace/HoverRace/wiki>
 
-Building on Windows (Version 2.1J on Visual Studio 2015) 
+Building on Windows (Version 2.1J on Visual Studio 2015 - New Documentation - updated 21/02/2020) 
 -----
 
 IMPORTANT: The project in this repository doesn't have a Visual Studio solution file, or project files. So we will need to generate them using CMake. We also need the Boot Libraries. Don't click build in Visual Studio until the following tasks are completed:
@@ -50,7 +50,7 @@ Now fire up Cmake and enter the following details:
 
 Where is the source code?  Wherever you cloned the github to eg: C:/Users/johnise/Source/Repos/HoverRace 
 
-Where to build the Binaries? This is where the real Visual Studio project will go.  You can decide this. The .sln file for the project will be created there. Put it in your favourite place to keep Visual Studio projects
+Where to build the Binaries? This is where a brand spanking new set of Visual Studio project will go.  You can decide this. The .sln file for the project will be created there. Put it in your favourite place to keep Visual Studio projects. I would recommend putting it in a completely new folder somewhere.
 
 Now click the "Add entry" button to create the following two settings:
 
