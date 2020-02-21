@@ -31,10 +31,9 @@ Source documentation: <http://hoverrace.github.io/API/>
 
 HoverRace wiki: <https://github.com/HoverRace/HoverRace/wiki>
 
-
-
 Developing on Windows (2.0)
-Michael Imamura edited this page on 19 Sep 2015 · 15 revisions
+-----
+
 This is preliminary documentation for HoverRace 2.0 using CMake. For the stable (1.24) branch, see: Windows Development Environment
 
 Supported compilers on Windows
