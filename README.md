@@ -31,7 +31,38 @@ Source documentation: <http://hoverrace.github.io/API/>
 
 HoverRace wiki: <https://github.com/HoverRace/HoverRace/wiki>
 
-Developing on Windows (2.0)
+Building on Windows (Version 2.1J on Visual Studio 2015) 
+-----
+
+IMPORTANT: The project in this repository doesn't have a Visual Studio solution file, or project files. So we will need to generate them using CMake. We also need the Boot Libraries. Don't click build in Visual Studio until the following tasks are completed:
+
+Download the boost libraries from http://sourceforge.net/projects/boost/files/boost-binaries/1.59.0/boost_1_59_0-msvc-14.0-32.exe/download
+ 
+Run the exe and install it
+
+Download the latest version of Cmake for Windows (known to work with Cmake 3.1) from https://cmake.org/download/ and install that
+
+Clone this repository to your computer whatever way you want. Open from Github in Visual Studio works ok for this, but dont bother buidling it just yet... There's no solution file or project files anyway
+
+If you've cloned it in  Visual Studio, now close Visual Studio
+
+Now Fire up cmake and enter the following details:
+
+Where is the source code?  Wherever you cloned the github to eg: C:/Users/johnise/Source/Repos/HoverRace 
+
+Where to build the Binaries? This is where the real Visual Studio project will go.  You can decide this. The .sln file for the project will be created there. Put it in your favourite place to keep Visual Studio projects
+
+Now click the "Add entry" button to create the following two settings:
+
+BOOST_INCLUDEDIR (string) - Typically, the root of your Boost installation (e.g. "C:\local\boost_1_59")
+BOOST_LIBRARYDIR (string) - Where the 32-bit Boost libraries were installed (e.g. "C:\local\boost_1_59\lib32-msvc-14.0")
+
+
+Click 'Configure' and when the box somes up asking for some more settings, just leave it with the default settings
+
+When that has finished, click 'Generate'. This will create the Sln file in the folder that you choose for "Where to build the binaries". Open the solution  in that folder and you should have a Visual Studio project that builds normally.
+
+Developing on Windows (2.0 Old Documentation)
 -----
 
 This is preliminary documentation for HoverRace 2.0 using CMake. For the stable (1.24) branch, see: Windows Development Environment
