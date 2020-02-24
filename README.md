@@ -96,6 +96,9 @@ Try building the project. If you get typinfo.h errors try changing typeinfo.h to
 
 I'm having some issues with Luabind at the moment which has some known incompatibilties with later versions of boost. I'm going to try replacing luabind in the game source with a newer version of luabind which supposedely has the fix applied. If that works then I'll update the code and delete this part of the instructions.
 
+Note to self. This is the version of luabind that supposedly has the fix applied (Files are in luabind folder in that repo and should be placed in include/luabind in the folder you installed the source code into)
+https://github.com/rpavlik/luabind
+
 
 
 
