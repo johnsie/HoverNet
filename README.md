@@ -62,6 +62,44 @@ Click 'Configure' and when the box somes up asking for some more settings, just 
 
 When that has finished, click 'Generate'. This will create the Sln file in the folder that you choose for "Where to build the binaries". Open the solution  in that folder and you should have a Visual Studio project that builds normally.
 
+
+
+Developing on Windows (1.24 New Documentation - Visual Studio 2019)
+-----
+
+1.24 compiles directly in Visual Studio without need for CMake. There are some things you'll need to do though:
+
+Download and isntall the necessary boost library binaries.
+https://sourceforge.net/projects/boost/files/boost-binaries/1.72.0/
+
+Msvc-142 works with VS2019, you'll notice there are no 32 bit versions. We'll be compiling in 64-bitif that works
+
+Clone the 1.24 of branch of this project from github in Visual Studio and open the sln in visual studio
+
+Click View->Other Windows->Property Manager in Visual Studio to show the properties managers
+
+Select all the projects in the properting manager yousing shift and the arrow keys after clicking one of them
+
+Right click and click "properties"
+
+
+On the left tab of the window that comes up select VC++ directories
+
+Add your boost folder into "include directories". Make sure you click "apply" when you do this.
+
+Add your lib64-msvc-14.2 folder to "Library directories" and also click apply
+
+On the top main menu in visual studio change the debug and release from 32 bit to 64 bit for each project.
+
+Try building the project. If you get typinfo.h errors try changing typeinfo.h to typeinfo in the code (typeinfo.h references are deprecated)
+
+
+I'm having some issues with Luabind at the moment which has some known incompatibilties with later versions of boost. I'm going to try replacing luabind in the game source with a newer version of luabind which supposedely has the fix applied. If that works then I'll update the code and delete this part of the instructions.
+
+
+
+
+
 Developing on Windows (2.0 Old Documentation)
 -----
 
