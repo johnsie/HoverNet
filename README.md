@@ -107,6 +107,11 @@ https://stackoverflow.com/questions/31113172/transformation-of-c-code-from-32-bi
 https://docs.microsoft.com/en-gb/windows/win32/api/winuser/nc-winuser-dlgproc?redirectedfrom=MSDN
 
 
+***Change retun type of the dlgProc from BOOL whateeever what ever to INT_PTR**
+****Also in the functiin itself make sure the BOOL return whatever is changed to an INT_PTR
+***And in the .h file for the dialog you also need to change the type from Bool to INT_PTR
+
+
 Developing on Windows (2.0 Old Documentation)
 -----
 
