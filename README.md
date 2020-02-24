@@ -69,6 +69,8 @@ Developing on Windows (1.24 New Documentation - Visual Studio 2019)
 
 1.24 compiles directly in Visual Studio without need for CMake. There are some things you'll need to do though:
 
+Make sure Visual Studio is installed with the MFC C++ Components for X86 and 64 bit. This can be done at install time  or by using add/remove programs and use the "change" option. Particularly with VS2019 you want to be looking at the 142 version of of these components. 
+
 Download and isntall the necessary boost library binaries.
 https://sourceforge.net/projects/boost/files/boost-binaries/1.72.0/
 
