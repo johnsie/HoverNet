@@ -100,7 +100,11 @@ Note to self. This is the version of luabind that supposedly has the fix applied
 https://github.com/rpavlik/luabind
 
 
+Next issue is the calls to dialogboxparamW. On 32 bit this worked, but now that we are doing 64 bit we need to change the return type. See possible solution in stackoverflow
 
+https://stackoverflow.com/questions/31113172/transformation-of-c-code-from-32-bit-to-64-bit
+
+https://docs.microsoft.com/en-gb/windows/win32/api/winuser/nc-winuser-dlgproc?redirectedfrom=MSDN
 
 
 Developing on Windows (2.0 Old Documentation)
