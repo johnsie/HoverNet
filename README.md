@@ -100,7 +100,7 @@ Note to self. This is the version of luabind that supposedly has the fix applied
 https://github.com/rpavlik/luabind
 
 
-Next issue is the calls to dialogboxparamW. On 32 bit this worked, but now that we are doing 64 bit we need to change the return type. See possible solution in stackoverflow
+Next issue is the calls to dialogboxparamW. On 32 bit this worked, but now that we are doing 64 bit we need to change the return type. Bool is an alias for a 32 bit int, but in 64 bit we need it to be a 64 bit int, so really we need to be returning an int_pr instead of a bool. See possible solution in stackoverflow
 
 https://stackoverflow.com/questions/31113172/transformation-of-c-code-from-32-bit-to-64-bit
 
