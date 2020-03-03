@@ -4,6 +4,8 @@
 //
 // Copyright (c) 2009 Michael Imamura.
 //
+// Derivative Work by Geoffrey White, 2020.
+//
 // Licensed under GrokkSoft HoverRace SourceCode License v1.0(the "License");
 // you may not use this file except in compliance with the License.
 //
@@ -91,8 +93,11 @@ BOOL CALLBACK AboutDialog::DlgFunc(HWND pWindow, UINT pMsgId, WPARAM pWParam, LP
 					_("with contributions from (in alphabetical order)") << ":\r\n"
 					"\r\n"
 					"Austin L. Brock\r\n"
-					"Ryan Curtin\r\n"
-					"Michael Imamura\r\n"
+					"Cong - https://github.com/cxong\r\n"
+					"Ryan Curtin - https://github.com/rcurtin\r\n"
+					"Michael Imamura - https://github.com/ZoogieZork\r\n"
+					"John McCourt - https://github.com/johnsie\r\n"
+					"Geoffrey White - https://github.com/geoff-white\r\n"
 					"\r\n" <<
 					_("and with the help of the many testers willing to put up with bugs and other strange happenings.") << "\r\n"
 					"\r\n" <<
@@ -104,6 +109,9 @@ BOOL CALLBACK AboutDialog::DlgFunc(HWND pWindow, UINT pMsgId, WPARAM pWParam, LP
 					"\r\n"
 					"Boost C++ Libraries\r\n"
 					"  http://www.boost.org/\r\n"
+					"\r\n"
+					"Font Awesome - Dave Gandy\r\n"
+					"  http://fontawesome.io/\r\n"
 					"\r\n"
 					"libcurl - Daniel Stenberg and contributors.\r\n"
 					"  http://curl.haxx.se/\r\n"
