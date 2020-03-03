@@ -14,7 +14,7 @@ Geoffrey White - https://github.com/geoff-white
 
 and with the help of the many testers willing to put up with bugs and other strange happenings.
 
-Visit us at http://www.hovernet.co.uk/
+Visit us at http://www.hoverrace.org/
 
 HoverRace © Richard Langlois, Grokksoft Inc.
 
