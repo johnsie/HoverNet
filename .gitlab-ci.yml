@@ -12,7 +12,7 @@ stages:
 
 variables:
   GIT_DEPTH: "20"
-  LINUX_RUNNER_TAG: "linux"
+  LINUX_RUNNER_TAG: "race-server"
   WINDOWS_RUNNER_TAG: "windows"
   SERVER_RUNNER_TAG: "race-server"
   CMAKE_BUILD_PARALLEL_LEVEL: "2"
@@ -22,7 +22,6 @@ default:
 
 lint:gitlab-ci:
   stage: validate
-  image: alpine:3.20
   tags: ["$LINUX_RUNNER_TAG"]
   script:
     - test -f .gitlab-ci.yml
@@ -32,8 +31,8 @@ build:raceserver:linux:
   stage: build
   tags: ["$LINUX_RUNNER_TAG"]
   script:
-    - cmake -S NetTarget/RaceServer -B build/raceserver -DCMAKE_BUILD_TYPE=Release
-    - cmake --build build/raceserver --parallel
+    - mkdir -p build/raceserver
+    - g++ -std=c++14 -O2 -pthread -I NetTarget/RaceServer -I NetTarget/RaceServer/NetworkInterface -I NetTarget/RaceServer/GameSimulation -I NetTarget/RaceServer/RaceManager -I NetTarget/RaceServer/Config -I NetTarget/RaceServer/Logging $(find NetTarget/RaceServer -path '*/build/*' -prune -o -name '*.cpp' -print) -o build/raceserver/RaceServer
     - test -x build/raceserver/RaceServer
   artifacts:
     expire_in: 7 days

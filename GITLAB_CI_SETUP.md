@@ -6,9 +6,8 @@ The pipeline builds and packages the central `RaceServer` as an Ubuntu `amd64` D
 
 Configure protected runners with these tags, or override the CI variables in GitLab:
 
-- `linux`: CMake, a C++14 compiler, `dpkg-deb`, and Bash.
+- `race-server`: C++14 compiler, `dpkg-deb`, Bash, and narrowly scoped deployment privileges. It builds/packages the server and deploys tagged releases.
 - `windows`: PowerShell, Visual Studio MSBuild, all client dependencies, and Inno Setup (`iscc` on `PATH`).
-- `race-server`: the runner on `192.168.10.181`, with passwordless `sudo` only for `/usr/local/sbin/hovernet-deploy`. This runner installs the already-built package; it does not compile the server.
 
 Mark the `race-server` runner and the production environment as protected. The deploy job is manual and runs only for a protected Git tag.
 
