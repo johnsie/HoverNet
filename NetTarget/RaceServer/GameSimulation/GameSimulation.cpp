@@ -12,7 +12,7 @@ GameSimulation::GameSimulation()
       mRaceStarted(FALSE),
       mRaceComplete(FALSE)
 {
-    ZeroMemory(&mState, sizeof(mState));
+    memset(&mState, 0, sizeof(mState));
     mState.mNumPlayers = 0;
     mState.mNumElements = 0;
 }
@@ -27,7 +27,7 @@ BOOL GameSimulation::Initialize(
     BOOL allowWeapons,
     int maxPlayers)
 {
-    strcpy_s(mState.mTrackName, sizeof(mState.mTrackName), trackName);
+    snprintf(mState.mTrackName, sizeof(mState.mTrackName), "%s", trackName);
     mState.mNumLaps = numLaps;
     mState.mWeaponsAllowed = allowWeapons;
     mMaxPlayers = maxPlayers;
@@ -51,7 +51,7 @@ int GameSimulation::AddPlayer(int clientId, const char* playerName)
     GameState::PlayerState& player = mState.mPlayers[playerIndex];
 
     player.mClientId = clientId;
-    strcpy_s(player.mName, sizeof(player.mName), playerName);
+    snprintf(player.mName, sizeof(player.mName), "%s", playerName);
     player.mPosition.x = 0;
     player.mPosition.y = 0;
     player.mPosition.z = 0;

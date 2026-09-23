@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 || ! -f $1 ]]; then
+    echo "Usage: hovernet-deploy /absolute/path/to/hovernet-raceserver_<version>_amd64.deb" >&2
+    exit 64
+fi
+
+package_path=$(readlink -f -- "$1")
+runner_root=/home/gitlab-runner/builds/
+
+case "$package_path" in
+    "$runner_root"*/dist/hovernet-raceserver_*_amd64.deb) ;;
+    *)
+        echo "Refusing package outside the GitLab Runner build directory." >&2
+        exit 65
+        ;;
+esac
+
+dpkg-deb --field "$package_path" Package | grep -Fxq hovernet-raceserver
+dpkg -i -- "$package_path"
+systemctl enable --now hovernet-raceserver.service
+systemctl --no-pager --full status hovernet-raceserver.service

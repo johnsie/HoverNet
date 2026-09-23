@@ -17,7 +17,7 @@ ClientConnection::ClientConnection()
       mAuthenticated(FALSE)
 {
     mPlayerName[0] = '\0';
-    ZeroMemory(&mUdpAddr, sizeof(mUdpAddr));
+    memset(&mUdpAddr, 0, sizeof(mUdpAddr));
 }
 
 ClientConnection::~ClientConnection()

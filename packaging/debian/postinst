@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+  configure)
+    if ! getent group hovernet >/dev/null; then
+      addgroup --system hovernet
+    fi
+    if ! getent passwd hovernet >/dev/null; then
+      adduser --system --no-create-home --ingroup hovernet --home /nonexistent hovernet
+    fi
+    install -d -o hovernet -g hovernet -m 0750 /var/log/hovernet
+    systemctl daemon-reload
+    ;;
+esac
+
+#DEBHELPER#

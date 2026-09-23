@@ -16,8 +16,8 @@ MR_ServerConfig::MR_ServerConfig()
       mLogLevel(1),  // MR_LOG_INFO
       mInternetRoomPort(80)
 {
-    strcpy_s(mLogFile, sizeof(mLogFile), "raceserver.log");
-    strcpy_s(mInternetRoomHost, sizeof(mInternetRoomHost), "localhost");
+    snprintf(mLogFile, sizeof(mLogFile), "%s", "raceserver.log");
+    snprintf(mInternetRoomHost, sizeof(mInternetRoomHost), "%s", "localhost");
 }
 
 BOOL MR_ServerConfig::LoadFromFile(const char* filename)

@@ -8,25 +8,22 @@
 MR_ServerLogger::MR_ServerLogger()
     : mpLogFile(NULL), mMinLevel(MR_LOG_DEBUG)
 {
-    InitializeCriticalSection(&mLock);
 }
 
 MR_ServerLogger::~MR_ServerLogger()
 {
     Close();
-    DeleteCriticalSection(&mLock);
 }
 
 BOOL MR_ServerLogger::Initialize(const char* logfilePath, int minLevel)
 {
-    EnterCriticalSection(&mLock);
+    std::lock_guard<std::mutex> lock(mLock);
 
     mMinLevel = minLevel;
     
     // Open log file in append mode
-    errno_t err = fopen_s(&mpLogFile, logfilePath, "a");
-    if (err != 0 || mpLogFile == NULL) {
-        LeaveCriticalSection(&mLock);
+    mpLogFile = fopen(logfilePath, "a");
+    if (mpLogFile == NULL) {
         return FALSE;
     }
 
@@ -38,7 +35,6 @@ BOOL MR_ServerLogger::Initialize(const char* logfilePath, int minLevel)
     fprintf(mpLogFile, "===========================================\n");
     fflush(mpLogFile);
 
-    LeaveCriticalSection(&mLock);
     return TRUE;
 }
 
@@ -59,13 +55,17 @@ void MR_ServerLogger::Log(int level, const char* format, ...)
         return;  // Skip logs below minimum level
     }
 
-    EnterCriticalSection(&mLock);
+    std::lock_guard<std::mutex> lock(mLock);
 
     if (mpLogFile) {
         // Get current time
         time_t now = time(NULL);
         struct tm timeinfo;
+    #ifdef _WIN32
         localtime_s(&timeinfo, &now);
+    #else
+        localtime_r(&now, &timeinfo);
+    #endif
         char timestr[32];
         strftime(timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", &timeinfo);
 
@@ -90,24 +90,21 @@ void MR_ServerLogger::Log(int level, const char* format, ...)
         printf("\n");
     }
 
-    LeaveCriticalSection(&mLock);
 }
 
 void MR_ServerLogger::Flush()
 {
-    EnterCriticalSection(&mLock);
+    std::lock_guard<std::mutex> lock(mLock);
     if (mpLogFile) {
         fflush(mpLogFile);
     }
-    LeaveCriticalSection(&mLock);
 }
 
 void MR_ServerLogger::Close()
 {
-    EnterCriticalSection(&mLock);
+    std::lock_guard<std::mutex> lock(mLock);
     if (mpLogFile) {
         fclose(mpLogFile);
         mpLogFile = NULL;
     }
-    LeaveCriticalSection(&mLock);
 }

@@ -5,9 +5,35 @@
 
 #pragma once
 
-#define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <winsock2.h>
+#pragma comment(lib, "ws2_32.lib")
+#else
+#include <arpa/inet.h>
+#include <cerrno>
+#include <csignal>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+typedef int BOOL;
+typedef int SOCKET;
+typedef socklen_t SocketLength;
+
+#define TRUE 1
+#define FALSE 0
+#define INVALID_SOCKET (-1)
+#define SOCKET_ERROR (-1)
+
+inline int closesocket(SOCKET socket) { return close(socket); }
+inline int WSAGetLastError() { return errno; }
+inline int WSAStartup(unsigned short, void*) { return 0; }
+inline int WSACleanup() { return 0; }
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,9 +47,9 @@
 #include <string>
 #include <memory>
 #include <algorithm>
-
-// Pragma to link Winsock2
-#pragma comment(lib, "ws2_32.lib")
+#include <chrono>
+#include <mutex>
+#include <thread>
 
 // Placeholder types for HoverRace compatibility
 // These will be replaced with actual HoverRace types during integration

@@ -1,0 +1,9 @@
+Package: hovernet-raceserver
+Version: 0.0.0
+Section: games
+Priority: optional
+Architecture: amd64
+Maintainer: HoverNet Team <devteam@outiva.com>
+Depends: libc6 (>= 2.31), adduser, systemd
+Description: HoverNet authoritative multiplayer race server
+ Central TCP and UDP relay and race-session service for HoverNet clients.

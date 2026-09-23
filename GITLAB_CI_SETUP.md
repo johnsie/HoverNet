@@ -1,0 +1,30 @@
+# GitLab CI and Race Server Delivery
+
+The pipeline builds and packages the central `RaceServer` as an Ubuntu `amd64` Debian package. It also builds the current Windows client and creates an Inno Setup installer. A native Linux game installer cannot be produced until the MFC/Win32 client port is complete; the Linux artifact in this pipeline is the authoritative central server.
+
+## GitLab runners
+
+Configure protected runners with these tags, or override the CI variables in GitLab:
+
+- `linux`: CMake, a C++14 compiler, `dpkg-deb`, and Bash.
+- `windows`: PowerShell, Visual Studio MSBuild, all client dependencies, and Inno Setup (`iscc` on `PATH`).
+- `race-server`: the runner on `192.168.10.181`, with passwordless `sudo` only for `/usr/local/sbin/hovernet-deploy`. This runner installs the already-built package; it does not compile the server.
+
+Mark the `race-server` runner and the production environment as protected. The deploy job is manual and runs only for a protected Git tag.
+
+## Server setup
+
+On `192.168.10.181`, tag the registered system-mode runner with `race-server` and configure it to accept protected jobs. Install the root-owned deployment wrapper from `packaging/debian/hovernet-deploy`, then permit the runner account passwordless `sudo` only for that wrapper; do not give it unrestricted passwordless sudo. Open both TCP and UDP port `9600` in the host firewall.
+
+The package creates the unprivileged `hovernet` service account, installs the server under `/usr/lib/hovernet`, preserves `/etc/hovernet/config.xml` across upgrades, and writes logs to `/var/log/hovernet`.
+
+## Publishing
+
+Add the requested GitLab remote without replacing the existing GitHub remote:
+
+```bash
+git remote add gitlab https://gitlab.outiva.com/devteam/hovernet.git
+git push --set-upstream gitlab feat/gitlab-cross-platform-delivery
+```
+
+Merge through a protected default branch and create a protected version tag to expose the manual production deployment job.

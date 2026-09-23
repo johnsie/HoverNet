@@ -26,7 +26,7 @@ BOOL RaceSession::Initialize(
     BOOL allowWeapons)
 {
     mRaceId = raceId;
-    strcpy_s(mRaceName, sizeof(mRaceName), raceName);
+    snprintf(mRaceName, sizeof(mRaceName), "%s", raceName);
     mCreatedTime = time(NULL);
     mRaceStarted = FALSE;
 

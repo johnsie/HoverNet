@@ -33,7 +33,7 @@ public:
 private:
     FILE* mpLogFile;
     int mMinLevel;
-    CRITICAL_SECTION mLock;
+    std::mutex mLock;
 
     const char* LevelToString(int level);
 };

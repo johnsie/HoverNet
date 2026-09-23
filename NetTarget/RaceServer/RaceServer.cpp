@@ -22,6 +22,7 @@ static MR_ServerConfig g_Config;
 // Signal handler for graceful shutdown
 static volatile bool g_bShutdownRequested = false;
 
+#ifdef _WIN32
 BOOL WINAPI ConsoleCtrlHandler(DWORD dwCtrlType)
 {
     if (dwCtrlType == CTRL_C_EVENT || dwCtrlType == CTRL_BREAK_EVENT) {
@@ -31,6 +32,13 @@ BOOL WINAPI ConsoleCtrlHandler(DWORD dwCtrlType)
     }
     return FALSE;
 }
+#else
+void ConsoleCtrlHandler(int)
+{
+    g_Logger.Log(MR_LOG_INFO, "Shutdown requested via signal");
+    g_bShutdownRequested = true;
+}
+#endif
 
 void PrintUsage(const char* programName)
 {
@@ -117,7 +125,12 @@ int main(int argc, char* argv[])
     g_Logger.Log(MR_LOG_INFO, "Server socket listening on port %u", port);
 
     // Set console control handler for graceful shutdown
+#ifdef _WIN32
     SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
+#else
+    signal(SIGINT, ConsoleCtrlHandler);
+    signal(SIGTERM, ConsoleCtrlHandler);
+#endif
 
     // Main event loop
     g_Logger.Log(MR_LOG_INFO, "=== Server Ready - Accepting Connections ===");
@@ -125,12 +138,11 @@ int main(int argc, char* argv[])
     printf("Press Ctrl+C to shutdown gracefully\n\n");
 
     const float FRAME_TIME = 0.016f;  // ~60 Hz
-    DWORD lastUpdateTime = GetTickCount();
-    DWORD lastStatsTime = GetTickCount();
+    std::chrono::steady_clock::time_point lastUpdateTime = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point lastStatsTime = lastUpdateTime;
 
     while (!g_bShutdownRequested) {
-        DWORD currentTime = GetTickCount();
-        DWORD deltaTime = currentTime - lastUpdateTime;
+        std::chrono::steady_clock::time_point currentTime = std::chrono::steady_clock::now();
         lastUpdateTime = currentTime;
 
         // Update race manager (process all race simulations)
@@ -141,7 +153,7 @@ int main(int argc, char* argv[])
         g_ServerSocket.ProcessEvents(&g_RaceManager);
 
         // Log statistics periodically (every 10 seconds)
-        if (currentTime - lastStatsTime >= 10000) {
+        if (std::chrono::duration_cast<std::chrono::seconds>(currentTime - lastStatsTime).count() >= 10) {
             lastStatsTime = currentTime;
             int activeRaces = g_RaceManager.GetActiveRaceCount();
             int totalPlayers = g_RaceManager.GetTotalPlayerCount();
@@ -150,7 +162,7 @@ int main(int argc, char* argv[])
         }
 
         // Limit frame rate
-        Sleep(1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     // Graceful shutdown

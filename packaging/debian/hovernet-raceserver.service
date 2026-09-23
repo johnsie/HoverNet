@@ -1,0 +1,21 @@
+[Unit]
+Description=HoverNet authoritative race server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hovernet
+Group=hovernet
+ExecStart=/usr/lib/hovernet/RaceServer 9600 /var/log/hovernet/raceserver.log --config /etc/hovernet/config.xml --max-races 50
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/hovernet
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

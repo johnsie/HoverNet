@@ -43,8 +43,12 @@ BOOL MR_ServerSocket::Initialize(unsigned port, int maxConnections)
     mMaxConnections = maxConnections;
 
     // Initialize Winsock
+#ifdef _WIN32
     WSADATA wsaData;
     int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+#else
+    int iResult = WSAStartup(0, NULL);
+#endif
     if (iResult != 0) {
         g_Logger.Log(MR_LOG_ERROR, "WSAStartup failed: %d", iResult);
         return FALSE;
@@ -166,7 +170,13 @@ void MR_ServerSocket::ProcessEvents(MR_RaceManager* pRaceManager)
     timeout.tv_sec = 0;
     timeout.tv_usec = 1000;  // 1ms timeout
 
-    int selectResult = select(0, &readSet, NULL, NULL, &timeout);
+    int maxSocket = mDatagramSocket;
+    for (const auto& pair : mConnections) {
+        if (pair.second && pair.second->mConnected) {
+            maxSocket = std::max(maxSocket, pair.second->mTcpSocket);
+        }
+    }
+    int selectResult = select(maxSocket + 1, &readSet, NULL, NULL, &timeout);
     if (selectResult > 0) {
         // Check UDP datagram socket
         if (FD_ISSET(mDatagramSocket, &readSet)) {
@@ -216,7 +226,7 @@ void MR_ServerSocket::AcceptNewConnection()
     if ((int)mConnections.size() >= mMaxConnections) {
         // Too many connections, accept and immediately close
         struct sockaddr_in clientAddr;
-        int clientAddrLen = sizeof(clientAddr);
+        SocketLength clientAddrLen = sizeof(clientAddr);
         SOCKET clientSocket = accept(mListenSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
         if (clientSocket != INVALID_SOCKET) {
             closesocket(clientSocket);
@@ -226,7 +236,7 @@ void MR_ServerSocket::AcceptNewConnection()
 
     // Accept new connection
     struct sockaddr_in clientAddr;
-    int clientAddrLen = sizeof(clientAddr);
+    SocketLength clientAddrLen = sizeof(clientAddr);
     SOCKET clientSocket = accept(mListenSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
 
     if (clientSocket == INVALID_SOCKET) {
