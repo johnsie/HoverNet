@@ -27,10 +27,14 @@
 
 #include "../VideoServices/Bitmap.h"
 
+#ifdef _WIN32
 #ifdef MR_OBJ_FAC_TOOLS
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 class MR_ResBitmap: public MR_Bitmap

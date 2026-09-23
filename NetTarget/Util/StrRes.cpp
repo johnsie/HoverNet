@@ -21,7 +21,7 @@
 //
 
 
-#include "stdafx.h"
+#include "StdAfx.h"
 
 
 // Project Includes
@@ -33,10 +33,12 @@ CString MR_LoadString( int pResource )
    CString lReturnValue;
 
    // MFC patch
+#ifdef _WIN32
    if( afxCurrentResourceHandle == NULL )
    {
       afxCurrentResourceHandle = GetModuleHandle( NULL );
    }
+#endif
 
    lReturnValue.LoadString( pResource );
 
@@ -48,10 +50,12 @@ const char* MR_LoadStringBuffered( int pResource )
    static CString lReturnValue;
 
    // MFC patch
+#ifdef _WIN32
    if( afxCurrentResourceHandle == NULL )
    {
       afxCurrentResourceHandle = GetModuleHandle( NULL );
    }
+#endif
 
    lReturnValue.LoadString( pResource );
 

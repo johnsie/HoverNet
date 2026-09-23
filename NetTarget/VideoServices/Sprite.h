@@ -23,13 +23,18 @@
 #ifndef MR_SPRITE_H
 #define MR_SPRITE_H
 
-#include "2DViewPort.h"
 #include "../Util/DllObjectFactory.h"
 
+class MR_2DViewPort;
+
+#ifdef _WIN32
 #ifdef MR_VIDEO_SERVICES
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 

@@ -34,10 +34,18 @@
 
 #include "MR_Types.h"
 
+#ifndef _WIN32
+#include "../Platform/MfcCompat.h"
+#endif
+
+#ifdef _WIN32
 #ifdef MR_UTIL
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 // Class decalration
@@ -104,6 +112,12 @@ namespace MR_DllObjectFactory
    MR_DllDeclare CString   GetObjectDescription( const MR_ObjectFromFactoryId& pId );
                                                  
 
+
+                                                class MR_DllObjectFactoryCleanup
+                                                {
+                                                   public:
+                                                      ~MR_DllObjectFactoryCleanup() { MR_DllObjectFactory::Clean( FALSE ); }
+                                                };
 
    // Fast Object Creation function
    MR_DllDeclare MR_ObjectFromFactory* CreateObject( const MR_ObjectFromFactoryId& pId );

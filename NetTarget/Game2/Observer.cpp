@@ -624,7 +624,7 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
             MR_FreeElement* lElement = MR_Level::GetFreeElement( lHandle );
             
             // Add bounds check - skip actors with impossible coordinates
-            if(lElement != NULL) {
+            if(lElement != NULL && lElement != pViewingCharacter) {
                // Check if coordinates are within reasonable bounds (-1000000 to +1000000)
                double x = lElement->mPosition.mX;
                double y = lElement->mPosition.mY;
@@ -650,48 +650,11 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
    // STAGE 5.5: Render the viewing character (player's hovercraft)
    
    __try {
-      // DIAGNOSTIC: Log that we're about to render the viewing character
-      static int observer_render_count = 0;
-      if( observer_render_count % 60 == 0 )
-      {
-         FILE* obsLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_Observer_Render.log", "a");
-         if( obsLog )
-         {
-            fprintf(obsLog, "[Observer #%d] About to call pViewingCharacter->Render()\n", observer_render_count);
-            fprintf(obsLog, "  pViewingCharacter=%p\n", pViewingCharacter);
-            fflush(obsLog);
-            fclose(obsLog);
-         }
-      }
-      observer_render_count++;
-
       // Call the character's render method to draw the player's hovercraft
       // Cast away const since Render() is not const (not ideal, but necessary for rendering)
       const_cast<MR_MainCharacter*>(pViewingCharacter)->Render( &m3DView, pTime );
-      
-      // DIAGNOSTIC: Log that render completed
-      static int observer_render_complete = 0;
-      if( observer_render_complete % 60 == 0 )
-      {
-         FILE* obsLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_Observer_Render.log", "a");
-         if( obsLog )
-         {
-            fprintf(obsLog, "[Observer Complete #%d] pViewingCharacter->Render() returned\n", observer_render_complete);
-            fflush(obsLog);
-            fclose(obsLog);
-         }
-      }
-      observer_render_complete++;
    }
    __except(EXCEPTION_EXECUTE_HANDLER) {
-      // Exception handled silently - but log it
-      FILE* obsLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_Observer_Render.log", "a");
-      if( obsLog )
-      {
-         fprintf(obsLog, "[Observer EXCEPTION] pViewingCharacter->Render() threw exception\n");
-         fflush(obsLog);
-         fclose(obsLog);
-      }
    }
 
    // STAGE 6: Cockpit UI rendering (speed/fuel meters, weapons, map, text)
@@ -787,7 +750,7 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
 
    // STAGE 8: Map rendering (minimap in top-left corner)
    __try {
-      if( pSession != NULL && pSession->GetMap() != NULL )
+      if( pSession != NULL && pSession->GetMap() != NULL && mHoverIcons != NULL )
       {
          const MR_Sprite* lHoverIcons = mHoverIcons->GetSprite();
          const MR_Sprite* lMapSprite = pSession->GetMap();
@@ -1570,15 +1533,6 @@ void MR_Observer::CallRender3DViewSafe( const MR_ClientSession* pSession, const 
 
 void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSession* pSession, const MR_MainCharacter* pViewingCharacter, MR_SimulationTime pTime, const MR_UInt8* pBackImage )
 {
-   static int render_frame_count = 0;
-   render_frame_count++;
-   
-   FILE *logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_Render_Trace.log", "a");
-   if(logFile) { 
-      fprintf(logFile, "[Render Frame %d] RenderNormalDisplay called\n", render_frame_count);
-      fflush(logFile); fclose(logFile); 
-   }
-   
    MR_SAMPLE_CONTEXT( "RenderNormalDisplay" );
 
    int lXRes = pDest->GetXRes();
@@ -1629,12 +1583,6 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       }
    }
    catch(...) {
-      logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_Render_Trace.log", "a");
-      if(logFile) { 
-         fprintf(logFile, "[Render Frame %d] Setup FAILED - returning early\n", render_frame_count);
-         fflush(logFile); fclose(logFile); 
-      }
-      // Setup failed, return early
       return;
    }
 
@@ -1648,26 +1596,8 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
    {
    }
 
-   // CRITICAL FIX: Always render the viewing character, even if mRoom is invalid (-1)
-   // The player should ALWAYS see their own hovercraft, regardless of room state
-   // This prevents the craft from disappearing in certain track sections
    {
-      logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_Render_Trace.log", "a");
-      if(logFile) { 
-         if(pViewingCharacter->mRoom != -1) {
-            fprintf(logFile, "[Render Frame %d] Room check PASSED (room=%d), calling CallRender3DViewSafe\n", render_frame_count, pViewingCharacter->mRoom);
-         } else {
-            fprintf(logFile, "[Render Frame %d] Room is INVALID (-1), but still rendering viewing character\n", render_frame_count);
-         }
-         fflush(logFile); fclose(logFile); 
-      }
       CallRender3DViewSafe( pSession, pViewingCharacter, pTime, pBackImage );
-      
-      logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_Render_Trace.log", "a");
-      if(logFile) { 
-         fprintf(logFile, "[Render Frame %d] CallRender3DViewSafe returned\n", render_frame_count);
-         fflush(logFile); fclose(logFile); 
-      }
    }
 
    // Display race timers at top and bottom of screen

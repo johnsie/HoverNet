@@ -20,7 +20,7 @@
 //
 
 
-#include "stdafx.h"
+#include "StdAfx.h"
 
 #include "ClientSession.h"
 #include "../MazeCompiler/TrackCommonStuff.h"
@@ -126,7 +126,7 @@ void MR_ClientSession::ReadLevelAttrib( MR_RecordFile* pRecordFile, MR_VideoBuff
 BOOL MR_ClientSession::LoadNew( const char* pTitle, MR_RecordFile* pMazeFile, int pNbLap, BOOL pAllowWeapons, MR_VideoBuffer* pVideo )
 {
    BOOL lReturnValue;
-   FILE* logFile = fopen("Game2_TrackLoad.log", "a");
+   FILE* logFile = NULL;
    
    if(logFile) fprintf(logFile, "\n--- MR_ClientSession::LoadNew START ---\n"), fflush(logFile);
    if(logFile) fprintf(logFile, "  pTitle='%s'\n", pTitle), fflush(logFile);
@@ -191,7 +191,7 @@ const MR_UInt8* MR_ClientSession::GetBackImage()const
 // Main character controll and interogation
 BOOL MR_ClientSession::CreateMainCharacter()
 {
-   FILE* logFile = fopen("Game2_TrackLoad.log", "a");
+   FILE* logFile = NULL;
    if(logFile) fprintf(logFile, "\n--- MR_ClientSession::CreateMainCharacter START ---\n"), fflush(logFile);
 
    // Add a main character in 

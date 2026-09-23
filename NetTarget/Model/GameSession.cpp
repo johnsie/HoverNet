@@ -21,9 +21,11 @@
 
 #include "StdAfx.h"
 
+#ifdef _WIN32
 #include <Mmsystem.h>
 #include <afxwin.h>
 #include <afxext.h>
+#endif
 
 #include "GameSession.h"
 #include "FreeElementMovingHelper.h"
@@ -40,6 +42,7 @@ MR_GameSession::MR_GameSession( BOOL pAllowRendering )
    mCurrentLevelNumber = -1;
 
    mSimulationTime  = -3000; // 3 sec countdown
+   mLastSimulateCallTime = timeGetTime();
 
 }
 
@@ -50,7 +53,7 @@ MR_GameSession::~MR_GameSession()
 
 BOOL MR_GameSession::LoadLevel( int pLevel )
 {
-   FILE* logFile = fopen("Game2_TrackLoad.log", "a");
+   FILE* logFile = NULL;
    if(logFile) fprintf(logFile, "\n--- MR_GameSession::LoadLevel START (pLevel=%d) ---\n", pLevel), fflush(logFile);
    
    ASSERT( mCurrentMazeFile != NULL );
@@ -177,7 +180,7 @@ void MR_GameSession::Clean()
 
 BOOL MR_GameSession::LoadNew( const char* pTitle, MR_RecordFile* pMazeFile )
 {
-   FILE* logFile = fopen("Game2_TrackLoad.log", "a");
+   FILE* logFile = NULL;
    if(logFile) fprintf(logFile, "\n--- MR_GameSession::LoadNew START ---\n"), fflush(logFile);
    if(logFile) fprintf(logFile, "  pTitle='%s'\n", pTitle), fflush(logFile);
    if(logFile) fprintf(logFile, "  pMazeFile=%p\n", pMazeFile), fflush(logFile);
@@ -278,6 +281,8 @@ BOOL MR_GameSession::LoadNew( const char* pTitle, MR_RecordFile* pMazeFile )
    {
       if(logFile) fprintf(logFile, "  ERROR: pMazeFile is NULL\n"), fflush(logFile);
    }
+
+   mLastSimulateCallTime = timeGetTime();
 
    if(logFile) fprintf(logFile, "--- MR_GameSession::LoadNew END, returning: %s ---\n", lReturnValue ? "TRUE" : "FALSE"), fflush(logFile);
    if(logFile) fclose(logFile);

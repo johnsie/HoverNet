@@ -179,7 +179,7 @@ MR_ResourceLib::~MR_ResourceLib()
 /*const*/ MR_ResBitmap* MR_ResourceLib::GetBitmap( int pBitmapId )
 {
 
-   MR_ResBitmap* lValue;
+   MR_ResBitmap* lValue = NULL;
 
    mBitmapList.Lookup( pBitmapId, lValue );
 
@@ -188,7 +188,7 @@ MR_ResourceLib::~MR_ResourceLib()
 
 const MR_ResActor* MR_ResourceLib::GetActor(  int pActorId  )
 {
-   MR_ResActor* lValue;
+   MR_ResActor* lValue = NULL;
 
    mActorList.Lookup( pActorId, lValue );
 
@@ -197,7 +197,7 @@ const MR_ResActor* MR_ResourceLib::GetActor(  int pActorId  )
 
 const MR_ResSprite* MR_ResourceLib::GetSprite(  int pSpriteId  )
 {
-   MR_ResSprite* lValue;
+   MR_ResSprite* lValue = NULL;
 
    mSpriteList.Lookup( pSpriteId, lValue );
 
@@ -206,7 +206,7 @@ const MR_ResSprite* MR_ResourceLib::GetSprite(  int pSpriteId  )
 
 const MR_ResShortSound* MR_ResourceLib::GetShortSound( int pSoundId  )
 {
-   MR_ResShortSound* lValue;
+   MR_ResShortSound* lValue = NULL;
 
    mShortSoundList.Lookup( pSoundId, lValue );
 
@@ -215,11 +215,36 @@ const MR_ResShortSound* MR_ResourceLib::GetShortSound( int pSoundId  )
 
 const MR_ResContinuousSound* MR_ResourceLib::GetContinuousSound( int pSoundId  )
 {
-   MR_ResContinuousSound* lValue;
+   MR_ResContinuousSound* lValue = NULL;
 
    mContinuousSoundList.Lookup( pSoundId, lValue );
 
    return lValue;
+}
+
+int MR_ResourceLib::GetBitmapCount() const
+{
+   return mBitmapList.GetCount();
+}
+
+int MR_ResourceLib::GetActorCount() const
+{
+   return mActorList.GetCount();
+}
+
+int MR_ResourceLib::GetSpriteCount() const
+{
+   return mSpriteList.GetCount();
+}
+
+int MR_ResourceLib::GetShortSoundCount() const
+{
+   return mShortSoundList.GetCount();
+}
+
+int MR_ResourceLib::GetContinuousSoundCount() const
+{
+   return mContinuousSoundList.GetCount();
 }
 
 

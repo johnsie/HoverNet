@@ -20,7 +20,7 @@
 // and limitations under the License.
 //
 
-#include "stdafx.h"
+#include "StdAfx.h"
 
 #include "3DViewport.h"
 #include "../Util/FastMemManip.h"
@@ -352,15 +352,15 @@ void MR_3DViewPort::DrawWFLine( const MR_3DCoordinate& pP0, const MR_3DCoordinat
       }
       else
       {
-         lP0.mZ = lP0.mZ + MulDiv( lP1.mZ-lP0.mZ, MR_ZBUFFER_UNIT*0xFFFE-lP0.mX, lP1.mX-lP0.mX );
-         lP0.mY = lP0.mY + MulDiv( lP1.mY-lP0.mY, MR_ZBUFFER_UNIT*0xFFFE-lP0.mX, lP1.mX-lP0.mX );
+         lP0.mZ = lP0.mZ + MulDiv( lP1.mZ-lP0.mZ, MR_ZBUFFER_UNIT*0xFFFE - lP0.mX, lP1.mX-lP0.mX );
+         lP0.mY = lP0.mY + MulDiv( lP1.mY-lP0.mY, MR_ZBUFFER_UNIT*0xFFFE - lP0.mX, lP1.mX-lP0.mX );
          lP0.mX = MR_ZBUFFER_UNIT*0xFFFE;
       }
    }
    else if( lP1.mX/MR_ZBUFFER_UNIT > 0xFFFE )
    {
-      lP1.mZ = lP1.mZ + MulDiv( lP0.mZ-lP1.mZ, MR_ZBUFFER_UNIT*0xFFFE-lP1.mX, lP0.mX-lP1.mX );
-      lP1.mY = lP1.mY + MulDiv( lP0.mY-lP1.mY, MR_ZBUFFER_UNIT*0xFFFE-lP1.mX, lP0.mX-lP1.mX );
+      lP1.mZ = lP1.mZ + MulDiv( lP0.mZ-lP1.mZ, MR_ZBUFFER_UNIT*0xFFFE - lP1.mX, lP0.mX-lP1.mX );
+      lP1.mY = lP1.mY + MulDiv( lP0.mY-lP1.mY, MR_ZBUFFER_UNIT*0xFFFE - lP1.mX, lP0.mX-lP1.mX );
       lP1.mX = MR_ZBUFFER_UNIT*0xFFFE;
    }
 

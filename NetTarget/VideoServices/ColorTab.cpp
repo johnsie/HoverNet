@@ -22,7 +22,7 @@
 // and limitations under the License.
 //
  
-#include "stdafx.h" 
+#include "StdAfx.h"
 #include "ColorPalette.h" 
  
 MR_UInt8 MR_ColorTable[ MR_NB_COLOR_INTENSITY ][ MR_NB_COLORS ] = 

@@ -32,10 +32,14 @@
 #include "../Util/BitPacking.h"
 
 
+#ifdef _WIN32
 #ifdef MR_MAIN_CHARACTER
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 #define MR_MAIN_CHARACTER_DLL_ID     5000 

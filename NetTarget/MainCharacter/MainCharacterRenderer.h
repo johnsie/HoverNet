@@ -25,15 +25,19 @@
 
 
 
-#include "../VideoServices/3DViewPort.h"
+#include "../VideoServices/3DViewport.h"
 #include "../VideoServices/SoundServer.h"
 #include "../Util/DllObjectFactory.h"
 
 
+#ifdef _WIN32
 #ifdef MR_MAIN_CHARACTER
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 

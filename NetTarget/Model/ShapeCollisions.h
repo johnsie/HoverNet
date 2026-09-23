@@ -26,10 +26,14 @@
 
 #include "Shapes.h"
 
+#ifdef _WIN32
 #ifdef MR_MODEL
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 // Collisions vs Movement

@@ -29,10 +29,14 @@
 #include "ResSprite.h"
 #include "ResSound.h"
 
+#ifdef _WIN32
 #ifdef MR_OBJ_FAC_TOOLS
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 
@@ -66,6 +70,12 @@ class MR_ResourceLib
       MR_DllDeclare const MR_ResSprite*          GetSprite(          int pSpriteId  );
       MR_DllDeclare const MR_ResShortSound*      GetShortSound(      int pSoundId   );
       MR_DllDeclare const MR_ResContinuousSound* GetContinuousSound( int pSoundId   );
+
+      MR_DllDeclare int GetBitmapCount() const;
+      MR_DllDeclare int GetActorCount() const;
+      MR_DllDeclare int GetSpriteCount() const;
+      MR_DllDeclare int GetShortSoundCount() const;
+      MR_DllDeclare int GetContinuousSoundCount() const;
 
 };
 

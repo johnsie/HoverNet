@@ -19,7 +19,7 @@
 // and limitations under the License.
 //
 
-#include "stdafx.h"
+#include "StdAfx.h"
 
 #include "Level.h"
 
@@ -465,7 +465,7 @@ void MR_Level::MoveElement( MR_FreeElementHandle pHandle, int pNewRoom )
 
 MR_FreeElementHandle MR_Level::InsertElement( MR_FreeElement* pElement, int pRoom, BOOL pBroadcast  )
 {
-   FILE* logFile = fopen("Game2_InsertElement.log", "a");
+   FILE* logFile = NULL;
    
    if(logFile) fprintf(logFile, "InsertElement START: pElement=%p, pRoom=%d, mAllowRendering=%d\n", pElement, pRoom, mAllowRendering), fflush(logFile);
    
@@ -563,7 +563,8 @@ void MR_Level::GetRoomContact(   int                      pRoom,
 {
 
    // Verify if the current room contains the requires shape
-   MR_DetectRoomContact( pShape, &SectionShape( &(mRoomList[ pRoom ]) ), pAnswer );
+   SectionShape roomShape( &(mRoomList[ pRoom ]) );
+   MR_DetectRoomContact( pShape, &roomShape, pAnswer );
 }
 
 BOOL MR_Level::GetRoomWallContactOrientation( int                      pRoom,
@@ -571,7 +572,8 @@ BOOL MR_Level::GetRoomWallContactOrientation( int                      pRoom,
                                               const MR_ShapeInterface* pShape,
                                               MR_Angle&                pAnswer   )
 {
-   return MR_GetWallForceLongitude( pShape, &SectionShape( &(mRoomList[ pRoom ]) ), pWall, pAnswer );
+   SectionShape roomShape( &(mRoomList[ pRoom ]) );
+   return MR_GetWallForceLongitude( pShape, &roomShape, pWall, pAnswer );
 }
 
 
@@ -582,14 +584,16 @@ BOOL MR_Level::GetFeatureContact( int                      pFeature,
 {
 
    // Verify if the current room contains the requires shape
-   return MR_DetectFeatureContact( pShape, &SectionShape( &(mFeatureList[ pFeature ]) ), pAnswer );
+   SectionShape featureShape( &(mFeatureList[ pFeature ]) );
+   return MR_DetectFeatureContact( pShape, &featureShape, pAnswer );
 }
 
 BOOL MR_Level::GetFeatureContactOrientation( int                      pFeature,
                                              const MR_ShapeInterface* pShape,
                                              MR_Angle&                pAnswer              )
 {
-   return MR_GetFeatureForceLongitude( pShape, &SectionShape( &(mFeatureList[ pFeature ]) ), pAnswer );
+   SectionShape featureShape( &(mFeatureList[ pFeature ]) );
+   return MR_GetFeatureForceLongitude( pShape, &featureShape, pAnswer );
 }
 
 

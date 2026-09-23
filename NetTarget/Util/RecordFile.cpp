@@ -20,7 +20,7 @@
 //
 
 
-#include "stdafx.h" // standar include at the beginning of each cpp file
+#include "StdAfx.h" // standar include at the beginning of each cpp file
 
 #include "RecordFile.h"
 
@@ -70,7 +70,7 @@ MR_RecordFileTable::MR_RecordFileTable( int pNbRecords )
    // Initialize the vector
    for( int lCounter = 0; lCounter < pNbRecords; lCounter++ )
    {
-      mRecordList[lCounter] = NULL;
+      mRecordList[lCounter] = 0;
    }
 }
 
@@ -506,8 +506,12 @@ void MR_RecordFile::UnlockRange(DWORD, DWORD )
 
 void MR_RecordFile::Abort()
 {
+#ifdef _WIN32
    ASSERT( FALSE );
    CFile( Abort );
+#else
+   Close();
+#endif
 }
 
 void MR_RecordFile::Close()

@@ -3,3 +3,9 @@
 **/*.pdb
 NetTarget/**/Release/*.pdb
 NetTarget/**/Debug/*.pdb
+
+# CMake build output
+build/
+
+# Debug logs
+*.log

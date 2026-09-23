@@ -21,8 +21,13 @@
 
 #include "StdAfx.h"
 
+#include <algorithm>
+
 #include "FreeElementMovingHelper.h"
 #include "../Util/FastArray.h"
+
+using std::max;
+using std::min;
 
 
 

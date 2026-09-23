@@ -20,20 +20,19 @@
 // and limitations under the License.
 //
 
-#include <windows.h>
-#include <winnt.h>
-
 #ifndef MR_TYPES_H
 #define MR_TYPES_H
 
-typedef signed char      MR_Int8;
-typedef unsigned char    MR_UInt8;
-typedef signed short     MR_Int16;
-typedef unsigned short   MR_UInt16;
-typedef signed int       MR_Int32;
-typedef unsigned int     MR_UInt32;
-typedef LONGLONG         MR_Int64;
-typedef DWORDLONG        MR_UInt64;
-     
+#include <cstdint>
+
+typedef std::int8_t   MR_Int8;
+typedef std::uint8_t  MR_UInt8;
+typedef std::int16_t  MR_Int16;
+typedef std::uint16_t MR_UInt16;
+typedef std::int32_t  MR_Int32;
+typedef std::uint32_t MR_UInt32;
+typedef std::int64_t  MR_Int64;
+typedef std::uint64_t MR_UInt64;
+
 #endif
      

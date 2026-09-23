@@ -49,18 +49,22 @@
 #include "Shapes.h"
 #include "ContactEffect.h"
 #include "../Util/DllObjectFactory.h"
-#include "../VideoServices/3DViewPort.h"
 
+#ifdef _WIN32
 #ifdef MR_MODEL
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 
 
 // Class Declaration
 class MR_Level;
+class MR_3DViewPort;
 
 // Renderer bases
 class MR_SurfaceElementRenderer; // used and defines by the Observer module

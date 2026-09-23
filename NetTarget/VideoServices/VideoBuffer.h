@@ -23,15 +23,25 @@
 #ifndef VIDEO_BUFFER_H
 #define VIDEO_BUFFER_H
 
+#ifdef _WIN32
 #include <ddraw.h>
+#endif
 
 #include "../Util/MR_Types.h"
 
+#ifndef _WIN32
+#include "../Platform/MfcCompat.h"
+#endif
 
+
+#ifdef _WIN32
 #ifdef MR_VIDEO_SERVICES
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 
@@ -41,6 +51,7 @@ class MR_VideoBuffer
 {   
 
    private:
+   #ifdef _WIN32
       HWND                 mWindow;
       BOOL                 mFullScreen;
       LPDIRECTDRAW         mDirectDraw;
@@ -48,15 +59,18 @@ class MR_VideoBuffer
       LPDIRECTDRAWSURFACE  mBackBuffer;
       LPDIRECTDRAWPALETTE  mPalette;
       LPDIRECTDRAWCLIPPER  mClipper;    // To use in windows only
+   #endif
                                         // remove if too slow
 
       BOOL                 mSpecialWindowMode; // Use a 256 color mode when switching to window mode
       int                  mSpecialModeXRes;
       int                  mSpecialModeYRes;
 
+   #ifdef _WIN32
       LONG                 mOriginalExStyle; // Only valid if mFullScreen
       LONG                 mOriginalStyle;   // Only valid if mFullScreen
       RECT                 mOriginalPos;     // Only valid if mFullScreen
+   #endif
 
       BOOL                 mModeSettingInProgress;
 
@@ -115,6 +129,7 @@ class MR_VideoBuffer
       MR_DllDeclare void CreatePalette(      double pGamma, double pContrast, double pBrightness );
       MR_DllDeclare void GetPaletteAttrib(   double& pGamma, double& pContrast, double& pBrightness );
       MR_DllDeclare void SetBackPalette(     MR_UInt8* pPalette );
+      MR_DllDeclare const MR_UInt8* GetBackPalette()const;
 
 
       // Buffers manipulation

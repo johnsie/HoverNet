@@ -19,14 +19,25 @@
 // and limitations under the License.
 //
 
-#include "stdafx.h"
+#include "StdAfx.h"
 
 #include "DllObjectFactory.h"
+
+#ifndef _WIN32
+#include <limits.h>
+#include <unistd.h>
+#endif
 
 #define new DEBUG_NEW
 
 // DllObjectFactory file name prefix
+#ifdef _WIN32
 static const char gsFilePrefix[] = ".\\ObjFac";
+static const char gsFileExtension[] = ".dll";
+#else
+static const char gsFilePrefix[] = "./ObjFac";
+static const char gsFileExtension[] = ".so";
+#endif
 
 // Local class declaration
 class MR_FactoryDll
@@ -153,7 +164,7 @@ MR_UInt16 MR_DllObjectFactory::GetObjectTypeCount( MR_UInt16 pDllId )
 
    MR_FactoryDll* lDllPtr = GetDll( pDllId, TRUE );
 
-   if( lDllPtr->mGetObjectTypeCount != NULL );
+   if( lDllPtr->mGetObjectTypeCount != NULL )
    {
       lReturnValue = lDllPtr->mGetObjectTypeCount(); 
    }   
@@ -168,7 +179,7 @@ CString   MR_DllObjectFactory::GetObjectFamily( const MR_ObjectFromFactoryId& pI
 
    MR_FactoryDll* lDllPtr = GetDll( pId.mDllId, TRUE );
 
-   if( lDllPtr->mGetObjectFamily != NULL );
+   if( lDllPtr->mGetObjectFamily != NULL )
    {
       lReturnValue = lDllPtr->mGetObjectFamily( pId.mClassId ); 
    }  
@@ -182,7 +193,7 @@ CString   MR_DllObjectFactory::GetObjectDescription( const MR_ObjectFromFactoryI
 
    MR_FactoryDll* lDllPtr = GetDll( pId.mDllId, TRUE );
 
-   if( lDllPtr->mGetObjectDescription != NULL );
+   if( lDllPtr->mGetObjectDescription != NULL )
    {
       lReturnValue = lDllPtr->mGetObjectDescription( pId.mClassId ); 
    }   
@@ -367,13 +378,42 @@ BOOL MR_FactoryDll::Open( MR_UInt16 pDllId )
 {
    ASSERT( mHandle == NULL );
 
+#ifdef _WIN32
    char lNameBuffer[ 40 ];
+#else
+   char lNameBuffer[ PATH_MAX ];
+#endif
 
-   sprintf( lNameBuffer, "%s%u.dll", gsFilePrefix, pDllId );
+   snprintf( lNameBuffer, sizeof(lNameBuffer), "%s%u%s", gsFilePrefix, pDllId, gsFileExtension );
 
    mDynamic = TRUE;
 
    mHandle = LoadLibrary( lNameBuffer );
+
+#ifndef _WIN32
+   if( mHandle == NULL )
+   {
+      char lExecutablePath[ PATH_MAX ];
+      const ssize_t lPathLength = readlink( "/proc/self/exe", lExecutablePath, sizeof(lExecutablePath) - 1 );
+      if( lPathLength > 0 )
+      {
+         lExecutablePath[ lPathLength ] = '\0';
+         char* lDirectoryEnd = strrchr( lExecutablePath, '/' );
+         if( lDirectoryEnd != NULL )
+         {
+            *lDirectoryEnd = '\0';
+            const int lDirectoryLength = snprintf( lNameBuffer, sizeof(lNameBuffer), "%s", lExecutablePath );
+            if( lDirectoryLength >= 0 &&
+                static_cast<size_t>(lDirectoryLength) < sizeof(lNameBuffer) - 12 )
+            {
+               snprintf( lNameBuffer + lDirectoryLength, sizeof(lNameBuffer) - lDirectoryLength,
+                         "/ObjFac%u.so", pDllId );
+               mHandle = LoadLibrary( lNameBuffer );
+            }
+         }
+      }
+   }
+#endif
 
    if(mHandle != NULL )
    {

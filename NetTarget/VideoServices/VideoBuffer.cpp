@@ -556,6 +556,11 @@ void MR_VideoBuffer::SetBackPalette( MR_UInt8* pPalette )
    CreatePalette( mGamma, mContrast, mBrightness );
 }
 
+const MR_UInt8* MR_VideoBuffer::GetBackPalette()const
+{
+   return mBackPalette;
+}
+
 
 void MR_VideoBuffer::AssignPalette()
 {

@@ -21,7 +21,7 @@
 //
 
 
-#include "stdafx.h"
+#include "StdAfx.h"
 
 // System includes
 #include <math.h>

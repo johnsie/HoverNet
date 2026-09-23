@@ -23,10 +23,14 @@
 #ifndef FAST_FIFO_H
 #define FAST_FIFO_H
 
+#ifdef _WIN32
 #ifdef MR_UTIL
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 template <class pType> class MR_FastFifoBase
@@ -65,7 +69,7 @@ template <class pType> class MR_FastFifo:public MR_FastFifoBase< pType >
 {
    public:
       MR_FastFifo<pType>( int pSize ):MR_FastFifoBase<pType>( pSize, new pType[ pSize ] ){};
-      ~MR_FastFifo<pType>()                                                              { delete []mArray; };
+      ~MR_FastFifo<pType>()                                                              { delete []this->mArray; };
 };
 
 

@@ -17,6 +17,7 @@
 #endif
 
 #include <cstdint>
+#include <vector>
 
 class SDL2GraphicsBackend
 {
@@ -53,6 +54,7 @@ private:
     // Palette for color conversion
     uint8_t* m_paletteRGB;  // 256 * 3 bytes (RGB format)
     SDL_Color* m_sdlPalette;  // SDL format palette
+    std::vector<uint8_t> m_rgbBuffer;
     
     // Resolution
     int m_width;

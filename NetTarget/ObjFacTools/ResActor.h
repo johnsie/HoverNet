@@ -6,15 +6,21 @@
 #define MR_RES_ACTOR_H
 
 #include "ResBitmap.h"
-#include "../VideoServices/3DViewPort.h"
+#include "../VideoServices/Patch.h"
 
+#ifdef _WIN32
 #ifdef MR_OBJ_FAC_TOOLS
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
 #endif
+#else
+   #define MR_DllDeclare
+#endif
 
 class MR_ResourceLib;
+class MR_3DViewPort;
+class MR_PositionMatrix;
 
 
 class MR_ResActor

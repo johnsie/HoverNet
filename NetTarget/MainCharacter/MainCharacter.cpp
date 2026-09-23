@@ -38,7 +38,7 @@
 #define MR_EON_CRAFT  19
 
 // Helper class to access ResActor internals
-static class MR_ResActorFriend
+class MR_ResActorFriend
 {
    public:
       static void Draw( const MR_ResActor* pActor, MR_3DViewPort* pDest, const MR_PositionMatrix& pMatrix, int pSequence, int pFrame );
@@ -354,6 +354,7 @@ void MR_MainCharacter::AddRenderer()
       // Create a simple renderer from the MainCharacter DLL
       MR_ObjectFromFactoryId lId = { MR_MAIN_CHARACTER_DLL_ID, 100 };
       
+#ifdef _WIN32
       __try
       {
          mRenderer = (MR_MainCharacterRenderer*) MR_DllObjectFactory::CreateObject( lId );
@@ -363,25 +364,21 @@ void MR_MainCharacter::AddRenderer()
          // Renderer creation failed - will use fallback
          mRenderer = NULL;
       }
+#else
+      try
+      {
+         mRenderer = (MR_MainCharacterRenderer*) MR_DllObjectFactory::CreateObject( lId );
+      }
+      catch(...)
+      {
+         mRenderer = NULL;
+      }
+#endif
    }
 }
 
 void MR_MainCharacter::Render( MR_3DViewPort* pDest, MR_SimulationTime /*pTime*/ )
 {
-   // DIAGNOSTIC: Log render entry
-   static int mc_render_entry = 0;
-   if( mc_render_entry % 60 == 0 )
-   {
-      FILE* mcLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_MC_Render_Entry.log", "a");
-      if( mcLog )
-      {
-         fprintf(mcLog, "[MC Entry #%d] MR_MainCharacter::Render() called, pDest=%p, mRenderer=%p\n", mc_render_entry, pDest, mRenderer);
-         fflush(mcLog);
-         fclose(mcLog);
-      }
-   }
-   mc_render_entry++;
-
    if( pDest == NULL ) return;
    if( mRenderer == NULL ) return;  // No renderer available - can't render
    
@@ -415,21 +412,6 @@ void MR_MainCharacter::Render( MR_3DViewPort* pDest, MR_SimulationTime /*pTime*/
       case 3: lActorId = MR_EON_CRAFT; break;     // Actor 19
       default: lActorId = MR_ELECTRO_CAR; break;  // Default to Electro Car
    }
-   
-   // DEBUG: Log sanitized values before calling renderer
-   static int render_call_count = 0;
-   if( render_call_count % 30 == 0 )
-   {
-      FILE* dbgLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_MainCharacter_Render.log", "a");
-      if( dbgLog )
-      {
-         fprintf(dbgLog, "[Render #%d] mHoverModel=%d (sanitized to %d), mapped to Actor %d, mHoverId=%d (sanitized to %d), Pos=(%.0f,%.0f,%.0f)\n",
-            render_call_count, mHoverModel, lSafeModel, lActorId, mHoverId, lSafeHoverId, mPosition.mX, mPosition.mY, mPosition.mZ);
-         fflush(dbgLog);
-         fclose(dbgLog);
-      }
-   }
-   render_call_count++;
    
    // Call the renderer - should be MR_HoverRender from ObjFac1
    // Use MFC TRY/CATCH to catch BOTH SEH and C++ exceptions
@@ -642,66 +624,21 @@ void MR_MainCharacter::SetControlState( int pState, MR_SimulationTime pTime )
 {
    int lState = pState;
 
-   // DEBUG: Log time value to see when car selection window is open
-   static int debugCallCount = 0;
-   if( debugCallCount % 30 == 0 || pTime < 100 )
-   {
-      FILE* dbgLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_ControlState.log", "a");
-      if( dbgLog )
-      {
-         fprintf(dbgLog, "[SetControlState #%d] pTime=%d, pState=%d, mControlState=%d, mHoverModel=%d, eRight=%d, eLeft=%d\n",
-            debugCallCount, pTime, pState, mControlState, mHoverModel, (pState & eRight), (pState & eLeft));
-         fflush(dbgLog);
-         fclose(dbgLog);
-      }
-   }
-   debugCallCount++;
-
-   // Set HoverType if race not started (pTime < 0 means pre-race initialization)
-   // Car selection only allowed before game allows movement
    if( pTime < 0 )
    {
-      // Detect key press transitions (from not-pressed to pressed)
-      // This allows changing cars when keys are initially pressed
       BOOL bRightPressed = (pState & eRight) && !(mControlState & eRight);
       BOOL bLeftPressed = (pState & eLeft) && !(mControlState & eLeft);
 
       if( bRightPressed )
       {
-         int oldModel = mHoverModel;
          mHoverModel++;
-         // Wrap model index to 0-3 range immediately
          mHoverModel = ((mHoverModel % 4) + 4) % 4;
-         FILE* dbgLog2 = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_ModelChange.log", "a");
-         if( dbgLog2 ) {
-            fprintf(dbgLog2, "[RightPressed] Model changed from %d to %d at pTime=%d\n", oldModel, mHoverModel, pTime);
-            fflush(dbgLog2);
-            fclose(dbgLog2);
-         }
       }
       
       if( bLeftPressed )
       {
-         int oldModel = mHoverModel;
          mHoverModel--;
-         // Wrap model index to 0-3 range immediately
          mHoverModel = ((mHoverModel % 4) + 4) % 4;
-         FILE* dbgLog2 = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_ModelChange.log", "a");
-         if( dbgLog2 ) {
-            fprintf(dbgLog2, "[LeftPressed] Model changed from %d to %d at pTime=%d\n", oldModel, mHoverModel, pTime);
-            fflush(dbgLog2);
-            fclose(dbgLog2);
-         }
-      }
-   }
-   else if( debugCallCount % 60 == 0 && pTime >= 0 )
-   {
-      // Log when we transition OUT of pre-race phase
-      FILE* dbgLog2 = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_ModelChange.log", "a");
-      if( dbgLog2 ) {
-         fprintf(dbgLog2, "[RaceStarted] pTime=%d (>= 0), Current mHoverModel=%d\n", pTime, mHoverModel);
-         fflush(dbgLog2);
-         fclose(dbgLog2);
       }
    }
 
@@ -947,7 +884,7 @@ int MR_MainCharacter::InternalSimulate( MR_SimulationTime pDuration, MR_Level* p
          }
          else if( (lAbsoluteSpeed > eSteadySpeed[mHoverModel])&&(lAbsoluteSpeed < 2.5*eSteadySpeed[mHoverModel]) )
          {
-            lFrictionAmplifier = min( 1.7, 1.1+2.5*(lAbsoluteSpeed/eSteadySpeed[0]-1.0) );
+            lFrictionAmplifier = std::min( 1.7, 1.1+2.5*(lAbsoluteSpeed/eSteadySpeed[0]-1.0) );
          }
 
          double lConstantPart = pDuration*lFrictionAmplifier*eFrictionAccell[mHoverModel]/lAbsoluteSpeed;
@@ -1572,20 +1509,6 @@ void MR_MainCharacter::PlayInternalSounds()
 {
    if( mRenderer != NULL )
    {
-      // Debug logging
-      static int frameCount = 0;
-      if(frameCount % 100 == 0) {
-         FILE* logFile = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_PlaySound.log", "a");
-         if(logFile) {
-            fprintf(logFile, "[PlayInternalSounds] Frame %d: renderer=%p, motorSound=%p, motorOn=%d, speed=%.2f\n",
-               frameCount, mRenderer, mRenderer->GetMotorSound(), mControlState&eMotorOn, 
-               sqrt(mXSpeed*mXSpeed+mYSpeed*mYSpeed));
-            fflush(logFile);
-            fclose(logFile);
-         }
-      }
-      frameCount++;
-
       // Sound events
       while( !mInternalSoundList.IsEmpty() )
       {
@@ -1598,37 +1521,13 @@ void MR_MainCharacter::PlayInternalSounds()
       MR_ContinuousSound* lMotorSound = mRenderer->GetMotorSound();
       double lAbsSpeed = sqrt( mXSpeed*mXSpeed + mYSpeed*mYSpeed )/(eSteadySpeed[0]);
 
-      static int debugCount = 0;
-      if(debugCount % 100 == 0) {
-         FILE* logFile = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_ContinuousSoundLogic.log", "a");
-         if(logFile) {
-            fprintf(logFile, "[ContinuousSoundLogic] Frame %d: lWindSound=%p, lMotorSound=%p, lAbsSpeed=%.3f, motorOn=%d\n",
-               debugCount, lWindSound, lMotorSound, lAbsSpeed, mControlState&eMotorOn);
-            fflush(logFile);
-            fclose(logFile);
-         }
-      }
-      debugCount++;
-
       if( lAbsSpeed > 0.02 )
       {
-         FILE* logFile = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_PlayingFrictionSound.log", "a");
-         if(logFile) {
-            fprintf(logFile, "[PlayingFrictionSound] lWindSound=%p, speed=%.3f\n", lWindSound, lAbsSpeed);
-            fflush(logFile);
-            fclose(logFile);
-         }
          MR_SoundServer::Play( lWindSound, 0, 0, 1.5*lAbsSpeed );
       }
 
       if( mControlState&eMotorOn )
       {
-         FILE* logFile = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_PlayingMotorSound.log", "a");
-         if(logFile) {
-            fprintf(logFile, "[PlayingMotorSound] lMotorSound=%p\n", lMotorSound);
-            fflush(logFile);
-            fclose(logFile);
-         }
          MR_SoundServer::Play( lMotorSound, 0, 0 );
       }
    }

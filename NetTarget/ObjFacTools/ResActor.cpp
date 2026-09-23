@@ -19,10 +19,11 @@
 // and limitations under the License.
 //
 
-#include "stdafx.h"
+#include "StdAfx.h"
 #include "ResActor.h"
 
 #include "ResourceLib.h"
+#include "../VideoServices/3DViewport.h"
 
 // ResActor
 //

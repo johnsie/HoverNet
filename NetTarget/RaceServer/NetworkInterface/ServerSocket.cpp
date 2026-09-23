@@ -19,8 +19,9 @@ struct MessageBuffer {
 
 // Helper to construct message header with message type
 inline unsigned short MakeMessageHeader(int messageType) {
-    // messageType in bits 0-5, DatagramQueue in bits 6-7, DatagramNumber in bits 8-15
-    return (messageType & 0x3F);  // Just the message type in lower 6 bits
+    // Match MR_NetMessageBuffer: DatagramNumber bits 0-7, DatagramQueue bits 8-9,
+    // and MessageType bits 10-15.
+    return static_cast<unsigned short>((messageType & 0x3F) << 10);
 }
 
 MR_ServerSocket::MR_ServerSocket()
@@ -298,6 +299,11 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn)
     // Extract message type (bits 0-5 of byte 2, or byte 1 depending on endianness)
     // Assuming the format is: byte[0] = header low, byte[1] = header high, byte[2] = data_len
     int messageDataLen = buffer[2];
+    if (bytesReceived < 3 + messageDataLen) {
+        g_Logger.Log(MR_LOG_WARN, "Client %d: Incomplete message (%d of %d bytes)",
+                     pConn->mClientId, bytesReceived, 3 + messageDataLen);
+        return;
+    }
     
     // For now, relay ALL messages to other players in the race
     // In production, you'd want to filter certain messages
@@ -308,16 +314,18 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn)
     // - MRNM_SET_MAIN_ELEM_STATE (3)
     // - MRNM_LAG_TEST (47)
     
-    int messageType = buffer[1] & 0x3F;  // Lower 6 bits
+    unsigned short messageHeader = static_cast<unsigned short>(buffer[0]) |
+                                   (static_cast<unsigned short>(buffer[1]) << 8);
+    int messageType = (messageHeader >> 10) & 0x3F;
     
     switch (messageType) {
         case 42:  // MRNM_GAME_NAME - Client is joining a race with this game name
         {
             // Extract game name from message
-            unsigned char dataLen = buffer[0] & 0xFF;  // Data length is in first byte
+            unsigned char dataLen = static_cast<unsigned char>(messageDataLen);
             if (dataLen > 0 && dataLen < 256) {
                 char gameName[256];
-                memcpy(gameName, &buffer[2], dataLen);
+                memcpy(gameName, &buffer[3], dataLen);
                 gameName[dataLen] = '\0';
                 
                 g_Logger.Log(MR_LOG_INFO, "Client %d joining game: %s", pConn->mClientId, gameName);

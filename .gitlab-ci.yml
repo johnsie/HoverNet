@@ -39,6 +39,14 @@ build:raceserver:linux:
     paths:
       - build/raceserver/RaceServer
 
+build:game:linux:
+  stage: build
+  tags: ["$LINUX_RUNNER_TAG"]
+  script:
+    - cmake -S . -B build/linux -DCMAKE_BUILD_TYPE=Release
+    - cmake --build build/linux --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+    - ctest --test-dir build/linux --output-on-failure
+
 package:raceserver:deb:
   stage: package
   tags: ["$LINUX_RUNNER_TAG"]

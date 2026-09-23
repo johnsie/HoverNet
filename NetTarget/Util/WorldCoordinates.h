@@ -25,12 +25,20 @@
 #ifndef WORLD_COORDINATES_H
 #define WORLD_COORDINATES_H
 
+#ifdef _WIN32
 #include <afx.h>
+#else
+#include "../Platform/MfcCompat.h"
+#endif
 
+#ifdef _WIN32
 #ifdef MR_UTIL
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 
@@ -79,7 +87,7 @@ typedef MR_Int16 MR_Angle;
 
 #define MR_NORMALIZE_ANGLE( pAngle ) ( (MR_Angle) (( 2*MR_2PI+(pAngle) )%MR_2PI) )
 
-#define RAD_2_MR_ANGLE( pAngle ) ((MR_Angle)( ((unsigned int)(pAngle*MR_2PI.0*0.5/3.1415926536)+MR_2PI)%(unsigned int)MR_2PI ))
+#define RAD_2_MR_ANGLE( pAngle ) ((MR_Angle)( ((unsigned int)(pAngle*MR_2PI*0.5/3.1415926536)+MR_2PI)%(unsigned int)MR_2PI ))
 
 // Temporal unities
 typedef MR_Int32  MR_SimulationTime; // In 1/1000th of seconds

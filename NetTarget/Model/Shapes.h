@@ -33,12 +33,16 @@
 #ifndef SHAPES_H
 #define SHAPES_H
 
-#include "../util/WorldCoordinates.h"
+#include "../Util/WorldCoordinates.h"
 
+#ifdef _WIN32
 #ifdef MR_MODEL
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 
@@ -120,6 +124,7 @@ class MR_DllDeclare MR_LineSegmentShape: public MR_ShapeInterface
 class MR_DllDeclare MR_PolygonShape: public MR_ShapeInterface
 {
    public:
+   virtual ~MR_PolygonShape() {}
       virtual int       VertexCount()const =0;
       virtual MR_Int32  X( int pIndex )const =0;
       virtual MR_Int32  Y( int pIndex )const =0;

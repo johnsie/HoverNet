@@ -31,11 +31,24 @@
 
 #include "../Util/MR_Types.h"
 
+#ifndef _WIN32
+struct PALETTEENTRY
+{
+   MR_UInt8 peRed;
+   MR_UInt8 peGreen;
+   MR_UInt8 peBlue;
+   MR_UInt8 peFlags;
+};
+#endif
 
+#ifdef _WIN32
 #ifdef MR_VIDEO_SERVICES
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
+#endif
+#else
+   #define MR_DllDeclare
 #endif
 
 #define MR_NB_COLORS                  256

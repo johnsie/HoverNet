@@ -30,10 +30,14 @@
 
 #include "ResourceLib.h"
 
-#ifdef MR_OBJ_FAC_TOOLS
-   #define MR_DllDeclare   __declspec( dllexport )
+#ifdef _WIN32
+   #ifdef MR_OBJ_FAC_TOOLS
+      #define MR_DllDeclare   __declspec( dllexport )
+   #else
+      #define MR_DllDeclare   __declspec( dllimport )
+   #endif
 #else
-   #define MR_DllDeclare   __declspec( dllimport )
+   #define MR_DllDeclare
 #endif
 
 

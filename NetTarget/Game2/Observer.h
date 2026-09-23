@@ -23,7 +23,7 @@
 #ifndef OBSERVER_H
 #define OBSERVER_H
 
-#include "../VideoServices/3DViewPort.h"
+#include "../VideoServices/3DViewport.h"
 #include "ClientSession.h"
 #include "../MainCharacter/MainCharacter.h"
 #include "../ObjFacTools/SpriteHandle.h"

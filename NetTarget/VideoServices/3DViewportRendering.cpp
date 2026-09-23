@@ -20,7 +20,7 @@
 // and limitations under the License.
 //
 
-#include "stdafx.h"
+#include "StdAfx.h"
 
 #include "3DViewport.h"
 #include "../Util/Profiler.h"
@@ -224,7 +224,7 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
       }
 
       lCutted0.mX    = MR_ZBUFFER_UNIT*0xFFFE;
-      lCutted0.mY    = lRotated0.mY + MulDiv( lRotated1.mY-lRotated0.mY, MR_ZBUFFER_UNIT*0xFFFE-lRotated0.mX, lRotated1.mX-lRotated0.mX );
+      lCutted0.mY    = lRotated0.mY + MulDiv( lRotated1.mY-lRotated0.mY, MR_ZBUFFER_UNIT*0xFFFE - lRotated0.mX, lRotated1.mX-lRotated0.mX );
    }
    else
    {
@@ -241,7 +241,7 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
    {
 
       lCutted1.mX    = MR_ZBUFFER_UNIT*0xFFFE;
-      lCutted1.mY    = lRotated0.mY + MulDiv( lRotated1.mY-lRotated0.mY, MR_ZBUFFER_UNIT*0xFFFE-lRotated0.mX, lRotated1.mX-lRotated0.mX );
+      lCutted1.mY    = lRotated0.mY + MulDiv( lRotated1.mY-lRotated0.mY, MR_ZBUFFER_UNIT*0xFFFE - lRotated0.mX, lRotated1.mX-lRotated0.mX );
 
    }
    else
@@ -692,14 +692,14 @@ void MR_3DViewPort::RenderHorizontalSurface( int pNbVertex, const MR_2DCoordinat
                   if( l2Close2Far[ lPrevious ]!= 1 )
                   {
                      lCutted[ lNbCutted ].mX = MR_ZBUFFER_UNIT*0xFFFE;
-                     lCutted[ lNbCutted ].mY = lRotated[lCounter].mY + MulDiv( lRotated[lPrevious].mY-lRotated[lCounter].mY, MR_ZBUFFER_UNIT*0xFFFE-lRotated[lCounter].mX, lRotated[lPrevious].mX-lRotated[lCounter].mX );
+                     lCutted[ lNbCutted ].mY = lRotated[lCounter].mY + MulDiv( lRotated[lPrevious].mY-lRotated[lCounter].mY, MR_ZBUFFER_UNIT*0xFFFE - lRotated[lCounter].mX, lRotated[lPrevious].mX-lRotated[lCounter].mX );
                      lNbCutted++;
                   }
 
                   if( l2Close2Far[ lNext ] != 1 )
                   {
                      lCutted[ lNbCutted ].mX = MR_ZBUFFER_UNIT*0xFFFE;
-                     lCutted[ lNbCutted ].mY = lRotated[lCounter].mY + MulDiv( lRotated[lNext].mY-lRotated[lCounter].mY, MR_ZBUFFER_UNIT*0xFFFE-lRotated[lCounter].mX, lRotated[lNext].mX-lRotated[lCounter].mX );
+                     lCutted[ lNbCutted ].mY = lRotated[lCounter].mY + MulDiv( lRotated[lNext].mY-lRotated[lCounter].mY, MR_ZBUFFER_UNIT*0xFFFE - lRotated[lCounter].mX, lRotated[lNext].mX-lRotated[lCounter].mX );
                      lNbCutted++;
                   }
                }              
@@ -1282,7 +1282,7 @@ void MR_3DViewPort::RenderHorizontalSurface( int pNbVertex, const MR_2DCoordinat
                   }
                }
 
-               
+
             } // End of sections loop
 
             
@@ -1902,11 +1902,13 @@ void BltTriangle()
 
             }
 
-            lLineBuffer  = gsTriangleBltParam.mBuffer[lCurrentLine];
-            lLineZBuffer = gsTriangleBltParam.mZBuffer[lCurrentLine];
-            
-            while( lCurrentLine < lFirstStop )
+            if( lCurrentLine < lFirstStop )
             {
+               lLineBuffer  = gsTriangleBltParam.mBuffer[lCurrentLine];
+               lLineZBuffer = gsTriangleBltParam.mZBuffer[lCurrentLine];
+
+               while( lCurrentLine < lFirstStop )
+               {
               
                int lXLeft  = lXLeft_4096/4096;
                int lXRight = lXRight_4096/4096;
@@ -1962,6 +1964,7 @@ void BltTriangle()
                lV_4096 += lDV_PerLine_4096;                    
                lZ_4096 += lDZ_PerLine_4096;                    
 
+               }
             }
 
             // Prepare the next part of the triangle
@@ -2097,6 +2100,10 @@ void BltTriangle()
       }
 
       // Draw the bottom part of the triangle
+      if( lCurrentLine >= lSecondStop )
+      {
+         return;
+      }
       lLineBuffer  = gsTriangleBltParam.mBuffer[lCurrentLine];
       lLineZBuffer = gsTriangleBltParam.mZBuffer[lCurrentLine];
 
