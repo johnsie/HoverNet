@@ -356,7 +356,18 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
                 FinishJoiningRace(pConn, pRaceManager);
             } else {
+                // A silently-dropped message here leaves the client's "Retrieving game
+                // info..." dialog waiting on its own 10s client-side timeout with no
+                // indication of what went wrong -- send an explicit rejection instead.
                 g_Logger.Log(MR_LOG_WARN, "Invalid GAME_NAME message length from client %d: %d", pConn->mClientId, dataLen);
+                MessageBuffer failMsg;
+                failMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE, raceId=-1 means "failed"
+                const int failId = -1;
+                memcpy(&failMsg.data[0], &failId, sizeof(failId));
+                failMsg.data[4] = 0;
+                memcpy(&failMsg.data[5], &pConn->mClientId, sizeof(pConn->mClientId));
+                failMsg.dataLen = 9;
+                send(pConn->mTcpSocket, (const char*)&failMsg, 3 + failMsg.dataLen, 0);
             }
             break;
         }

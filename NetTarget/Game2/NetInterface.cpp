@@ -734,7 +734,8 @@ BOOL MR_NetworkInterface::SlaveConnect( HWND pWindow, const char* pServerIP, uns
       CString lSavedServerAddr = mRaceServerAddr;
       unsigned lSavedServerPort = mRaceServerPort;
       BOOL lSavedIsGameCreator = mIsGameCreator;  // Preserve game creator flag
-      
+      CString lSavedGameName = mGameName;  // Disconnect() below clears this too
+
       Disconnect();
       ASSERT( !mServerMode );
 
@@ -743,6 +744,7 @@ BOOL MR_NetworkInterface::SlaveConnect( HWND pWindow, const char* pServerIP, uns
       mRaceServerAddr = lSavedServerAddr;
       mRaceServerPort = lSavedServerPort;
       mIsGameCreator = lSavedIsGameCreator;  // Restore game creator flag
+      mGameName = lSavedGameName;
 
       // Phase 4: Check if this is server-hosted race
       if( mConnectionMode == MR_CONNECTION_SERVER_HOSTED )
