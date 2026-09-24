@@ -30,6 +30,12 @@ enum MR_RaceServerMessageType
     eRSMsgListGames        = 60,  // Client -> Server: request the lobby listing
     eRSMsgGameInfo         = 61,  // Server -> Client: one open race (see ParseGameInfo)
     eRSMsgGameListEnd      = 62,  // Server -> Client: listing is complete
+    eRSMsgJoinedRace       = 63,  // Server -> Client: ack for eRSMsgGameName (see ParseJoinedRace)
+    // NOTE: the wire header's message-type field is only 6 bits (MakeMessageHeader in
+    // ServerSocket.cpp masks with 0x3F), so every value here must stay in 0-63 or it
+    // silently wraps around to a different, already-used type.
+    eRSMsgStartRace        = 52,  // Client -> Server: race creator asks to start (ignored otherwise)
+    eRSMsgRaceStarted      = 53,  // Server -> Client: broadcast to every player in the race at once
 };
 
 // One race as reported by eRSMsgGameInfo.
@@ -54,6 +60,13 @@ struct RaceServerPeer
 {
     unsigned mUdpPort = 0;
     std::string mName;
+};
+
+// The server's reply to a successful eRSMsgGameName join/create.
+struct RaceServerJoinAck
+{
+    int mRaceId = -1;
+    bool mIsHost = false;  // True if this client created the race (and so may start it)
 };
 
 // Blocking TCP client for the RaceServer protocol. Not thread-safe.
@@ -90,6 +103,13 @@ public:
 
     // Parses an eRSMsgGameInfo payload.
     static bool ParseGameInfo(const RaceServerMessage& pMessage, RaceServerGameInfo& pOut);
+
+    // Parses an eRSMsgJoinedRace payload ([4-byte little-endian raceId][1-byte isHost]).
+    static bool ParseJoinedRace(const RaceServerMessage& pMessage, RaceServerJoinAck& pOut);
+
+    // Convenience: the race's creator asks the server to start it. The server only
+    // honors this from the actual creator; anyone else's request is silently ignored.
+    bool StartRace();
 
 private:
     int mSocket;

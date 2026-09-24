@@ -1,6 +1,7 @@
 #include "RaceServerClient.h"
 
 #include <arpa/inet.h>
+#include <cassert>
 #include <cerrno>
 #include <cstring>
 #include <netdb.h>
@@ -12,10 +13,13 @@
 namespace
 {
     // Matches MakeMessageHeader() in NetTarget/RaceServer/NetworkInterface/ServerSocket.cpp:
-    // DatagramNumber occupies bits 0-7, DatagramQueue bits 8-9, MessageType bits 10-15.
+    // DatagramNumber occupies bits 0-7, DatagramQueue bits 8-9, MessageType bits 10-15 --
+    // only 6 bits, so valid types are 0-63; anything else silently wraps into a
+    // different, already-used type instead of failing loudly.
     // Datagram fields are unused over TCP, so they are left zero.
     std::uint16_t MakeMessageHeader(int pMessageType)
     {
+        assert(pMessageType >= 0 && pMessageType <= 0x3F);
         return static_cast<std::uint16_t>((pMessageType & 0x3F) << 10);
     }
 
@@ -140,6 +144,11 @@ bool RaceServerClient::JoinGame(const std::string& pGameName)
     return SendMessage(eRSMsgGameName, pGameName.data(), pGameName.size());
 }
 
+bool RaceServerClient::StartRace()
+{
+    return SendMessage(eRSMsgStartRace, nullptr, 0);
+}
+
 bool RaceServerClient::PollMessage(RaceServerMessage& pOut, int pTimeoutMs)
 {
     if (mSocket < 0)
@@ -249,5 +258,19 @@ bool RaceServerClient::ParseGameInfo(const RaceServerMessage& pMessage, RaceServ
     }
     pOut.mTrack.assign(lData + lOffset, lData + lOffset + lTrackLen);
 
+    return true;
+}
+
+bool RaceServerClient::ParseJoinedRace(const RaceServerMessage& pMessage, RaceServerJoinAck& pOut)
+{
+    if (pMessage.mType != eRSMsgJoinedRace || pMessage.mData.size() < 5)
+    {
+        return false;
+    }
+
+    int lRaceId = 0;
+    std::memcpy(&lRaceId, pMessage.mData.data(), sizeof(lRaceId));
+    pOut.mRaceId = lRaceId;
+    pOut.mIsHost = pMessage.mData[4] != 0;
     return true;
 }

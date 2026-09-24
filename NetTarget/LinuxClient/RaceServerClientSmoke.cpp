@@ -178,6 +178,10 @@ namespace
             std::fprintf(stderr, "Could not join the second, independent race\n");
             return false;
         }
+        // Drain D's own eRSMsgJoinedRace ack before checking isolation -- that's
+        // expected traffic addressed to D, not a leak from the other race.
+        RaceServerMessage lMessage;
+        while (lClientD.PollMessage(lMessage, 200)) { }
 
         const std::string lLeakText = "should not leak";
         if (!lClientA.SendMessage(eRSMsgChatMessage, lLeakText.data(), lLeakText.size()))
@@ -185,7 +189,6 @@ namespace
             std::fprintf(stderr, "Failed to send isolation-check chat message\n");
             return false;
         }
-        RaceServerMessage lMessage;
         if (lClientD.PollMessage(lMessage, 500))
         {
             std::fprintf(stderr, "Client D received traffic from an unrelated race (no isolation)\n");
@@ -251,6 +254,102 @@ namespace
             return false;
         }
         std::printf("Lobby chat and race chat are isolated from each other, as expected\n");
+
+        // Host-controlled start: the creator of a race gets told it's the host via
+        // eRSMsgJoinedRace, a non-creator does not, a non-host's start request is
+        // ignored, and the host's start request broadcasts eRSMsgRaceStarted to
+        // every player in that race (including the host itself) at once.
+        RaceServerClient lHost;
+        RaceServerClient lJoiner;
+        if (!lHost.Connect("127.0.0.1", pPort) || !lJoiner.Connect("127.0.0.1", pPort))
+        {
+            std::fprintf(stderr, "Could not connect host/joiner clients\n");
+            return false;
+        }
+
+        if (!lHost.JoinGame("start-test-race"))
+        {
+            std::fprintf(stderr, "Host could not create start-test-race\n");
+            return false;
+        }
+        RaceServerJoinAck lHostAck;
+        bool lGotHostAck = false;
+        for (int lTries = 0; lTries < 20 && !lGotHostAck; ++lTries)
+        {
+            if (lHost.PollMessage(lMessage, 200) && RaceServerClient::ParseJoinedRace(lMessage, lHostAck))
+            {
+                lGotHostAck = true;
+            }
+        }
+        if (!lGotHostAck || !lHostAck.mIsHost)
+        {
+            std::fprintf(stderr, "Race creator was not acknowledged as host\n");
+            return false;
+        }
+
+        if (!lJoiner.JoinGame("start-test-race"))
+        {
+            std::fprintf(stderr, "Joiner could not join start-test-race\n");
+            return false;
+        }
+        RaceServerJoinAck lJoinerAck;
+        bool lGotJoinerAck = false;
+        for (int lTries = 0; lTries < 20 && !lGotJoinerAck; ++lTries)
+        {
+            if (lJoiner.PollMessage(lMessage, 200) && RaceServerClient::ParseJoinedRace(lMessage, lJoinerAck))
+            {
+                lGotJoinerAck = true;
+            }
+        }
+        if (!lGotJoinerAck || lJoinerAck.mIsHost)
+        {
+            std::fprintf(stderr, "Non-creator was incorrectly acknowledged as host\n");
+            return false;
+        }
+        std::printf("Host/non-host join acknowledgement is correct\n");
+
+        // A non-host's start request must be ignored. Drain whatever arrives for a
+        // beat (there may be an unrelated queued eRSMsgConnNameSet from the join
+        // above) and confirm none of it is eRSMsgRaceStarted.
+        if (!lJoiner.StartRace())
+        {
+            std::fprintf(stderr, "Failed to send non-host start request\n");
+            return false;
+        }
+        while (lHost.PollMessage(lMessage, 500))
+        {
+            if (lMessage.mType == eRSMsgRaceStarted)
+            {
+                std::fprintf(stderr, "Race started from a non-host request (no host authority check)\n");
+                return false;
+            }
+        }
+
+        // The host's start request must reach both the host and the joiner.
+        if (!lHost.StartRace())
+        {
+            std::fprintf(stderr, "Failed to send host start request\n");
+            return false;
+        }
+        bool lHostSawStart = false;
+        bool lJoinerSawStart = false;
+        for (int lTries = 0; lTries < 20 && !(lHostSawStart && lJoinerSawStart); ++lTries)
+        {
+            if (!lHostSawStart && lHost.PollMessage(lMessage, 100) && lMessage.mType == eRSMsgRaceStarted)
+            {
+                lHostSawStart = true;
+            }
+            if (!lJoinerSawStart && lJoiner.PollMessage(lMessage, 100) && lMessage.mType == eRSMsgRaceStarted)
+            {
+                lJoinerSawStart = true;
+            }
+        }
+        if (!lHostSawStart || !lJoinerSawStart)
+        {
+            std::fprintf(stderr, "Host's start request did not reach every player in the race\n");
+            return false;
+        }
+        std::printf("Host-controlled race start works and reaches all players together\n");
 
         return true;
     }

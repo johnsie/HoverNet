@@ -9,7 +9,8 @@ extern MR_ServerLogger g_Logger;
 RaceSession::RaceSession()
     : mRaceId(-1),
       mCreatedTime(0),
-      mRaceStarted(FALSE)
+      mRaceStarted(FALSE),
+      mCreatorClientId(-1)
 {
     mRaceName[0] = '\0';
 }
@@ -23,12 +24,14 @@ BOOL RaceSession::Initialize(
     const char* raceName,
     const char* trackName,
     int numLaps,
-    BOOL allowWeapons)
+    BOOL allowWeapons,
+    int creatorClientId)
 {
     mRaceId = raceId;
     snprintf(mRaceName, sizeof(mRaceName), "%s", raceName);
     mCreatedTime = time(NULL);
     mRaceStarted = FALSE;
+    mCreatorClientId = creatorClientId;
 
     if (!mSimulation.Initialize(trackName, numLaps, allowWeapons, 8)) {
         g_Logger.Log(MR_LOG_ERROR, "Failed to initialize game simulation for race %d", raceId);

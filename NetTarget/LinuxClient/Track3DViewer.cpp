@@ -311,6 +311,12 @@ enum class LobbyInputMode
     eChat,
 };
 
+enum class LobbyPhase
+{
+    eBrowsing,    // Picking or naming a race
+    eWaitingRoom, // Joined a race, waiting for its creator to start it
+};
+
 bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                     const MR_Sprite& font, const std::string& host, unsigned port,
                     std::string& outJoinedName, int pFrameLimit)
@@ -338,10 +344,13 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
 
     int selected = 0;
     LobbyInputMode inputMode = LobbyInputMode::eNone;
+    LobbyPhase phase = LobbyPhase::eBrowsing;
     std::string inputBuffer;
     Uint32 lastRefresh = SDL_GetTicks();
     bool running = true;
     bool joined = false;
+    bool isHost = false;
+    std::vector<std::string> raceMembers;
     int framesShown = 0;
 
     SDL_StartTextInput();
@@ -375,9 +384,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     else if (key == SDLK_RETURN && !inputBuffer.empty()) {
                         if (client.JoinGame(inputBuffer)) {
                             outJoinedName = inputBuffer;
-                            joined = true;
-                            running = false;
+                            phase = LobbyPhase::eWaitingRoom;
+                            inputMode = LobbyInputMode::eNone;
+                            raceMembers.clear();
                         }
+                        inputBuffer.clear();
                     }
                 }
                 else if (inputMode == LobbyInputMode::eChat) {
@@ -391,30 +402,37 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                         inputBuffer.clear();  // Stay in chat mode -- keep the conversation going
                     }
                 }
-                else if (key == SDLK_UP && !games.empty()) {
-                    selected = (selected + static_cast<int>(games.size()) - 1) % static_cast<int>(games.size());
-                }
-                else if (key == SDLK_DOWN && !games.empty()) {
-                    selected = (selected + 1) % static_cast<int>(games.size());
-                }
-                else if (key == SDLK_r) {
-                    gamesBeingListed.clear();
-                    client.SendMessage(eRSMsgListGames, nullptr, 0);
-                    lastRefresh = SDL_GetTicks();
-                }
-                else if (key == SDLK_n) {
-                    inputMode = LobbyInputMode::eHostRace;
-                    inputBuffer.clear();
-                }
                 else if (key == SDLK_t) {
                     inputMode = LobbyInputMode::eChat;
                     inputBuffer.clear();
                 }
-                else if (key == SDLK_RETURN && !games.empty()) {
-                    if (client.JoinGame(games[static_cast<std::size_t>(selected)].mName)) {
-                        outJoinedName = games[static_cast<std::size_t>(selected)].mName;
-                        joined = true;
-                        running = false;
+                else if (phase == LobbyPhase::eBrowsing) {
+                    if (key == SDLK_UP && !games.empty()) {
+                        selected = (selected + static_cast<int>(games.size()) - 1) % static_cast<int>(games.size());
+                    }
+                    else if (key == SDLK_DOWN && !games.empty()) {
+                        selected = (selected + 1) % static_cast<int>(games.size());
+                    }
+                    else if (key == SDLK_r) {
+                        gamesBeingListed.clear();
+                        client.SendMessage(eRSMsgListGames, nullptr, 0);
+                        lastRefresh = SDL_GetTicks();
+                    }
+                    else if (key == SDLK_n) {
+                        inputMode = LobbyInputMode::eHostRace;
+                        inputBuffer.clear();
+                    }
+                    else if (key == SDLK_RETURN && !games.empty()) {
+                        if (client.JoinGame(games[static_cast<std::size_t>(selected)].mName)) {
+                            outJoinedName = games[static_cast<std::size_t>(selected)].mName;
+                            phase = LobbyPhase::eWaitingRoom;
+                            raceMembers.clear();
+                        }
+                    }
+                }
+                else if (phase == LobbyPhase::eWaitingRoom) {
+                    if (key == SDLK_s && isHost) {
+                        client.StartRace();
                     }
                 }
             }
@@ -444,28 +462,72 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             else if (message.mType == eRSMsgChatMessage) {
                 pushChat(std::string(message.mData.begin(), message.mData.end()));
             }
+            else if (message.mType == eRSMsgJoinedRace) {
+                RaceServerJoinAck ack;
+                if (RaceServerClient::ParseJoinedRace(message, ack)) {
+                    isHost = ack.mIsHost;
+                }
+            }
+            else if (message.mType == eRSMsgConnNameSet) {
+                RaceServerPeer peer;
+                if (RaceServerClient::ParsePeer(message, peer)) {
+                    raceMembers.push_back(peer.mName);
+                    pushChat("* " + peer.mName + " joined");
+                }
+            }
+            else if (message.mType == eRSMsgRaceStarted) {
+                joined = true;
+                running = false;
+            }
         }
 
         viewport.Clear(0);
         int y = lineHeight;
-        DrawUiText(font, viewport.GetXRes() / 2, y, "HOVERRACE LOBBY", &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
-        y += lineHeight * 2;
 
-        if (games.empty()) {
-            DrawUiText(font, 20, y, "(no open races -- press N to host one)", &viewport, MR_Sprite::eLeft,
-                       MR_Sprite::eTop);
+        if (phase == LobbyPhase::eWaitingRoom) {
+            char titleLine[64];
+            std::snprintf(titleLine, sizeof(titleLine), "IN RACE: %s", outJoinedName.c_str());
+            DrawUiText(font, viewport.GetXRes() / 2, y, titleLine, &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
+            y += lineHeight * 2;
+
+            if (raceMembers.empty()) {
+                DrawUiText(font, 20, y, "(waiting for other players...)", &viewport, MR_Sprite::eLeft,
+                           MR_Sprite::eTop);
+                y += lineHeight;
+            }
+            else {
+                for (const std::string& member : raceMembers) {
+                    DrawUiText(font, 20, y, member.c_str(), &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+                    y += lineHeight;
+                }
+            }
+            y += lineHeight;
+            DrawUiText(font, 20, y,
+                       isHost ? "You are the host." : "Waiting for the host to start the race...",
+                       &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
             y += lineHeight;
         }
         else {
-            for (std::size_t index = 0; index < games.size(); ++index) {
-                const RaceServerGameInfo& game = games[index];
-                char line[128];
-                std::snprintf(line, sizeof(line), "%s%-24s track=%-12s laps=%d players=%d%s",
-                              static_cast<int>(index) == selected ? "> " : "  ", game.mName.c_str(),
-                              game.mTrack.c_str(), game.mNumLaps, game.mNumPlayers,
-                              game.mStarted ? " (in progress)" : "");
-                DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            DrawUiText(font, viewport.GetXRes() / 2, y, "HOVERRACE LOBBY", &viewport, MR_Sprite::eCenter,
+                       MR_Sprite::eTop);
+            y += lineHeight * 2;
+
+            if (games.empty()) {
+                DrawUiText(font, 20, y, "(no open races -- press N to host one)", &viewport, MR_Sprite::eLeft,
+                           MR_Sprite::eTop);
                 y += lineHeight;
+            }
+            else {
+                for (std::size_t index = 0; index < games.size(); ++index) {
+                    const RaceServerGameInfo& game = games[index];
+                    char line[128];
+                    std::snprintf(line, sizeof(line), "%s%-24s track=%-12s laps=%d players=%d%s",
+                                  static_cast<int>(index) == selected ? "> " : "  ", game.mName.c_str(),
+                                  game.mTrack.c_str(), game.mNumLaps, game.mNumPlayers,
+                                  game.mStarted ? " (in progress)" : "");
+                    DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+                    y += lineHeight;
+                }
             }
         }
         y += lineHeight;
@@ -491,6 +553,15 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
             y += lineHeight;
             DrawUiText(font, 20, y, "Enter: send   Esc: stop chatting", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+        }
+        else if (phase == LobbyPhase::eWaitingRoom) {
+            if (isHost) {
+                DrawUiText(font, 20, y, "S: start the race   T: chat   Esc: leave", &viewport, MR_Sprite::eLeft,
+                           MR_Sprite::eTop);
+            }
+            else {
+                DrawUiText(font, 20, y, "T: chat   Esc: leave", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            }
         }
         else {
             DrawUiText(font, 20, y, "Up/Down: select   Enter: join   Esc: skip", &viewport, MR_Sprite::eLeft,

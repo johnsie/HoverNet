@@ -40,7 +40,7 @@ int MR_RaceManager::CreateRace(
     int raceId = mNextRaceId++;
     RaceSession* pRace = new RaceSession();
 
-    if (!pRace->Initialize(raceId, raceName, trackName, numLaps, allowWeapons)) {
+    if (!pRace->Initialize(raceId, raceName, trackName, numLaps, allowWeapons, creatorClientId)) {
         delete pRace;
         return -1;
     }

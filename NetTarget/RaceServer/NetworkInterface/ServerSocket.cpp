@@ -20,7 +20,10 @@ struct MessageBuffer {
 // Helper to construct message header with message type
 inline unsigned short MakeMessageHeader(int messageType) {
     // Match MR_NetMessageBuffer: DatagramNumber bits 0-7, DatagramQueue bits 8-9,
-    // and MessageType bits 10-15.
+    // and MessageType bits 10-15 -- only 6 bits, so valid types are 0-63. A type
+    // outside that range silently wraps into some other, already-used type instead
+    // of failing loudly, so assert here rather than let that happen again.
+    assert(messageType >= 0 && messageType <= 0x3F);
     return static_cast<unsigned short>((messageType & 0x3F) << 10);
 }
 
@@ -349,7 +352,19 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 pRaceManager->JoinRace(pConn->mRaceId, pConn->mClientId, pConn->mPlayerName);
 
                 g_Logger.Log(MR_LOG_INFO, "Client %d assigned to race %d", pConn->mClientId, pConn->mRaceId);
-                
+
+                // Ack the join so the client knows its race id and, critically, whether
+                // it's the creator -- only the creator may later start the race.
+                {
+                    RaceSession* pRace = pRaceManager->GetRace(pConn->mRaceId);
+                    MessageBuffer ackMsg;
+                    ackMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE
+                    memcpy(&ackMsg.data[0], &pConn->mRaceId, sizeof(pConn->mRaceId));
+                    ackMsg.data[4] = (pRace != nullptr && pRace->IsCreator(pConn->mClientId)) ? 1 : 0;
+                    ackMsg.dataLen = 5;
+                    send(pConn->mTcpSocket, (const char*)&ackMsg, 3 + ackMsg.dataLen, 0);
+                }
+
                 // Now send CONN_NAME_SET messages for all other clients in this race
                 // so this client knows about the other players
                 g_Logger.Log(MR_LOG_INFO, "Sending player list to client %d for race %d", pConn->mClientId, pConn->mRaceId);
@@ -507,6 +522,31 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             endMsg.header = MakeMessageHeader(62);  // MRNM_GAME_LIST_END
             endMsg.dataLen = 0;
             send(pConn->mTcpSocket, (const char*)&endMsg, 3, 0);
+            break;
+        }
+        case 52:  // MRNM_START_RACE - only the race's creator may start it
+        {
+            RaceSession* pRace = (pConn->mRaceId >= 0) ? pRaceManager->GetRace(pConn->mRaceId) : nullptr;
+            if (pRace == nullptr || !pRace->IsCreator(pConn->mClientId)) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d tried to start race %d but is not its creator",
+                             pConn->mClientId, pConn->mRaceId);
+                break;
+            }
+
+            pRaceManager->StartRace(pConn->mRaceId);
+            g_Logger.Log(MR_LOG_INFO, "Race %d started by creator client %d", pConn->mRaceId, pConn->mClientId);
+
+            // Broadcast to every player in the race, including the creator, so
+            // everyone transitions from the lobby into the race on the same signal.
+            MessageBuffer startedMsg;
+            startedMsg.header = MakeMessageHeader(53);  // MRNM_RACE_STARTED
+            startedMsg.dataLen = 0;
+            for (auto& pair : mConnections) {
+                ClientConnection* pTarget = pair.second;
+                if (pTarget && pTarget->mConnected && pTarget->mRaceId == pConn->mRaceId) {
+                    send(pTarget->mTcpSocket, (const char*)&startedMsg, 3, 0);
+                }
+            }
             break;
         }
         default:

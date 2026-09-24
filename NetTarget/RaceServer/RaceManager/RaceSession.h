@@ -16,6 +16,7 @@ public:
     std::vector<int> mPlayerClientIds;   // Connected player IDs
     time_t mCreatedTime;
     BOOL mRaceStarted;
+    int mCreatorClientId;   // The player who created this race -- only they may start it
 
     // Initialize race
     BOOL Initialize(
@@ -23,7 +24,10 @@ public:
         const char* raceName,
         const char* trackName,
         int numLaps,
-        BOOL allowWeapons);
+        BOOL allowWeapons,
+        int creatorClientId);
+
+    BOOL IsCreator(int clientId) const { return clientId == mCreatorClientId; }
 
     // Player joins this race
     int AddPlayer(int clientId, const char* playerName);
