@@ -1064,7 +1064,23 @@ int main(int argc, char** argv)
                     // started; the main loop below spawns any that join afterward the
                     // same way, and keeps every one of them positioned from the
                     // eRSMsgSetMainElemState updates the server relays.
-                    int nextStartSlot = 1;
+                    std::vector<int> raceClientIds;
+                    raceClientIds.push_back(localClientId);
+                    for (const RaceServerPeer& peer : knownPeers) {
+                        raceClientIds.push_back(peer.mClientId);
+                    }
+                    std::sort(raceClientIds.begin(), raceClientIds.end());
+                    raceClientIds.erase(std::unique(raceClientIds.begin(), raceClientIds.end()), raceClientIds.end());
+
+                    const int playerStartCount = level.GetPlayerCount();
+                    const auto localIt = std::lower_bound(raceClientIds.begin(), raceClientIds.end(), localClientId);
+                    const int localRaceSlot = static_cast<int>(std::distance(raceClientIds.begin(), localIt));
+                    const int localStartSlot = localRaceSlot % playerStartCount;
+                    if (!session.PlaceCharacterAtStart(mainCharacter, localStartSlot)) {
+                        std::fprintf(stderr, "Could not place local multiplayer craft in start slot %d\n", localStartSlot);
+                    }
+                    mainCharacter->SetHoverId(localRaceSlot);
+                    mainCharacter->SetHoverModel(localRaceSlot % 4);
                     for (const RaceServerPeer& peer : knownPeers) {
                         if (remotePlayers.count(peer.mClientId) > 0) {
                             continue;
@@ -1073,13 +1089,15 @@ int main(int argc, char** argv)
                         if (remote == nullptr) {
                             continue;
                         }
-                        const int slot = nextStartSlot++;
-                        const int startSlot = std::min(slot, level.GetPlayerCount() - 1);
+                        const auto remoteIt = std::lower_bound(raceClientIds.begin(), raceClientIds.end(), peer.mClientId);
+                        const int remoteRaceSlot = static_cast<int>(std::distance(raceClientIds.begin(), remoteIt));
+                        const int startSlot = remoteRaceSlot % playerStartCount;
                         const int startRoom = level.GetStartingRoom(startSlot);
                         remote->mPosition = level.GetStartingPos(startSlot);
                         remote->SetOrientation(level.GetStartingOrientation(startSlot));
                         remote->mRoom = (startRoom >= 0 && startRoom < level.GetRoomCount()) ? startRoom : room;
-                        remote->SetHoverId(slot);
+                        remote->SetHoverId(remoteRaceSlot);
+                        remote->SetHoverModel(remoteRaceSlot % 4);
                         MR_FreeElementHandle remoteHandle = session.InsertRemoteCharacter(remote, remote->mRoom);
                         if (remoteHandle != nullptr) {
                             remotePlayers[peer.mClientId] = {remote, remoteHandle};

@@ -38,6 +38,20 @@ int main()
         std::fprintf(stderr, "Local player was not inserted into the starting room\n");
         return 1;
     }
+    if (level->GetPlayerCount() < 2 || !session.PlaceCharacterAtStart(player, 1) ||
+        player->mRoom != level->GetStartingRoom(1) ||
+        player->mPosition.mX != level->GetStartingPos(1).mX ||
+        player->mPosition.mY != level->GetStartingPos(1).mY ||
+        player->mPosition.mZ != level->GetStartingPos(1).mZ) {
+        std::fprintf(stderr, "Local player was not moved to multiplayer start slot 1\n");
+        return 1;
+    }
+    if (player->mPosition.mX == level->GetStartingPos(0).mX &&
+        player->mPosition.mY == level->GetStartingPos(0).mY &&
+        player->mPosition.mZ == level->GetStartingPos(0).mZ) {
+        std::fprintf(stderr, "ClassicH multiplayer start slots overlap\n");
+        return 1;
+    }
     if (session.GetBackImage() == nullptr || buffer.GetBackPalette() == nullptr ||
         session.GetMap() == nullptr) {
         std::fprintf(stderr, "ClassicH presentation data was not loaded\n");

@@ -272,6 +272,39 @@ BOOL MR_ClientSession::CreateMainCharacter2()
    return TRUE;
 }
 
+BOOL MR_ClientSession::PlaceCharacterAtStart( MR_MainCharacter* pCharacter, int pPlayerSlot )
+{
+   MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
+   if( pCharacter == NULL || lCurrentLevel == NULL || pPlayerSlot < 0 ||
+       pPlayerSlot >= lCurrentLevel->GetPlayerCount() )
+   {
+      return FALSE;
+   }
+
+   for( int lRoom = 0; lRoom < lCurrentLevel->GetRoomCount(); ++lRoom )
+   {
+      MR_FreeElementHandle lHandle = lCurrentLevel->GetFirstFreeElement( lRoom );
+      while( lHandle != NULL )
+      {
+         if( lCurrentLevel->GetFreeElement( lHandle ) == pCharacter )
+         {
+            const int lStartRoom = lCurrentLevel->GetStartingRoom( pPlayerSlot );
+            if( lStartRoom < 0 || lStartRoom >= lCurrentLevel->GetRoomCount() )
+            {
+               return FALSE;
+            }
+            pCharacter->mPosition = lCurrentLevel->GetStartingPos( pPlayerSlot );
+            pCharacter->SetOrientation( lCurrentLevel->GetStartingOrientation( pPlayerSlot ) );
+            pCharacter->mRoom = lStartRoom;
+            lCurrentLevel->MoveElement( lHandle, lStartRoom );
+            return TRUE;
+         }
+         lHandle = lCurrentLevel->GetNextFreeElement( lHandle );
+      }
+   }
+   return FALSE;
+}
+
 MR_FreeElementHandle MR_ClientSession::InsertRemoteCharacter( MR_MainCharacter* pCharacter, int pRoom )
 {
    MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
