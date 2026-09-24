@@ -11,6 +11,14 @@ case "$1" in
     fi
     install -d -o hovernet -g hovernet -m 0750 /var/log/hovernet
     systemctl daemon-reload
+    systemctl enable hovernet-raceserver
+    # Reloading the unit file is not enough: an already-running process keeps
+    # running the old binary until something restarts it. Without this, every
+    # deploy installs a new .deb but silently leaves the old server running
+    # (dpkg reports the new version; the live process disagrees) -- restart
+    # unconditionally so an upgrade always takes effect, whether or not the
+    # service was already running.
+    systemctl restart hovernet-raceserver
     ;;
 esac
 
