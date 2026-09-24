@@ -76,12 +76,11 @@
     <ClCompile Include="ColorPalette.cpp" />
     <ClCompile Include="ColorTab.cpp" />
     <ClCompile Include="Patch.cpp" />
-    <ClCompile Include="SoundServer.cpp" />
+    <ClCompile Include="..\LinuxClient\HeadlessSoundServer.cpp" />
     <ClCompile Include="Sprite.cpp" />
     <ClCompile Include="StdAfx.cpp" />
     <ClCompile Include="VideoBuffer.cpp" />
     <ClCompile Include="VideoBuffer2DDraw.cpp" />
-    <ClCompile Include="..\..\OpenAL\alstub.cpp" />
     <ClCompile Include="RenderingEngine.cpp" />
     <ClCompile Include="GraphicsUtilities.cpp" />
     <ClCompile Include="ModernVideoBuffer.cpp" />

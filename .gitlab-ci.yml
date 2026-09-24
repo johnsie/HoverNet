@@ -26,6 +26,8 @@ lint:gitlab-ci:
   script:
     - test -f .gitlab-ci.yml
     - test -f packaging/debian/hovernet-raceserver.service
+    - test -x packaging/debian/build-game-deb.sh
+    - test -x packaging/debian/hovernet-game
 
 build:raceserver:linux:
   stage: build
@@ -46,10 +48,11 @@ build:game:linux:
     - cmake -S . -B build/linux -DCMAKE_BUILD_TYPE=Release
     - cmake --build build/linux --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
     - ctest --test-dir build/linux --output-on-failure
-  rules:
-    - if: '$CI_COMMIT_TAG'
-      when: never
-    - when: on_success
+  artifacts:
+    expire_in: 7 days
+    paths:
+      - build/linux/HoverNetGame2Player
+      - build/linux/ObjFac1.so
 
 package:raceserver:deb:
   stage: package
@@ -66,12 +69,27 @@ package:raceserver:deb:
     paths:
       - dist/*.deb
 
+package:game:deb:
+  stage: package
+  tags: ["$LINUX_RUNNER_TAG"]
+  needs:
+    - job: build:game:linux
+      artifacts: true
+  script:
+    - chmod +x packaging/debian/build-game-deb.sh
+    - export PACKAGE_VERSION="${CI_COMMIT_TAG#v}"; packaging/debian/build-game-deb.sh "${PACKAGE_VERSION:-0.0.0+${CI_COMMIT_SHORT_SHA}}" build/linux/HoverNetGame2Player build/linux/ObjFac1.so
+  artifacts:
+    name: "hovernet-game-linux-${CI_COMMIT_REF_SLUG}"
+    expire_in: 30 days
+    paths:
+      - dist/hovernet-game_*.deb
+
 build:game:windows:
   stage: build
   tags: ["$WINDOWS_RUNNER_TAG"]
   script:
-    - '$msbuild = "C:\BuildTools\MSBuild\Current\Bin\MSBuild.exe"; if (-not (Test-Path $msbuild)) { throw "MSBuild not found at $msbuild" }; & $msbuild NetTarget/Game2/Game2.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal'
-    - 'Copy-Item "C:\SDL2\lib\x86\SDL2.dll" "Release\SDL2.dll" -Force'
+    - '$msbuild = "C:\BuildTools\MSBuild\Current\Bin\MSBuild.exe"; if (-not (Test-Path $msbuild)) { throw "MSBuild not found at $msbuild" }; & $msbuild NetTarget/ObjFac1/ObjFac1.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & $msbuild NetTarget/Game2/Game2.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal'
+    - 'Copy-Item "C:\SDL2\lib\x86\SDL2.dll" "Release\SDL2.dll" -Force; $required = @("Game2.exe", "ObjFac1.dll", "ObjFac1.dat", "VideoServices.dll", "Model.dll", "MainCharacter.dll"); foreach ($file in $required) { if (-not (Test-Path (Join-Path "Release" $file))) { throw "Missing Windows runtime file: $file" } }'
   artifacts:
     expire_in: 7 days
     paths:

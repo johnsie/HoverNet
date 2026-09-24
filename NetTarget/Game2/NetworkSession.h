@@ -100,6 +100,7 @@ class MR_NetworkSession: public MR_ClientSession
 
       void ReadNet();
       void WriteNet();
+      void EnsureServerPeerCharacter( int pClientSlot );
 
       static void ElementCreationHook( MR_FreeElement* pElement, int pRoom, void* pThis );
       static void PermElementStateHook( MR_FreeElement* pElement, int pRoom, int pPermId, void* pThis );
@@ -139,6 +140,7 @@ class MR_NetworkSession: public MR_ClientSession
       // Phase 4: Dual-mode networking
       void SetConnectionMode( MR_ConnectionMode pMode, const char* pServerAddr = NULL, unsigned pServerPort = 0 );
       MR_ConnectionMode GetConnectionMode()const;
+      void ConfigureHostedRace( const char* pTrack, int pLaps, BOOL pWeapons );
       void SetIsGameCreator( BOOL pIsCreator );
       BOOL GetIsGameCreator()const;
 

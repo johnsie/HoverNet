@@ -28,6 +28,7 @@
 #include "../MazeCompiler/TrackCommonStuff.h"
 #include "../Util/StrRes.h"
 #include <direct.h>
+#include <share.h>
 #include <windows.h>
 
 
@@ -53,6 +54,25 @@ static void          CleanList();
 
 static int           CompareFunc(const void *elem1, const void *elem2 );
 
+static FILE* OpenTrackLog(const char* pMode)
+{
+   char lPath[MAX_PATH] = { 0 };
+   const DWORD lPathLen = GetTempPathA(sizeof(lPath), lPath);
+   if( (lPathLen > 0) && (lPathLen < sizeof(lPath)) )
+   {
+      strcat_s(lPath, sizeof(lPath), "HoverNet-Game2-TrackLoad.log");
+      FILE* lFile = _fsopen(lPath, pMode, _SH_DENYNO);
+      if( lFile != NULL )
+      {
+         return lFile;
+      }
+   }
+
+   // Logging is diagnostic only. Always return a valid stream when the
+   // temp directory is unavailable or another process owns the log.
+   return fopen("NUL", "w");
+}
+
 
 // Local variable
 #define MAX_TRACK_ENTRIES   200
@@ -71,7 +91,7 @@ static BOOL        gAllowRegistred;
 MR_RecordFile* MR_TrackOpen( HWND pWindow, const char* pFileName, BOOL pAllowRegistred )
 {
    MR_RecordFile* lReturnValue = NULL;
-   FILE* logFile = fopen("Game2_TrackLoad.log", "a");
+   FILE* logFile = OpenTrackLog("a");
    
    fprintf(logFile, "\nMR_TrackOpen: Opening track '%s'\n", pFileName);
    fflush(logFile);
@@ -189,7 +209,7 @@ BOOL MR_SelectTrack( HWND pParentWindow, CString& pTrackFile, int& pNbLap, BOOL&
    BOOL lReturnValue = FALSE;
    gsSelectedEntry = -1;
 
-   FILE* logFile = fopen("Game2_TrackLoad.log", "a");
+   FILE* logFile = OpenTrackLog("a");
    fprintf(logFile, "\n--- MR_SelectTrack START ---\n");
    fflush(logFile);
 
@@ -244,7 +264,7 @@ BOOL MR_SelectTrack( HWND pParentWindow, CString& pTrackFile, int& pNbLap, BOOL&
 
    fprintf(logFile, "--- MR_SelectTrack END, returning %d ---\n", lReturnValue);
    fflush(logFile);
-   fclose(logFile);
+   if( logFile ) fclose(logFile);
 
    return lReturnValue;
 }
@@ -254,7 +274,7 @@ static INT_PTR CALLBACK TrackSelectCallBack( HWND pWindow, UINT  pMsgId, WPARAM 
 {
    INT_PTR lReturnValue = FALSE;
    int  lCounter;
-   FILE* logFile = fopen("Game2_TrackLoad.log", "a");
+   FILE* logFile = OpenTrackLog("a");
    
    fprintf(logFile, "\nTrackSelectCallBack: Message %u\n", pMsgId);
    fflush(logFile);
@@ -425,7 +445,7 @@ MR_TrackAvail MR_GetTrackAvail( const char* pFileName, BOOL pAllowRegistred )
 BOOL ReadTrackEntry( MR_RecordFile* pRecordFile, TrackEntry* pDest, const char* pFileName )
 {
    BOOL lReturnValue = FALSE;
-   FILE* logFile = fopen("Game2_TrackLoad.log", "a");
+   FILE* logFile = OpenTrackLog("a");
 
    fprintf(logFile, "\n    ReadTrackEntry: Starting to read track\n");
    fflush(logFile);
@@ -590,7 +610,7 @@ void ReadList()
 {
    long lHandle;
    struct _finddata_t lFileInfo;
-   FILE* logFile = fopen("Game2_TrackLoad.log", "w");
+   FILE* logFile = OpenTrackLog("w");
    
    // Get the executable directory
    char szPath[MAX_PATH];

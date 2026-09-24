@@ -1,14 +1,20 @@
-#include "RaceServerClient.h"
-
+#ifdef _WIN32
+#include "../Game2/StdAfx.h"
+#include <winsock.h>
+#else
 #include <arpa/inet.h>
-#include <cassert>
 #include <cerrno>
-#include <cstring>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+#endif
+
+#include "RaceServerClient.h"
+
+#include <cassert>
+#include <cstring>
 
 namespace
 {
@@ -52,44 +58,56 @@ namespace
 
 RaceServerClient::RaceServerClient() : mSocket(-1)
 {
+#ifdef _WIN32
+    WSADATA lWsaData;
+    WSAStartup(MAKEWORD(1, 1), &lWsaData);
+#endif
 }
 
 RaceServerClient::~RaceServerClient()
 {
     Disconnect();
+#ifdef _WIN32
+    WSACleanup();
+#endif
 }
 
 bool RaceServerClient::Connect(const std::string& pHost, unsigned pPort)
 {
     Disconnect();
-
-    struct addrinfo lHints;
-    std::memset(&lHints, 0, sizeof(lHints));
-    lHints.ai_family = AF_INET;
-    lHints.ai_socktype = SOCK_STREAM;
-
-    struct addrinfo* lResult = nullptr;
-    const std::string lPortStr = std::to_string(pPort);
-    if (getaddrinfo(pHost.c_str(), lPortStr.c_str(), &lHints, &lResult) != 0 || lResult == nullptr)
+#ifdef _WIN32
+    SOCKADDR_IN lAddr;
+    std::memset(&lAddr, 0, sizeof(lAddr));
+    lAddr.sin_family = AF_INET;
+    lAddr.sin_port = htons(static_cast<unsigned short>(pPort));
+    lAddr.sin_addr.s_addr = inet_addr(pHost.c_str());
+    if (lAddr.sin_addr.s_addr == INADDR_NONE)
     {
-        return false;
+        HOSTENT* lHost = gethostbyname(pHost.c_str());
+        if (lHost == nullptr || lHost->h_addr_list[0] == nullptr) return false;
+        std::memcpy(&lAddr.sin_addr, lHost->h_addr_list[0], sizeof(lAddr.sin_addr));
     }
-
-    mSocket = socket(lResult->ai_family, lResult->ai_socktype, lResult->ai_protocol);
-    if (mSocket < 0)
-    {
-        freeaddrinfo(lResult);
-        return false;
-    }
-
-    const bool lConnected = connect(mSocket, lResult->ai_addr, lResult->ai_addrlen) == 0;
-    freeaddrinfo(lResult);
-
-    if (!lConnected)
+    mSocket = static_cast<int>(socket(AF_INET, SOCK_STREAM, 0));
+    if (mSocket == static_cast<int>(INVALID_SOCKET) || connect(static_cast<SOCKET>(mSocket),
+        reinterpret_cast<const SOCKADDR*>(&lAddr), sizeof(lAddr)) == SOCKET_ERROR)
     {
         Disconnect();
         return false;
     }
+#else
+    struct addrinfo lHints;
+    std::memset(&lHints, 0, sizeof(lHints));
+    lHints.ai_family = AF_INET;
+    lHints.ai_socktype = SOCK_STREAM;
+    struct addrinfo* lResult = nullptr;
+    const std::string lPortStr = std::to_string(pPort);
+    if (getaddrinfo(pHost.c_str(), lPortStr.c_str(), &lHints, &lResult) != 0 || lResult == nullptr) return false;
+    mSocket = socket(lResult->ai_family, lResult->ai_socktype, lResult->ai_protocol);
+    if (mSocket < 0) { freeaddrinfo(lResult); return false; }
+    const bool lConnected = connect(mSocket, lResult->ai_addr, lResult->ai_addrlen) == 0;
+    freeaddrinfo(lResult);
+    if (!lConnected) { Disconnect(); return false; }
+#endif
     return true;
 }
 
@@ -97,7 +115,11 @@ void RaceServerClient::Disconnect()
 {
     if (mSocket >= 0)
     {
+#ifdef _WIN32
+        closesocket(static_cast<SOCKET>(mSocket));
+#else
         close(mSocket);
+#endif
         mSocket = -1;
     }
     mReceiveBuffer.clear();
@@ -130,8 +152,13 @@ bool RaceServerClient::SendMessage(int pMessageType, const void* pData, std::siz
     std::size_t lSent = 0;
     while (lSent < lBuffer.size())
     {
+#ifdef _WIN32
+        const int lCount = send(static_cast<SOCKET>(mSocket), reinterpret_cast<const char*>(lBuffer.data() + lSent), static_cast<int>(lBuffer.size() - lSent), 0);
+        if (lCount == SOCKET_ERROR && WSAGetLastError() == WSAEINTR)
+#else
         const ssize_t lCount = send(mSocket, lBuffer.data() + lSent, lBuffer.size() - lSent, 0);
         if (lCount < 0 && errno == EINTR)
+#endif
         {
             continue;
         }
@@ -211,8 +238,13 @@ bool RaceServerClient::PollMessage(RaceServerMessage& pOut, int pTimeoutMs)
     }
 
     std::uint8_t lIncoming[4096];
+#ifdef _WIN32
+    const int lCount = recv(static_cast<SOCKET>(mSocket), reinterpret_cast<char*>(lIncoming), sizeof(lIncoming), 0);
+    if (lCount == SOCKET_ERROR && WSAGetLastError() == WSAEINTR)
+#else
     const ssize_t lCount = recv(mSocket, lIncoming, sizeof(lIncoming), 0);
     if (lCount < 0 && errno == EINTR)
+#endif
     {
         return false;
     }

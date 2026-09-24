@@ -39,6 +39,7 @@
 #define MRNM_SET_PERM_ELEMENT_STATE   8    
 #define MRNM_SEND_KEYID               9
 #define MRNM_HIT_MESSAGE             10
+#define MRNM_CONN_NAME_SET           44
 
 
 // Local structures
@@ -410,6 +411,10 @@ void MR_NetworkSession::ReadNet( )
 
          case MRNM_CREATE_MAIN_ELEM:
             {
+               if( mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
+               {
+                  break;
+               }
                MR_ObjectFromFactoryId lTypeId;
                int                    lRoom;
                int                    lHoverId;
@@ -456,6 +461,7 @@ void MR_NetworkSession::ReadNet( )
 
 
          case MRNM_SET_MAIN_ELEM_STATE:
+            EnsureServerPeerCharacter( lClientId );
             if( mClientCharacter[ lClientId ] != NULL )
             {
                // Drop the message if there was a recent collision on that item
@@ -579,6 +585,10 @@ void MR_NetworkSession::ReadNet( )
 
          case MRNM_HIT_MESSAGE:
             AddHitEntry( lClientId, (char)lMessage[0] );
+            break;
+
+         case MRNM_CONN_NAME_SET:
+            EnsureServerPeerCharacter( lClientId );
             break;
 
          case 51: // MRNM_READY
@@ -757,6 +767,41 @@ void MR_NetworkSession::SetSimulationTime( MR_SimulationTime pTime )
    MR_ClientSession::SetSimulationTime( pTime );      
 }
 
+void MR_NetworkSession::EnsureServerPeerCharacter( int pClientSlot )
+{
+   if( mNetInterface.GetConnectionMode() != MR_CONNECTION_SERVER_HOSTED ||
+       pClientSlot < 0 || pClientSlot >= MR_NetworkInterface::eMaxClient ||
+       mClientCharacter[ pClientSlot ] != NULL )
+   {
+      return;
+   }
+
+   const int lServerClientId = mNetInterface.GetServerPeerId( pClientSlot );
+   MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
+   if( lServerClientId < 0 || lCurrentLevel == NULL || lCurrentLevel->GetPlayerCount() <= 0 )
+   {
+      return;
+   }
+
+   const int lRaceSlot = mNetInterface.GetServerRaceSlot( lServerClientId );
+   const int lStartSlot = lRaceSlot % lCurrentLevel->GetPlayerCount();
+   MR_MainCharacter* lRemote = MR_MainCharacter::New( mNbLap, mAllowWeapons );
+   if( lRemote == NULL )
+   {
+      return;
+   }
+
+   lRemote->mPosition = lCurrentLevel->GetStartingPos( lStartSlot );
+   lRemote->SetOrientation( lCurrentLevel->GetStartingOrientation( lStartSlot ) );
+   lRemote->mRoom = lCurrentLevel->GetStartingRoom( lStartSlot );
+   lRemote->SetHoverId( lRaceSlot % MR_NetworkInterface::eMaxClient );
+   lRemote->SetHoverModel( 0 );
+   lRemote->SetAsSlave();
+   lRemote->SetNbLapForRace( mNbLap );
+   mClientCharacter[ pClientSlot ] = lRemote;
+   mClient[ pClientSlot ] = lCurrentLevel->InsertElement( lRemote, lRemote->mRoom );
+}
+
 BOOL MR_NetworkSession::CreateMainCharacter()
 {
    // Add a main character on the track
@@ -770,12 +815,22 @@ BOOL MR_NetworkSession::CreateMainCharacter()
    MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
       
  
-   mMainCharacter1->mPosition    = lCurrentLevel->GetStartingPos( mNetInterface.GetId() );
-   mMainCharacter1->SetOrientation( lCurrentLevel->GetStartingOrientation( mNetInterface.GetId() ));
-   mMainCharacter1->mRoom        = lCurrentLevel->GetStartingRoom( mNetInterface.GetId() );
+   const int lStartSlot = lCurrentLevel->GetPlayerCount() > 0 ?
+      mNetInterface.GetId() % lCurrentLevel->GetPlayerCount() : 0;
+   mMainCharacter1->mPosition    = lCurrentLevel->GetStartingPos( lStartSlot );
+   mMainCharacter1->SetOrientation( lCurrentLevel->GetStartingOrientation( lStartSlot ));
+   mMainCharacter1->mRoom        = lCurrentLevel->GetStartingRoom( lStartSlot );
    mMainCharacter1->SetHoverId( mNetInterface.GetId() );
 
    lCurrentLevel->InsertElement( mMainCharacter1, mMainCharacter1->mRoom );
+
+   if( mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
+   {
+      for( int lPeerSlot = 0; lPeerSlot < MR_NetworkInterface::eMaxClient; lPeerSlot++ )
+      {
+         EnsureServerPeerCharacter( lPeerSlot );
+      }
+   }
 
    // BroadcastMainElementCreation( mMainCharacter1->GetTypeId(), mMainCharacter1->GetNetState(), mMainCharacter1->mRoom, mMainCharacter1->GetHoverId() );
 
@@ -820,6 +875,12 @@ void MR_NetworkSession::BroadcastAutoElementCreation( const MR_ObjectFromFactory
    *(MR_Int16*)&(lMessage.mData[2]) = pId.mClassId;
    *(MR_Int16*)&(lMessage.mData[4]) = pRoom;
    memcpy( lMessage.mData+6, pState.mData, pState.mDataLen );
+
+   if( mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
+   {
+      mNetInterface.BroadcastMessage( &lMessage, MR_NET_REQUIRED );
+      return;
+   }
    
 
    // Determine clients proximity
@@ -1040,9 +1101,19 @@ void MR_NetworkSession::BroadcastMainElementState( const MR_ElementNetState& pSt
    MR_NetMessageBuffer lMessage;
 
    // lMessage.mSendingTime            = mSession.GetSimulationTime()>>2;
-   lMessage.mMessageType            = MRNM_SET_MAIN_ELEM_STATE;
-   lMessage.mDataLen                = pState.mDataLen;
+   lMessage.mMessageType = MRNM_SET_MAIN_ELEM_STATE;
 
+   if( mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
+   {
+      const int lLocalClientId = mNetInterface.GetLocalClientId();
+      lMessage.mDataLen = pState.mDataLen + sizeof(lLocalClientId);
+      memcpy( lMessage.mData, &lLocalClientId, sizeof(lLocalClientId) );
+      memcpy( lMessage.mData + sizeof(lLocalClientId), pState.mData, pState.mDataLen );
+      mNetInterface.BroadcastMessage( &lMessage, MR_NET_REQUIRED );
+      return;
+   }
+
+   lMessage.mDataLen = pState.mDataLen;
    memcpy( lMessage.mData, pState.mData, pState.mDataLen );
 
    // Old method
@@ -1503,6 +1574,11 @@ void MR_NetworkSession::SetConnectionMode( MR_ConnectionMode pMode, const char* 
 MR_ConnectionMode MR_NetworkSession::GetConnectionMode()const
 {
    return mNetInterface.GetConnectionMode();
+}
+
+void MR_NetworkSession::ConfigureHostedRace( const char* pTrack, int pLaps, BOOL pWeapons )
+{
+   mNetInterface.ConfigureHostedRace( pTrack, pLaps, pWeapons );
 }
 
 void MR_NetworkSession::SetIsGameCreator( BOOL pIsCreator )

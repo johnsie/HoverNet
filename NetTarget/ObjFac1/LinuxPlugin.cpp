@@ -16,7 +16,9 @@
 #include "FuelSource.h"
 #include "ObjFac1Res.h"
 
+#include <cstdlib>
 #include <memory>
+#include <string>
 
 class MR_ResActorFriend
 {
@@ -657,10 +659,19 @@ void MR_InitModule(HMODULE)
 {
     try {
     MR_InitTrigoTables();
+    const char* dataDirectory = std::getenv("HOVERNET_DATA_DIR");
+    if (dataDirectory != nullptr && dataDirectory[0] != '\0') {
+        resourceLib.reset(new MR_ResourceLib(
+            (std::string(dataDirectory) + "/NetTarget/ObjFac1.dat").c_str()));
+    }
 #ifdef HOVERNET_SOURCE_DIR
-    resourceLib.reset(new MR_ResourceLib(HOVERNET_SOURCE_DIR "/NetTarget/ObjFac1.dat"));
+    else {
+        resourceLib.reset(new MR_ResourceLib(HOVERNET_SOURCE_DIR "/NetTarget/ObjFac1.dat"));
+    }
 #else
-    resourceLib.reset(new MR_ResourceLib("../../NetTarget/ObjFac1.dat"));
+    else {
+        resourceLib.reset(new MR_ResourceLib("../../NetTarget/ObjFac1.dat"));
+    }
 #endif
     }
     catch (...) {

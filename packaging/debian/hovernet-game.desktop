@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=HoverNet
+Comment=Play HoverNet multiplayer races
+Exec=hovernet
+Terminal=false
+Categories=Game;ActionGame;

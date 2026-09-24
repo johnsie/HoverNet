@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -e
+export HOVERNET_DATA_DIR=/usr/share/games/hovernet
+cd /usr/lib/hovernet
+exec ./HoverNetGame2Player "$@"

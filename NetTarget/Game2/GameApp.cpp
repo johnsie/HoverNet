@@ -503,8 +503,14 @@ void MR_GameApp::Clean()
    delete mCurrentSession;
    mCurrentSession = NULL;
    
-   mObserver1->Delete();
-   mObserver2->Delete();
+   if( mObserver1 != NULL )
+   {
+      mObserver1->Delete();
+   }
+   if( mObserver2 != NULL )
+   {
+      mObserver2->Delete();
+   }
 
    mObserver1 = NULL;
    mObserver2 = NULL;
@@ -1184,11 +1190,10 @@ int MR_GameApp::MainLoop()
 
    if(logFile) { fprintf(logFile, "MainLoop exited after %d frames\n", lFrameCount); fflush(logFile); }
 
-   if(logFile) { fprintf(logFile, "MainLoop: About to call Clean()\n"); fflush(logFile); fclose(logFile); }
+   if(logFile) { fprintf(logFile, "MainLoop: About to call Clean()\n"); fflush(logFile); fclose(logFile); logFile = NULL; }
 
    Clean();
 
-   if(logFile) { fprintf(logFile, "MainLoop: Clean() completed\n"); fflush(logFile); fclose(logFile); }
    logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
    if(logFile) { fprintf(logFile, "--- MainLoop END ---\n"); fflush(logFile); fclose(logFile); }
 

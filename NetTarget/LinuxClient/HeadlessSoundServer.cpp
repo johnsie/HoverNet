@@ -1,3 +1,9 @@
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include "../VideoServices/stdafx.h"
+#endif
 #include "../VideoServices/SoundServer.h"
 
 #include <SDL.h>

@@ -519,7 +519,10 @@ MR_ElementNetState MR_MainCharacter::GetNetState()const
    lsState.Set( MC_CONTROL_ST, mControlState );
    lsState.Set( MC_ON_FLOOR,   mOnFloor      );
    lsState.Set( MC_HOVER_MODEL,mHoverModel    );
-   lsState.Set( MC_PADDING,    0              ); // no sounds now
+   int lOutOfControlState = mOutOfControlDuration/4;
+   if( lOutOfControlState < 0 ) lOutOfControlState = 0;
+   if( lOutOfControlState > 0x7FF ) lOutOfControlState = 0x7FF;
+   lsState.Set( MC_PADDING, lOutOfControlState );
 
    /*
    lsState.mPosX          = mPosition.mX;
@@ -575,6 +578,7 @@ void MR_MainCharacter::SetNetState( int pDataLen, const MR_UInt8* pData )
    mControlState = lState->Getu( MC_CONTROL_ST );
    mOnFloor      = lState->Get( MC_ON_FLOOR );
    mHoverModel   = lState->Getu( MC_HOVER_MODEL );
+   mOutOfControlDuration = lState->Getu( MC_PADDING )*4;
 
 
    /*
@@ -1229,14 +1233,17 @@ void MR_MainCharacter::ApplyEffect( const MR_ContactEffect* pEffect,  MR_Simulat
       }
    }
 
-   if( (lLostOfControl != NULL) && mMasterMode )
+   if( lLostOfControl != NULL )
    {
 
-      if( mOutOfControlDuration < 1750 )
+      if( mMasterMode && mOutOfControlDuration < 1750 )
       {
          mLastHits.Add( lLostOfControl->mHoverId );
       }
 
+      // Apply the visible reaction on both authoritative and replicated craft.
+      // Previously slave craft ignored missile effects, so the shooter saw a
+      // missile disappear on impact while the remote hovercraft did nothing.
       mOutOfControlDuration = 2000;
 
       if( mRenderer != NULL )
@@ -1245,7 +1252,7 @@ void MR_MainCharacter::ApplyEffect( const MR_ContactEffect* pEffect,  MR_Simulat
          mExternalSoundList.Add( mRenderer->GetOutOfCtrlSound() );
       }
 
-      if( lLostOfControl->mType == MR_LostOfControl::eMine )
+      if( lLostOfControl->mType == MR_LostOfControl::eMine && mMasterMode )
       {
          mZSpeed = 1.1*eMaxZSpeed[0];
 

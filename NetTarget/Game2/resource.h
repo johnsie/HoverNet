@@ -53,6 +53,7 @@
 #define IDD_LADDER_RES_2                158
 #define IDD_LADDER_RES_1                159
 #define IDD_LADDER_SUBMIT_PROCESS       160
+#define IDD_RACE_NAME                   161
 #define IDC_GAMMA_SLIDER                1001
 #define IDC_CONTRAST_SLIDER             1002
 #define IDC_SERVER_PORT                 1002
@@ -124,6 +125,7 @@
 #define IDC_COMMENT                     1070
 #define ID_BTN3                         1070
 #define IDC_RESULT                      1071
+#define IDC_RACE_NAME                   1072
 #define ID_HELP_CONTENTS                32772
 #define ID_HELP_HOWTOORDER              32773
 #define ID_HELP_TIPOFTHEDAY             32774

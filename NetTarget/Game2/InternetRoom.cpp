@@ -25,6 +25,10 @@
 #include "MatchReport.h"
 #include "resource.h"
 #include "../Util/StrRes.h"
+#include "../LinuxClient/RaceServerClient.h"
+#include <cstdarg>
+#include <string>
+#include <vector>
 #include <wininet.h>
 #pragma comment(lib, "wininet.lib")
 
@@ -106,6 +110,81 @@ int gCurrentBannerEntry = 0;
 CString gMainServer = MR_IR_LIST;
 
 MR_InternetRoom* MR_InternetRoom::mThis = NULL;
+
+namespace
+{
+   const char* const kDefaultRaceServerHost = "192.168.10.181";
+   const unsigned kDefaultRaceServerPort = 9600;
+   const UINT_PTR kRaceServerRefreshTimer = 2001;
+   RaceServerClient gRaceServerLobby;
+   std::vector<RaceServerGameInfo> gRaceServerGames;
+   CString gRaceServerHost = kDefaultRaceServerHost;
+   unsigned gRaceServerPort = kDefaultRaceServerPort;
+   CString gPendingRaceName;
+
+   void RefreshRaceServerList(HWND pWindow)
+   {
+      std::vector<RaceServerGameInfo> lGames;
+      if( !gRaceServerLobby.ListGames(lGames, 750) ) return;
+      gRaceServerGames.swap(lGames);
+      HWND lList = GetDlgItem(pWindow, IDC_GAME_LIST);
+      ListView_DeleteAllItems(lList);
+      for( size_t i = 0; i < gRaceServerGames.size(); ++i )
+      {
+         const RaceServerGameInfo& lGame = gRaceServerGames[i];
+         CString lLabel;
+         lLabel.Format("%s  [%d player%s]%s", lGame.mName.c_str(), lGame.mNumPlayers,
+                       lGame.mNumPlayers == 1 ? "" : "s", lGame.mStarted ? " (started)" : "");
+         LV_ITEM lItem = {};
+         lItem.mask = LVIF_TEXT | LVIF_PARAM;
+         lItem.iItem = static_cast<int>(i);
+         lItem.pszText = (char*)(const char*)lLabel;
+         lItem.lParam = static_cast<LPARAM>(i);
+         ListView_InsertItem(lList, &lItem);
+      }
+      if( !gRaceServerGames.empty() )
+      {
+         ListView_SetItemState(lList, 0, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+      }
+   }
+
+   // Shares NetJoin_Debug.log with NetInterface.cpp's WaitGameNameCallBack breadcrumbs so
+   // the whole join sequence -- from clicking Join to the RaceServer ack -- reads as one
+   // timeline when diagnosing the "Retrieving game info..." hang.
+   void LogNetJoin( const char* pFormat, ... )
+   {
+      FILE* lLog = fopen( "NetJoin_Debug.log", "a" );
+      if( lLog != NULL )
+      {
+         va_list lArgs;
+         va_start( lArgs, pFormat );
+         vfprintf( lLog, pFormat, lArgs );
+         va_end( lArgs );
+         fprintf( lLog, "\n" );
+         fclose( lLog );
+      }
+   }
+
+   int SelectedRaceIndex(HWND pWindow)
+   {
+      return ListView_GetNextItem(GetDlgItem(pWindow, IDC_GAME_LIST), -1, LVNI_SELECTED);
+   }
+
+   void RefreshRaceServerSelection(HWND pWindow)
+   {
+      const int lIndex = SelectedRaceIndex(pWindow);
+      if( lIndex < 0 || lIndex >= static_cast<int>(gRaceServerGames.size()) ) return;
+      const RaceServerGameInfo& lGame = gRaceServerGames[lIndex];
+      SetDlgItemTextA(pWindow, IDC_TRACK_NAME, lGame.mTrack.c_str());
+      SetDlgItemInt(pWindow, IDC_NB_LAP, lGame.mNumLaps, FALSE);
+      SetDlgItemTextA(pWindow, IDC_WEAPONS, "Server");
+      SetDlgItemTextA(pWindow, IDC_AVAIL_MESSAGE, lGame.mStarted ? "Race already started" : "Ready to join");
+      CString lPlayers;
+      lPlayers.Format("%d player%s connected", lGame.mNumPlayers, lGame.mNumPlayers == 1 ? "" : "s");
+      SetDlgItemText(pWindow, IDC_PLAYER_LIST, lPlayers);
+   }
+}
+
 
 static BOOL gAskPassword = TRUE;
 
@@ -1274,38 +1353,33 @@ BOOL MR_InternetRoom::AskRoomParams( HWND pParentWindow )
 
 BOOL MR_InternetRoom::DisplayChatRoom( HWND pParentWindow, MR_NetworkSession* pSession, MR_VideoBuffer* pVideoBuffer )
 {
-   // Check for NULL pointers
-   if (!pSession || !pVideoBuffer) {
-      return FALSE;
-   }
-   
+   if( pSession == NULL || pVideoBuffer == NULL ) return FALSE;
+
+   mThis = this;
+   mSession = pSession;
+   mVideoBuffer = pVideoBuffer;
    mUser = pSession->GetPlayerName();
+   mSession->SetPlayerName(mUser);
 
-   BOOL lReturnValue = AskRoomParams( pParentWindow );
-
-   if( lReturnValue )
+   gRaceServerHost = kDefaultRaceServerHost;
+   gRaceServerPort = kDefaultRaceServerPort;
+   char lOverride[256] = { 0 };
+   if( GetEnvironmentVariableA("HOVERNET_LOBBY", lOverride, sizeof(lOverride)) > 0 )
    {
-      mThis = this;
-
-      mSession      = pSession;
-      mVideoBuffer  = pVideoBuffer;
-
-      mSession->SetPlayerName( mUser );
-
-      if( gNbBannerEntries == 0 )
+      char* lColon = strrchr(lOverride, 58);
+      if( lColon != NULL )
       {
-         lReturnValue = DialogBox( GetModuleHandle( NULL ), MAKEINTRESOURCE( IDD_INTERNET_MEETING ), pParentWindow, RoomCallBack )==IDOK;
+         *lColon = 0;
+         const int lPort = atoi(lColon + 1);
+         if( lPort > 0 && lPort <= 65535 ) gRaceServerPort = static_cast<unsigned>(lPort);
       }
-      else
-      {
-         lReturnValue = DialogBox( GetModuleHandle( NULL ), MAKEINTRESOURCE( IDD_INTERNET_MEETING_PUB ), pParentWindow, RoomCallBack )==IDOK;
-      }
-
+      if( lOverride[0] != 0 ) gRaceServerHost = lOverride;
    }
-   
-   OutputDebugString("DisplayChatRoom: EXITING");
 
-   return lReturnValue;
+   gRaceServerLobby.Disconnect();
+   gRaceServerGames.clear();
+   return DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_INTERNET_MEETING),
+                    pParentWindow, RaceServerRoomCallBack) == IDOK;
 }
 
 /*
@@ -1949,6 +2023,201 @@ BOOL CALLBACK MR_InternetRoom::AskParamsCallBack( HWND pWindow, UINT  pMsgId, WP
 
 }
 
+
+BOOL CALLBACK MR_InternetRoom::RaceNameCallBack( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM )
+{
+   if( pMsgId == WM_INITDIALOG )
+   {
+      SetDlgItemText(pWindow, IDC_RACE_NAME, gPendingRaceName);
+      return TRUE;
+   }
+   if( pMsgId == WM_COMMAND )
+   {
+      if( LOWORD(pWParam) == IDOK )
+      {
+         char lName[64] = { 0 };
+         GetDlgItemTextA(pWindow, IDC_RACE_NAME, lName, sizeof(lName));
+         if( lName[0] == 0 )
+         {
+            MessageBoxA(pWindow, "Enter a race name.", "HoverNet Lobby", MB_OK | MB_ICONINFORMATION);
+            return TRUE;
+         }
+         gPendingRaceName = lName;
+         EndDialog(pWindow, IDOK);
+         return TRUE;
+      }
+      if( LOWORD(pWParam) == IDCANCEL )
+      {
+         EndDialog(pWindow, IDCANCEL);
+         return TRUE;
+      }
+   }
+   return FALSE;
+}
+
+BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM pLParam )
+{
+   switch( pMsgId )
+   {
+      case WM_INITDIALOG:
+      {
+         HWND lGameList = GetDlgItem(pWindow, IDC_GAME_LIST);
+         RECT lRect;
+         GetClientRect(lGameList, &lRect);
+         LV_COLUMN lColumn = {};
+         lColumn.mask = LVCF_WIDTH | LVCF_FMT;
+         lColumn.fmt = LVCFMT_LEFT;
+         lColumn.cx = lRect.right - GetSystemMetrics(SM_CXVSCROLL);
+         ListView_InsertColumn(lGameList, 0, &lColumn);
+
+         HWND lUserList = GetDlgItem(pWindow, IDC_USER_LIST);
+         GetClientRect(lUserList, &lRect);
+         lColumn.cx = lRect.right - GetSystemMetrics(SM_CXVSCROLL);
+         ListView_InsertColumn(lUserList, 0, &lColumn);
+         LV_ITEM lUserItem = {};
+         lUserItem.mask = LVIF_TEXT;
+         lUserItem.iItem = 0;
+         lUserItem.pszText = (char*)(const char*)mThis->mUser;
+         ListView_InsertItem(lUserList, &lUserItem);
+
+         ShowWindow(GetDlgItem(pWindow, IDC_ADD), SW_HIDE);
+         SetDlgItemTextA(pWindow, IDC_ADD_SERVER, "Host Race...");
+         CString lStatus;
+         lStatus.Format("Connecting to %s:%u...", (const char*)gRaceServerHost, gRaceServerPort);
+         SetDlgItemText(pWindow, IDC_CHAT_OUT, lStatus);
+         if( !gRaceServerLobby.Connect((const char*)gRaceServerHost, gRaceServerPort) )
+         {
+            MessageBoxA(pWindow, "Could not connect to the HoverNet RaceServer.", "HoverNet Lobby", MB_OK | MB_ICONERROR);
+            EndDialog(pWindow, IDCANCEL);
+            return TRUE;
+         }
+         SetDlgItemTextA(pWindow, IDC_CHAT_OUT, "Connected to the shared HoverNet lobby.");
+         RefreshRaceServerList(pWindow);
+         RefreshRaceServerSelection(pWindow);
+         SetTimer(pWindow, kRaceServerRefreshTimer, 2000, NULL);
+         return TRUE;
+      }
+
+      case WM_TIMER:
+         if( pWParam == kRaceServerRefreshTimer && gRaceServerLobby.IsConnected() )
+         {
+            RefreshRaceServerList(pWindow);
+            RefreshRaceServerSelection(pWindow);
+            return TRUE;
+         }
+         break;
+
+      case WM_NOTIFY:
+      {
+         NMHDR* lHeader = reinterpret_cast<NMHDR*>(pLParam);
+         if( lHeader != NULL && lHeader->idFrom == IDC_GAME_LIST && lHeader->code == LVN_ITEMCHANGED )
+         {
+            RefreshRaceServerSelection(pWindow);
+            return TRUE;
+         }
+         break;
+      }
+
+      case WM_COMMAND:
+         if( LOWORD(pWParam) == IDCANCEL )
+         {
+            KillTimer(pWindow, kRaceServerRefreshTimer);
+            gRaceServerLobby.Disconnect();
+            EndDialog(pWindow, IDCANCEL);
+            return TRUE;
+         }
+         if( LOWORD(pWParam) == IDOK && GetFocus() == GetDlgItem(pWindow, IDC_CHAT_IN) )
+         {
+            char lMessage[200] = { 0 };
+            GetDlgItemTextA(pWindow, IDC_CHAT_IN, lMessage, sizeof(lMessage));
+            if( lMessage[0] != 0 )
+            {
+               gRaceServerLobby.SendMessage(eRSMsgChatMessage, lMessage, strlen(lMessage));
+               char lChatBuffer[4096] = { 0 };
+               GetDlgItemTextA(pWindow, IDC_CHAT_OUT, lChatBuffer, sizeof(lChatBuffer));
+               CString lChat = lChatBuffer;
+               lChat += "\r\n";
+               lChat += mThis->mUser;
+               lChat += ": ";
+               lChat += lMessage;
+               SetDlgItemText(pWindow, IDC_CHAT_OUT, lChat);
+               SetDlgItemTextA(pWindow, IDC_CHAT_IN, "");
+            }
+            return TRUE;
+         }
+         if( LOWORD(pWParam) == IDC_JOIN )
+         {
+            const int lIndex = SelectedRaceIndex(pWindow);
+            LogNetJoin( "=== IDC_JOIN: selectedIndex=%d ===", lIndex );
+            if( lIndex < 0 || lIndex >= static_cast<int>(gRaceServerGames.size()) ) return TRUE;
+            const RaceServerGameInfo lGame = gRaceServerGames[lIndex];
+            LogNetJoin( "IDC_JOIN: race name='%s' track='%s' laps=%d started=%d players=%d",
+                        lGame.mName.c_str(), lGame.mTrack.c_str(), lGame.mNumLaps, (int)lGame.mStarted,
+                        lGame.mNumPlayers );
+            if( lGame.mStarted )
+            {
+               MessageBoxA(pWindow, "That race has already started.", "HoverNet Lobby", MB_OK | MB_ICONINFORMATION);
+               return TRUE;
+            }
+            MR_RecordFile* lTrackFile = MR_TrackOpen(pWindow, lGame.mTrack.c_str(), mThis->mAllowRegistred);
+            LogNetJoin( "IDC_JOIN: MR_TrackOpen returned %p", (void*)lTrackFile );
+            if( lTrackFile == NULL || !mThis->mSession->LoadNew(lGame.mTrack.c_str(), lTrackFile,
+                 lGame.mNumLaps, TRUE, mThis->mVideoBuffer) )
+            {
+               LogNetJoin( "IDC_JOIN: track open/LoadNew failed, aborting" );
+               return TRUE;
+            }
+            LogNetJoin( "IDC_JOIN: LoadNew ok, connecting to %s:%u",
+                        (const char*)gRaceServerHost, gRaceServerPort );
+
+            KillTimer(pWindow, kRaceServerRefreshTimer);
+            gRaceServerLobby.Disconnect();
+            mThis->mSession->SetIsGameCreator(FALSE);
+            mThis->mSession->SetConnectionMode(MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort);
+            const BOOL lJoined = mThis->mSession->ConnectToServer(pWindow, gRaceServerHost, gRaceServerPort, lGame.mName.c_str());
+            LogNetJoin( "IDC_JOIN: ConnectToServer returned %d", (int)lJoined );
+            if( lJoined )
+            {
+               EndDialog(pWindow, IDOK);
+            }
+            else
+            {
+               gRaceServerLobby.Connect((const char*)gRaceServerHost, gRaceServerPort);
+               SetTimer(pWindow, kRaceServerRefreshTimer, 2000, NULL);
+            }
+            return TRUE;
+         }
+         if( LOWORD(pWParam) == IDC_ADD_SERVER )
+         {
+            CString lTrack;
+            int lLaps = 3;
+            BOOL lWeapons = TRUE;
+            if( !MR_SelectTrack(pWindow, lTrack, lLaps, lWeapons, mThis->mAllowRegistred) ) return TRUE;
+            gPendingRaceName.Format("%s - %s", (const char*)mThis->mUser, (const char*)lTrack);
+            if( DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_RACE_NAME), pWindow, RaceNameCallBack) != IDOK ) return TRUE;
+            MR_RecordFile* lTrackFile = MR_TrackOpen(pWindow, lTrack, mThis->mAllowRegistred);
+            if( lTrackFile == NULL || !mThis->mSession->LoadNew(lTrack, lTrackFile, lLaps, lWeapons, mThis->mVideoBuffer) ) return TRUE;
+
+            KillTimer(pWindow, kRaceServerRefreshTimer);
+            gRaceServerLobby.Disconnect();
+            mThis->mSession->SetConnectionMode(MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort);
+            mThis->mSession->SetIsGameCreator(TRUE);
+            mThis->mSession->ConfigureHostedRace(lTrack, lLaps, lWeapons);
+            if( mThis->mSession->ConnectToServer(pWindow, gRaceServerHost, gRaceServerPort, gPendingRaceName) )
+            {
+               EndDialog(pWindow, IDOK);
+            }
+            else
+            {
+               gRaceServerLobby.Connect((const char*)gRaceServerHost, gRaceServerPort);
+               SetTimer(pWindow, kRaceServerRefreshTimer, 2000, NULL);
+            }
+            return TRUE;
+         }
+         break;
+   }
+   return FALSE;
+}
 
 BOOL CALLBACK MR_InternetRoom::RoomCallBack( HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam )
 {

@@ -33,6 +33,7 @@
 #define NB_PLAYER_PAGE 4
 #define MR_CHAT_EXPIRATION     20
 
+#ifdef _WIN32
 CString gRankTitle = Ascii2Simple( MR_LoadString( IDS_RANK_TITLE ) );
 CString gHitTitle  = Ascii2Simple( MR_LoadString( IDS_HIT_TITLE ) );
 
@@ -48,6 +49,21 @@ CString gBestLapStr      = MR_LoadString( IDS_BEST_LAP );
 CString gHeaderStr       = MR_LoadString( IDS_HEADER );
 CString gLastLapStr      = MR_LoadString( IDS_LAST_LAP );
 CString gCurLapStr       = MR_LoadString( IDS_CUR_LAP );
+#else
+CString gRankTitle       = Ascii2Simple( "Rank            Result   Best Lap " );
+CString gHitTitle        = Ascii2Simple( "Rank                 For   Agains" );
+CString gFirstLapStr     = "%d %-0.10s #%d%*s   --First lap--  %c";
+CString gChartFinish     = "%d %-0.10s #%d%*s %2d.%02d.%02d %2d.%02d.%02d%c";
+CString gChart           = "%d %-0.10s #%d%*s lap:%-2d   %2d.%02d.%02d%c";
+CString gHitChart        = "%d %-0.10s #%d%*s  %2d      %2d";
+CString gCountdownStr    = "Start in %02d.%02d sec. for %d laps";
+CString gFinishStr       = "Finish in %d.%02d.%02d  %d of %d";
+CString gFinishStrSingle = "Finish in %d.%02d.%02d";
+CString gBestLapStr      = "  Best lap %d.%02d.%02d  ";
+CString gHeaderStr       = "%d.%02d.%02d  Lap:%d/%d";
+CString gLastLapStr      = "Last lap %d.%02d.%02d  Best %d.%02d.%02d";
+CString gCurLapStr       = "Current lap %d.%02d.%02d  Best %d.%02d.%02d";
+#endif
 
 
 

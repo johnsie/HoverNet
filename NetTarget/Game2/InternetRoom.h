@@ -169,6 +169,8 @@ class MR_InternetRoom
       static BOOL CALLBACK AskPasswordCallBack( HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
       static BOOL CALLBACK AskParamsCallBack(   HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
       static BOOL CALLBACK RoomCallBack(        HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
+      static BOOL CALLBACK RaceServerRoomCallBack( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM pLParam );
+      static BOOL CALLBACK RaceNameCallBack( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM pLParam );
       static BOOL CALLBACK NetOpCallBack(       HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
       static BOOL CALLBACK FastNetOpCallBack(   HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
       static BOOL CALLBACK GetAddrCallBack(     HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );

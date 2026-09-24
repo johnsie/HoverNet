@@ -1,0 +1,9 @@
+Package: hovernet-game
+Version: 0.0.0
+Section: games
+Priority: optional
+Architecture: amd64
+Maintainer: HoverNet Team <devteam@outiva.com>
+Depends: libc6, libstdc++6, libsdl2-2.0-0
+Description: HoverNet multiplayer racing game client
+ HoverNet game client with its object resources and all bundled race tracks.

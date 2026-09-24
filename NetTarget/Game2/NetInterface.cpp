@@ -21,6 +21,9 @@
 
 #include "stdafx.h"
 
+#include <cstdarg>
+#include <cstdio>
+
 #include <Mmsystem.h>
 
 #include "NetInterface.h"
@@ -30,12 +33,33 @@
 
 
 
+namespace
+{
+   // Breadcrumb trail for the "Retrieving game info..." join hang -- the server side of
+   // this exchange has been verified correct with raw protocol probes, so this narrows
+   // down exactly which step the Windows client gets stuck on next time it's reproduced.
+   void LogNetJoin( const char* pFormat, ... )
+   {
+      FILE* lLog = fopen( "NetJoin_Debug.log", "a" );
+      if( lLog != NULL )
+      {
+         va_list lArgs;
+         va_start( lArgs, pFormat );
+         vfprintf( lLog, pFormat, lArgs );
+         va_end( lArgs );
+         fprintf( lLog, "\n" );
+         fclose( lLog );
+      }
+   }
+}
+
 // Private window messages
 #define MRM_SERVER_CONNECT (WM_USER+1)
 #define MRM_NEW_CLIENT     (WM_USER+2)
 #define MRM_CLIENT         (WM_USER+10) // 64 next reserved
 
 
+#define MRNM_SET_MAIN_ELEM_STATE 3
 #define MRNM_GET_GAME_NAME     40
 #define MRNM_REMOVE_ENTRY      41
 #define MRNM_GAME_NAME         42
@@ -48,7 +72,10 @@
 #define MRNM_LAG_INFO          49
 #define MRNM_CONNECTION_DONE   50
 #define MRNM_READY             51
-#define MRNM_CLIENT_ID_ASSIGN  52  // Server-hosted: Assign client ID to joining player
+#define MRNM_START_RACE        52
+#define MRNM_RACE_STARTED      53
+#define MRNM_HOST_RACE         54
+#define MRNM_JOINED_RACE       63
 
 #define MR_CONNECTION_TIMEOUT   21000 // 21 sec
 
@@ -96,6 +123,9 @@ MR_NetworkInterface::MR_NetworkInterface()
    // Phase 4: Initialize connection mode
    mConnectionMode   = MR_CONNECTION_PEER_TO_PEER;
    mRaceServerPort   = 0;
+   mHostRaceRequest = FALSE;
+   mHostedLaps       = 3;
+   mHostedWeapons    = TRUE;
 
    mAllPreLoguedRecv = FALSE;
 
@@ -104,6 +134,7 @@ MR_NetworkInterface::MR_NetworkInterface()
       mPreLoguedClient[ lCounter ]            = FALSE;
       mConnected[ lCounter ]                  = FALSE;
       mCanBePreLogued[ lCounter ]             = FALSE;
+      mServerPeerId[ lCounter ]                = -1;
    }
 
    // Init the UDP Output ports
@@ -197,10 +228,11 @@ BOOL MR_NetworkInterface::IsConnected( int pIndex )const
    {
       return TRUE;
    }
-   else
+   if( mConnectionMode == MR_CONNECTION_SERVER_HOSTED )
    {
-      return mClient[ pIndex ].IsConnected();
+      return mConnected[ pIndex ];
    }
+   return mClient[ pIndex ].IsConnected();
 }
 
 
@@ -232,6 +264,8 @@ void MR_NetworkInterface::Disconnect()
       mPreLoguedClient[ lCounter ] = FALSE;
       mConnected[ lCounter ]       = FALSE;
       mCanBePreLogued[ lCounter ]  = FALSE;
+      mServerPeerId[ lCounter ]       = -1;
+      mClientName[ lCounter ]         = "";
 
    }
 }
@@ -242,7 +276,7 @@ int MR_NetworkInterface::GetClientCount()const
 
    for( int lCounter = 0; lCounter < eMaxClient; lCounter++ )
    {
-      if( mClient[ lCounter ].IsConnected() )
+      if( IsConnected( lCounter ) )
       {
          lReturnValue++;
       }
@@ -254,6 +288,10 @@ int MR_NetworkInterface::GetId()const
 {
    ASSERT( (mId!=0)||mServerMode );
 
+   if( mConnectionMode == MR_CONNECTION_SERVER_HOSTED && mLocalClientId >= 0 )
+   {
+      return GetServerRaceSlot( mLocalClientId );
+   }
    return mId;
 }
 
@@ -372,6 +410,32 @@ BOOL MR_NetworkInterface::FetchMessage( DWORD& pTimeStamp, int& pMessageType, in
          
          pClientId = lClient;
 
+         if( mConnectionMode == MR_CONNECTION_SERVER_HOSTED && pMessageType == MRNM_SET_MAIN_ELEM_STATE )
+         {
+            if( pMessageLen < (int)sizeof(int) )
+            {
+               lReturnValue = FALSE;
+               continue;
+            }
+            int lServerClientId = -1;
+            memcpy( &lServerClientId, pMessage, sizeof(lServerClientId) );
+            pClientId = RegisterServerPeer( lServerClientId );
+            pMessage += sizeof(lServerClientId);
+            pMessageLen -= sizeof(lServerClientId);
+            if( pClientId < 0 )
+            {
+               lReturnValue = FALSE;
+            }
+         }
+         else if( mConnectionMode == MR_CONNECTION_SERVER_HOSTED && pMessageType == MRNM_CONN_NAME_SET &&
+                  pMessageLen >= (int)sizeof(int) )
+         {
+            int lServerClientId = -1;
+            memcpy( &lServerClientId, pMessage, sizeof(lServerClientId) );
+            pClientId = RegisterServerPeer( lServerClientId, (const char*)pMessage + sizeof(lServerClientId),
+                                            pMessageLen - sizeof(lServerClientId) );
+         }
+
       }
    }
    return lReturnValue;
@@ -404,9 +468,21 @@ MR_ConnectionMode MR_NetworkInterface::GetConnectionMode()const
    return mConnectionMode;
 }
 
+void MR_NetworkInterface::ConfigureHostedRace( const char* pTrack, int pLaps, BOOL pWeapons )
+{
+   mHostRaceRequest = TRUE;
+   mHostedTrack = pTrack != NULL ? pTrack : "ClassicH";
+   mHostedLaps = max(1, min(255, pLaps));
+   mHostedWeapons = pWeapons;
+}
+
 void MR_NetworkInterface::SetIsGameCreator( BOOL pIsCreator )
 {
    mIsGameCreator = pIsCreator;
+   if( !pIsCreator )
+   {
+      mHostRaceRequest = FALSE;
+   }
 }
 
 BOOL MR_NetworkInterface::GetIsGameCreator()const
@@ -432,6 +508,70 @@ int MR_NetworkInterface::GetLocalClientId()const
 void MR_NetworkInterface::SetLocalClientId( int pClientId )
 {
    mLocalClientId = pClientId;
+   if( mConnectionMode == MR_CONNECTION_SERVER_HOSTED && pClientId >= 0 )
+   {
+      mId = pClientId % eMaxClient;
+   }
+}
+
+int MR_NetworkInterface::RegisterServerPeer( int pServerClientId, const char* pName, int pNameLen )
+{
+   if( pServerClientId < 0 || pServerClientId == mLocalClientId )
+   {
+      return -1;
+   }
+
+   int lFreeSlot = -1;
+   for( int lSlot = 0; lSlot < eMaxClient; lSlot++ )
+   {
+      if( mServerPeerId[ lSlot ] == pServerClientId )
+      {
+         if( pName != NULL && pNameLen > 0 )
+         {
+            mClientName[ lSlot ] = CString( pName, pNameLen );
+         }
+         mConnected[ lSlot ] = TRUE;
+         return lSlot;
+      }
+      if( lFreeSlot < 0 && mServerPeerId[ lSlot ] < 0 )
+      {
+         lFreeSlot = lSlot;
+      }
+   }
+
+   if( lFreeSlot >= 0 )
+   {
+      mServerPeerId[ lFreeSlot ] = pServerClientId;
+      mConnected[ lFreeSlot ] = TRUE;
+      if( pName != NULL && pNameLen > 0 )
+      {
+         mClientName[ lFreeSlot ] = CString( pName, pNameLen );
+      }
+   }
+   return lFreeSlot;
+}
+
+int MR_NetworkInterface::GetServerPeerId( int pSlot )const
+{
+   return (pSlot >= 0 && pSlot < eMaxClient) ? mServerPeerId[ pSlot ] : -1;
+}
+
+int MR_NetworkInterface::GetServerRaceSlot( int pServerClientId )const
+{
+   if( pServerClientId < 0 )
+   {
+      return 0;
+   }
+
+   int lRaceSlot = (mLocalClientId >= 0 && mLocalClientId < pServerClientId) ? 1 : 0;
+   for( int lSlot = 0; lSlot < eMaxClient; lSlot++ )
+   {
+      if( mServerPeerId[ lSlot ] >= 0 && mServerPeerId[ lSlot ] < pServerClientId )
+      {
+         lRaceSlot++;
+      }
+   }
+   return lRaceSlot;
 }
 
 void MR_NetworkInterface::SignalGameReady()
@@ -651,17 +791,6 @@ BOOL MR_NetworkInterface::SlaveConnect( HWND pWindow, const char* pServerIP, uns
 
    if( lReturnValue )
    {
-      // For server-hosted races, assign client IDs
-      if( mConnectionMode == MR_CONNECTION_SERVER_HOSTED )
-      {
-         if( mIsGameCreator )
-         {
-            // Game creator is always client 0
-            mLocalClientId = 0;
-         }
-         // Joining players will receive their ID via MRNM_CLIENT_ID_ASSIGN message
-      }
-
       if( pModalessDlg == NULL )
       {
          mReturnMessage = 0;
@@ -858,10 +987,15 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
       case WM_INITDIALOG:
          {
 
+            LogNetJoin( "WM_INITDIALOG: addr=%s port=%u mode=%d",
+                        (const char*)mActiveInterface->mServerAddr, mActiveInterface->mServerPort,
+                        (int)mActiveInterface->GetConnectionMode() );
+
             sNewSocket = socket( PF_INET, SOCK_STREAM, 0 );
 
             if( sNewSocket == INVALID_SOCKET )
             {
+               LogNetJoin( "WM_INITDIALOG: socket() failed, error=%d", WSAGetLastError() );
                SetDlgItemText( pWindow, IDC_TEXT, MR_LoadString( IDS_CANT_CREATE_SOCK ) );
             }
             else
@@ -902,6 +1036,8 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
          {
             MR_NetMessageBuffer lOutputBuffer;
 
+            LogNetJoin( "MRM_SERVER_CONNECT: selectError=%d", WSAGETSELECTERROR( pLParam) );
+
             if( WSAGETSELECTERROR( pLParam) == 0 )
             {
                SetDlgItemText( pWindow, IDC_TEXT, MR_LoadString( IDS_GET_GAMEINFO ) );
@@ -909,7 +1045,8 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
                mActiveInterface->mClient[0].Connect( sNewSocket );
 
 
-               WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, FD_READ );
+               WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, FD_READ|FD_CLOSE );
+               SetTimer( pWindow, 1000, 10000, NULL );
 
                SOCKADDR_IN lAddr;
                int lSize        = sizeof( lAddr );
@@ -935,16 +1072,34 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
                // For server-hosted races, send GAME_NAME message to RaceServer
                if( mActiveInterface->GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
                {
-                  // Server-hosted: send game name to RaceServer so it knows which race we're joining
-                  MR_NetMessageBuffer lGameNameMsg;
-                  lGameNameMsg.mMessageType = MRNM_GAME_NAME;
-                  lGameNameMsg.mDataLen = mActiveInterface->mGameName.GetLength();
-                  memcpy( lGameNameMsg.mData, (const char*)mActiveInterface->mGameName, lGameNameMsg.mDataLen );
-                  
-                  mActiveInterface->mClient[0].Send( &lGameNameMsg, MR_NET_REQUIRED );
-                  
-                  // Set a timer to close dialog after 500ms - allows async message processing
-                  SetTimer( pWindow, 1000, 500, NULL );
+                  MR_NetMessageBuffer lJoinMsg;
+                  if( mActiveInterface->mHostRaceRequest )
+                  {
+                     const int lTrackLen = min(63, mActiveInterface->mHostedTrack.GetLength());
+                     const int lNameLen = min(63, mActiveInterface->mGameName.GetLength());
+                     int lOffset = 0;
+                     lJoinMsg.mMessageType = MRNM_HOST_RACE;
+                     lJoinMsg.mData[lOffset++] = (MR_UInt8)lTrackLen;
+                     memcpy(lJoinMsg.mData + lOffset, (const char*)mActiveInterface->mHostedTrack, lTrackLen);
+                     lOffset += lTrackLen;
+                     lJoinMsg.mData[lOffset++] = (MR_UInt8)mActiveInterface->mHostedLaps;
+                     lJoinMsg.mData[lOffset++] = mActiveInterface->mHostedWeapons ? 1 : 0;
+                     lJoinMsg.mData[lOffset++] = (MR_UInt8)lNameLen;
+                     memcpy(lJoinMsg.mData + lOffset, (const char*)mActiveInterface->mGameName, lNameLen);
+                     lJoinMsg.mDataLen = (MR_UInt8)(lOffset + lNameLen);
+                  }
+                  else
+                  {
+                     lJoinMsg.mMessageType = MRNM_GAME_NAME;
+                     lJoinMsg.mDataLen = (MR_UInt8)min(255, mActiveInterface->mGameName.GetLength());
+                     memcpy(lJoinMsg.mData, (const char*)mActiveInterface->mGameName, lJoinMsg.mDataLen);
+                  }
+                  LogNetJoin( "MRM_SERVER_CONNECT: sending type=%d dataLen=%d gameName='%s' hostRequest=%d",
+                              (int)lJoinMsg.mMessageType, (int)lJoinMsg.mDataLen,
+                              (const char*)mActiveInterface->mGameName, (int)mActiveInterface->mHostRaceRequest );
+                  mActiveInterface->mClient[0].Send( &lJoinMsg, MR_NET_REQUIRED );
+                  LogNetJoin( "MRM_SERVER_CONNECT: Send() returned, socket connected=%d",
+                              (int)mActiveInterface->mClient[0].IsConnected() );
                }
                else
                {
@@ -960,7 +1115,10 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
             }
             else
             {
+               LogNetJoin( "MRM_SERVER_CONNECT: connect failed, selectError=%d", WSAGETSELECTERROR( pLParam) );
                SetDlgItemText( pWindow, IDC_TEXT, MR_LoadString( IDS_CANT_CONNECT ) );
+               MessageBoxA( pWindow, "Could not connect to the HoverNet RaceServer.", "HoverNet Multiplayer", MB_OK | MB_ICONERROR );
+               EndDialog( pWindow, IDCANCEL );
             }
          }
          lReturnValue = TRUE;
@@ -972,47 +1130,65 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
 
             switch( WSAGETSELECTEVENT( pLParam) )
             {
+               case FD_CLOSE:
+                  LogNetJoin( "MRM_CLIENT: FD_CLOSE, selectError=%d", WSAGETSELECTERROR( pLParam) );
+                  KillTimer( pWindow, 1000 );
+                  MessageBoxA( pWindow, "The HoverNet RaceServer closed the connection while joining the race.", "HoverNet Multiplayer", MB_OK | MB_ICONERROR );
+                  EndDialog( pWindow, IDCANCEL );
+                  break;
+
                case FD_READ:
                   WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, 0 );
                   lBuffer = mActiveInterface->mClient[0].Poll();
+
+                  LogNetJoin( "MRM_CLIENT: FD_READ, Poll() returned %s (type=%d dataLen=%d)",
+                              lBuffer != NULL ? "message" : "NULL",
+                              lBuffer != NULL ? (int)lBuffer->mMessageType : -1,
+                              lBuffer != NULL ? (int)lBuffer->mDataLen : -1 );
 
                   if( lBuffer != NULL )
                   {
                      if( lBuffer->mMessageType == MRNM_GAME_NAME )
                      {
+                        KillTimer( pWindow, 1000 );
                         mActiveInterface->mGameName = CString( (const char*)lBuffer->mData, lBuffer->mDataLen );
                         EndDialog( pWindow, IDOK );
                      }
-                     else if( lBuffer->mMessageType == 51 ) // MRNM_READY
+                     else if( lBuffer->mMessageType == MRNM_JOINED_RACE )
                      {
-                        // For server-hosted joining players, MRNM_READY contains the assigned client ID in first byte
-                        if( lBuffer->mDataLen > 0 )
+                        KillTimer( pWindow, 1000 );
+                        if( lBuffer->mDataLen >= 9 )
                         {
-                           mActiveInterface->SetLocalClientId( lBuffer->mData[0] );
+                           const int lRaceId = *(int*)&lBuffer->mData[0];
+                           if( lRaceId < 0 )
+                           {
+                              MessageBoxA(pWindow, "The RaceServer rejected this race request.", "HoverNet Lobby", MB_OK | MB_ICONERROR);
+                              EndDialog(pWindow, IDCANCEL);
+                           }
+                           else
+                           {
+                              mActiveInterface->SetIsGameCreator(lBuffer->mData[4] != 0);
+                              mActiveInterface->SetLocalClientId(*(int*)&lBuffer->mData[5]);
+                              EndDialog(pWindow, IDOK);
+                           }
                         }
-                        // Proceed to next dialog
-                        EndDialog( pWindow, IDOK );
-                     }
-                     else if( lBuffer->mMessageType == 52 ) // MRNM_CLIENT_ID_ASSIGN
-                     {
-                        // Server-hosted: Creator is assigning this player a client ID
-                        if( lBuffer->mDataLen > 0 )
+                        else
                         {
-                           mActiveInterface->SetLocalClientId( lBuffer->mData[0] );
+                           MessageBoxA( pWindow, "The HoverNet RaceServer returned an invalid join acknowledgement.",
+                                        "HoverNet Multiplayer", MB_OK | MB_ICONERROR );
+                           EndDialog( pWindow, IDCANCEL );
                         }
-                        // Continue waiting for game to start
-                        WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, FD_READ );
                      }
                      else
                      {
                         // Bad message, reenable reception
-                        WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, FD_READ );
+                        WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, FD_READ|FD_CLOSE );
                      }
                   }
                   else
                   {
                      // Null message, reenable reception
-                     WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, FD_READ );
+                     WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, FD_READ|FD_CLOSE );
                   }
 
                   break;
@@ -1024,11 +1200,15 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
          break;
 
       case WM_TIMER:
-         // Timer 1000: timeout for server-hosted game name send
+         // Timer 1000: fail cleanly if the RaceServer never acknowledges the join.
          if( pWParam == 1000 )
          {
+            LogNetJoin( "WM_TIMER: 10s join timeout fired" );
             KillTimer( pWindow, 1000 );
-            EndDialog( pWindow, IDOK );
+            MessageBoxA( pWindow, "The HoverNet RaceServer did not acknowledge the race join within 10 seconds.",
+                         "HoverNet Multiplayer", MB_OK | MB_ICONERROR );
+            mActiveInterface->mClient[0].Disconnect();
+            EndDialog( pWindow, IDCANCEL );
             lReturnValue = TRUE;
          }
          break;
@@ -1037,6 +1217,7 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
          switch(LOWORD( pWParam))
          {
             case IDCANCEL:
+               KillTimer( pWindow, 1000 );
                lReturnValue = TRUE;
                closesocket( sNewSocket );
                mActiveInterface->mClient[0].Disconnect();
@@ -1261,16 +1442,10 @@ BOOL CALLBACK MR_NetworkInterface::ListCallBack( HWND pWindow, UINT  pMsgId, WPA
                      }
                      else if( mActiveInterface->GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
                      {
-                        // Server-hosted mode: Broadcast READY message with player count and ID assignments
                         MR_NetMessageBuffer lMessage;
-                        lMessage.mMessageType = MRNM_READY;
-                        lMessage.mDataLen     = 2;
-                        
-                        // For creator, they're always ID 0
-                        lMessage.mData[0]     = 1 + lCounter;  // Total connected players (including creator)
-                        lMessage.mData[1]     = 0;              // Creator's ID is always 0
-
-                        mActiveInterface->BroadcastMessage( &lMessage, MR_NET_REQUIRED );
+                        lMessage.mMessageType = MRNM_START_RACE;
+                        lMessage.mDataLen = 0;
+                        mActiveInterface->mClient[0].Send( &lMessage, MR_NET_REQUIRED );
                      }
                      
                      // Disable all callbacks
@@ -1451,29 +1626,32 @@ BOOL CALLBACK MR_NetworkInterface::ListCallBack( HWND pWindow, UINT  pMsgId, WPA
 
                      break;
 
-                  case MRNM_GAME_NAME:
-                     // Server-hosted mode: Joining player is announcing which game they're joining
-                     // Assign them the next available client ID and send it back
-                     if( mActiveInterface->GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED && mActiveInterface->GetIsGameCreator() )
-                     {
-                        // Assign this joiner the next slot
-                        int lAssignedId = mActiveInterface->mNextClientSlot;
-                        mActiveInterface->mNextClientSlot++;
-
-                        // Send back CLIENT_ID_ASSIGN message with their assigned ID
-                        lAnswer.mMessageType = MRNM_CLIENT_ID_ASSIGN;
-                        lAnswer.mDataLen = 1;
-                        lAnswer.mData[0] = lAssignedId;
-
-                        mActiveInterface->mClient[ lClient ].Send( &lAnswer, MR_NET_REQUIRED );
-
-                        // Store the player name for display
-                        mActiveInterface->mClientName[ lClient ] = CString( (const char*)lBuffer->mData, lBuffer->mDataLen );
-                     }
-                     break;
-
                   case MRNM_CONN_NAME_SET:
                      {
+                        if( mActiveInterface->GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED &&
+                            lBuffer->mDataLen >= (int)sizeof(int) )
+                        {
+                           int lServerClientId = -1;
+                           memcpy( &lServerClientId, lBuffer->mData, sizeof(lServerClientId) );
+                           int lPeerSlot = mActiveInterface->RegisterServerPeer(
+                              lServerClientId, (const char*)lBuffer->mData + sizeof(lServerClientId),
+                              lBuffer->mDataLen - sizeof(lServerClientId) );
+                           if( lPeerSlot >= 0 )
+                           {
+                              LV_ITEM lServerItem;
+                              memset( &lServerItem, 0, sizeof(lServerItem) );
+                              lServerItem.mask = LVIF_TEXT;
+                              lServerItem.iItem = lPeerSlot + 1;
+                              lServerItem.pszText = (char*)(const char*)mActiveInterface->mClientName[ lPeerSlot ];
+                              if( ListView_GetItemCount( lListHandle ) > lServerItem.iItem )
+                                 ListView_SetItem( lListHandle, &lServerItem );
+                              else
+                                 ListView_InsertItem( lListHandle, &lServerItem );
+                              ListView_SetItemText( lListHandle, lPeerSlot + 1, 1, "Server" );
+                              ListView_SetItemText( lListHandle, lPeerSlot + 1, 2, "Connected" );
+                           }
+                           break;
+                        }
                         // Add the item int the list
                         LV_ITEM lItem;
                         CString lConnectionName( (const char*)(lBuffer->mData+4), lBuffer->mDataLen-4 );
@@ -1737,9 +1915,8 @@ BOOL CALLBACK MR_NetworkInterface::ListCallBack( HWND pWindow, UINT  pMsgId, WPA
                      break;
 
 
-                  case MRNM_READY:
-                     //Get Client Id
-                     mActiveInterface->mId = lBuffer->mData[0];
+                  case MRNM_RACE_STARTED:
+                     // RaceServer started this race for every connected client
 
                      // Signal that game is ready to start
                      mActiveInterface->mGameReady = TRUE;

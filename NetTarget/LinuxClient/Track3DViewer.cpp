@@ -45,6 +45,10 @@ constexpr unsigned kDefaultLobbyPort = 9600;
 
 std::string SourcePath(const char* relativePath)
 {
+    const char* dataDirectory = std::getenv("HOVERNET_DATA_DIR");
+    if (dataDirectory != nullptr && dataDirectory[0] != '\0') {
+        return std::string(dataDirectory) + "/" + relativePath;
+    }
     return std::string(HOVERNET_SOURCE_DIR) + "/" + relativePath;
 }
 

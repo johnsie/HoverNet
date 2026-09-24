@@ -29,6 +29,8 @@
 #include "../MainCharacter/MainCharacter.h"
 #include "../VideoServices/Sprite.h"
 
+#include <vector>
+
 
 #define MR_CHAT_MESSAGE_STACK   8
 
@@ -49,6 +51,7 @@ class MR_ClientSession
       MR_GameSession    mSession;
       MR_MainCharacter* mMainCharacter1;
       MR_MainCharacter* mMainCharacter2;
+      std::vector<MR_MainCharacter*> mRemoteCharacters;
 
       MR_UInt8*         mBackImage;
 

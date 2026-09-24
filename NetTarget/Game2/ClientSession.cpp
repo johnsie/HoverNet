@@ -316,7 +316,12 @@ MR_FreeElementHandle MR_ClientSession::InsertRemoteCharacter( MR_MainCharacter* 
    pCharacter->SetAsSlave();
    pCharacter->SetNbLapForRace( mNbLap );
    pCharacter->mRoom = pRoom;
-   return lCurrentLevel->InsertElement( pCharacter, pRoom, FALSE );
+   MR_FreeElementHandle lHandle = lCurrentLevel->InsertElement( pCharacter, pRoom, FALSE );
+   if( lHandle != NULL )
+   {
+      mRemoteCharacters.push_back( pCharacter );
+   }
+   return lHandle;
 }
 
 MR_FreeElementHandle MR_ClientSession::InsertRemoteElement( MR_FreeElement* pElement, int pRoom )
@@ -421,39 +426,29 @@ int MR_ClientSession::GetNbPlayers()const
    {
       lReturnValue++;
    }
+   lReturnValue += static_cast<int>( mRemoteCharacters.size() );
    return lReturnValue;
 }
 
 int MR_ClientSession::GetRank( const MR_MainCharacter* pPlayer )const
 {
-   int lReturnValue = 1;
-
-   if( mMainCharacter1 != NULL )
+   int lRank = 1;
+   if( pPlayer == NULL || !pPlayer->HasFinish() )
    {
-      if( pPlayer == mMainCharacter1 )
-      {
-         if( mMainCharacter2->HasFinish() )
-         {
-            if( mMainCharacter2->GetTotalTime() <  mMainCharacter1->GetTotalTime() )
-            {
-               lReturnValue = 2;
-            }
-         }
-      }   
-      else
-      {
-         lReturnValue = 2;
+      return lRank;
+   }
 
-         if( mMainCharacter1->HasFinish() )
-         {
-            if( mMainCharacter1->GetTotalTime() <  mMainCharacter2->GetTotalTime() )
-            {
-               lReturnValue = 1;
-            }
-         }
+   const int lNbPlayers = GetNbPlayers();
+   for( int lIndex = 0; lIndex < lNbPlayers; ++lIndex )
+   {
+      const MR_MainCharacter* lOther = GetPlayer( lIndex );
+      if( lOther != NULL && lOther != pPlayer && lOther->HasFinish() &&
+          lOther->GetTotalTime() < pPlayer->GetTotalTime() )
+      {
+         lRank++;
       }
    }
-   return lReturnValue;
+   return lRank;
 }
 
 void MR_ClientSession::SetMap( MR_Sprite* pMap, int pX0, int pY0, int pX1, int pY1 )
@@ -485,21 +480,21 @@ void MR_ClientSession::ConvertMapCoordinate( int& pX, int& pY, int pRatio )const
 
 const MR_MainCharacter* MR_ClientSession::GetPlayer( int pPlayerIndex )const
 {
-   const MR_MainCharacter* lReturnValue = NULL;
-
-   switch( pPlayerIndex )
+   if( pPlayerIndex == 0 )
    {
-      case 0:
-         lReturnValue = mMainCharacter1;
-         break;
-
-      case 1:
-         lReturnValue = mMainCharacter2;
-         break;
+      return mMainCharacter1;
    }
-   ASSERT( lReturnValue != NULL );
-
-   return lReturnValue;
+   if( mMainCharacter2 != NULL )
+   {
+      if( pPlayerIndex == 1 )
+      {
+         return mMainCharacter2;
+      }
+      pPlayerIndex--;
+   }
+   const int lRemoteIndex = pPlayerIndex-1;
+   return ( lRemoteIndex >= 0 && lRemoteIndex < static_cast<int>( mRemoteCharacters.size() ) )
+      ? mRemoteCharacters[lRemoteIndex] : NULL;
 }
 
 void MR_ClientSession::AddMessageKey( char /*pKey*/ )

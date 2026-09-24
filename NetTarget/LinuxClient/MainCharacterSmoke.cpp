@@ -1,6 +1,9 @@
+#define protected public
 #include "../MainCharacter/MainCharacter.h"
+#undef protected
 #include "../Model/FreeElementMovingHelper.h"
 #include "../Model/GameSession.h"
+#include "../Model/RaceEffects.h"
 #include "../Util/DllObjectFactory.h"
 #include "../Util/RecordFile.h"
 #include "../Util/WorldCoordinates.h"
@@ -77,6 +80,36 @@ int main()
         std::fprintf(stderr, "Pre-race left control did not select the previous hovercraft\n");
         return 1;
     }
+
+    MR_MainCharacter* hitSource = MR_MainCharacter::New(5, TRUE);
+    MR_MainCharacter* replicatedVictim = MR_MainCharacter::New(5, TRUE);
+    if (hitSource == nullptr || replicatedVictim == nullptr) {
+        std::fprintf(stderr, "Could not create missile-hit replication players\n");
+        delete hitSource;
+        delete replicatedVictim;
+        return 1;
+    }
+    hitSource->mPosition = level->GetStartingPos(0);
+    hitSource->mRoom = startRoom;
+    hitSource->SetOrientation(level->GetStartingOrientation(0));
+    MR_LostOfControl missileHit;
+    missileHit.mType = MR_LostOfControl::eMissile;
+    missileHit.mElementId = -1;
+    missileHit.mHoverId = 1;
+    hitSource->ApplyEffect(&missileHit, 0, 0, TRUE, 0, 0, 0, level);
+    const MR_ElementNetState hitState = hitSource->GetNetState();
+    replicatedVictim->SetAsSlave();
+    replicatedVictim->SetNetState(hitState.mDataLen, hitState.mData);
+    const MR_Angle orientationBeforeHitReaction = replicatedVictim->mOrientation;
+    replicatedVictim->Simulate(10, level, startRoom);
+    if (replicatedVictim->mOrientation == orientationBeforeHitReaction) {
+        std::fprintf(stderr, "Replicated missile hit did not spin the remote craft\n");
+        delete hitSource;
+        delete replicatedVictim;
+        return 1;
+    }
+    delete hitSource;
+    delete replicatedVictim;
 
     int solidWall = -1;
     for (int wall = 0; wall < level->GetRoomVertexCount(startRoom); ++wall) {

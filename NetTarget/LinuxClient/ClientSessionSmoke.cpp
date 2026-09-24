@@ -58,6 +58,21 @@ int main()
         return 1;
     }
 
+    MR_MainCharacter* remote = MR_MainCharacter::New(1, FALSE);
+    remote->mPosition = level->GetStartingPos(0);
+    remote->SetOrientation(level->GetStartingOrientation(0));
+    remote->SetHoverId(1);
+    if (session.InsertRemoteCharacter(remote, level->GetStartingRoom(0)) == nullptr) {
+        delete remote;
+        std::fprintf(stderr, "Remote player was not inserted\n");
+        return 1;
+    }
+    if (session.GetNbPlayers() != 2 || session.GetPlayer(0) != player ||
+        session.GetPlayer(1) != remote) {
+        std::fprintf(stderr, "Remote player was not exposed to HUD enumeration\n");
+        return 1;
+    }
+
     session.SetControlState(MR_MainCharacter::eMotorOn | MR_MainCharacter::eRight, 0);
     session.Process();
     std::printf("ClientSession smoke test passed: room=%d hover=%d\n",

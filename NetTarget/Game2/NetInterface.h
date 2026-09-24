@@ -150,6 +150,10 @@ class MR_NetworkInterface
       MR_ConnectionMode mConnectionMode;
       CString          mRaceServerAddr;
       unsigned         mRaceServerPort;
+      BOOL             mHostRaceRequest;
+      CString          mHostedTrack;
+      int              mHostedLaps;
+      BOOL             mHostedWeapons;
 
       // UDP port
       SOCKET   mUDPOutShortPort;
@@ -170,6 +174,7 @@ class MR_NetworkInterface
       BOOL           mGameReady;     // TRUE when game is ready to start (after MRNM_READY received)
       int            mLocalClientId; // This player's client ID in server-hosted mode (-1 if not assigned)
       int            mNextClientSlot; // Next slot to assign for server-hosted joining players (starts at 1)
+      int            mServerPeerId[ eMaxClient ]; // RaceServer client id represented by each local player slot
 
       // Dialog functions
       static MR_NetworkInterface* mActiveInterface;
@@ -180,6 +185,7 @@ class MR_NetworkInterface
 
       // Helper func
       void SendConnectionDoneIfNeeded();
+      int  RegisterServerPeer( int pServerClientId, const char* pName = NULL, int pNameLen = 0 );
 
    public:
       // Creation and destruction
@@ -192,6 +198,7 @@ class MR_NetworkInterface
       // Phase 4: Set connection mode for server-hosted races
       void  SetConnectionMode( MR_ConnectionMode pMode, const char* pServerAddr = NULL, unsigned pServerPort = 0 );
       MR_ConnectionMode GetConnectionMode()const;
+      void  ConfigureHostedRace( const char* pTrack, int pLaps, BOOL pWeapons );
 
       // Game creator flag accessors
       void  SetIsGameCreator( BOOL pIsCreator );
@@ -207,6 +214,8 @@ class MR_NetworkInterface
       // Get this player's client ID in server-hosted mode
       int   GetLocalClientId()const;
       void  SetLocalClientId( int pClientId );
+      int   GetServerPeerId( int pSlot )const;
+      int   GetServerRaceSlot( int pServerClientId )const;
 
       BOOL MasterConnect( HWND pWindow, const char* pGameName, BOOL pPromptForPort = TRUE, unsigned pDefaultPort = MR_DEFAULT_NET_PORT, HWND* pModalessDlg = NULL, int pReturnMessage = 0);
       BOOL SlavePreConnect( HWND pWindow, CString& pGameName );
