@@ -2361,11 +2361,20 @@ void  MR_NetworkPort::Send( const MR_NetMessageBuffer* pMessage, int pReqLevel )
 
                ASSERT( lFirstBlocSize > 0 );
 
-               memcpy( mOutQueue+lTail, pMessage+lReturnValue, lFirstBlocSize );
+               // pMessage is a MR_NetMessageBuffer*, so plain pointer arithmetic on it
+               // advances by sizeof(MR_NetMessageBuffer) (~258 bytes) per unit, not by
+               // bytes -- pMessage+lReturnValue was landing far outside the message,
+               // corrupting/crashing on the next send() this queued data was flushed
+               // with. Only reached when send() partially writes a message, which is
+               // rare for one message but eventually happens once continuous per-frame
+               // position updates are flowing during a live race.
+               const MR_UInt8* lMessageBytes = (const MR_UInt8*)pMessage;
+
+               memcpy( mOutQueue+lTail, lMessageBytes+lReturnValue, lFirstBlocSize );
 
                if( lSecondBlocSize > 0 )
                {
-                  memcpy( mOutQueue, pMessage+lFirstBlocSize+lReturnValue, lSecondBlocSize );
+                  memcpy( mOutQueue, lMessageBytes+lFirstBlocSize+lReturnValue, lSecondBlocSize );
                }
 
                mOutQueueLen += lToSend;
