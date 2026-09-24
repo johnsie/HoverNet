@@ -2360,8 +2360,11 @@ void MR_GameApp::NewLocalSession()
    AssignPalette();
    
    if(logFile) fprintf(logFile, "About to close logFile\n"), fflush(logFile);
-   if(logFile) fclose(logFile);
-   if(logFile) fprintf(logFile, "SHOULD NOT SEE THIS\n");  // logFile is now NULL
+   if( logFile )
+   {
+      fclose( logFile );
+      logFile = NULL;
+   }
 }
 
 

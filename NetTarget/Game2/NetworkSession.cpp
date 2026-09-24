@@ -300,9 +300,20 @@ BOOL MR_NetworkSession::ResultAvaillable()const
 
 int MR_NetworkSession::GetNbPlayers()const
 {
-   // Return the number of players still playing???
-   // return mNetInterface.GetClientCount()+1;
-   return ResultAvaillable();
+   int lPlayerCount = (mMainCharacter1 != NULL) ? 1 : 0;
+
+   // The result list is populated by lap-stat messages and is not a live
+   // roster.  Count the instantiated network characters so HUD consumers
+   // (notably the minimap) keep scanning sparse client slots.
+   for( int lCounter = 0; lCounter < MR_NetworkInterface::eMaxClient; lCounter++ )
+   {
+      if( mClientCharacter[ lCounter ] != NULL )
+      {
+         lPlayerCount++;
+      }
+   }
+
+   return lPlayerCount;
 }
 
 const MR_MainCharacter* MR_NetworkSession::GetPlayer( int pPlayerIndex )const
