@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <string>
+#include <map>
 #include <vector>
 
 namespace
@@ -401,13 +402,24 @@ enum class LobbyPhase
     eWaitingRoom, // Joined a race, waiting for its creator to start it
 };
 
+struct RemotePlayer
+{
+    MR_MainCharacter* mCharacter = nullptr;
+    MR_FreeElementHandle mHandle = nullptr;
+};
+
+// pClient is caller-owned (not constructed here) and deliberately left connected
+// when this returns true: a joined-and-started race needs to keep talking to the
+// server afterward (player position sync), so the connection can't be scoped to
+// just this function the way it could when all it did was browse/chat.
 bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
-                    const MR_Sprite& font, const std::string& host, unsigned port,
-                    std::string& outJoinedName, int pFrameLimit)
+                    const MR_Sprite& font, RaceServerClient& pClient, const std::string& host, unsigned port,
+                    std::string& outJoinedName, int& outLocalClientId, std::vector<RaceServerPeer>& outPeers,
+                    int pFrameLimit)
 {
     const int lineHeight = std::max(1, font.GetItemHeight());
+    RaceServerClient& client = pClient;
 
-    RaceServerClient client;
     if (!client.Connect(host, port)) {
         std::fprintf(stderr, "Lobby screen: could not connect to RaceServer at %s:%u\n", host.c_str(), port);
         return false;
@@ -602,6 +614,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     }
                     else {
                         isHost = ack.mIsHost;
+                        outLocalClientId = ack.mClientId;
                     }
                 }
             }
@@ -609,6 +622,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 RaceServerPeer peer;
                 if (RaceServerClient::ParsePeer(message, peer)) {
                     raceMembers.push_back(peer.mName);
+                    outPeers.push_back(peer);
                     pushChat("* " + peer.mName + " joined");
                 }
             }
@@ -1018,6 +1032,17 @@ int main(int argc, char** argv)
     const int frameLimit = ParseFrameCount(argc, argv);
 
 #ifdef HOVERNET_GAME2_PLAYER
+    // When set, onlineClient stays connected for the rest of the run: the main
+    // loop below sends this player's position each frame and applies updates from
+    // remotePlayers (one MR_MainCharacter per other racer, keyed by their server-
+    // assigned client id -- see RaceServerClient::SendPlayerState/ParsePlayerState
+    // for why that id has to be threaded through explicitly rather than assumed).
+    RaceServerClient onlineClient;
+    int localClientId = -1;
+    std::map<int, RemotePlayer> remotePlayers;
+#endif
+
+#ifdef HOVERNET_GAME2_PLAYER
     if (playerMode) {
         MR_SpriteHandle* menuFontHandle = LoadUiFont();
         if (menuFontHandle != nullptr) {
@@ -1029,11 +1054,40 @@ int main(int argc, char** argv)
                 ParseLobbyArg(argc, argv, lobbyHost, lobbyPort);  // --lobby overrides the default
 
                 std::string joinedRace;
-                if (RunLobbyScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(), lobbyHost,
-                                   lobbyPort, joinedRace, frameLimit)) {
-                    std::printf("Joined race '%s' via the lobby\n", joinedRace.c_str());
+                std::vector<RaceServerPeer> knownPeers;
+                if (RunLobbyScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(), onlineClient,
+                                   lobbyHost, lobbyPort, joinedRace, localClientId, knownPeers, frameLimit)) {
+                    std::printf("Joined race '%s' via the lobby (%zu other player(s) already in)\n",
+                               joinedRace.c_str(), knownPeers.size());
+
+                    // Spawn a MainCharacter for each racer already in the race when it
+                    // started; the main loop below spawns any that join afterward the
+                    // same way, and keeps every one of them positioned from the
+                    // eRSMsgSetMainElemState updates the server relays.
+                    int nextStartSlot = 1;
+                    for (const RaceServerPeer& peer : knownPeers) {
+                        if (remotePlayers.count(peer.mClientId) > 0) {
+                            continue;
+                        }
+                        MR_MainCharacter* remote = MR_MainCharacter::New(5, TRUE);
+                        if (remote == nullptr) {
+                            continue;
+                        }
+                        const int slot = nextStartSlot++;
+                        const int startSlot = std::min(slot, level.GetPlayerCount() - 1);
+                        const int startRoom = level.GetStartingRoom(startSlot);
+                        remote->mPosition = level.GetStartingPos(startSlot);
+                        remote->SetOrientation(level.GetStartingOrientation(startSlot));
+                        remote->mRoom = (startRoom >= 0 && startRoom < level.GetRoomCount()) ? startRoom : room;
+                        remote->SetHoverId(slot);
+                        MR_FreeElementHandle remoteHandle = session.InsertRemoteCharacter(remote, remote->mRoom);
+                        if (remoteHandle != nullptr) {
+                            remotePlayers[peer.mClientId] = {remote, remoteHandle};
+                        }
+                    }
                 }
                 else {
+                    onlineClient.Disconnect();
                     std::printf("Lobby skipped or unavailable; continuing with local play\n");
                 }
             }
@@ -1130,6 +1184,56 @@ int main(int argc, char** argv)
             if (fire && !missileSeen && ContainsFreeElementType(level, 1, 150)) {
                 missileSeen = true;
             }
+
+#ifdef HOVERNET_GAME2_PLAYER
+            if (onlineClient.IsConnected() && localClientId >= 0) {
+                const MR_ElementNetState localState = mainCharacter->GetNetState();
+                onlineClient.SendPlayerState(localClientId, localState.mData, localState.mDataLen);
+
+                RaceServerMessage netMessage;
+                while (onlineClient.PollMessage(netMessage, 0)) {
+                    if (netMessage.mType == eRSMsgConnNameSet) {
+                        RaceServerPeer peer;
+                        if (RaceServerClient::ParsePeer(netMessage, peer) &&
+                            remotePlayers.count(peer.mClientId) == 0) {
+                            // A player who joined after the race started -- spawn them
+                            // the same way the pre-race roster was spawned, just with
+                            // no free starting slot to reserve at this point.
+                            MR_MainCharacter* remote = MR_MainCharacter::New(5, TRUE);
+                            if (remote != nullptr) {
+                                remote->mPosition = mainCharacter->mPosition;
+                                remote->mRoom = mainCharacter->mRoom;
+                                remote->SetHoverId(static_cast<int>(remotePlayers.size()) + 1);
+                                MR_FreeElementHandle remoteHandle = session.InsertRemoteCharacter(remote, remote->mRoom);
+                                if (remoteHandle != nullptr) {
+                                    remotePlayers[peer.mClientId] = {remote, remoteHandle};
+                                }
+                            }
+                        }
+                    }
+                    else if (netMessage.mType == eRSMsgSetMainElemState) {
+                        int senderClientId = -1;
+                        const MR_UInt8* stateData = nullptr;
+                        std::size_t stateLen = 0;
+                        if (RaceServerClient::ParsePlayerState(netMessage, senderClientId, stateData, stateLen) &&
+                            stateLen == static_cast<std::size_t>(localState.mDataLen)) {
+                            auto remoteIt = remotePlayers.find(senderClientId);
+                            if (remoteIt != remotePlayers.end()) {
+                                MR_MainCharacter* remote = remoteIt->second.mCharacter;
+                                const int oldRoom = remote->mRoom;
+                                remote->SetNetState(static_cast<int>(stateLen), stateData);
+                                if (remote->mRoom < 0 || remote->mRoom >= level.GetRoomCount()) {
+                                    remote->mRoom = oldRoom;
+                                }
+                                else if (remote->mRoom != oldRoom) {
+                                    session.MoveRemoteCharacter(remoteIt->second.mHandle, remote->mRoom);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+#endif
         }
         else {
             if (turnLeft != turnRight) {

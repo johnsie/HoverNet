@@ -48,7 +48,7 @@ namespace
             RaceServerPeer lPeer;
             if (RaceServerClient::ParsePeer(lMessage, lPeer))
             {
-                std::printf("  * %s joined (UDP port %u)\n", lPeer.mName.c_str(), lPeer.mUdpPort);
+                std::printf("  * %s joined\n", lPeer.mName.c_str());
             }
             else if (lMessage.mType == eRSMsgChatMessage)
             {

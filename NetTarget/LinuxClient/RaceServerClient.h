@@ -56,10 +56,12 @@ struct RaceServerMessage
     std::vector<std::uint8_t> mData;
 };
 
-// A peer discovered via eRSMsgConnNameSet.
+// A peer discovered via eRSMsgConnNameSet. mClientId identifies them in later
+// eRSMsgSetMainElemState updates. The server stamps that id from the sending
+// connection, allowing races with multiple remote players to attribute updates.
 struct RaceServerPeer
 {
-    unsigned mUdpPort = 0;
+    int mClientId = -1;
     std::string mName;
 };
 
@@ -70,6 +72,7 @@ struct RaceServerJoinAck
 {
     int mRaceId = -1;
     bool mIsHost = false;  // True if this client created the race (and so may start it)
+    int mClientId = -1;    // This connection's server-assigned identity
 };
 
 // Blocking TCP client for the RaceServer protocol. Not thread-safe.
@@ -102,7 +105,7 @@ public:
     // disconnect, or malformed data.
     bool PollMessage(RaceServerMessage& pOut, int pTimeoutMs);
 
-    // Parses an eRSMsgConnNameSet payload ([4-byte little-endian UDP port][name]).
+    // Parses an eRSMsgConnNameSet payload ([4-byte little-endian clientId][name]).
     static bool ParsePeer(const RaceServerMessage& pMessage, RaceServerPeer& pOut);
 
     // Sends eRSMsgListGames and collects every eRSMsgGameInfo up to eRSMsgGameListEnd
@@ -113,15 +116,28 @@ public:
     // Parses an eRSMsgGameInfo payload.
     static bool ParseGameInfo(const RaceServerMessage& pMessage, RaceServerGameInfo& pOut);
 
-    // Parses an eRSMsgJoinedRace payload ([4-byte little-endian raceId][1-byte isHost]).
+    // Parses an eRSMsgJoinedRace payload
+    // ([4-byte little-endian raceId][1-byte isHost][4-byte little-endian clientId]).
     static bool ParseJoinedRace(const RaceServerMessage& pMessage, RaceServerJoinAck& pOut);
 
     // Convenience: the race's creator asks the server to start it. The server only
     // honors this from the actual creator; anyone else's request is silently ignored.
     bool StartRace();
 
+    // Sends this player's MainCharacter net state to the rest of the race. The
+    // envelope includes pLocalClientId, but the server replaces it with the id of
+    // the actual sending connection before relaying it to prevent impersonation.
+    bool SendPlayerState(int pLocalClientId, const void* pStateData, std::size_t pStateLen);
+
+    // Parses an eRSMsgSetMainElemState envelope built by SendPlayerState:
+    // [4-byte little-endian senderClientId][raw MR_MainCharacter net state bytes].
+    // pOutStateData/pOutStateLen point into pMessage's own storage.
+    static bool ParsePlayerState(const RaceServerMessage& pMessage, int& pOutSenderClientId,
+                                 const std::uint8_t*& pOutStateData, std::size_t& pOutStateLen);
+
 private:
     int mSocket;
+    std::vector<std::uint8_t> mReceiveBuffer;
 };
 
 #endif

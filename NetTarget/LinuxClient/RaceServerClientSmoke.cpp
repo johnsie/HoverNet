@@ -55,7 +55,7 @@ namespace
             std::fprintf(stderr, "Client B never discovered client A via eRSMsgConnNameSet\n");
             return false;
         }
-        std::printf("Client B discovered peer '%s' on UDP port %u\n", lPeer.mName.c_str(), lPeer.mUdpPort);
+        std::printf("Client B discovered peer '%s' (client id %d)\n", lPeer.mName.c_str(), lPeer.mClientId);
 
         const std::string lChatText = "hello from A";
         if (!pClientA.SendMessage(eRSMsgChatMessage, lChatText.data(), lChatText.size()))
@@ -444,6 +444,75 @@ namespace
             return false;
         }
         std::printf("HostRace correctly rejects an unknown track and a duplicate race name\n");
+
+        // Player position sync: SendPlayerState's [senderClientId][state bytes]
+        // envelope must round-trip through the server's opaque relay so a receiver
+        // can tell ParsePlayerState whose update it just got, with a third player
+        // in the same race present to prove it's not just "the only other client".
+        RaceServerClient lThirdRacer;
+        if (!lThirdRacer.Connect("127.0.0.1", pPort) || !lThirdRacer.JoinGame("start-test-race"))
+        {
+            std::fprintf(stderr, "Third racer could not join start-test-race\n");
+            return false;
+        }
+        // Drain lThirdRacer's own join ack and the CONN_NAME_SET backlog for the
+        // two already-in-race players before sending anything state-related.
+        for (int lDrain = 0; lDrain < 5; ++lDrain)
+        {
+            if (!lThirdRacer.PollMessage(lMessage, 200))
+            {
+                break;
+            }
+        }
+        // lHost and lJoiner likewise get a CONN_NAME_SET about the new arrival.
+        lHost.PollMessage(lMessage, 200);
+        lJoiner.PollMessage(lMessage, 200);
+
+        // Deliberately claim a bogus sender id. The server must replace it with
+        // the connection's real id before either recipient sees the update.
+        const std::uint8_t lFakeState[] = {1, 2, 3, 4, 5, 6, 7, 8};
+        const int lForgedClientId = -999;
+        if (!lHost.SendPlayerState(lForgedClientId, lFakeState, sizeof(lFakeState)))
+        {
+            std::fprintf(stderr, "Failed to send player state\n");
+            return false;
+        }
+
+        bool lJoinerGotState = false;
+        bool lThirdGotState = false;
+        for (int lTries = 0; lTries < 20 && !(lJoinerGotState && lThirdGotState); ++lTries)
+        {
+            if (!lJoinerGotState && lJoiner.PollMessage(lMessage, 100))
+            {
+                int lSenderId = -1;
+                const std::uint8_t* lStateData = nullptr;
+                std::size_t lStateLen = 0;
+                if (RaceServerClient::ParsePlayerState(lMessage, lSenderId, lStateData, lStateLen) &&
+                    lSenderId == lHostAck.mClientId && lStateLen == sizeof(lFakeState) &&
+                    std::memcmp(lStateData, lFakeState, lStateLen) == 0)
+                {
+                    lJoinerGotState = true;
+                }
+            }
+            if (!lThirdGotState && lThirdRacer.PollMessage(lMessage, 100))
+            {
+                int lSenderId = -1;
+                const std::uint8_t* lStateData = nullptr;
+                std::size_t lStateLen = 0;
+                if (RaceServerClient::ParsePlayerState(lMessage, lSenderId, lStateData, lStateLen) &&
+                    lSenderId == lHostAck.mClientId && lStateLen == sizeof(lFakeState) &&
+                    std::memcmp(lStateData, lFakeState, lStateLen) == 0)
+                {
+                    lThirdGotState = true;
+                }
+            }
+        }
+        if (!lJoinerGotState || !lThirdGotState)
+        {
+            std::fprintf(stderr, "Player state update did not reach every other player with the right sender id\n");
+            return false;
+        }
+        std::printf("Player state sync correctly attributes updates to the sending player\n");
 
         return true;
     }

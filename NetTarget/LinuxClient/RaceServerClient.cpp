@@ -28,34 +28,24 @@ namespace
         return (pHeader >> 10) & 0x3F;
     }
 
-    bool RecvAll(int pSocket, void* pBuffer, std::size_t pLen, int pTimeoutMs)
+    bool TryExtractMessage(std::vector<std::uint8_t>& pBuffer, RaceServerMessage& pOut)
     {
-        std::uint8_t* lDest = static_cast<std::uint8_t*>(pBuffer);
-        std::size_t lReceived = 0;
-
-        while (lReceived < pLen)
+        if (pBuffer.size() < 3)
         {
-            fd_set lReadSet;
-            FD_ZERO(&lReadSet);
-            FD_SET(pSocket, &lReadSet);
-
-            struct timeval lTimeout;
-            lTimeout.tv_sec = pTimeoutMs / 1000;
-            lTimeout.tv_usec = (pTimeoutMs % 1000) * 1000;
-
-            int lReady = select(pSocket + 1, &lReadSet, nullptr, nullptr, &lTimeout);
-            if (lReady <= 0)
-            {
-                return false;  // Timeout or error
-            }
-
-            ssize_t lCount = recv(pSocket, lDest + lReceived, pLen - lReceived, 0);
-            if (lCount <= 0)
-            {
-                return false;  // Peer closed or error
-            }
-            lReceived += static_cast<std::size_t>(lCount);
+            return false;
         }
+
+        const std::size_t lMessageLen = 3 + pBuffer[2];
+        if (pBuffer.size() < lMessageLen)
+        {
+            return false;
+        }
+
+        const std::uint16_t lHeader = static_cast<std::uint16_t>(pBuffer[0]) |
+                                      (static_cast<std::uint16_t>(pBuffer[1]) << 8);
+        pOut.mType = MessageTypeFromHeader(lHeader);
+        pOut.mData.assign(pBuffer.begin() + 3, pBuffer.begin() + lMessageLen);
+        pBuffer.erase(pBuffer.begin(), pBuffer.begin() + lMessageLen);
         return true;
     }
 }
@@ -110,6 +100,7 @@ void RaceServerClient::Disconnect()
         close(mSocket);
         mSocket = -1;
     }
+    mReceiveBuffer.clear();
 }
 
 bool RaceServerClient::IsConnected() const
@@ -136,7 +127,22 @@ bool RaceServerClient::SendMessage(int pMessageType, const void* pData, std::siz
         lBuffer.insert(lBuffer.end(), lSrc, lSrc + pLen);
     }
 
-    return send(mSocket, lBuffer.data(), lBuffer.size(), 0) == static_cast<ssize_t>(lBuffer.size());
+    std::size_t lSent = 0;
+    while (lSent < lBuffer.size())
+    {
+        const ssize_t lCount = send(mSocket, lBuffer.data() + lSent, lBuffer.size() - lSent, 0);
+        if (lCount < 0 && errno == EINTR)
+        {
+            continue;
+        }
+        if (lCount <= 0)
+        {
+            Disconnect();
+            return false;
+        }
+        lSent += static_cast<std::size_t>(lCount);
+    }
+    return true;
 }
 
 bool RaceServerClient::JoinGame(const std::string& pGameName)
@@ -179,24 +185,45 @@ bool RaceServerClient::PollMessage(RaceServerMessage& pOut, int pTimeoutMs)
         return false;
     }
 
-    std::uint8_t lHeaderBytes[3];
-    if (!RecvAll(mSocket, lHeaderBytes, sizeof(lHeaderBytes), pTimeoutMs))
+    if (TryExtractMessage(mReceiveBuffer, pOut))
+    {
+        return true;
+    }
+
+    fd_set lReadSet;
+    FD_ZERO(&lReadSet);
+    FD_SET(mSocket, &lReadSet);
+
+    const int lTimeoutMs = pTimeoutMs > 0 ? pTimeoutMs : 0;
+    struct timeval lTimeout;
+    lTimeout.tv_sec = lTimeoutMs / 1000;
+    lTimeout.tv_usec = (lTimeoutMs % 1000) * 1000;
+
+    const int lReady = select(mSocket + 1, &lReadSet, nullptr, nullptr, &lTimeout);
+    if (lReady < 0)
+    {
+        Disconnect();
+        return false;
+    }
+    if (lReady == 0)
     {
         return false;
     }
 
-    const std::uint16_t lHeader = static_cast<std::uint16_t>(lHeaderBytes[0]) |
-                                   (static_cast<std::uint16_t>(lHeaderBytes[1]) << 8);
-    const std::uint8_t lDataLen = lHeaderBytes[2];
-
-    pOut.mType = MessageTypeFromHeader(lHeader);
-    pOut.mData.assign(lDataLen, 0);
-
-    if (lDataLen > 0 && !RecvAll(mSocket, pOut.mData.data(), lDataLen, pTimeoutMs))
+    std::uint8_t lIncoming[4096];
+    const ssize_t lCount = recv(mSocket, lIncoming, sizeof(lIncoming), 0);
+    if (lCount < 0 && errno == EINTR)
     {
         return false;
     }
-    return true;
+    if (lCount <= 0)
+    {
+        Disconnect();
+        return false;
+    }
+
+    mReceiveBuffer.insert(mReceiveBuffer.end(), lIncoming, lIncoming + lCount);
+    return TryExtractMessage(mReceiveBuffer, pOut);
 }
 
 bool RaceServerClient::ParsePeer(const RaceServerMessage& pMessage, RaceServerPeer& pOut)
@@ -206,9 +233,9 @@ bool RaceServerClient::ParsePeer(const RaceServerMessage& pMessage, RaceServerPe
         return false;
     }
 
-    std::uint32_t lPort = 0;
-    std::memcpy(&lPort, pMessage.mData.data(), sizeof(lPort));
-    pOut.mUdpPort = lPort;
+    int lClientId = 0;
+    std::memcpy(&lClientId, pMessage.mData.data(), sizeof(lClientId));
+    pOut.mClientId = lClientId;
     pOut.mName.assign(pMessage.mData.begin() + 4, pMessage.mData.end());
     return true;
 }
@@ -286,7 +313,7 @@ bool RaceServerClient::ParseGameInfo(const RaceServerMessage& pMessage, RaceServ
 
 bool RaceServerClient::ParseJoinedRace(const RaceServerMessage& pMessage, RaceServerJoinAck& pOut)
 {
-    if (pMessage.mType != eRSMsgJoinedRace || pMessage.mData.size() < 5)
+    if (pMessage.mType != eRSMsgJoinedRace || pMessage.mData.size() < 9)
     {
         return false;
     }
@@ -295,5 +322,44 @@ bool RaceServerClient::ParseJoinedRace(const RaceServerMessage& pMessage, RaceSe
     std::memcpy(&lRaceId, pMessage.mData.data(), sizeof(lRaceId));
     pOut.mRaceId = lRaceId;
     pOut.mIsHost = pMessage.mData[4] != 0;
+
+    int lClientId = 0;
+    std::memcpy(&lClientId, pMessage.mData.data() + 5, sizeof(lClientId));
+    pOut.mClientId = lClientId;
+    return true;
+}
+
+bool RaceServerClient::SendPlayerState(int pLocalClientId, const void* pStateData, std::size_t pStateLen)
+{
+    if (pStateLen > 251)  // 255-byte message cap minus the 4-byte clientId prefix
+    {
+        return false;
+    }
+
+    std::vector<std::uint8_t> lEnvelope;
+    lEnvelope.reserve(4 + pStateLen);
+    lEnvelope.resize(4);
+    std::memcpy(lEnvelope.data(), &pLocalClientId, sizeof(pLocalClientId));
+    if (pStateData != nullptr && pStateLen > 0)
+    {
+        const std::uint8_t* lSrc = static_cast<const std::uint8_t*>(pStateData);
+        lEnvelope.insert(lEnvelope.end(), lSrc, lSrc + pStateLen);
+    }
+    return SendMessage(eRSMsgSetMainElemState, lEnvelope.data(), lEnvelope.size());
+}
+
+bool RaceServerClient::ParsePlayerState(const RaceServerMessage& pMessage, int& pOutSenderClientId,
+                                        const std::uint8_t*& pOutStateData, std::size_t& pOutStateLen)
+{
+    if (pMessage.mType != eRSMsgSetMainElemState || pMessage.mData.size() < 4)
+    {
+        return false;
+    }
+
+    int lClientId = 0;
+    std::memcpy(&lClientId, pMessage.mData.data(), sizeof(lClientId));
+    pOutSenderClientId = lClientId;
+    pOutStateData = pMessage.mData.data() + 4;
+    pOutStateLen = pMessage.mData.size() - 4;
     return true;
 }

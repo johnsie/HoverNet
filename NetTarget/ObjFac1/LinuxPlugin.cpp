@@ -74,6 +74,30 @@ public:
         : MR_SurfaceElement(id), bitmap(bitmap), alternateBitmap(alternateBitmap ? alternateBitmap : bitmap),
           rotationSpeed(rotationSpeed), rotationLength(rotationLength), maximumHeight(maximumHeight) {}
 
+    // Mirrors MR_BitmapSurface::GetEffectList() (ObjFacTools/BitmapSurface.cpp), the
+    // class this headless reimplementation stands in for on Linux: every textured
+    // wall/floor surface carries an infinite-weight MR_PhysicalCollision so
+    // MainCharacter::ApplyEffect() (MainCharacter.cpp) bounces off it. Without this
+    // override the base MR_Element::GetEffectList() returns NULL, GameSession's
+    // ComputeShapeContactEffects() has nothing to dispatch, and craft never bounce
+    // off walls at all -- they just stop dead, since MainCharacter's own collision
+    // loop (InternalSimulate) only blocks movement, it never reflects velocity.
+    const MR_ContactEffectList* GetEffectList() override
+    {
+        static MR_PhysicalCollision sEffect;
+        static MR_ContactEffectList sEffectList;
+        static bool sInitialized = false;
+        if (!sInitialized) {
+            sInitialized = true;
+            sEffect.mWeight = MR_InertialMoment::eInfiniteWeight;
+            sEffect.mXSpeed = 0;
+            sEffect.mYSpeed = 0;
+            sEffect.mZSpeed = 0;
+            sEffectList.AddTail(&sEffect);
+        }
+        return &sEffectList;
+    }
+
     void RenderWallSurface(MR_3DViewPort* destination, const MR_3DCoordinate& upperLeft,
                            const MR_3DCoordinate& lowerRight, MR_Int32 length,
                            MR_SimulationTime time) override

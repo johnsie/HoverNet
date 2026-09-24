@@ -5,8 +5,10 @@
 #include "../Util/RecordFile.h"
 #include "../Util/WorldCoordinates.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 class PlayerMovementCylinder : public MR_CylinderShape
 {
@@ -101,6 +103,26 @@ int main()
         return 1;
     }
 
+    // The wall segment's true normal (perpendicular to it, not the start-to-wall
+    // vector used above, which mixes normal and along-the-wall components unless
+    // the wall happens to be perpendicular to that vector). Bounce reflects the
+    // normal component of velocity and preserves the tangential one -- a craft
+    // sliding along the wall after bouncing is correct, so only the normal
+    // component is a meaningful "did it bounce" signal.
+    double wallNormalX = -(wallEnd.mY - wallStart.mY);
+    double wallNormalY = (wallEnd.mX - wallStart.mX);
+    const double wallNormalLength = std::sqrt(wallNormalX * wallNormalX + wallNormalY * wallNormalY);
+    if (wallNormalLength == 0.0) {
+        std::fprintf(stderr, "Structural wall has zero length\n");
+        return 1;
+    }
+    wallNormalX /= wallNormalLength;
+    wallNormalY /= wallNormalLength;
+    if (wallNormalX * towardStartX + wallNormalY * towardStartY < 0.0) {
+        wallNormalX = -wallNormalX;
+        wallNormalY = -wallNormalY;
+    }
+
     PlayerMovementCylinder wallProbe(
         wallX + static_cast<MR_Int32>(towardStartX * 200 / towardStartLength),
         wallY + static_cast<MR_Int32>(towardStartY * 200 / towardStartLength),
@@ -127,25 +149,76 @@ int main()
     player->SetControlState(MR_MainCharacter::eMotorOn, 0);
     session.SetSimulationTime(6000);
     int wallCollisionRoom = startRoom;
-    for (int slice = 0; slice < 500; ++slice) {
+
+    // Track how far the player is from the wall along its true normal each slice.
+    // Once bounce works, the craft slides along the wall (tangentially) while its
+    // normal-direction distance should only ever increase after first contact --
+    // it must never go negative (clipped through) or stay pinned at the minimum
+    // (stopped dead, no bounce). Continued thrust in the original heading means it
+    // can coast back toward the wall's normal *and* slide far enough tangentially
+    // to reach some other, unrelated opening in the room -- that's why this only
+    // checks the closest approach and the rebound after it, not "stayed in room".
+    double closestApproach = towardStartLength;  // Starting distance from the wall midpoint
+    double afterApproachMax = 0.0;
+    double minProjectedEver = towardStartLength;
+    bool pastClosestApproach = false;
+
+    // Short enough to capture the bounce-and-rebound arc without running long
+    // enough for continued thrust to slide the craft into an unrelated doorway.
+    for (int slice = 0; slice < 85; ++slice) {
         session.SimulateLateElement(handle, 10, wallCollisionRoom);
         wallCollisionRoom = player->mRoom;
+
+        const double projected = (player->mPosition.mX - wallX) * wallNormalX +
+                                  (player->mPosition.mY - wallY) * wallNormalY;
+        if (std::getenv("SMOKE_TRACE") != nullptr) {
+            std::fprintf(stderr, "slice=%d room=%d pos=(%d,%d) projected=%.0f\n", slice, player->mRoom,
+                         player->mPosition.mX, player->mPosition.mY, projected);
+        }
+        minProjectedEver = std::min(minProjectedEver, projected);
+
+        if (!pastClosestApproach) {
+            if (projected <= closestApproach) {
+                closestApproach = projected;
+            }
+            else {
+                // Distance from the wall started increasing again -- past the point
+                // of closest approach, now track how far it bounces back out.
+                pastClosestApproach = true;
+                afterApproachMax = projected;
+            }
+        }
+        else if (projected > afterApproachMax) {
+            afterApproachMax = projected;
+        }
     }
     const double distanceMoved = std::sqrt(
         static_cast<double>(player->mPosition.mX - startPosition.mX) *
             (player->mPosition.mX - startPosition.mX) +
         static_cast<double>(player->mPosition.mY - startPosition.mY) *
             (player->mPosition.mY - startPosition.mY));
-    const int finalRoom = level->FindRoomForPoint(
-        MR_2DCoordinate(player->mPosition.mX, player->mPosition.mY), startRoom);
-    if (distanceMoved == 0.0 || wallCollisionRoom != startRoom || finalRoom != startRoom) {
-        std::fprintf(stderr, "Player crossed a structural wall: room=%d pointRoom=%d distance=%.0f position=(%d,%d,%d)\n",
-                     wallCollisionRoom, finalRoom, distanceMoved,
+    if (distanceMoved == 0.0 || minProjectedEver < 0.0) {
+        std::fprintf(stderr, "Player clipped through the structural wall: minProjected=%.0f distance=%.0f "
+                     "position=(%d,%d,%d)\n", minProjectedEver, distanceMoved,
                      player->mPosition.mX, player->mPosition.mY, player->mPosition.mZ);
         return 1;
     }
 
-    std::printf("MainCharacter smoke test passed: room=%d position=(%d,%d,%d)\n",
-                player->mRoom, player->mPosition.mX, player->mPosition.mY, player->mPosition.mZ);
+    // A craft driving straight into a wall must bounce off it (deflect away, not
+    // just stop dead) -- see MainCharacter::ApplyEffect's MR_InertialMoment-based
+    // reflection, which only fires when the wall's surface element actually
+    // advertises an MR_PhysicalCollision effect (HeadlessBitmapSurface::GetEffectList
+    // in the Linux ObjFac1 plugin).
+    const double bounceDistance = afterApproachMax - closestApproach;
+    if (!pastClosestApproach || bounceDistance < 50.0) {
+        std::fprintf(stderr,
+                     "Player did not bounce off the wall: closest=%.0f afterMax=%.0f bounce=%.0f\n",
+                     closestApproach, afterApproachMax, bounceDistance);
+        return 1;
+    }
+
+    std::printf("MainCharacter smoke test passed: room=%d position=(%d,%d,%d) bounce=%.0f\n",
+                player->mRoom, player->mPosition.mX, player->mPosition.mY, player->mPosition.mZ,
+                bounceDistance);
     return 0;
 }

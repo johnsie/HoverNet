@@ -272,6 +272,30 @@ BOOL MR_ClientSession::CreateMainCharacter2()
    return TRUE;
 }
 
+MR_FreeElementHandle MR_ClientSession::InsertRemoteCharacter( MR_MainCharacter* pCharacter, int pRoom )
+{
+   MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
+   if( pCharacter == NULL || lCurrentLevel == NULL || pRoom < 0 || pRoom >= lCurrentLevel->GetRoomCount() )
+   {
+      return NULL;
+   }
+
+   pCharacter->SetAsSlave();
+   pCharacter->SetNbLapForRace( mNbLap );
+   pCharacter->mRoom = pRoom;
+   return lCurrentLevel->InsertElement( pCharacter, pRoom, FALSE );
+}
+
+void MR_ClientSession::MoveRemoteCharacter( MR_FreeElementHandle pHandle, int pRoom )
+{
+   MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
+   if( pHandle == NULL || lCurrentLevel == NULL || pRoom < 0 || pRoom >= lCurrentLevel->GetRoomCount() )
+   {
+      return;
+   }
+
+   lCurrentLevel->MoveElement( pHandle, pRoom );
+}
 
 
 MR_MainCharacter*  MR_ClientSession::GetMainCharacter()const      

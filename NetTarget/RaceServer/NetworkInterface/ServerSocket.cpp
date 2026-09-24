@@ -398,7 +398,8 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 const int failId = -1;
                 memcpy(&failMsg.data[0], &failId, sizeof(failId));
                 failMsg.data[4] = 0;
-                failMsg.dataLen = 5;
+                memcpy(&failMsg.data[5], &pConn->mClientId, sizeof(pConn->mClientId));
+                failMsg.dataLen = 9;
                 send(pConn->mTcpSocket, (const char*)&failMsg, 3 + failMsg.dataLen, 0);
                 break;
             }
@@ -442,9 +443,18 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             }
             break;
         }
+        case 3:   // MRNM_SET_MAIN_ELEM_STATE
+            if (messageDataLen < static_cast<int>(sizeof(pConn->mClientId))) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d sent an undersized player state", pConn->mClientId);
+                break;
+            }
+            // Sender identity is connection metadata, not client-controlled state.
+            // Replace the claimed id before relaying so one player cannot update
+            // another player's craft by spoofing its envelope prefix.
+            memcpy(&buffer[3], &pConn->mClientId, sizeof(pConn->mClientId));
+            [[fallthrough]];
         case 51:  // MRNM_READY
         case 2:   // MRNM_CREATE_MAIN_ELEM
-        case 3:   // MRNM_SET_MAIN_ELEM_STATE
         case 47:  // MRNM_LAG_TEST
         {
             g_Logger.Log(MR_LOG_INFO, "Client %d (Race %d): Relaying message type %d to race members",
@@ -551,20 +561,25 @@ void MR_ServerSocket::ReceiveDatagram()
 
 void MR_ServerSocket::FinishJoiningRace(ClientConnection* pConn, MR_RaceManager* pRaceManager)
 {
-    // Ack the join so the client knows its race id and, critically, whether it's
-    // the creator -- only the creator may later start the race.
+    // Ack the join so the client knows its race id, whether it's the creator (only
+    // the creator may later start the race), and its server-assigned client id.
     {
         RaceSession* pRace = pRaceManager->GetRace(pConn->mRaceId);
         MessageBuffer ackMsg;
         ackMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE
         memcpy(&ackMsg.data[0], &pConn->mRaceId, sizeof(pConn->mRaceId));
         ackMsg.data[4] = (pRace != nullptr && pRace->IsCreator(pConn->mClientId)) ? 1 : 0;
-        ackMsg.dataLen = 5;
+        memcpy(&ackMsg.data[5], &pConn->mClientId, sizeof(pConn->mClientId));
+        ackMsg.dataLen = 9;
         send(pConn->mTcpSocket, (const char*)&ackMsg, 3 + ackMsg.dataLen, 0);
     }
 
     // Send CONN_NAME_SET messages for all other clients already in this race so
-    // this client knows about the other players.
+    // this client knows about the other players. The first field used to be a
+    // fabricated "UDP port" left over from the old peer-to-peer protocol (nothing
+    // ever used it -- there's no direct client-to-client connection here); it's the
+    // peer's real client id now, which SetMainElemState relaying needs so a
+    // multi-player race can tell whose position update is whose.
     for (auto& pair : mConnections) {
         int otherId = pair.first;
         ClientConnection* pOther = pair.second;
@@ -573,8 +588,7 @@ void MR_ServerSocket::FinishJoiningRace(ClientConnection* pConn, MR_RaceManager*
             MessageBuffer msg;
             msg.header = MakeMessageHeader(44);  // MRNM_CONN_NAME_SET = 44
 
-            unsigned int udpPort = 9601 + otherId;
-            *(unsigned int*)&msg.data[0] = udpPort;
+            memcpy(&msg.data[0], &otherId, sizeof(otherId));
 
             int nameLen = strlen(pOther->mPlayerName);
             memcpy(&msg.data[4], pOther->mPlayerName, nameLen);
@@ -594,8 +608,7 @@ void MR_ServerSocket::FinishJoiningRace(ClientConnection* pConn, MR_RaceManager*
             MessageBuffer msg;
             msg.header = MakeMessageHeader(44);  // MRNM_CONN_NAME_SET = 44
 
-            unsigned int udpPort = 9601 + pConn->mClientId;
-            *(unsigned int*)&msg.data[0] = udpPort;
+            memcpy(&msg.data[0], &pConn->mClientId, sizeof(pConn->mClientId));
 
             int nameLen = strlen(pConn->mPlayerName);
             memcpy(&msg.data[4], pConn->mPlayerName, nameLen);

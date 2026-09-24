@@ -80,6 +80,9 @@ class MR_ClientSession
       // Main character controll and interogation
       BOOL CreateMainCharacter();
       BOOL CreateMainCharacter2();
+
+      MR_FreeElementHandle InsertRemoteCharacter( MR_MainCharacter* pCharacter, int pRoom );
+      void MoveRemoteCharacter( MR_FreeElementHandle pHandle, int pRoom );
       
       MR_MainCharacter*  GetMainCharacter()const;      
       MR_MainCharacter*  GetMainCharacter2()const;      
