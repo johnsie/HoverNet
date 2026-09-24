@@ -46,6 +46,10 @@ build:game:linux:
     - cmake -S . -B build/linux -DCMAKE_BUILD_TYPE=Release
     - cmake --build build/linux --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
     - ctest --test-dir build/linux --output-on-failure
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: never
+    - when: on_success
 
 package:raceserver:deb:
   stage: package
@@ -66,7 +70,8 @@ build:game:windows:
   stage: build
   tags: ["$WINDOWS_RUNNER_TAG"]
   script:
-    - '& msbuild NetTarget/Game2/Game2.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal'
+    - '$msbuild = "C:\BuildTools\MSBuild\Current\Bin\MSBuild.exe"; if (-not (Test-Path $msbuild)) { throw "MSBuild not found at $msbuild" }; & $msbuild NetTarget/Game2/Game2.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal'
+    - 'Copy-Item "C:\SDL2\lib\x86\SDL2.dll" "Release\SDL2.dll" -Force'
   artifacts:
     expire_in: 7 days
     paths:
@@ -83,7 +88,7 @@ package:game:windows:
   script:
     - '$env:HOVERNET_VERSION = if ($env:CI_COMMIT_TAG) { $env:CI_COMMIT_TAG } else { "0.0.0-$env:CI_COMMIT_SHORT_SHA" }'
     - '$env:HOVERNET_RELEASE_DIR = (Resolve-Path Release).Path'
-    - '& iscc packaging/windows/HoverNet.iss'
+    - '$iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"; if (-not (Test-Path $iscc)) { throw "ISCC not found at $iscc" }; & $iscc packaging/windows/HoverNet.iss'
   artifacts:
     name: "hovernet-game-${CI_COMMIT_REF_SLUG}"
     expire_in: 30 days

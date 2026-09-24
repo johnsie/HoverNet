@@ -22,6 +22,7 @@
 #include "StdAfx.h"
 
 #include <math.h>
+#include <algorithm>
 
 #include "MainCharacter.h"
 #include "../Model/RaceEffects.h"
@@ -884,7 +885,7 @@ int MR_MainCharacter::InternalSimulate( MR_SimulationTime pDuration, MR_Level* p
          }
          else if( (lAbsoluteSpeed > eSteadySpeed[mHoverModel])&&(lAbsoluteSpeed < 2.5*eSteadySpeed[mHoverModel]) )
          {
-            lFrictionAmplifier = std::min( 1.7, 1.1+2.5*(lAbsoluteSpeed/eSteadySpeed[0]-1.0) );
+            lFrictionAmplifier = (std::min)( 1.7, 1.1+2.5*(lAbsoluteSpeed/eSteadySpeed[0]-1.0) );
          }
 
          double lConstantPart = pDuration*lFrictionAmplifier*eFrictionAccell[mHoverModel]/lAbsoluteSpeed;

@@ -21,6 +21,7 @@
 
 #include "StdAfx.h"
 
+#include "../VideoServices/3DViewport.h"
 #include "BitmapSurface.h"
 #include "../Model/PhysicalCollision.h"
 

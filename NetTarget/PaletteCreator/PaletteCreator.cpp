@@ -25,7 +25,7 @@
 #include <afxext.h>         // MFC extensions
 #include <afxtempl.h>
 
-#include <typeinfo.h>
+#include <typeinfo>
 #include "math.h"
 
 #include "../VideoServices/ColorPalette.h"
