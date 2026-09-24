@@ -277,6 +277,41 @@ void DrawUiText(const MR_Sprite& font, int x, int y, const char* text, MR_3DView
     font.StrBlt(x, y, Ascii2Simple(text), dest, hAlign, vAlign);
 }
 
+// Word-wraps text to fit the viewport's width (this font is fixed-width, so pixel
+// width is exact from character count) instead of relying on every caller to hand-
+// trim its own strings to fit -- that approach already broke three separate times
+// as lines were extended, each only noticed from a screenshot after the fact.
+// Draws left-aligned starting at (x, y) and returns the y position after the last
+// wrapped line, so callers can keep laying out content below it.
+int DrawUiTextWrapped(const MR_Sprite& font, int x, int y, int lineHeight, const char* text,
+                      MR_3DViewPort* dest)
+{
+    // MR_Sprite::StrBlt advances by mWidth*3/4 per character (see Sprite.cpp), not
+    // the full glyph cell width -- match that exactly or this under-estimates how
+    // many characters actually fit and wraps too early.
+    const int charWidth = std::max(1, font.GetItemWidth() * 3 / 4);
+    const int maxChars = std::max(1, (dest->GetXRes() - x) / charWidth);
+
+    std::string remaining(text);
+    while (!remaining.empty()) {
+        if (static_cast<int>(remaining.size()) <= maxChars) {
+            DrawUiText(font, x, y, remaining.c_str(), dest);
+            y += lineHeight;
+            break;
+        }
+        // Break at the last space within the limit, so words don't get split.
+        std::size_t breakAt = remaining.rfind(' ', static_cast<std::size_t>(maxChars));
+        if (breakAt == std::string::npos || breakAt == 0) {
+            breakAt = static_cast<std::size_t>(maxChars);
+        }
+        DrawUiText(font, x, y, remaining.substr(0, breakAt).c_str(), dest);
+        y += lineHeight;
+        const std::size_t nextStart = remaining.find_first_not_of(' ', breakAt);
+        remaining = (nextStart == std::string::npos) ? std::string() : remaining.substr(nextStart);
+    }
+    return y;
+}
+
 // Loads the same bitmap font sprite MR_Observer uses for its HUD text, for the menu
 // and lobby screens to share. Caller owns the returned handle (may be null on
 // failure, e.g. if the resource pack couldn't provide it).
@@ -587,10 +622,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         int y = lineHeight;
 
         if (phase == LobbyPhase::eWaitingRoom) {
-            char titleLine[64];
+            char titleLine[96];
             std::snprintf(titleLine, sizeof(titleLine), "IN RACE: %s", outJoinedName.c_str());
-            DrawUiText(font, viewport.GetXRes() / 2, y, titleLine, &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
-            y += lineHeight * 2;
+            y = DrawUiTextWrapped(font, 20, y, lineHeight, titleLine, &viewport);
+            y += lineHeight;
 
             if (raceMembers.empty()) {
                 DrawUiText(font, 20, y, "(waiting for other players...)", &viewport, MR_Sprite::eLeft,
@@ -599,15 +634,13 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             }
             else {
                 for (const std::string& member : raceMembers) {
-                    DrawUiText(font, 20, y, member.c_str(), &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
-                    y += lineHeight;
+                    y = DrawUiTextWrapped(font, 20, y, lineHeight, member.c_str(), &viewport);
                 }
             }
             y += lineHeight;
-            DrawUiText(font, 20, y,
-                       isHost ? "You are the host." : "Waiting for the host to start the race...",
-                       &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
-            y += lineHeight;
+            y = DrawUiTextWrapped(font, 20, y, lineHeight,
+                                  isHost ? "You are the host." : "Waiting for the host to start the race...",
+                                  &viewport);
         }
         else {
             DrawUiText(font, viewport.GetXRes() / 2, y, "HOVERRACE LOBBY", &viewport, MR_Sprite::eCenter,
@@ -615,20 +648,17 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             y += lineHeight * 2;
 
             if (games.empty()) {
-                DrawUiText(font, 20, y, "(no open races -- press N to host one)", &viewport, MR_Sprite::eLeft,
-                           MR_Sprite::eTop);
-                y += lineHeight;
+                y = DrawUiTextWrapped(font, 20, y, lineHeight, "(no open races -- press N to host one)", &viewport);
             }
             else {
                 for (std::size_t index = 0; index < games.size(); ++index) {
                     const RaceServerGameInfo& game = games[index];
-                    char line[128];
-                    std::snprintf(line, sizeof(line), "%s%-24s track=%-12s laps=%d players=%d%s",
+                    char line[192];
+                    std::snprintf(line, sizeof(line), "%s%s - %s - %d laps - %d players%s",
                                   static_cast<int>(index) == selected ? "> " : "  ", game.mName.c_str(),
                                   game.mTrack.c_str(), game.mNumLaps, game.mNumPlayers,
                                   game.mStarted ? " (in progress)" : "");
-                    DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
-                    y += lineHeight;
+                    y = DrawUiTextWrapped(font, 20, y, lineHeight, line, &viewport);
                 }
             }
         }
@@ -637,65 +667,77 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         DrawUiText(font, 20, y, "-- Chat --", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
         y += lineHeight;
         for (const std::string& chatLine : chatLog) {
-            DrawUiText(font, 20, y, chatLine.c_str(), &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
-            y += lineHeight;
+            y = DrawUiTextWrapped(font, 20, y, lineHeight, chatLine.c_str(), &viewport);
         }
         y += lineHeight;
 
         if (inputMode == LobbyInputMode::eHostRace) {
             char line[96];
-            std::snprintf(line, sizeof(line), "%sTrack: %s%s",
-                          hostStep == HostSetupStep::eTrack ? "> " : "  ",
-                          kHostableTracks[hostPrefs.mTrackIndex],
-                          hostStep == HostSetupStep::eTrack ? "  (Left/Right, Enter)" : "");
+            std::snprintf(line, sizeof(line), "%sTrack: %s", hostStep == HostSetupStep::eTrack ? "> " : "  ",
+                          kHostableTracks[hostPrefs.mTrackIndex]);
             DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
             y += lineHeight;
 
-            std::snprintf(line, sizeof(line), "%sLaps: %d%s", hostStep == HostSetupStep::eLaps ? "> " : "  ",
-                          hostPrefs.mLaps, hostStep == HostSetupStep::eLaps ? "  (Up/Down, Enter)" : "");
+            std::snprintf(line, sizeof(line), "%sLaps: %d", hostStep == HostSetupStep::eLaps ? "> " : "  ",
+                          hostPrefs.mLaps);
             DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
             y += lineHeight;
 
-            std::snprintf(line, sizeof(line), "%sWeapons: %s%s", hostStep == HostSetupStep::eWeapons ? "> " : "  ",
-                          hostPrefs.mWeapons ? "On" : "Off",
-                          hostStep == HostSetupStep::eWeapons ? "  (Left/Right, Enter)" : "");
+            std::snprintf(line, sizeof(line), "%sWeapons: %s", hostStep == HostSetupStep::eWeapons ? "> " : "  ",
+                          hostPrefs.mWeapons ? "On" : "Off");
             DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
             y += lineHeight;
 
             if (hostStep == HostSetupStep::eName) {
                 std::snprintf(line, sizeof(line), "> Race name: %s_", inputBuffer.c_str());
-                DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
-                y += lineHeight;
-                DrawUiText(font, 20, y, "Enter: host it   Esc: cancel", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
             }
             else {
-                DrawUiText(font, 20, y, "  Race name: (not set yet)", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
-                y += lineHeight;
-                DrawUiText(font, 20, y, "Esc: cancel", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+                std::snprintf(line, sizeof(line), "  Race name: (not set yet)");
             }
+            y = DrawUiTextWrapped(font, 20, y, lineHeight, line, &viewport);
+
+            // One instruction line for whichever field is active, instead of packing
+            // a hint onto each value line -- those overflowed a 1024px-wide window
+            // once already, and combining "> Track: The Alley2  (Left/Right, Enter)"
+            // is exactly the kind of line length that broke last time.
+            switch (hostStep) {
+                case HostSetupStep::eTrack:
+                    DrawUiText(font, 20, y, "Left/Right   Enter: next", &viewport, MR_Sprite::eLeft,
+                               MR_Sprite::eTop);
+                    break;
+                case HostSetupStep::eLaps:
+                    DrawUiText(font, 20, y, "Up/Down   Enter: next", &viewport, MR_Sprite::eLeft,
+                               MR_Sprite::eTop);
+                    break;
+                case HostSetupStep::eWeapons:
+                    DrawUiText(font, 20, y, "Left/Right   Enter: next", &viewport, MR_Sprite::eLeft,
+                               MR_Sprite::eTop);
+                    break;
+                case HostSetupStep::eName:
+                    DrawUiText(font, 20, y, "Enter: host it", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+                    break;
+            }
+            y += lineHeight;
+            DrawUiText(font, 20, y, "Esc: cancel", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
         }
         else if (inputMode == LobbyInputMode::eChat) {
             char line[80];
             std::snprintf(line, sizeof(line), "Say: %s_", inputBuffer.c_str());
-            DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
-            y += lineHeight;
-            DrawUiText(font, 20, y, "Enter: send   Esc: stop chatting", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            y = DrawUiTextWrapped(font, 20, y, lineHeight, line, &viewport);
+            DrawUiText(font, 20, y, "Enter: send   Esc: stop", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
         }
         else if (phase == LobbyPhase::eWaitingRoom) {
             if (isHost) {
-                DrawUiText(font, 20, y, "S: start the race   T: chat   Esc: leave", &viewport, MR_Sprite::eLeft,
-                           MR_Sprite::eTop);
+                y = DrawUiTextWrapped(font, 20, y, lineHeight, "S: start the race   T: chat", &viewport);
+                DrawUiText(font, 20, y, "Esc: leave", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
             }
             else {
                 DrawUiText(font, 20, y, "T: chat   Esc: leave", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
             }
         }
         else {
-            DrawUiText(font, 20, y, "Up/Down: select   Enter: join   Esc: skip", &viewport, MR_Sprite::eLeft,
-                       MR_Sprite::eTop);
-            y += lineHeight;
-            DrawUiText(font, 20, y, "N: host a race   T: chat   R: refresh", &viewport, MR_Sprite::eLeft,
-                       MR_Sprite::eTop);
+            y = DrawUiTextWrapped(font, 20, y, lineHeight, "Up/Down: select   Enter: join   Esc: skip", &viewport);
+            DrawUiTextWrapped(font, 20, y, lineHeight, "N: host a race   T: chat   R: refresh", &viewport);
         }
 
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
@@ -765,7 +807,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             y += lineHeight;
         }
         y += lineHeight;
-        DrawUiText(font, viewport.GetXRes() / 2, y, "Up/Down: select   Enter: confirm", &viewport,
+        DrawUiText(font, viewport.GetXRes() / 2, y, "Up/Down   Enter: confirm", &viewport,
                    MR_Sprite::eCenter, MR_Sprite::eTop);
 
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
