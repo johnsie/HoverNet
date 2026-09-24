@@ -9,3 +9,6 @@ build/
 
 # Debug logs
 *.log
+
+# Personal/machine-local Claude Code settings (shared allowlist lives in .claude/settings.json)
+.claude/settings.local.json

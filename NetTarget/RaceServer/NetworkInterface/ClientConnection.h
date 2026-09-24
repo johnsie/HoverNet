@@ -18,6 +18,11 @@ public:
     // Network state
     SOCKET mTcpSocket;
     struct sockaddr_in mUdpAddr;
+
+    // Bytes read from mTcpSocket that haven't formed a complete message yet
+    // (TCP is a byte stream: one recv() can contain multiple messages, part
+    // of a message, or a mix of both).
+    std::vector<unsigned char> mRecvBuffer;
     
     // Race participation
     int mRaceId;

@@ -3,11 +3,14 @@
 #ifdef HOVERNET_GAME2_PLAYER
 #include "../Game2/Observer.h"
 #include "../VideoServices/SoundServer.h"
+#include "RaceServerClient.h"
 #endif
 #include "../Model/GameSession.h"
 #include "../ObjFac1/ObjFac1Res.h"
 #include "../ObjFacTools/ResActor.h"
 #include "../ObjFacTools/ResourceLib.h"
+#include "../ObjFacTools/SpriteHandle.h"
+#include "../VideoServices/Sprite.h"
 #include "../Util/DllObjectFactory.h"
 #include "../Util/WorldCoordinates.h"
 #include "../VideoServices/3DViewport.h"
@@ -27,6 +30,12 @@ namespace
 {
 constexpr int kWidth = 1024;
 constexpr int kHeight = 768;
+
+#ifdef HOVERNET_GAME2_PLAYER
+// The production RaceServer, deployed by the GitLab pipeline. --lobby overrides this.
+constexpr const char* kDefaultLobbyHost = "192.168.10.181";
+constexpr unsigned kDefaultLobbyPort = 9600;
+#endif
 
 #ifndef HOVERNET_SOURCE_DIR
 #define HOVERNET_SOURCE_DIR "."
@@ -74,6 +83,20 @@ bool HasArgument(int argc, char** argv, const char* argument)
     }
     return false;
 }
+
+#ifdef HOVERNET_GAME2_PLAYER
+bool ParseLobbyArg(int argc, char** argv, std::string& outHost, unsigned& outPort)
+{
+    for (int argument = 1; argument + 2 < argc; ++argument) {
+        if (std::strcmp(argv[argument], "--lobby") == 0) {
+            outHost = argv[argument + 1];
+            outPort = static_cast<unsigned>(std::atoi(argv[argument + 2]));
+            return true;
+        }
+    }
+    return false;
+}
+#endif
 
 MR_ResBitmap* BitmapForSurface(const MR_SurfaceElement* surface, MR_ResourceLib& resources)
 {
@@ -242,6 +265,239 @@ bool ContainsFreeElementType(const MR_Level& level, MR_UInt16 dllId, MR_UInt16 c
     }
     return false;
 }
+
+#ifdef HOVERNET_GAME2_PLAYER
+// Loads the same bitmap font sprite MR_Observer uses for its HUD text, for the menu
+// and lobby screens to share. Caller owns the returned handle (may be null on
+// failure, e.g. if the resource pack couldn't provide it).
+MR_SpriteHandle* LoadUiFont()
+{
+    try {
+        MR_ObjectFromFactoryId baseFontId = {1, 1000};
+        MR_SpriteHandle* handle = (MR_SpriteHandle*)MR_DllObjectFactory::CreateObject(baseFontId);
+        if (handle != nullptr && handle->GetSprite() == nullptr) {
+            delete handle;
+            return nullptr;
+        }
+        return handle;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+// In-game lobby screen: connect to a RaceServer, list its open races, and let the
+// player pick one (or type a new name to host it) using the keyboard, rendered
+// with the game's own bitmap font -- no separate CLI tool needed. Returns true and
+// sets outJoinedName when the player joined a race; false if they cancelled or no
+// server was reachable (in which case the caller should fall back to local play).
+// pFrameLimit bounds how many screen refreshes the lobby will wait through before
+// giving up and returning false, exactly like the main loop's --frames: without it
+// (pFrameLimit < 0) this blocks indefinitely for a human, as a lobby screen should.
+// With it, an automated/headless run (e.g. under ctest, with no real keyboard input
+// ever arriving) can't hang here forever.
+bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
+                    const MR_Sprite& font, const std::string& host, unsigned port,
+                    std::string& outJoinedName, int pFrameLimit)
+{
+    const int lineHeight = std::max(1, font.GetItemHeight());
+
+    RaceServerClient client;
+    if (!client.Connect(host, port)) {
+        std::fprintf(stderr, "Lobby screen: could not connect to RaceServer at %s:%u\n", host.c_str(), port);
+        return false;
+    }
+
+    std::vector<RaceServerGameInfo> games;
+    client.ListGames(games, 500);
+
+    int selected = 0;
+    bool typingName = false;
+    std::string typedName;
+    Uint32 lastRefresh = SDL_GetTicks();
+    bool running = true;
+    bool joined = false;
+    int framesShown = 0;
+
+    SDL_StartTextInput();
+    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                running = false;
+            }
+            else if (typingName && event.type == SDL_TEXTINPUT) {
+                if (typedName.size() < 32) {
+                    typedName += event.text.text;
+                }
+            }
+            else if (event.type == SDL_KEYDOWN) {
+                const SDL_Keycode key = event.key.keysym.sym;
+                if (key == SDLK_ESCAPE) {
+                    if (typingName) {
+                        typingName = false;
+                        typedName.clear();
+                    }
+                    else {
+                        running = false;
+                    }
+                }
+                else if (typingName) {
+                    if (key == SDLK_BACKSPACE && !typedName.empty()) {
+                        typedName.pop_back();
+                    }
+                    else if (key == SDLK_RETURN && !typedName.empty()) {
+                        if (client.JoinGame(typedName)) {
+                            outJoinedName = typedName;
+                            joined = true;
+                            running = false;
+                        }
+                    }
+                }
+                else if (key == SDLK_UP && !games.empty()) {
+                    selected = (selected + static_cast<int>(games.size()) - 1) % static_cast<int>(games.size());
+                }
+                else if (key == SDLK_DOWN && !games.empty()) {
+                    selected = (selected + 1) % static_cast<int>(games.size());
+                }
+                else if (key == SDLK_r) {
+                    client.ListGames(games, 500);
+                    selected = 0;
+                }
+                else if (key == SDLK_n) {
+                    typingName = true;
+                    typedName.clear();
+                }
+                else if (key == SDLK_RETURN && !games.empty()) {
+                    if (client.JoinGame(games[static_cast<std::size_t>(selected)].mName)) {
+                        outJoinedName = games[static_cast<std::size_t>(selected)].mName;
+                        joined = true;
+                        running = false;
+                    }
+                }
+            }
+        }
+
+        if (running && SDL_GetTicks() - lastRefresh > 2000) {
+            client.ListGames(games, 300);
+            lastRefresh = SDL_GetTicks();
+            if (!games.empty()) {
+                selected = std::min(selected, static_cast<int>(games.size()) - 1);
+            }
+        }
+
+        viewport.Clear(0);
+        int y = lineHeight;
+        font.StrBlt(viewport.GetXRes() / 2, y, "HOVERRACE LOBBY", &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
+        y += lineHeight * 2;
+
+        if (games.empty()) {
+            font.StrBlt(20, y, "(no open races)", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            y += lineHeight;
+        }
+        else {
+            for (std::size_t index = 0; index < games.size(); ++index) {
+                const RaceServerGameInfo& game = games[index];
+                char line[128];
+                std::snprintf(line, sizeof(line), "%s%-24s track=%-12s laps=%d players=%d%s",
+                              static_cast<int>(index) == selected ? "> " : "  ", game.mName.c_str(),
+                              game.mTrack.c_str(), game.mNumLaps, game.mNumPlayers,
+                              game.mStarted ? " (in progress)" : "");
+                font.StrBlt(20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+                y += lineHeight;
+            }
+        }
+
+        y += lineHeight;
+        if (typingName) {
+            char line[64];
+            std::snprintf(line, sizeof(line), "New race name: %s_", typedName.c_str());
+            font.StrBlt(20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            y += lineHeight;
+            font.StrBlt(20, y, "Enter: host it   Esc: cancel", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+        }
+        else {
+            font.StrBlt(20, y, "Up/Down: select   Enter: join   N: host new   R: refresh   Esc: skip",
+                        &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+        }
+
+        graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
+        SDL_Delay(16);
+    }
+    SDL_StopTextInput();
+
+    return joined;
+}
+
+enum class MenuChoice
+{
+    eLocalPlay,
+    eOnlineLobby,
+};
+
+// The very first screen in player mode: pick local play or the online lobby. Bounded
+// by pFrameLimit exactly like RunLobbyScreen, and defaults to eLocalPlay if the
+// player never chooses (Escape, or the frame budget runs out under an automated/
+// headless run) -- this is what keeps every existing --frames-bounded test working
+// unchanged even though the menu is now always shown first in player mode.
+MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
+                       const MR_Sprite& font, int pFrameLimit)
+{
+    const int lineHeight = std::max(1, font.GetItemHeight());
+    int selected = 0;
+    const char* options[] = {"Local Play", "Online Lobby"};
+    const int optionCount = 2;
+
+    bool running = true;
+    MenuChoice choice = MenuChoice::eLocalPlay;
+    int framesShown = 0;
+
+    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                running = false;
+            }
+            else if (event.type == SDL_KEYDOWN) {
+                const SDL_Keycode key = event.key.keysym.sym;
+                if (key == SDLK_ESCAPE) {
+                    running = false;
+                }
+                else if (key == SDLK_UP) {
+                    selected = (selected + optionCount - 1) % optionCount;
+                }
+                else if (key == SDLK_DOWN) {
+                    selected = (selected + 1) % optionCount;
+                }
+                else if (key == SDLK_RETURN) {
+                    choice = (selected == 1) ? MenuChoice::eOnlineLobby : MenuChoice::eLocalPlay;
+                    running = false;
+                }
+            }
+        }
+
+        viewport.Clear(0);
+        int y = lineHeight * 3;
+        font.StrBlt(viewport.GetXRes() / 2, y, "HOVERRACE", &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
+        y += lineHeight * 3;
+        for (int index = 0; index < optionCount; ++index) {
+            char line[64];
+            std::snprintf(line, sizeof(line), "%s%s", index == selected ? "> " : "  ", options[index]);
+            font.StrBlt(viewport.GetXRes() / 2, y, line, &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
+            y += lineHeight;
+        }
+        y += lineHeight;
+        font.StrBlt(viewport.GetXRes() / 2, y, "Up/Down: select   Enter: confirm", &viewport,
+                    MR_Sprite::eCenter, MR_Sprite::eTop);
+
+        graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
+        SDL_Delay(16);
+    }
+
+    return choice;
+}
+#endif
 
 RenderStats RenderScene(const MR_Level& level, int room, const MR_3DCoordinate& camera,
                         MR_Angle orientation, MR_3DViewPort& viewport, MR_ResourceLib& resources,
@@ -440,9 +696,35 @@ int main(int argc, char** argv)
     }
     graphics.SetPalette(palette.data(), static_cast<int>(palette.size()));
 
+    const int frameLimit = ParseFrameCount(argc, argv);
+
+#ifdef HOVERNET_GAME2_PLAYER
+    if (playerMode) {
+        MR_SpriteHandle* menuFontHandle = LoadUiFont();
+        if (menuFontHandle != nullptr) {
+            const MenuChoice choice = RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
+                                                  frameLimit);
+            if (choice == MenuChoice::eOnlineLobby) {
+                std::string lobbyHost = kDefaultLobbyHost;
+                unsigned lobbyPort = kDefaultLobbyPort;
+                ParseLobbyArg(argc, argv, lobbyHost, lobbyPort);  // --lobby overrides the default
+
+                std::string joinedRace;
+                if (RunLobbyScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(), lobbyHost,
+                                   lobbyPort, joinedRace, frameLimit)) {
+                    std::printf("Joined race '%s' via the lobby\n", joinedRace.c_str());
+                }
+                else {
+                    std::printf("Lobby skipped or unavailable; continuing with local play\n");
+                }
+            }
+        }
+        delete menuFontHandle;
+    }
+#endif
+
     std::printf("ClassicH 3D view: room=%d surfaces=%d actors=%d pixels=%d\n",
                 room, renderStats.surfacesRendered, renderStats.actorsRendered, nonZeroPixels);
-    const int frameLimit = ParseFrameCount(argc, argv);
     int framesRendered = 0;
     bool running = true;
     bool cockpitView = false;

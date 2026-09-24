@@ -224,6 +224,11 @@ typedef struct sockaddr    SOCKADDR;
 
 #endif  // !WIN32
 
+#ifdef WIN32
+typedef int SocketLength;
+#else
+typedef socklen_t SocketLength;
+#endif
 
 
 // BETA ROOM
@@ -492,7 +497,7 @@ class IRState
       void AddMessage( const char* pMessage );
       void BanIP( const char* pIP, int pDuration /*in minutes*/ );
       void AddUser(  const char* pUserName, int pVersion, int pMajorID, int pMinorID, unsigned int pKey2, unsigned int pKey3  );
-      void AddGame(  const char* pGameName, const char* pTrackName, int pNbLap, int pPlayerIndex, int pPlayerId, const char* pRemoteAddr, unsigned int pPort, int pWeapon );
+      void AddGame(  const char* pGameName, const char* pTrackName, int pNbLap, int pPlayerIndex, int pPlayerId, const char* pRemoteAddr, unsigned int pPort, int pWeapon, BOOL pServerHosted = FALSE );
       void JoinGame( int pGameIndex, int pGameId, int pPlayerIndex, int pPlayerId );
       void DeleteGame( int pGameIndex, int pGameId, int pPlayerIndex, int pPlayerId );
       void LeaveGame( int pGameIndex, int pGameId, int pPlayerIndex, int pPlayerId  );
@@ -2192,7 +2197,7 @@ void IRState::AddUser(  const char* pUserName, int pVersion, int pMajorID, int p
 }
 
 
-void IRState::AddGame(  const char* pGameName, const char* pTrackName, int pNbLap, int pPlayerIndex, int pPlayerId, const char* pRemoteAddr, unsigned int pPort, int pWeapon )
+void IRState::AddGame(  const char* pGameName, const char* pTrackName, int pNbLap, int pPlayerIndex, int pPlayerId, const char* pRemoteAddr, unsigned int pPort, int pWeapon, BOOL pServerHosted )
 {
 
    // Verify the the user is valid
@@ -2268,8 +2273,7 @@ void IRState::AddGame(  const char* pGameName, const char* pTrackName, int pNbLa
          StrMaxCopy( mGame[ lCounter ].mTrack, pTrackName, IR_TRACK_NAME_LEN );
          StrMaxCopy( mGame[ lCounter ].mAddr, pRemoteAddr, sizeof( mGame[ lCounter ].mAddr ) );
 
-         // Detect if this is a server-hosted race (server address != client address)
-         if( strcmp( pRemoteAddr, "127.0.0.1" ) == 0 && pPort == 9600 )
+         if( pServerHosted )
          {
             mGame[ lCounter ].mServerHosted = TRUE;
             StrMaxCopy( mGame[ lCounter ].mServerAddr, pRemoteAddr, sizeof( mGame[ lCounter ].mServerAddr ) );
@@ -2516,7 +2520,7 @@ BOOL IR_Port::IsValid()
 void IR_Port::Accept( SOCKET pParent )
 {
    SOCKADDR_IN  lAddr;
-   int          lAddrSize = sizeof( lAddr );
+   SocketLength lAddrSize = sizeof( lAddr );
 
    lAddr.sin_family      = AF_INET;
    lAddr.sin_addr.s_addr = INADDR_ANY;
@@ -3292,10 +3296,15 @@ int main( int pArgc, const char** pArgs )
                               Unpad( lTrackName );
                               Unpad( lGameName );
                               
-                              // For hosted games, we use the RaceServer (localhost or configured server)
-                              // Port 9600 is the standard RaceServer port
-                              const char* lServerAddr = "127.0.0.1";  // TODO: Configure from INI/XML
-                              unsigned lRaceServerPort = 9600;
+                              // For hosted games, we use the RaceServer (localhost or configured
+                              // server). Defaults to the standard RaceServer address/port, but can
+                              // be overridden (e.g. for testing multiple stacks side by side) via
+                              // HOVERNET_RACESERVER_ADDR / HOVERNET_RACESERVER_PORT.
+                              const char* lServerAddrEnv = getenv( "HOVERNET_RACESERVER_ADDR" );
+                              const char* lServerAddr = (lServerAddrEnv != NULL) ? lServerAddrEnv : "127.0.0.1";
+
+                              const char* lServerPortEnv = getenv( "HOVERNET_RACESERVER_PORT" );
+                              unsigned lRaceServerPort = (lServerPortEnv != NULL) ? (unsigned)atoi( lServerPortEnv ) : 9600;
                               
                               if( InitLogFile() )
                               {
@@ -3304,8 +3313,7 @@ int main( int pArgc, const char** pArgs )
                                  fflush( gLogFile );
                               }
                               
-                              // Add as P2P game but mark it as server-hosted by using special server address
-                              lState->AddGame( lGameName, lTrackName, lNbLap, lUserIndex, lUserId, lServerAddr, lRaceServerPort, lWeapon );
+                              lState->AddGame( lGameName, lTrackName, lNbLap, lUserIndex, lUserId, lServerAddr, lRaceServerPort, lWeapon, TRUE );
                            }
                            else
                            {

@@ -31,8 +31,9 @@ public:
         const void* pMessageData,
         int messageLength);
 
-    // Close a player connection
-    void CloseConnection(int clientId);
+    // Close a player connection. Removes the player from its race when pRaceManager
+    // is given, so lobby listings (player counts) don't go stale after a disconnect.
+    void CloseConnection(int clientId, MR_RaceManager* pRaceManager = nullptr);
 
     // Shutdown server
     void Shutdown();
@@ -47,7 +48,7 @@ private:
 
     // Helper methods
     void AcceptNewConnection();
-    void ReceiveFromClient(ClientConnection* pConn);
+    void ReceiveFromClient(ClientConnection* pConn, MR_RaceManager* pRaceManager);
     void ReceiveDatagram();
     BOOL SetSocketOptions(SOCKET sock);
 };

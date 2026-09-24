@@ -190,7 +190,7 @@ void MR_ServerSocket::ProcessEvents(MR_RaceManager* pRaceManager)
             int clientId = pair.first;
             ClientConnection* pConn = pair.second;
             if (pConn && FD_ISSET(pConn->mTcpSocket, &readSet)) {
-                ReceiveFromClient(pConn);
+                ReceiveFromClient(pConn, pRaceManager);
                 if (!pConn->IsAlive()) {
                     clientsToRemove.push_back(clientId);
                 }
@@ -199,7 +199,7 @@ void MR_ServerSocket::ProcessEvents(MR_RaceManager* pRaceManager)
 
         // Remove dead connections
         for (int clientId : clientsToRemove) {
-            CloseConnection(clientId);
+            CloseConnection(clientId, pRaceManager);
         }
     }
 }
@@ -214,7 +214,7 @@ void MR_ServerSocket::AcceptNewConnection()
     timeout.tv_sec = 0;
     timeout.tv_usec = 0;  // Non-blocking
 
-    int selectResult = select(0, &listenSet, NULL, NULL, &timeout);
+    int selectResult = select(mListenSocket + 1, &listenSet, NULL, NULL, &timeout);
     if (selectResult <= 0) {
         return;  // No pending connections
     }
@@ -262,21 +262,23 @@ void MR_ServerSocket::AcceptNewConnection()
                 ntohs(clientAddr.sin_port));
 }
 
-void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn)
+void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager* pRaceManager)
 {
     if (!pConn || pConn->mTcpSocket == INVALID_SOCKET) {
         return;
     }
 
-    // Read message from TCP socket
-    // Message format: 2-byte header + 1-byte data length + data
-    unsigned char buffer[258];  // Max 256 bytes for message buffer
-    
-    int bytesReceived = recv(pConn->mTcpSocket, (char*)buffer, sizeof(buffer), 0);
-    
-    if (bytesReceived <= 0) {
+    // TCP is a byte stream, not a message stream: a single recv() can deliver
+    // zero, one, or several complete messages, plus a trailing partial one
+    // (e.g. when the client sends several small messages back-to-back and the
+    // kernel coalesces them, or a message straddles two packets). Buffer raw
+    // bytes per-connection and drain only whole messages from the front.
+    unsigned char recvChunk[4096];
+    int bytesRead = recv(pConn->mTcpSocket, (char*)recvChunk, sizeof(recvChunk), 0);
+
+    if (bytesRead <= 0) {
         // Connection closed or error
-        g_Logger.Log(MR_LOG_WARN, "Client %d: Connection closed or recv error: %ld", 
+        g_Logger.Log(MR_LOG_WARN, "Client %d: Connection closed or recv error: %ld",
                      pConn->mClientId, WSAGetLastError());
         pConn->mConnected = FALSE;
         return;
@@ -285,39 +287,38 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn)
     // Update last message time
     pConn->mLastMessageTime = time(NULL);
 
-    g_Logger.Log(MR_LOG_DEBUG, "Client %d: Received %d bytes", pConn->mClientId, bytesReceived);
+    g_Logger.Log(MR_LOG_DEBUG, "Client %d: Received %d bytes", pConn->mClientId, bytesRead);
+
+    pConn->mRecvBuffer.insert(pConn->mRecvBuffer.end(), recvChunk, recvChunk + bytesRead);
 
     // The message is: [uint16 header: datagramNum(8), datagramQueue(2), messageType(6)]
     //                [uint8 dataLen]
     //                [data...]
-    
-    if (bytesReceived < 3) {
-        g_Logger.Log(MR_LOG_WARN, "Client %d: Message too short (%d bytes)", pConn->mClientId, bytesReceived);
-        return;
+    while (pConn->mRecvBuffer.size() >= 3) {
+    unsigned char buffer[258];  // Max 256 bytes for message buffer
+    int messageDataLen = pConn->mRecvBuffer[2];
+    int bytesReceived = 3 + messageDataLen;
+
+    if (static_cast<int>(pConn->mRecvBuffer.size()) < bytesReceived) {
+        break;  // Rest of this message hasn't arrived yet
     }
 
-    // Extract message type (bits 0-5 of byte 2, or byte 1 depending on endianness)
-    // Assuming the format is: byte[0] = header low, byte[1] = header high, byte[2] = data_len
-    int messageDataLen = buffer[2];
-    if (bytesReceived < 3 + messageDataLen) {
-        g_Logger.Log(MR_LOG_WARN, "Client %d: Incomplete message (%d of %d bytes)",
-                     pConn->mClientId, bytesReceived, 3 + messageDataLen);
-        return;
-    }
-    
+    memcpy(buffer, pConn->mRecvBuffer.data(), bytesReceived);
+    pConn->mRecvBuffer.erase(pConn->mRecvBuffer.begin(), pConn->mRecvBuffer.begin() + bytesReceived);
+
     // For now, relay ALL messages to other players in the race
     // In production, you'd want to filter certain messages
-    
+
     // Messages that should be broadcast to all players in race:
     // - MRNM_READY (51)
-    // - MRNM_CREATE_MAIN_ELEM (2) 
+    // - MRNM_CREATE_MAIN_ELEM (2)
     // - MRNM_SET_MAIN_ELEM_STATE (3)
     // - MRNM_LAG_TEST (47)
-    
+
     unsigned short messageHeader = static_cast<unsigned short>(buffer[0]) |
                                    (static_cast<unsigned short>(buffer[1]) << 8);
     int messageType = (messageHeader >> 10) & 0x3F;
-    
+
     switch (messageType) {
         case 42:  // MRNM_GAME_NAME - Client is joining a race with this game name
         {
@@ -329,11 +330,24 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn)
                 gameName[dataLen] = '\0';
                 
                 g_Logger.Log(MR_LOG_INFO, "Client %d joining game: %s", pConn->mClientId, gameName);
-                
-                // TODO: Parse game name to extract race ID and join the race
-                // For now, use client ID as race ID (simple approach)
-                pConn->mRaceId = 0;  // Clients with game names join race 0
-                
+
+                // Each distinct game name is its own isolated race: the first client to
+                // name it creates it (as a lobby "host" would), later clients with the
+                // same name join it. The wire message only carries a name today, so a
+                // freshly-created race uses fixed defaults; picking a track/lap count
+                // when hosting would need a richer message than eRSMsgGameName.
+                pConn->mRaceId = pRaceManager->FindOrCreateRace(
+                    gameName, "ClassicH", 3, TRUE, pConn->mClientId);
+
+                if (pConn->mRaceId < 0) {
+                    g_Logger.Log(MR_LOG_WARN, "Client %d: could not join or create race '%s'",
+                                 pConn->mClientId, gameName);
+                    break;
+                }
+
+                snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
+                pRaceManager->JoinRace(pConn->mRaceId, pConn->mClientId, pConn->mPlayerName);
+
                 g_Logger.Log(MR_LOG_INFO, "Client %d assigned to race %d", pConn->mClientId, pConn->mRaceId);
                 
                 // Now send CONN_NAME_SET messages for all other clients in this race
@@ -354,15 +368,12 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn)
                         unsigned int udpPort = 9601 + otherId;
                         *(unsigned int*)&msg.data[0] = udpPort;
                         
-                        // Player name - for now use a generic name with client ID
-                        char playerName[64];
-                        snprintf(playerName, sizeof(playerName), "Player_%d", otherId);
-                        int nameLen = strlen(playerName);
-                        memcpy(&msg.data[4], playerName, nameLen);
-                        
+                        int nameLen = strlen(pOther->mPlayerName);
+                        memcpy(&msg.data[4], pOther->mPlayerName, nameLen);
+
                         // Set data length: 4 (UDP port) + nameLen
                         msg.dataLen = 4 + nameLen;
-                        
+
                         // Send to the new client
                         int msgSize = 3 + msg.dataLen;  // header(2) + dataLen(1) + data
                         send(pConn->mTcpSocket, (const char*)&msg, msgSize, 0);
@@ -387,15 +398,12 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn)
                         unsigned int udpPort = 9601 + pConn->mClientId;
                         *(unsigned int*)&msg.data[0] = udpPort;
                         
-                        // Player name - for now use a generic name with client ID
-                        char playerName[64];
-                        snprintf(playerName, sizeof(playerName), "Player_%d", pConn->mClientId);
-                        int nameLen = strlen(playerName);
-                        memcpy(&msg.data[4], playerName, nameLen);
-                        
+                        int nameLen = strlen(pConn->mPlayerName);
+                        memcpy(&msg.data[4], pConn->mPlayerName, nameLen);
+
                         // Set data length: 4 (UDP port) + nameLen
                         msg.dataLen = 4 + nameLen;
-                        
+
                         // Send to the existing client
                         int msgSize = 3 + msg.dataLen;  // header(2) + dataLen(1) + data
                         send(pOther->mTcpSocket, (const char*)&msg, msgSize, 0);
@@ -441,8 +449,48 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn)
             }
             break;
         }
+        case 60:  // MRNM_LIST_GAMES - client wants the current lobby listing
+        {
+            std::vector<RaceSummary> races;
+            pRaceManager->ListRaces(races);
+
+            for (const RaceSummary& race : races) {
+                MessageBuffer msg;
+                msg.header = MakeMessageHeader(61);  // MRNM_GAME_INFO
+
+                const unsigned char nameLen = static_cast<unsigned char>(
+                    std::min<size_t>(race.mName.size(), 100));
+                const unsigned char trackLen = static_cast<unsigned char>(
+                    std::min<size_t>(race.mTrack.size(), 100));
+
+                unsigned char* p = msg.data;
+                const int raceId = race.mRaceId;
+                memcpy(p, &raceId, sizeof(raceId));
+                p += sizeof(raceId);
+                *p++ = static_cast<unsigned char>(std::min(race.mNumPlayers, 255));
+                *p++ = race.mStarted ? 1 : 0;
+                *p++ = static_cast<unsigned char>(std::min(race.mNumLaps, 255));
+                *p++ = nameLen;
+                memcpy(p, race.mName.data(), nameLen);
+                p += nameLen;
+                *p++ = trackLen;
+                memcpy(p, race.mTrack.data(), trackLen);
+                p += trackLen;
+
+                msg.dataLen = static_cast<unsigned char>(p - msg.data);
+                const int msgSize = 3 + msg.dataLen;
+                send(pConn->mTcpSocket, (const char*)&msg, msgSize, 0);
+            }
+
+            MessageBuffer endMsg;
+            endMsg.header = MakeMessageHeader(62);  // MRNM_GAME_LIST_END
+            endMsg.dataLen = 0;
+            send(pConn->mTcpSocket, (const char*)&endMsg, 3, 0);
+            break;
+        }
         default:
             g_Logger.Log(MR_LOG_DEBUG, "Client %d: Message type %d (not broadcast)", pConn->mClientId, messageType);
+    }
     }
 }
 
@@ -469,12 +517,15 @@ void MR_ServerSocket::SendToPlayer(
     // TODO: Send message to specific client
 }
 
-void MR_ServerSocket::CloseConnection(int clientId)
+void MR_ServerSocket::CloseConnection(int clientId, MR_RaceManager* pRaceManager)
 {
     auto it = mConnections.find(clientId);
     if (it != mConnections.end()) {
         ClientConnection* pConn = it->second;
         g_Logger.Log(MR_LOG_INFO, "Closing connection: ID=%d", clientId);
+        if (pRaceManager && pConn->mRaceId >= 0) {
+            pRaceManager->LeaveRace(pConn->mRaceId, clientId);
+        }
         if (pConn->mTcpSocket != INVALID_SOCKET) {
             closesocket(pConn->mTcpSocket);
         }

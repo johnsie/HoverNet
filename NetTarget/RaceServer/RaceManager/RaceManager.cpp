@@ -52,6 +52,51 @@ int MR_RaceManager::CreateRace(
     return raceId;
 }
 
+int MR_RaceManager::FindRaceByName(const char* raceName) const
+{
+    for (const auto& pair : mRaces) {
+        if (pair.second && strcmp(pair.second->mRaceName, raceName) == 0) {
+            return pair.first;
+        }
+    }
+    return -1;
+}
+
+int MR_RaceManager::FindOrCreateRace(
+    const char* raceName,
+    const char* trackName,
+    int numLaps,
+    BOOL allowWeapons,
+    int creatorClientId)
+{
+    int raceId = FindRaceByName(raceName);
+    if (raceId >= 0) {
+        return raceId;
+    }
+    return CreateRace(raceName, trackName, numLaps, allowWeapons, creatorClientId);
+}
+
+void MR_RaceManager::ListRaces(std::vector<RaceSummary>& outRaces) const
+{
+    outRaces.clear();
+    for (const auto& pair : mRaces) {
+        RaceSession* pRace = pair.second;
+        if (!pRace) {
+            continue;
+        }
+        const GameState& state = pRace->mSimulation.GetCurrentState();
+
+        RaceSummary summary;
+        summary.mRaceId = pRace->mRaceId;
+        summary.mName = pRace->mRaceName;
+        summary.mTrack = state.mTrackName;
+        summary.mNumLaps = state.mNumLaps;
+        summary.mNumPlayers = pRace->GetActivePlayerCount();
+        summary.mStarted = pRace->mRaceStarted;
+        outRaces.push_back(summary);
+    }
+}
+
 BOOL MR_RaceManager::JoinRace(int raceId, int clientId, const char* playerName)
 {
     RaceSession* pRace = GetRace(raceId);

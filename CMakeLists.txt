@@ -8,6 +8,27 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(SDL2 REQUIRED)
 include(CTest)
+find_package(Threads REQUIRED)
+
+file(GLOB HOVERNET_RACESERVER_SOURCES CONFIGURE_DEPENDS
+    NetTarget/RaceServer/*.cpp
+    NetTarget/RaceServer/NetworkInterface/*.cpp
+    NetTarget/RaceServer/GameSimulation/*.cpp
+    NetTarget/RaceServer/RaceManager/*.cpp
+    NetTarget/RaceServer/Config/*.cpp
+    NetTarget/RaceServer/Logging/*.cpp
+)
+
+add_executable(RaceServer ${HOVERNET_RACESERVER_SOURCES})
+target_include_directories(RaceServer PRIVATE
+    NetTarget/RaceServer
+    NetTarget/RaceServer/NetworkInterface
+    NetTarget/RaceServer/GameSimulation
+    NetTarget/RaceServer/RaceManager
+    NetTarget/RaceServer/Config
+    NetTarget/RaceServer/Logging
+)
+target_link_libraries(RaceServer PRIVATE Threads::Threads)
 
 add_library(HoverNetPortableUtil STATIC
     NetTarget/Util/DllObjectFactory.cpp
@@ -190,6 +211,22 @@ add_executable(HoverNetActorRenderSmoke
 
 target_link_libraries(HoverNetActorRenderSmoke PRIVATE HoverNetVideoCore HoverNetResourceCore)
 
+add_library(HoverNetRaceServerClient STATIC
+    NetTarget/LinuxClient/RaceServerClient.cpp
+)
+target_include_directories(HoverNetRaceServerClient PUBLIC NetTarget/LinuxClient)
+
+add_executable(HoverNetRaceServerClientSmoke
+    NetTarget/LinuxClient/RaceServerClientSmoke.cpp
+)
+add_dependencies(HoverNetRaceServerClientSmoke RaceServer)
+target_link_libraries(HoverNetRaceServerClientSmoke PRIVATE HoverNetRaceServerClient)
+
+add_executable(HoverNetLobby
+    NetTarget/LinuxClient/LobbyCli.cpp
+)
+target_link_libraries(HoverNetLobby PRIVATE HoverNetRaceServerClient)
+
 add_executable(HoverNetLinuxBootstrap
     NetTarget/LinuxClient/main.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
@@ -223,7 +260,7 @@ add_executable(HoverNetGame2Player
 
 add_dependencies(HoverNetGame2Player HoverNetHeadlessObjFac1)
 target_compile_definitions(HoverNetGame2Player PRIVATE _HAVE_SDL2 HOVERNET_GAME2_PLAYER HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-target_link_libraries(HoverNetGame2Player PRIVATE HoverNetObserver HoverNetClientSession HoverNetResourceCore HoverNetVideoCore SDL2::SDL2)
+target_link_libraries(HoverNetGame2Player PRIVATE HoverNetObserver HoverNetClientSession HoverNetResourceCore HoverNetVideoCore HoverNetRaceServerClient SDL2::SDL2)
 
 if(BUILD_TESTING)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/linux")
@@ -242,6 +279,7 @@ if(BUILD_TESTING)
     add_hovernet_root_test(HoverNetResourceSmoke)
     add_hovernet_root_test(HoverNetViewportSmoke)
     add_hovernet_root_test(HoverNetActorRenderSmoke)
+    add_hovernet_root_test(HoverNetRaceServerClientSmoke "$<TARGET_FILE:RaceServer>")
     add_hovernet_root_test(HoverNetMainCharacterSmoke)
     add_hovernet_root_test(HoverNetMainCharacterRenderSmoke)
     add_hovernet_root_test(HoverNetClientSessionSmoke)
