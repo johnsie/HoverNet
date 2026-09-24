@@ -21,12 +21,33 @@
 
 #include "stdafx.h"
 
+#include <cstdarg>
+#include <cstdio>
+
 #include <Mmsystem.h>
 #include "NetworkSession.h"
 #include "InternetRoom.h"
 #include "resource.h"
 #include "../Util/StrRes.h"
 
+namespace
+{
+   // Throttled (first N calls only) breadcrumb trail for diagnosing why a remote
+   // craft's position never updates on Windows even though it spawns correctly.
+   void LogNetSync( const char* pFormat, ... )
+   {
+      FILE* lLog = fopen( "NetSync_Debug.log", "a" );
+      if( lLog != NULL )
+      {
+         va_list lArgs;
+         va_start( lArgs, pFormat );
+         vfprintf( lLog, pFormat, lArgs );
+         va_end( lArgs );
+         fprintf( lLog, "\n" );
+         fclose( lLog );
+      }
+   }
+}
 
 // Messages
 #define MRNM_SET_TIME                 1
@@ -461,29 +482,58 @@ void MR_NetworkSession::ReadNet( )
 
 
          case MRNM_SET_MAIN_ELEM_STATE:
-            EnsureServerPeerCharacter( lClientId );
-            if( mClientCharacter[ lClientId ] != NULL )
             {
-               // Drop the message if there was a recent collision on that item
-               int lLastCollisionAge = mSession.GetSimulationTime()-mClientCharacter[ lClientId ]->mLastCollisionTime;
+               static int sLogCount = 0;
+               const BOOL lShouldLog = mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED && sLogCount < 40;
 
-               if( lLastCollisionAge < (mNetInterface.GetAvgLag( lClientId )+40) )
+               EnsureServerPeerCharacter( lClientId );
+               if( mClientCharacter[ lClientId ] != NULL )
                {
-                  // Drop this message
-               }
-               else
-               {
-                  int lOldRoom = mClientCharacter[ lClientId ]->mRoom;
+                  // Drop the message if there was a recent collision on that item
+                  int lLastCollisionAge = mSession.GetSimulationTime()-mClientCharacter[ lClientId ]->mLastCollisionTime;
+                  const BOOL lDropped = lLastCollisionAge < (mNetInterface.GetAvgLag( lClientId )+40);
 
-                  mClientCharacter[ lClientId ]->SetNetState( lMessageLen, lMessage );
-
-                  // Move element if needed
-                  if( mClientCharacter[ lClientId ]->mRoom != lOldRoom )
+                  if( lShouldLog )
                   {
-                     MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
- 
-                     lCurrentLevel->MoveElement( mClient[ lClientId ], mClientCharacter[ lClientId ]->mRoom );
+                     LogNetSync( "SET_MAIN_ELEM_STATE: slot=%d dataLen=%d simTime=%d collisionAge=%d avgLag=%d dropped=%d pos_before=(%d,%d,%d)",
+                                 lClientId, lMessageLen, mSession.GetSimulationTime(), lLastCollisionAge,
+                                 mNetInterface.GetAvgLag( lClientId ), (int)lDropped,
+                                 mClientCharacter[ lClientId ]->mPosition.mX, mClientCharacter[ lClientId ]->mPosition.mY,
+                                 mClientCharacter[ lClientId ]->mPosition.mZ );
+                     sLogCount++;
                   }
+
+                  if( lDropped )
+                  {
+                     // Drop this message
+                  }
+                  else
+                  {
+                     int lOldRoom = mClientCharacter[ lClientId ]->mRoom;
+
+                     mClientCharacter[ lClientId ]->SetNetState( lMessageLen, lMessage );
+
+                     if( lShouldLog )
+                     {
+                        LogNetSync( "SET_MAIN_ELEM_STATE: slot=%d pos_after=(%d,%d,%d) room=%d",
+                                    lClientId, mClientCharacter[ lClientId ]->mPosition.mX,
+                                    mClientCharacter[ lClientId ]->mPosition.mY, mClientCharacter[ lClientId ]->mPosition.mZ,
+                                    mClientCharacter[ lClientId ]->mRoom );
+                     }
+
+                     // Move element if needed
+                     if( mClientCharacter[ lClientId ]->mRoom != lOldRoom )
+                     {
+                        MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
+
+                        lCurrentLevel->MoveElement( mClient[ lClientId ], mClientCharacter[ lClientId ]->mRoom );
+                     }
+                  }
+               }
+               else if( lShouldLog )
+               {
+                  LogNetSync( "SET_MAIN_ELEM_STATE: slot=%d has NO character (EnsureServerPeerCharacter did not create one)", lClientId );
+                  sLogCount++;
                }
             }
             break;
@@ -1125,7 +1175,18 @@ void MR_NetworkSession::BroadcastMainElementState( const MR_ElementNetState& pSt
       lMessage.mDataLen = pState.mDataLen + sizeof(lLocalClientId);
       memcpy( lMessage.mData, &lLocalClientId, sizeof(lLocalClientId) );
       memcpy( lMessage.mData + sizeof(lLocalClientId), pState.mData, pState.mDataLen );
-      mNetInterface.BroadcastMessage( &lMessage, MR_NET_REQUIRED );
+      const BOOL lSent = mNetInterface.BroadcastMessage( &lMessage, MR_NET_REQUIRED );
+
+      static int sLogCount = 0;
+      if( sLogCount < 40 )
+      {
+         LogNetSync( "BroadcastMainElementState: localClientId=%d dataLen=%d sent=%d pos=(%d,%d,%d)",
+                     lLocalClientId, (int)lMessage.mDataLen, (int)lSent,
+                     mMainCharacter1 != NULL ? mMainCharacter1->mPosition.mX : -1,
+                     mMainCharacter1 != NULL ? mMainCharacter1->mPosition.mY : -1,
+                     mMainCharacter1 != NULL ? mMainCharacter1->mPosition.mZ : -1 );
+         sLogCount++;
+      }
       return;
    }
 
