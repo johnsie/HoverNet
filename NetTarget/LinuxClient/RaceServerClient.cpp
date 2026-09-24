@@ -363,3 +363,51 @@ bool RaceServerClient::ParsePlayerState(const RaceServerMessage& pMessage, int& 
     pOutStateLen = pMessage.mData.size() - 4;
     return true;
 }
+
+bool RaceServerClient::SendAutoElement(int pDllId, int pClassId, int pRoom,
+                                       const void* pStateData, std::size_t pStateLen)
+{
+    if (pStateLen > 249 || pDllId < -32768 || pDllId > 32767 ||
+        pClassId < -32768 || pClassId > 32767 || pRoom < -32768 || pRoom > 32767)
+    {
+        return false;
+    }
+
+    std::vector<std::uint8_t> lPayload(6);
+    const std::int16_t lDllId = static_cast<std::int16_t>(pDllId);
+    const std::int16_t lClassId = static_cast<std::int16_t>(pClassId);
+    const std::int16_t lRoom = static_cast<std::int16_t>(pRoom);
+    std::memcpy(lPayload.data(), &lDllId, sizeof(lDllId));
+    std::memcpy(lPayload.data() + 2, &lClassId, sizeof(lClassId));
+    std::memcpy(lPayload.data() + 4, &lRoom, sizeof(lRoom));
+    if (pStateData != nullptr && pStateLen > 0)
+    {
+        const std::uint8_t* lSrc = static_cast<const std::uint8_t*>(pStateData);
+        lPayload.insert(lPayload.end(), lSrc, lSrc + pStateLen);
+    }
+    return SendMessage(eRSMsgCreateAutoElem, lPayload.data(), lPayload.size());
+}
+
+bool RaceServerClient::ParseAutoElement(const RaceServerMessage& pMessage, int& pOutDllId,
+                                        int& pOutClassId, int& pOutRoom,
+                                        const std::uint8_t*& pOutStateData,
+                                        std::size_t& pOutStateLen)
+{
+    if (pMessage.mType != eRSMsgCreateAutoElem || pMessage.mData.size() < 6)
+    {
+        return false;
+    }
+
+    std::int16_t lDllId = 0;
+    std::int16_t lClassId = 0;
+    std::int16_t lRoom = 0;
+    std::memcpy(&lDllId, pMessage.mData.data(), sizeof(lDllId));
+    std::memcpy(&lClassId, pMessage.mData.data() + 2, sizeof(lClassId));
+    std::memcpy(&lRoom, pMessage.mData.data() + 4, sizeof(lRoom));
+    pOutDllId = lDllId;
+    pOutClassId = lClassId;
+    pOutRoom = lRoom;
+    pOutStateData = pMessage.mData.data() + 6;
+    pOutStateLen = pMessage.mData.size() - 6;
+    return true;
+}

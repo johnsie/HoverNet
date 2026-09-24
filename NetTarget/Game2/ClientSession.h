@@ -83,6 +83,9 @@ class MR_ClientSession
 
       BOOL PlaceCharacterAtStart( MR_MainCharacter* pCharacter, int pPlayerSlot );
       MR_FreeElementHandle InsertRemoteCharacter( MR_MainCharacter* pCharacter, int pRoom );
+      MR_FreeElementHandle InsertRemoteElement( MR_FreeElement* pElement, int pRoom );
+      void SetElementCreationBroadcastHook( void (*pCreationHook)(MR_FreeElement*, int, void*),
+                                            void* pHookData );
       void MoveRemoteCharacter( MR_FreeElementHandle pHandle, int pRoom );
       
       MR_MainCharacter*  GetMainCharacter()const;      

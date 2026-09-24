@@ -316,6 +316,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
     // - MRNM_READY (51)
     // - MRNM_CREATE_MAIN_ELEM (2)
     // - MRNM_SET_MAIN_ELEM_STATE (3)
+    // - MRNM_CREATE_AUTO_ELEM (4)
     // - MRNM_LAG_TEST (47)
 
     unsigned short messageHeader = static_cast<unsigned short>(buffer[0]) |
@@ -455,6 +456,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             [[fallthrough]];
         case 51:  // MRNM_READY
         case 2:   // MRNM_CREATE_MAIN_ELEM
+        case 4:   // MRNM_CREATE_AUTO_ELEM (missiles and other transient elements)
         case 47:  // MRNM_LAG_TEST
         {
             g_Logger.Log(MR_LOG_INFO, "Client %d (Race %d): Relaying message type %d to race members",

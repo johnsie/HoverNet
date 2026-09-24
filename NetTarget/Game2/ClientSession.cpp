@@ -319,6 +319,26 @@ MR_FreeElementHandle MR_ClientSession::InsertRemoteCharacter( MR_MainCharacter* 
    return lCurrentLevel->InsertElement( pCharacter, pRoom, FALSE );
 }
 
+MR_FreeElementHandle MR_ClientSession::InsertRemoteElement( MR_FreeElement* pElement, int pRoom )
+{
+   MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
+   if( pElement == NULL || lCurrentLevel == NULL || pRoom < 0 || pRoom >= lCurrentLevel->GetRoomCount() )
+   {
+      return NULL;
+   }
+   return lCurrentLevel->InsertElement( pElement, pRoom, FALSE );
+}
+
+void MR_ClientSession::SetElementCreationBroadcastHook(
+   void (*pCreationHook)(MR_FreeElement*, int, void*), void* pHookData )
+{
+   MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
+   if( lCurrentLevel != NULL )
+   {
+      lCurrentLevel->SetBroadcastHook( pCreationHook, NULL, pHookData );
+   }
+}
+
 void MR_ClientSession::MoveRemoteCharacter( MR_FreeElementHandle pHandle, int pRoom )
 {
    MR_Level* lCurrentLevel = mSession.GetCurrentLevel();

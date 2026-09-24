@@ -514,6 +514,45 @@ namespace
         }
         std::printf("Player state sync correctly attributes updates to the sending player\n");
 
+        const std::uint8_t lMissileState[16] = {
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+        };
+        if (!lHost.SendAutoElement(1, 150, 2, lMissileState, sizeof(lMissileState)))
+        {
+            std::fprintf(stderr, "Failed to send automatic missile element\n");
+            return false;
+        }
+
+        auto lReceivesMissile = [&](RaceServerClient& pClient) {
+            for (int lTries = 0; lTries < 20; ++lTries)
+            {
+                if (!pClient.PollMessage(lMessage, 100))
+                {
+                    continue;
+                }
+                int lDllId = 0;
+                int lClassId = 0;
+                int lRoom = -1;
+                const std::uint8_t* lStateData = nullptr;
+                std::size_t lStateLen = 0;
+                if (RaceServerClient::ParseAutoElement(lMessage, lDllId, lClassId, lRoom,
+                                                       lStateData, lStateLen) &&
+                    lDllId == 1 && lClassId == 150 && lRoom == 2 &&
+                    lStateLen == sizeof(lMissileState) &&
+                    std::memcmp(lStateData, lMissileState, lStateLen) == 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
+        if (!lReceivesMissile(lJoiner) || !lReceivesMissile(lThirdRacer))
+        {
+            std::fprintf(stderr, "Missile creation did not reach every other racer intact\n");
+            return false;
+        }
+        std::printf("Missile creation sync reaches every other racer intact\n");
+
         return true;
     }
 }

@@ -407,6 +407,23 @@ struct RemotePlayer
     MR_MainCharacter* mCharacter = nullptr;
     MR_FreeElementHandle mHandle = nullptr;
 };
+struct OnlineElementBroadcastContext
+{
+    RaceServerClient* mClient = nullptr;
+};
+
+void BroadcastCreatedElement(MR_FreeElement* pElement, int pRoom, void* pHookData)
+{
+    OnlineElementBroadcastContext* lContext = static_cast<OnlineElementBroadcastContext*>(pHookData);
+    if (pElement == nullptr || lContext == nullptr || lContext->mClient == nullptr ||
+        !lContext->mClient->IsConnected()) {
+        return;
+    }
+    const MR_ObjectFromFactoryId lTypeId = pElement->GetTypeId();
+    const MR_ElementNetState lState = pElement->GetNetState();
+    lContext->mClient->SendAutoElement(lTypeId.mDllId, lTypeId.mClassId, pRoom,
+                                       lState.mData, lState.mDataLen);
+}
 
 // pClient is caller-owned (not constructed here) and deliberately left connected
 // when this returns true: a joined-and-started race needs to keep talking to the
@@ -1038,6 +1055,7 @@ int main(int argc, char** argv)
     // assigned client id -- see RaceServerClient::SendPlayerState/ParsePlayerState
     // for why that id has to be threaded through explicitly rather than assumed).
     RaceServerClient onlineClient;
+    OnlineElementBroadcastContext elementBroadcastContext{&onlineClient};
     int localClientId = -1;
     std::map<int, RemotePlayer> remotePlayers;
 #endif
@@ -1080,7 +1098,7 @@ int main(int argc, char** argv)
                         std::fprintf(stderr, "Could not place local multiplayer craft in start slot %d\n", localStartSlot);
                     }
                     mainCharacter->SetHoverId(localRaceSlot);
-                    mainCharacter->SetHoverModel(localRaceSlot % 4);
+                    mainCharacter->SetHoverModel(0);
                     for (const RaceServerPeer& peer : knownPeers) {
                         if (remotePlayers.count(peer.mClientId) > 0) {
                             continue;
@@ -1097,12 +1115,14 @@ int main(int argc, char** argv)
                         remote->SetOrientation(level.GetStartingOrientation(startSlot));
                         remote->mRoom = (startRoom >= 0 && startRoom < level.GetRoomCount()) ? startRoom : room;
                         remote->SetHoverId(remoteRaceSlot);
-                        remote->SetHoverModel(remoteRaceSlot % 4);
+                        remote->SetHoverModel(0);
                         MR_FreeElementHandle remoteHandle = session.InsertRemoteCharacter(remote, remote->mRoom);
                         if (remoteHandle != nullptr) {
                             remotePlayers[peer.mClientId] = {remote, remoteHandle};
                         }
                     }
+                    session.SetElementCreationBroadcastHook(BroadcastCreatedElement,
+                                                            &elementBroadcastContext);
                 }
                 else {
                     onlineClient.Disconnect();
@@ -1245,6 +1265,30 @@ int main(int argc, char** argv)
                                 }
                                 else if (remote->mRoom != oldRoom) {
                                     session.MoveRemoteCharacter(remoteIt->second.mHandle, remote->mRoom);
+                                }
+                            }
+                        }
+                    }
+                    else if (netMessage.mType == eRSMsgCreateAutoElem) {
+                        int dllId = 0;
+                        int classId = 0;
+                        int elementRoom = -1;
+                        const std::uint8_t* stateData = nullptr;
+                        std::size_t stateLen = 0;
+                        if (RaceServerClient::ParseAutoElement(netMessage, dllId, classId, elementRoom,
+                                                               stateData, stateLen) &&
+                            dllId == 1 && classId == 150 &&
+                            elementRoom >= 0 && elementRoom < level.GetRoomCount() &&
+                            stateLen == 16) {
+                            MR_ObjectFromFactoryId typeId = {
+                                static_cast<MR_UInt16>(dllId), static_cast<MR_UInt16>(classId)
+                            };
+                            MR_FreeElement* remoteElement =
+                                (MR_FreeElement*)MR_DllObjectFactory::CreateObject(typeId);
+                            if (remoteElement != nullptr) {
+                                remoteElement->SetNetState(static_cast<int>(stateLen), stateData);
+                                if (session.InsertRemoteElement(remoteElement, elementRoom) == nullptr) {
+                                    delete remoteElement;
                                 }
                             }
                         }
