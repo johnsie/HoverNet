@@ -419,6 +419,16 @@ void MR_NetworkSession::ReadNet( )
 
    while( mNetInterface.FetchMessage( lTimeStamp, lMessageType, lMessageLen, lMessage, lClientId ) )
    {
+      {
+         static int sRawLogCount = 0;
+         if( mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED &&
+             mSession.GetSimulationTime() >= -1000 && sRawLogCount < 150 )
+         {
+            LogNetSync( "ReadNet: got messageType=%d len=%d clientId=%d simTime=%d",
+                        lMessageType, lMessageLen, lClientId, mSession.GetSimulationTime() );
+            sRawLogCount++;
+         }
+      }
       switch( lMessageType )
       {
          case MRNM_SET_TIME:
