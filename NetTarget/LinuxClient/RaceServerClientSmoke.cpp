@@ -193,12 +193,73 @@ namespace
         }
         std::printf("Second race is isolated from the first, as expected\n");
 
+        // Lobby-wide chat: two clients that haven't joined any race yet (mRaceId
+        // stays -1 on the server) should still be able to chat with each other, and
+        // that chat must not leak to clients already in a race, nor vice versa.
+        RaceServerClient lLobbyClientE;
+        RaceServerClient lLobbyClientF;
+        if (!lLobbyClientE.Connect("127.0.0.1", pPort) || !lLobbyClientF.Connect("127.0.0.1", pPort))
+        {
+            std::fprintf(stderr, "Could not connect two lobby-only (unjoined) clients\n");
+            return false;
+        }
+        // A TCP connect() succeeding only means the OS accepted it into the listen
+        // backlog; the server's own poll loop still needs a turn to accept() it at
+        // the application level (add it to mConnections) before it'll relay anything
+        // to/from it. Give that a moment rather than racing it.
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+        const std::string lLobbyChatText = "hello from the lobby";
+        if (!lLobbyClientE.SendMessage(eRSMsgChatMessage, lLobbyChatText.data(), lLobbyChatText.size()))
+        {
+            std::fprintf(stderr, "Failed to send lobby-wide chat message\n");
+            return false;
+        }
+
+        bool lLobbyChatSeen = false;
+        for (int lTries = 0; lTries < 20 && !lLobbyChatSeen; ++lTries)
+        {
+            if (lLobbyClientF.PollMessage(lMessage, 200) && lMessage.mType == eRSMsgChatMessage)
+            {
+                const std::string lReceived(lMessage.mData.begin(), lMessage.mData.end());
+                lLobbyChatSeen = (lReceived == lLobbyChatText);
+            }
+        }
+        if (!lLobbyChatSeen)
+        {
+            std::fprintf(stderr, "Lobby-only client never received lobby-wide chat\n");
+            return false;
+        }
+        std::printf("Lobby-wide chat between unjoined clients works\n");
+
+        // The already-in-a-race clients must not see lobby chat...
+        if (lClientA.PollMessage(lMessage, 300) && lMessage.mType == eRSMsgChatMessage)
+        {
+            std::fprintf(stderr, "A client in a race received lobby-wide chat (no isolation)\n");
+            return false;
+        }
+        // ...and a lobby-only client must not see race-scoped chat.
+        const std::string lRaceOnlyText = "should stay in the race";
+        if (!lClientB.SendMessage(eRSMsgChatMessage, lRaceOnlyText.data(), lRaceOnlyText.size()))
+        {
+            std::fprintf(stderr, "Failed to send race-scoped chat for the reverse isolation check\n");
+            return false;
+        }
+        if (lLobbyClientE.PollMessage(lMessage, 300) || lLobbyClientF.PollMessage(lMessage, 300))
+        {
+            std::fprintf(stderr, "A lobby-only client received race-scoped chat (no isolation)\n");
+            return false;
+        }
+        std::printf("Lobby chat and race chat are isolated from each other, as expected\n");
+
         return true;
     }
 }
 
 int main(int argc, char* argv[])
 {
+    std::setvbuf(stdout, nullptr, _IOLBF, 0);  // Flush progress even if something hangs afterward
+
     if (argc < 2)
     {
         std::fprintf(stderr, "Usage: %s <path-to-RaceServer>\n", argv[0]);
@@ -239,9 +300,28 @@ int main(int argc, char* argv[])
         std::fprintf(stderr, "RaceServer never started listening on port %u\n", lPort);
     }
 
+    // Give the server a few seconds to exit on SIGTERM; if it doesn't (this test
+    // helped find a real bug where it sometimes wouldn't -- see RaceServer.cpp's
+    // ConsoleCtrlHandler comment), fall back to SIGKILL rather than hanging forever.
     kill(lServerPid, SIGTERM);
     int lStatus = 0;
-    waitpid(lServerPid, &lStatus, 0);
+    bool lExited = false;
+    for (int lWait = 0; lWait < 50 && !lExited; ++lWait)
+    {
+        if (waitpid(lServerPid, &lStatus, WNOHANG) == lServerPid)
+        {
+            lExited = true;
+        }
+        else
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+    }
+    if (!lExited)
+    {
+        kill(lServerPid, SIGKILL);
+        waitpid(lServerPid, &lStatus, 0);
+    }
 
     return lResult;
 }

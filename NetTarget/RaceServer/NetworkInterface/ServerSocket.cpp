@@ -417,34 +417,55 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             break;
         }
         
+        case 6:   // MRNM_CHAT_MESSAGE
+        {
+            // Chat is scoped to wherever the sender currently is: other members of
+            // their race if they've joined one, or everyone else still browsing the
+            // lobby (mRaceId == -1) if they haven't -- this is what makes lobby chat
+            // work without a separate message type or connection state.
+            g_Logger.Log(MR_LOG_INFO, "Client %d (Race %d): Relaying chat", pConn->mClientId, pConn->mRaceId);
+
+            for (auto& pair : mConnections) {
+                int targetId = pair.first;
+                ClientConnection* pTarget = pair.second;
+
+                if (pTarget && pTarget->mConnected && targetId != pConn->mClientId &&
+                    pTarget->mRaceId == pConn->mRaceId) {
+                    int sendResult = send(pTarget->mTcpSocket, (const char*)buffer, bytesReceived, 0);
+                    if (sendResult == SOCKET_ERROR) {
+                        g_Logger.Log(MR_LOG_WARN, "Failed to send chat to client %d: %ld", targetId, WSAGetLastError());
+                    }
+                }
+            }
+            break;
+        }
         case 51:  // MRNM_READY
         case 2:   // MRNM_CREATE_MAIN_ELEM
         case 3:   // MRNM_SET_MAIN_ELEM_STATE
         case 47:  // MRNM_LAG_TEST
-        case 6:   // MRNM_CHAT_MESSAGE
         {
-            g_Logger.Log(MR_LOG_INFO, "Client %d (Race %d): Relaying message type %d to race members", 
+            g_Logger.Log(MR_LOG_INFO, "Client %d (Race %d): Relaying message type %d to race members",
                          pConn->mClientId, pConn->mRaceId, messageType);
-            
+
             // Broadcast this message to all OTHER clients in the SAME race
             if (pConn->mRaceId >= 0) {
                 for (auto& pair : mConnections) {
                     int targetId = pair.first;
                     ClientConnection* pTarget = pair.second;
-                    
+
                     // Send to all clients in the same race EXCEPT the sender
                     if (pTarget && pTarget->mConnected && targetId != pConn->mClientId && pTarget->mRaceId == pConn->mRaceId) {
                         int sendResult = send(pTarget->mTcpSocket, (const char*)buffer, bytesReceived, 0);
                         if (sendResult == SOCKET_ERROR) {
                             g_Logger.Log(MR_LOG_WARN, "Failed to send message to client %d: %ld", targetId, WSAGetLastError());
                         } else {
-                            g_Logger.Log(MR_LOG_DEBUG, "Relayed %d bytes from client %d to client %d", 
+                            g_Logger.Log(MR_LOG_DEBUG, "Relayed %d bytes from client %d to client %d",
                                          sendResult, pConn->mClientId, targetId);
                         }
                     }
                 }
             } else {
-                g_Logger.Log(MR_LOG_WARN, "Client %d sent message but not in any race (mRaceId=%d)", 
+                g_Logger.Log(MR_LOG_WARN, "Client %d sent message but not in any race (mRaceId=%d)",
                              pConn->mClientId, pConn->mRaceId);
             }
             break;

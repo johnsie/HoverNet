@@ -19,15 +19,21 @@ static MR_RaceManager g_RaceManager;
 // Global configuration
 static MR_ServerConfig g_Config;
 
-// Signal handler for graceful shutdown
-static volatile bool g_bShutdownRequested = false;
+// Signal handler for graceful shutdown. On POSIX this runs synchronously on the
+// interrupted thread, so it must only touch async-signal-safe state -- no logging,
+// no locking. g_Logger.Log() takes a std::mutex; if the signal lands while the main
+// thread already holds it (likely, given how much this server logs), calling it here
+// would deadlock the process against itself, leaving it unresponsive to SIGTERM.
+// (SetConsoleCtrlHandler callbacks run on a separate thread on Windows, so logging
+// there is safe -- this asymmetry is why only the POSIX handler was affected.)
+static volatile sig_atomic_t g_bShutdownRequested = 0;
 
 #ifdef _WIN32
 BOOL WINAPI ConsoleCtrlHandler(DWORD dwCtrlType)
 {
     if (dwCtrlType == CTRL_C_EVENT || dwCtrlType == CTRL_BREAK_EVENT) {
         g_Logger.Log(MR_LOG_INFO, "Shutdown requested via console signal");
-        g_bShutdownRequested = true;
+        g_bShutdownRequested = 1;
         return TRUE;
     }
     return FALSE;
@@ -35,8 +41,7 @@ BOOL WINAPI ConsoleCtrlHandler(DWORD dwCtrlType)
 #else
 void ConsoleCtrlHandler(int)
 {
-    g_Logger.Log(MR_LOG_INFO, "Shutdown requested via signal");
-    g_bShutdownRequested = true;
+    g_bShutdownRequested = 1;
 }
 #endif
 
@@ -166,6 +171,7 @@ int main(int argc, char* argv[])
     }
 
     // Graceful shutdown
+    g_Logger.Log(MR_LOG_INFO, "Shutdown requested via signal");
     g_Logger.Log(MR_LOG_INFO, "=== Server Shutting Down ===");
     g_ServerSocket.Shutdown();
     g_RaceManager.Shutdown();

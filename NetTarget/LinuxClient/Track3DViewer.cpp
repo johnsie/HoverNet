@@ -267,6 +267,15 @@ bool ContainsFreeElementType(const MR_Level& level, MR_UInt16 dllId, MR_UInt16 c
 }
 
 #ifdef HOVERNET_GAME2_PLAYER
+// The font sprite indexes glyphs as (ascii - 32 + 1), not raw ASCII -- every other
+// StrBlt call site in the game (see Observer.cpp) wraps its text in Ascii2Simple()
+// for this reason; skipping it renders scrambled/wrong glyphs.
+void DrawUiText(const MR_Sprite& font, int x, int y, const char* text, MR_3DViewPort* dest,
+                MR_Sprite::eAlignment hAlign = MR_Sprite::eLeft, MR_Sprite::eAlignment vAlign = MR_Sprite::eTop)
+{
+    font.StrBlt(x, y, Ascii2Simple(text), dest, hAlign, vAlign);
+}
+
 // Loads the same bitmap font sprite MR_Observer uses for its HUD text, for the menu
 // and lobby screens to share. Caller owns the returned handle (may be null on
 // failure, e.g. if the resource pack couldn't provide it).
@@ -295,6 +304,13 @@ MR_SpriteHandle* LoadUiFont()
 // (pFrameLimit < 0) this blocks indefinitely for a human, as a lobby screen should.
 // With it, an automated/headless run (e.g. under ctest, with no real keyboard input
 // ever arriving) can't hang here forever.
+enum class LobbyInputMode
+{
+    eNone,
+    eHostRace,
+    eChat,
+};
+
 bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                     const MR_Sprite& font, const std::string& host, unsigned port,
                     std::string& outJoinedName, int pFrameLimit)
@@ -308,11 +324,21 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     }
 
     std::vector<RaceServerGameInfo> games;
-    client.ListGames(games, 500);
+    std::vector<RaceServerGameInfo> gamesBeingListed;
+    client.SendMessage(eRSMsgListGames, nullptr, 0);
+
+    std::vector<std::string> chatLog;
+    auto pushChat = [&chatLog](const std::string& line) {
+        chatLog.push_back(line);
+        constexpr std::size_t kMaxChatLines = 8;
+        if (chatLog.size() > kMaxChatLines) {
+            chatLog.erase(chatLog.begin());
+        }
+    };
 
     int selected = 0;
-    bool typingName = false;
-    std::string typedName;
+    LobbyInputMode inputMode = LobbyInputMode::eNone;
+    std::string inputBuffer;
     Uint32 lastRefresh = SDL_GetTicks();
     bool running = true;
     bool joined = false;
@@ -326,32 +352,43 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             if (event.type == SDL_QUIT) {
                 running = false;
             }
-            else if (typingName && event.type == SDL_TEXTINPUT) {
-                if (typedName.size() < 32) {
-                    typedName += event.text.text;
+            else if (inputMode != LobbyInputMode::eNone && event.type == SDL_TEXTINPUT) {
+                if (inputBuffer.size() < 60) {
+                    inputBuffer += event.text.text;
                 }
             }
             else if (event.type == SDL_KEYDOWN) {
                 const SDL_Keycode key = event.key.keysym.sym;
                 if (key == SDLK_ESCAPE) {
-                    if (typingName) {
-                        typingName = false;
-                        typedName.clear();
+                    if (inputMode != LobbyInputMode::eNone) {
+                        inputMode = LobbyInputMode::eNone;
+                        inputBuffer.clear();
                     }
                     else {
                         running = false;
                     }
                 }
-                else if (typingName) {
-                    if (key == SDLK_BACKSPACE && !typedName.empty()) {
-                        typedName.pop_back();
+                else if (inputMode == LobbyInputMode::eHostRace) {
+                    if (key == SDLK_BACKSPACE && !inputBuffer.empty()) {
+                        inputBuffer.pop_back();
                     }
-                    else if (key == SDLK_RETURN && !typedName.empty()) {
-                        if (client.JoinGame(typedName)) {
-                            outJoinedName = typedName;
+                    else if (key == SDLK_RETURN && !inputBuffer.empty()) {
+                        if (client.JoinGame(inputBuffer)) {
+                            outJoinedName = inputBuffer;
                             joined = true;
                             running = false;
                         }
+                    }
+                }
+                else if (inputMode == LobbyInputMode::eChat) {
+                    if (key == SDLK_BACKSPACE && !inputBuffer.empty()) {
+                        inputBuffer.pop_back();
+                    }
+                    else if (key == SDLK_RETURN && !inputBuffer.empty()) {
+                        if (client.SendMessage(eRSMsgChatMessage, inputBuffer.data(), inputBuffer.size())) {
+                            pushChat("You: " + inputBuffer);
+                        }
+                        inputBuffer.clear();  // Stay in chat mode -- keep the conversation going
                     }
                 }
                 else if (key == SDLK_UP && !games.empty()) {
@@ -361,12 +398,17 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     selected = (selected + 1) % static_cast<int>(games.size());
                 }
                 else if (key == SDLK_r) {
-                    client.ListGames(games, 500);
-                    selected = 0;
+                    gamesBeingListed.clear();
+                    client.SendMessage(eRSMsgListGames, nullptr, 0);
+                    lastRefresh = SDL_GetTicks();
                 }
                 else if (key == SDLK_n) {
-                    typingName = true;
-                    typedName.clear();
+                    inputMode = LobbyInputMode::eHostRace;
+                    inputBuffer.clear();
+                }
+                else if (key == SDLK_t) {
+                    inputMode = LobbyInputMode::eChat;
+                    inputBuffer.clear();
                 }
                 else if (key == SDLK_RETURN && !games.empty()) {
                     if (client.JoinGame(games[static_cast<std::size_t>(selected)].mName)) {
@@ -378,21 +420,40 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             }
         }
 
-        if (running && SDL_GetTicks() - lastRefresh > 2000) {
-            client.ListGames(games, 300);
+        if (running && SDL_GetTicks() - lastRefresh > 3000) {
+            gamesBeingListed.clear();
+            client.SendMessage(eRSMsgListGames, nullptr, 0);
             lastRefresh = SDL_GetTicks();
-            if (!games.empty()) {
-                selected = std::min(selected, static_cast<int>(games.size()) - 1);
+        }
+
+        // Drain every message currently waiting rather than blocking for a response
+        // to one specific request -- lobby listings and chat share this connection
+        // and can arrive interleaved.
+        RaceServerMessage message;
+        while (client.PollMessage(message, 0)) {
+            RaceServerGameInfo info;
+            if (message.mType == eRSMsgGameInfo && RaceServerClient::ParseGameInfo(message, info)) {
+                gamesBeingListed.push_back(info);
+            }
+            else if (message.mType == eRSMsgGameListEnd) {
+                games = gamesBeingListed;
+                if (!games.empty()) {
+                    selected = std::min(selected, static_cast<int>(games.size()) - 1);
+                }
+            }
+            else if (message.mType == eRSMsgChatMessage) {
+                pushChat(std::string(message.mData.begin(), message.mData.end()));
             }
         }
 
         viewport.Clear(0);
         int y = lineHeight;
-        font.StrBlt(viewport.GetXRes() / 2, y, "HOVERRACE LOBBY", &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
+        DrawUiText(font, viewport.GetXRes() / 2, y, "HOVERRACE LOBBY", &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
         y += lineHeight * 2;
 
         if (games.empty()) {
-            font.StrBlt(20, y, "(no open races)", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            DrawUiText(font, 20, y, "(no open races -- press N to host one)", &viewport, MR_Sprite::eLeft,
+                       MR_Sprite::eTop);
             y += lineHeight;
         }
         else {
@@ -403,22 +464,40 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                               static_cast<int>(index) == selected ? "> " : "  ", game.mName.c_str(),
                               game.mTrack.c_str(), game.mNumLaps, game.mNumPlayers,
                               game.mStarted ? " (in progress)" : "");
-                font.StrBlt(20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+                DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
                 y += lineHeight;
             }
         }
-
         y += lineHeight;
-        if (typingName) {
-            char line[64];
-            std::snprintf(line, sizeof(line), "New race name: %s_", typedName.c_str());
-            font.StrBlt(20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+
+        DrawUiText(font, 20, y, "-- Chat --", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+        y += lineHeight;
+        for (const std::string& chatLine : chatLog) {
+            DrawUiText(font, 20, y, chatLine.c_str(), &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
             y += lineHeight;
-            font.StrBlt(20, y, "Enter: host it   Esc: cancel", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+        }
+        y += lineHeight;
+
+        if (inputMode == LobbyInputMode::eHostRace) {
+            char line[80];
+            std::snprintf(line, sizeof(line), "New race name: %s_", inputBuffer.c_str());
+            DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            y += lineHeight;
+            DrawUiText(font, 20, y, "Enter: host it   Esc: cancel", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+        }
+        else if (inputMode == LobbyInputMode::eChat) {
+            char line[80];
+            std::snprintf(line, sizeof(line), "Say: %s_", inputBuffer.c_str());
+            DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            y += lineHeight;
+            DrawUiText(font, 20, y, "Enter: send   Esc: stop chatting", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
         }
         else {
-            font.StrBlt(20, y, "Up/Down: select   Enter: join   N: host new   R: refresh   Esc: skip",
-                        &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            DrawUiText(font, 20, y, "Up/Down: select   Enter: join   Esc: skip", &viewport, MR_Sprite::eLeft,
+                       MR_Sprite::eTop);
+            y += lineHeight;
+            DrawUiText(font, 20, y, "N: host a race   T: chat   R: refresh", &viewport, MR_Sprite::eLeft,
+                       MR_Sprite::eTop);
         }
 
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
@@ -479,17 +558,17 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 
         viewport.Clear(0);
         int y = lineHeight * 3;
-        font.StrBlt(viewport.GetXRes() / 2, y, "HOVERRACE", &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
+        DrawUiText(font, viewport.GetXRes() / 2, y, "HOVERRACE", &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
         y += lineHeight * 3;
         for (int index = 0; index < optionCount; ++index) {
             char line[64];
             std::snprintf(line, sizeof(line), "%s%s", index == selected ? "> " : "  ", options[index]);
-            font.StrBlt(viewport.GetXRes() / 2, y, line, &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
+            DrawUiText(font, viewport.GetXRes() / 2, y, line, &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
             y += lineHeight;
         }
         y += lineHeight;
-        font.StrBlt(viewport.GetXRes() / 2, y, "Up/Down: select   Enter: confirm", &viewport,
-                    MR_Sprite::eCenter, MR_Sprite::eTop);
+        DrawUiText(font, viewport.GetXRes() / 2, y, "Up/Down: select   Enter: confirm", &viewport,
+                   MR_Sprite::eCenter, MR_Sprite::eTop);
 
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
         SDL_Delay(16);
