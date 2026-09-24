@@ -51,4 +51,9 @@ private:
     void ReceiveFromClient(ClientConnection* pConn, MR_RaceManager* pRaceManager);
     void ReceiveDatagram();
     BOOL SetSocketOptions(SOCKET sock);
+
+    // Shared tail end of both "join by name" (eRSMsgGameName) and "host with
+    // settings" (eRSMsgHostRace): acks the join (with host status) and exchanges
+    // eRSMsgConnNameSet with every other player already in pConn->mRaceId.
+    void FinishJoiningRace(ClientConnection* pConn, MR_RaceManager* pRaceManager);
 };

@@ -149,6 +149,29 @@ bool RaceServerClient::StartRace()
     return SendMessage(eRSMsgStartRace, nullptr, 0);
 }
 
+bool RaceServerClient::HostRace(const std::string& pRaceName, const std::string& pTrackName, int pNumLaps,
+                                bool pWeaponsAllowed)
+{
+    if (pTrackName.size() > 63 || pRaceName.size() > 63 || pNumLaps < 1 || pNumLaps > 255)
+    {
+        return false;
+    }
+
+    std::vector<std::uint8_t> lPayload;
+    lPayload.push_back(static_cast<std::uint8_t>(pTrackName.size()));
+    lPayload.insert(lPayload.end(), pTrackName.begin(), pTrackName.end());
+    lPayload.push_back(static_cast<std::uint8_t>(pNumLaps));
+    lPayload.push_back(pWeaponsAllowed ? 1 : 0);
+    lPayload.push_back(static_cast<std::uint8_t>(pRaceName.size()));
+    lPayload.insert(lPayload.end(), pRaceName.begin(), pRaceName.end());
+
+    if (lPayload.size() > 255)
+    {
+        return false;
+    }
+    return SendMessage(eRSMsgHostRace, lPayload.data(), lPayload.size());
+}
+
 bool RaceServerClient::PollMessage(RaceServerMessage& pOut, int pTimeoutMs)
 {
     if (mSocket < 0)

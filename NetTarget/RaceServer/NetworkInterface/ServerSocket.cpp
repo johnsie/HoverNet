@@ -353,85 +353,73 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
                 g_Logger.Log(MR_LOG_INFO, "Client %d assigned to race %d", pConn->mClientId, pConn->mRaceId);
 
-                // Ack the join so the client knows its race id and, critically, whether
-                // it's the creator -- only the creator may later start the race.
-                {
-                    RaceSession* pRace = pRaceManager->GetRace(pConn->mRaceId);
-                    MessageBuffer ackMsg;
-                    ackMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE
-                    memcpy(&ackMsg.data[0], &pConn->mRaceId, sizeof(pConn->mRaceId));
-                    ackMsg.data[4] = (pRace != nullptr && pRace->IsCreator(pConn->mClientId)) ? 1 : 0;
-                    ackMsg.dataLen = 5;
-                    send(pConn->mTcpSocket, (const char*)&ackMsg, 3 + ackMsg.dataLen, 0);
-                }
-
-                // Now send CONN_NAME_SET messages for all other clients in this race
-                // so this client knows about the other players
-                g_Logger.Log(MR_LOG_INFO, "Sending player list to client %d for race %d", pConn->mClientId, pConn->mRaceId);
-                
-                for (auto& pair : mConnections) {
-                    int otherId = pair.first;
-                    ClientConnection* pOther = pair.second;
-                    
-                    // Send info about other connected clients in same race (excluding self)
-                    if (pOther && pOther->mConnected && otherId != pConn->mClientId && pOther->mRaceId == pConn->mRaceId) {
-                        // Build CONN_NAME_SET message: [4 bytes UDP port][player name]
-                        MessageBuffer msg;
-                        msg.header = MakeMessageHeader(44);  // MRNM_CONN_NAME_SET = 44
-                        
-                        // UDP port (4 bytes) - using a default port for now
-                        unsigned int udpPort = 9601 + otherId;
-                        *(unsigned int*)&msg.data[0] = udpPort;
-                        
-                        int nameLen = strlen(pOther->mPlayerName);
-                        memcpy(&msg.data[4], pOther->mPlayerName, nameLen);
-
-                        // Set data length: 4 (UDP port) + nameLen
-                        msg.dataLen = 4 + nameLen;
-
-                        // Send to the new client
-                        int msgSize = 3 + msg.dataLen;  // header(2) + dataLen(1) + data
-                        send(pConn->mTcpSocket, (const char*)&msg, msgSize, 0);
-                        g_Logger.Log(MR_LOG_DEBUG, "Sent player info for client %d to client %d", otherId, pConn->mClientId);
-                    }
-                }
-                
-                // Now notify all OTHER clients in this race about the new player
-                g_Logger.Log(MR_LOG_INFO, "Broadcasting new player client %d to other race members", pConn->mClientId);
-                
-                for (auto& pair : mConnections) {
-                    int otherId = pair.first;
-                    ClientConnection* pOther = pair.second;
-                    
-                    // Send info about new client to other connected clients in same race
-                    if (pOther && pOther->mConnected && otherId != pConn->mClientId && pOther->mRaceId == pConn->mRaceId) {
-                        // Build CONN_NAME_SET message for the new client: [4 bytes UDP port][player name]
-                        MessageBuffer msg;
-                        msg.header = MakeMessageHeader(44);  // MRNM_CONN_NAME_SET = 44
-                        
-                        // UDP port (4 bytes) - using a default port for now
-                        unsigned int udpPort = 9601 + pConn->mClientId;
-                        *(unsigned int*)&msg.data[0] = udpPort;
-                        
-                        int nameLen = strlen(pConn->mPlayerName);
-                        memcpy(&msg.data[4], pConn->mPlayerName, nameLen);
-
-                        // Set data length: 4 (UDP port) + nameLen
-                        msg.dataLen = 4 + nameLen;
-
-                        // Send to the existing client
-                        int msgSize = 3 + msg.dataLen;  // header(2) + dataLen(1) + data
-                        send(pOther->mTcpSocket, (const char*)&msg, msgSize, 0);
-                        g_Logger.Log(MR_LOG_DEBUG, "Notified client %d about new player client %d", otherId, pConn->mClientId);
-                    }
-                }
-                
+                FinishJoiningRace(pConn, pRaceManager);
             } else {
                 g_Logger.Log(MR_LOG_WARN, "Invalid GAME_NAME message length from client %d: %d", pConn->mClientId, dataLen);
             }
             break;
         }
-        
+
+        case 54:  // MRNM_HOST_RACE - create a race with explicit track/laps/weapons
+        {
+            // Payload: [1B trackLen][track][1B laps][1B weapons(0/1)][1B nameLen][name]
+            const unsigned char* p = &buffer[3];
+            const unsigned char* pEnd = &buffer[3] + messageDataLen;
+
+            if (p >= pEnd) { g_Logger.Log(MR_LOG_WARN, "Client %d: empty HOST_RACE message", pConn->mClientId); break; }
+            const unsigned char trackLen = *p++;
+            if (p + trackLen + 2 > pEnd) { g_Logger.Log(MR_LOG_WARN, "Client %d: malformed HOST_RACE message", pConn->mClientId); break; }
+            char trackName[64];
+            const unsigned char clampedTrackLen = static_cast<unsigned char>(std::min<size_t>(trackLen, sizeof(trackName) - 1));
+            memcpy(trackName, p, clampedTrackLen);
+            trackName[clampedTrackLen] = '\0';
+            p += trackLen;
+
+            const unsigned char numLaps = *p++;
+            const unsigned char weaponsAllowed = *p++;
+
+            if (p >= pEnd) { g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE missing race name", pConn->mClientId); break; }
+            const unsigned char nameLen = *p++;
+            if (p + nameLen > pEnd) { g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE race name overruns message", pConn->mClientId); break; }
+            char raceName[64];
+            const unsigned char clampedNameLen = static_cast<unsigned char>(std::min<size_t>(nameLen, sizeof(raceName) - 1));
+            memcpy(raceName, p, clampedNameLen);
+            raceName[clampedNameLen] = '\0';
+
+            static const char* const kValidTracks[] = {"ClassicH", "Steeplechase", "The Alley2", "The River"};
+            bool trackOk = false;
+            for (const char* t : kValidTracks) { if (strcmp(t, trackName) == 0) { trackOk = true; break; } }
+
+            if (!trackOk || pRaceManager->FindRaceByName(raceName) >= 0) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE rejected (track_ok=%d, name='%s' taken=%d)",
+                             pConn->mClientId, trackOk, raceName, pRaceManager->FindRaceByName(raceName) >= 0);
+                MessageBuffer failMsg;
+                failMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE, raceId=-1 means "failed"
+                const int failId = -1;
+                memcpy(&failMsg.data[0], &failId, sizeof(failId));
+                failMsg.data[4] = 0;
+                failMsg.dataLen = 5;
+                send(pConn->mTcpSocket, (const char*)&failMsg, 3 + failMsg.dataLen, 0);
+                break;
+            }
+
+            pConn->mRaceId = pRaceManager->CreateRace(raceName, trackName, numLaps, weaponsAllowed ? TRUE : FALSE,
+                                                       pConn->mClientId);
+            if (pConn->mRaceId < 0) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d: could not create race '%s'", pConn->mClientId, raceName);
+                break;
+            }
+
+            snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
+            pRaceManager->JoinRace(pConn->mRaceId, pConn->mClientId, pConn->mPlayerName);
+            g_Logger.Log(MR_LOG_INFO, "Client %d hosted race %d '%s': track=%s laps=%d weapons=%s",
+                         pConn->mClientId, pConn->mRaceId, raceName, trackName, numLaps,
+                         weaponsAllowed ? "yes" : "no");
+
+            FinishJoiningRace(pConn, pRaceManager);
+            break;
+        }
+
         case 6:   // MRNM_CHAT_MESSAGE
         {
             // Chat is scoped to wherever the sender currently is: other members of
@@ -559,6 +547,64 @@ void MR_ServerSocket::ReceiveDatagram()
 {
     // TODO: Implement UDP datagram receive
     // Read datagram from mDatagramSocket
+}
+
+void MR_ServerSocket::FinishJoiningRace(ClientConnection* pConn, MR_RaceManager* pRaceManager)
+{
+    // Ack the join so the client knows its race id and, critically, whether it's
+    // the creator -- only the creator may later start the race.
+    {
+        RaceSession* pRace = pRaceManager->GetRace(pConn->mRaceId);
+        MessageBuffer ackMsg;
+        ackMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE
+        memcpy(&ackMsg.data[0], &pConn->mRaceId, sizeof(pConn->mRaceId));
+        ackMsg.data[4] = (pRace != nullptr && pRace->IsCreator(pConn->mClientId)) ? 1 : 0;
+        ackMsg.dataLen = 5;
+        send(pConn->mTcpSocket, (const char*)&ackMsg, 3 + ackMsg.dataLen, 0);
+    }
+
+    // Send CONN_NAME_SET messages for all other clients already in this race so
+    // this client knows about the other players.
+    for (auto& pair : mConnections) {
+        int otherId = pair.first;
+        ClientConnection* pOther = pair.second;
+
+        if (pOther && pOther->mConnected && otherId != pConn->mClientId && pOther->mRaceId == pConn->mRaceId) {
+            MessageBuffer msg;
+            msg.header = MakeMessageHeader(44);  // MRNM_CONN_NAME_SET = 44
+
+            unsigned int udpPort = 9601 + otherId;
+            *(unsigned int*)&msg.data[0] = udpPort;
+
+            int nameLen = strlen(pOther->mPlayerName);
+            memcpy(&msg.data[4], pOther->mPlayerName, nameLen);
+            msg.dataLen = 4 + nameLen;
+
+            int msgSize = 3 + msg.dataLen;
+            send(pConn->mTcpSocket, (const char*)&msg, msgSize, 0);
+        }
+    }
+
+    // Notify all OTHER clients in this race about the new player.
+    for (auto& pair : mConnections) {
+        int otherId = pair.first;
+        ClientConnection* pOther = pair.second;
+
+        if (pOther && pOther->mConnected && otherId != pConn->mClientId && pOther->mRaceId == pConn->mRaceId) {
+            MessageBuffer msg;
+            msg.header = MakeMessageHeader(44);  // MRNM_CONN_NAME_SET = 44
+
+            unsigned int udpPort = 9601 + pConn->mClientId;
+            *(unsigned int*)&msg.data[0] = udpPort;
+
+            int nameLen = strlen(pConn->mPlayerName);
+            memcpy(&msg.data[4], pConn->mPlayerName, nameLen);
+            msg.dataLen = 4 + nameLen;
+
+            int msgSize = 3 + msg.dataLen;
+            send(pOther->mTcpSocket, (const char*)&msg, msgSize, 0);
+        }
+    }
 }
 
 void MR_ServerSocket::BroadcastToRace(

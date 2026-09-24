@@ -23,6 +23,7 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -311,6 +312,54 @@ enum class LobbyInputMode
     eChat,
 };
 
+enum class HostSetupStep
+{
+    eTrack,
+    eLaps,
+    eWeapons,
+    eName,
+};
+
+// Tracks the server will actually accept (kept in sync with the whitelist in
+// ServerSocket.cpp's eRSMsgHostRace handler).
+const char* const kHostableTracks[] = {"ClassicH", "Steeplechase", "The Alley2", "The River"};
+constexpr int kHostableTrackCount = 4;
+
+struct HostPrefs
+{
+    int mTrackIndex = 0;
+    int mLaps = 5;
+    bool mWeapons = false;
+};
+
+std::string HostPrefsPath()
+{
+    const char* home = std::getenv("HOME");
+    return std::string(home != nullptr ? home : ".") + "/.hovernet_host_prefs";
+}
+
+// "Remember last choice" for hosting settings, across process runs, per the user's
+// own machine -- deliberately simple (one line, three ints) rather than a general
+// config format, since this is the only thing it stores.
+HostPrefs LoadHostPrefs()
+{
+    HostPrefs prefs;
+    std::ifstream in(HostPrefsPath());
+    int track = 0, laps = 0, weapons = 0;
+    if (in >> track >> laps >> weapons) {
+        if (track >= 0 && track < kHostableTrackCount) { prefs.mTrackIndex = track; }
+        if (laps >= 1 && laps <= 20) { prefs.mLaps = laps; }
+        prefs.mWeapons = weapons != 0;
+    }
+    return prefs;
+}
+
+void SaveHostPrefs(const HostPrefs& prefs)
+{
+    std::ofstream out(HostPrefsPath());
+    out << prefs.mTrackIndex << ' ' << prefs.mLaps << ' ' << (prefs.mWeapons ? 1 : 0) << '\n';
+}
+
 enum class LobbyPhase
 {
     eBrowsing,    // Picking or naming a race
@@ -353,6 +402,9 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     std::vector<std::string> raceMembers;
     int framesShown = 0;
 
+    HostSetupStep hostStep = HostSetupStep::eTrack;
+    HostPrefs hostPrefs = LoadHostPrefs();
+
     SDL_StartTextInput();
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
@@ -361,8 +413,14 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             if (event.type == SDL_QUIT) {
                 running = false;
             }
-            else if (inputMode != LobbyInputMode::eNone && event.type == SDL_TEXTINPUT) {
+            else if (inputMode == LobbyInputMode::eChat && event.type == SDL_TEXTINPUT) {
                 if (inputBuffer.size() < 60) {
+                    inputBuffer += event.text.text;
+                }
+            }
+            else if (inputMode == LobbyInputMode::eHostRace && hostStep == HostSetupStep::eName &&
+                     event.type == SDL_TEXTINPUT) {
+                if (inputBuffer.size() < 32) {
                     inputBuffer += event.text.text;
                 }
             }
@@ -378,17 +436,51 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     }
                 }
                 else if (inputMode == LobbyInputMode::eHostRace) {
-                    if (key == SDLK_BACKSPACE && !inputBuffer.empty()) {
-                        inputBuffer.pop_back();
-                    }
-                    else if (key == SDLK_RETURN && !inputBuffer.empty()) {
-                        if (client.JoinGame(inputBuffer)) {
-                            outJoinedName = inputBuffer;
-                            phase = LobbyPhase::eWaitingRoom;
-                            inputMode = LobbyInputMode::eNone;
-                            raceMembers.clear();
+                    if (hostStep == HostSetupStep::eTrack) {
+                        if (key == SDLK_LEFT) {
+                            hostPrefs.mTrackIndex = (hostPrefs.mTrackIndex + kHostableTrackCount - 1) % kHostableTrackCount;
                         }
-                        inputBuffer.clear();
+                        else if (key == SDLK_RIGHT) {
+                            hostPrefs.mTrackIndex = (hostPrefs.mTrackIndex + 1) % kHostableTrackCount;
+                        }
+                        else if (key == SDLK_RETURN) {
+                            hostStep = HostSetupStep::eLaps;
+                        }
+                    }
+                    else if (hostStep == HostSetupStep::eLaps) {
+                        if (key == SDLK_UP || key == SDLK_RIGHT) {
+                            hostPrefs.mLaps = std::min(20, hostPrefs.mLaps + 1);
+                        }
+                        else if (key == SDLK_DOWN || key == SDLK_LEFT) {
+                            hostPrefs.mLaps = std::max(1, hostPrefs.mLaps - 1);
+                        }
+                        else if (key == SDLK_RETURN) {
+                            hostStep = HostSetupStep::eWeapons;
+                        }
+                    }
+                    else if (hostStep == HostSetupStep::eWeapons) {
+                        if (key == SDLK_LEFT || key == SDLK_RIGHT || key == SDLK_SPACE) {
+                            hostPrefs.mWeapons = !hostPrefs.mWeapons;
+                        }
+                        else if (key == SDLK_RETURN) {
+                            hostStep = HostSetupStep::eName;
+                        }
+                    }
+                    else if (hostStep == HostSetupStep::eName) {
+                        if (key == SDLK_BACKSPACE && !inputBuffer.empty()) {
+                            inputBuffer.pop_back();
+                        }
+                        else if (key == SDLK_RETURN && !inputBuffer.empty()) {
+                            if (client.HostRace(inputBuffer, kHostableTracks[hostPrefs.mTrackIndex],
+                                                hostPrefs.mLaps, hostPrefs.mWeapons)) {
+                                outJoinedName = inputBuffer;
+                                phase = LobbyPhase::eWaitingRoom;
+                                inputMode = LobbyInputMode::eNone;
+                                raceMembers.clear();
+                                SaveHostPrefs(hostPrefs);
+                            }
+                            inputBuffer.clear();
+                        }
                     }
                 }
                 else if (inputMode == LobbyInputMode::eChat) {
@@ -420,6 +512,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     }
                     else if (key == SDLK_n) {
                         inputMode = LobbyInputMode::eHostRace;
+                        hostStep = HostSetupStep::eTrack;
                         inputBuffer.clear();
                     }
                     else if (key == SDLK_RETURN && !games.empty()) {
@@ -465,7 +558,16 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             else if (message.mType == eRSMsgJoinedRace) {
                 RaceServerJoinAck ack;
                 if (RaceServerClient::ParseJoinedRace(message, ack)) {
-                    isHost = ack.mIsHost;
+                    if (ack.mRaceId < 0) {
+                        // The server rejected the pending host request (an unknown
+                        // track, or the race name is already taken). The UI already
+                        // optimistically moved to the waiting room on send; undo that.
+                        phase = LobbyPhase::eBrowsing;
+                        pushChat("* Could not host '" + outJoinedName + "' (name taken or bad track)");
+                    }
+                    else {
+                        isHost = ack.mIsHost;
+                    }
                 }
             }
             else if (message.mType == eRSMsgConnNameSet) {
@@ -541,11 +643,36 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         y += lineHeight;
 
         if (inputMode == LobbyInputMode::eHostRace) {
-            char line[80];
-            std::snprintf(line, sizeof(line), "New race name: %s_", inputBuffer.c_str());
+            char line[96];
+            std::snprintf(line, sizeof(line), "%sTrack: %s%s",
+                          hostStep == HostSetupStep::eTrack ? "> " : "  ",
+                          kHostableTracks[hostPrefs.mTrackIndex],
+                          hostStep == HostSetupStep::eTrack ? "  (Left/Right, Enter)" : "");
             DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
             y += lineHeight;
-            DrawUiText(font, 20, y, "Enter: host it   Esc: cancel", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+
+            std::snprintf(line, sizeof(line), "%sLaps: %d%s", hostStep == HostSetupStep::eLaps ? "> " : "  ",
+                          hostPrefs.mLaps, hostStep == HostSetupStep::eLaps ? "  (Up/Down, Enter)" : "");
+            DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            y += lineHeight;
+
+            std::snprintf(line, sizeof(line), "%sWeapons: %s%s", hostStep == HostSetupStep::eWeapons ? "> " : "  ",
+                          hostPrefs.mWeapons ? "On" : "Off",
+                          hostStep == HostSetupStep::eWeapons ? "  (Left/Right, Enter)" : "");
+            DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            y += lineHeight;
+
+            if (hostStep == HostSetupStep::eName) {
+                std::snprintf(line, sizeof(line), "> Race name: %s_", inputBuffer.c_str());
+                DrawUiText(font, 20, y, line, &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+                y += lineHeight;
+                DrawUiText(font, 20, y, "Enter: host it   Esc: cancel", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            }
+            else {
+                DrawUiText(font, 20, y, "  Race name: (not set yet)", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+                y += lineHeight;
+                DrawUiText(font, 20, y, "Esc: cancel", &viewport, MR_Sprite::eLeft, MR_Sprite::eTop);
+            }
         }
         else if (inputMode == LobbyInputMode::eChat) {
             char line[80];

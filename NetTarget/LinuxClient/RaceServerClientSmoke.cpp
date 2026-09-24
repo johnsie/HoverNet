@@ -351,6 +351,100 @@ namespace
         }
         std::printf("Host-controlled race start works and reaches all players together\n");
 
+        // Hosting with explicit track/laps/weapons: settings must round-trip into the
+        // lobby listing, and both an unknown track and a duplicate race name must be
+        // rejected (eRSMsgJoinedRace with raceId == -1), not silently accepted.
+        RaceServerClient lConfiguredHost;
+        if (!lConfiguredHost.Connect("127.0.0.1", pPort))
+        {
+            std::fprintf(stderr, "Could not connect configured-host client\n");
+            return false;
+        }
+        if (!lConfiguredHost.HostRace("configured-race", "Steeplechase", 7, true))
+        {
+            std::fprintf(stderr, "Failed to send HostRace request\n");
+            return false;
+        }
+        RaceServerJoinAck lConfiguredAck;
+        bool lGotConfiguredAck = false;
+        for (int lTries = 0; lTries < 20 && !lGotConfiguredAck; ++lTries)
+        {
+            if (lConfiguredHost.PollMessage(lMessage, 200) &&
+                RaceServerClient::ParseJoinedRace(lMessage, lConfiguredAck))
+            {
+                lGotConfiguredAck = true;
+            }
+        }
+        if (!lGotConfiguredAck || lConfiguredAck.mRaceId < 0 || !lConfiguredAck.mIsHost)
+        {
+            std::fprintf(stderr, "HostRace with valid settings was not accepted\n");
+            return false;
+        }
+
+        if (!lLister.ListGames(lGames))
+        {
+            std::fprintf(stderr, "ListGames failed after HostRace\n");
+            return false;
+        }
+        const RaceServerGameInfo* lConfigured = nullptr;
+        for (const RaceServerGameInfo& lGame : lGames)
+        {
+            if (lGame.mName == "configured-race") { lConfigured = &lGame; }
+        }
+        if (lConfigured == nullptr || lConfigured->mTrack != "Steeplechase" || lConfigured->mNumLaps != 7)
+        {
+            std::fprintf(stderr, "Configured race's track/laps didn't reach the lobby listing\n");
+            return false;
+        }
+        std::printf("HostRace with explicit track/laps/weapons works\n");
+
+        RaceServerClient lBadTrackHost;
+        if (!lBadTrackHost.Connect("127.0.0.1", pPort) ||
+            !lBadTrackHost.HostRace("bad-track-race", "NotARealTrack", 3, false))
+        {
+            std::fprintf(stderr, "Could not send an unknown-track HostRace request\n");
+            return false;
+        }
+        RaceServerJoinAck lBadTrackAck;
+        bool lGotBadTrackAck = false;
+        for (int lTries = 0; lTries < 20 && !lGotBadTrackAck; ++lTries)
+        {
+            if (lBadTrackHost.PollMessage(lMessage, 200) &&
+                RaceServerClient::ParseJoinedRace(lMessage, lBadTrackAck))
+            {
+                lGotBadTrackAck = true;
+            }
+        }
+        if (!lGotBadTrackAck || lBadTrackAck.mRaceId != -1)
+        {
+            std::fprintf(stderr, "HostRace with an unknown track was not rejected\n");
+            return false;
+        }
+
+        RaceServerClient lDupeNameHost;
+        if (!lDupeNameHost.Connect("127.0.0.1", pPort) ||
+            !lDupeNameHost.HostRace("configured-race", "ClassicH", 3, false))
+        {
+            std::fprintf(stderr, "Could not send a duplicate-name HostRace request\n");
+            return false;
+        }
+        RaceServerJoinAck lDupeNameAck;
+        bool lGotDupeNameAck = false;
+        for (int lTries = 0; lTries < 20 && !lGotDupeNameAck; ++lTries)
+        {
+            if (lDupeNameHost.PollMessage(lMessage, 200) &&
+                RaceServerClient::ParseJoinedRace(lMessage, lDupeNameAck))
+            {
+                lGotDupeNameAck = true;
+            }
+        }
+        if (!lGotDupeNameAck || lDupeNameAck.mRaceId != -1)
+        {
+            std::fprintf(stderr, "HostRace with an already-taken race name was not rejected\n");
+            return false;
+        }
+        std::printf("HostRace correctly rejects an unknown track and a duplicate race name\n");
+
         return true;
     }
 }

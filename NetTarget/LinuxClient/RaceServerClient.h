@@ -36,6 +36,7 @@ enum MR_RaceServerMessageType
     // silently wraps around to a different, already-used type.
     eRSMsgStartRace        = 52,  // Client -> Server: race creator asks to start (ignored otherwise)
     eRSMsgRaceStarted      = 53,  // Server -> Client: broadcast to every player in the race at once
+    eRSMsgHostRace         = 54,  // Client -> Server: create a race with explicit track/laps/weapons
 };
 
 // One race as reported by eRSMsgGameInfo.
@@ -62,7 +63,9 @@ struct RaceServerPeer
     std::string mName;
 };
 
-// The server's reply to a successful eRSMsgGameName join/create.
+// The server's reply to eRSMsgGameName or eRSMsgHostRace. mRaceId == -1 means the
+// request was rejected (eRSMsgHostRace only: unknown track, or the race name is
+// already taken).
 struct RaceServerJoinAck
 {
     int mRaceId = -1;
@@ -88,6 +91,12 @@ public:
 
     // Convenience: joins race server matchmaking under the given game/session name.
     bool JoinGame(const std::string& gameName);
+
+    // Convenience: creates a race with explicit settings. Fails (returns false, no
+    // message sent) if any field is oversized; the server separately rejects an
+    // unknown track or an already-taken race name via eRSMsgJoinedRace(raceId=-1).
+    bool HostRace(const std::string& raceName, const std::string& trackName, int numLaps,
+                 bool weaponsAllowed);
 
     // Waits up to pTimeoutMs for one complete message. Returns false on timeout,
     // disconnect, or malformed data.
