@@ -813,8 +813,24 @@ BOOL MR_NetworkSession::CreateMainCharacter()
 
    // Insert the character in the current level
    MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
-      
- 
+
+   if( mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
+   {
+      // MR_ServerSocket::FinishJoiningRace sends this client's join ack immediately
+      // followed by a CONN_NAME_SET announcement for every player already in the
+      // race. Those normally arrive (or are already sitting in the socket's receive
+      // buffer) within milliseconds of the ack itself, but nothing has drained them
+      // yet at this point -- mNetInterface's peer-slot table is still empty, so the
+      // start slot and hover colour computed just below would always come out as
+      // slot 0 regardless of how many players joined before this one. Drain now so
+      // already-present players are known before that computation happens.
+      for( int lAttempt = 0; lAttempt < 20; lAttempt++ )
+      {
+         ReadNet();
+         Sleep( 5 );
+      }
+   }
+
    const int lStartSlot = lCurrentLevel->GetPlayerCount() > 0 ?
       mNetInterface.GetId() % lCurrentLevel->GetPlayerCount() : 0;
    mMainCharacter1->mPosition    = lCurrentLevel->GetStartingPos( lStartSlot );
