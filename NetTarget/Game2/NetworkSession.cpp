@@ -483,8 +483,14 @@ void MR_NetworkSession::ReadNet( )
 
          case MRNM_SET_MAIN_ELEM_STATE:
             {
+               // Only log once the race has actually started (simTime >= 0) -- the
+               // ~20s pre-race countdown alone generates far more than 40 calls at
+               // this message rate, which used up the whole throttle budget on
+               // messages that are *supposed* to be dropped and never reached the
+               // window anyone actually cares about.
                static int sLogCount = 0;
-               const BOOL lShouldLog = mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED && sLogCount < 40;
+               const BOOL lShouldLog = mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED &&
+                                       mSession.GetSimulationTime() >= 0 && sLogCount < 80;
 
                EnsureServerPeerCharacter( lClientId );
                if( mClientCharacter[ lClientId ] != NULL )
@@ -1178,7 +1184,7 @@ void MR_NetworkSession::BroadcastMainElementState( const MR_ElementNetState& pSt
       const BOOL lSent = mNetInterface.BroadcastMessage( &lMessage, MR_NET_REQUIRED );
 
       static int sLogCount = 0;
-      if( sLogCount < 40 )
+      if( mSession.GetSimulationTime() >= 0 && sLogCount < 80 )
       {
          LogNetSync( "BroadcastMainElementState: localClientId=%d dataLen=%d sent=%d pos=(%d,%d,%d)",
                      lLocalClientId, (int)lMessage.mDataLen, (int)lSent,
