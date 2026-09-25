@@ -494,8 +494,8 @@ void BroadcastCreatedElement(MR_FreeElement* pElement, int pRoom, void* pHookDat
 // just this function the way it could when all it did was browse/chat.
 bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                     const MR_Sprite& font, RaceServerClient& pClient, const std::string& host, unsigned port,
-                    std::string& outJoinedName, int& outLocalClientId, std::vector<RaceServerPeer>& outPeers,
-                    int pFrameLimit)
+                    std::string& outJoinedName, std::string& outTrackName, int& outNumLaps,
+                    int& outLocalClientId, std::vector<RaceServerPeer>& outPeers, int pFrameLimit)
 {
     const int bodyScale = 2;
     const int bodyHeight = std::max(12, font.GetItemHeight() / bodyScale);
@@ -578,6 +578,8 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             const RaceServerGameInfo& game = games[static_cast<std::size_t>(selected)];
             if (client.JoinGameById(game.mRaceId)) {
                 outJoinedName = game.mName;
+                outTrackName = game.mTrack;
+                outNumLaps = std::max(1, game.mNumLaps);
                 phase = LobbyPhase::eWaitingRoom;
                 raceMembers.clear();
                 statusText = "Joined - waiting for the race to start";
@@ -593,10 +595,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         }
         else {
             // The race name is just the track name -- no reason to make the host
-            // type one. Only one open race per track can exist at a time as a
-            // result (the server rejects a duplicate name), which is an acceptable
-            // trade for not prompting for a name.
+            // type one. Two people can host the same track at once now (races are
+            // joined by id, see JoinGameById), so this no longer collides.
             const std::string raceName = kHostableTracks[hostPrefs.mTrackIndex];
+            outTrackName = kHostableTracks[hostPrefs.mTrackIndex];
+            outNumLaps = hostPrefs.mLaps;
             if (client.HostRace(raceName, kHostableTracks[hostPrefs.mTrackIndex],
                                  hostPrefs.mLaps, hostPrefs.mWeapons)) {
                 outJoinedName = raceName;
@@ -607,7 +610,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 statusText = "Race created - waiting for players";
             }
             else {
-                statusText = "Could not host: a " + raceName + " race is already open";
+                // HostRace() only fails a client-side size check (or the socket
+                // being down); the server's own verdict (e.g. an unknown track)
+                // always arrives later as an async eRSMsgJoinedRace(raceId=-1),
+                // handled below.
+                statusText = "Could not send host request";
             }
         }
     };
@@ -806,12 +813,13 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 RaceServerJoinAck ack;
                 if (RaceServerClient::ParseJoinedRace(message, ack)) {
                     if (ack.mRaceId < 0) {
-                        // The server rejected the pending host request (an unknown
-                        // track, or the race name is already taken). The UI already
-                        // optimistically moved to the waiting room on send; undo that.
+                        // The server rejected the pending host request (unknown
+                        // track) or the joined race no longer exists. The UI
+                        // already optimistically moved to the waiting room on
+                        // send; undo that.
                         phase = LobbyPhase::eBrowsing;
                         statusText = "Could not create race";
-                        pushChat("* Could not host '" + outJoinedName + "' (name taken or bad track)");
+                        pushChat("* Could not host or join '" + outJoinedName + "'");
                     }
                     else {
                         isHost = ack.mIsHost;
@@ -1410,17 +1418,42 @@ int main(int argc, char** argv)
 
     auto joinOnlineRace = [&]() -> bool {
         std::string joinedRace;
+        std::string joinedTrack;
+        int joinedLaps = 1;
         std::vector<RaceServerPeer> knownPeers;
         localClientId = -1;
         if (menuFontHandle == nullptr ||
             !RunLobbyScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(), onlineClient,
-                            lobbyHost, lobbyPort, joinedRace, localClientId, knownPeers, frameLimit)) {
+                            lobbyHost, lobbyPort, joinedRace, joinedTrack, joinedLaps, localClientId,
+                            knownPeers, frameLimit)) {
             onlineClient.Disconnect();
             return false;
         }
 
         std::printf("Joined race %c%s%c via the lobby (%zu other player(s) already in)\n",
                     39, joinedRace.c_str(), 39, knownPeers.size());
+
+        // The level loaded at startup (or left over from a previous online race) is
+        // whatever track happened to be current before this -- reload with the
+        // track this race actually uses. LoadNew() invalidates the previous
+        // MR_MainCharacter (see its own comment: "a newly loaded track owns a
+        // completely new element graph"), so the local player has to be recreated
+        // too, and every stale remote craft from any earlier race dropped.
+        if (!joinedTrack.empty()) {
+            MR_RecordFile* joinedTrackFile = new MR_RecordFile;
+            const std::string joinedTrackPath = SourcePath(("NetTarget/Tracks/" + joinedTrack + ".trk").c_str());
+            if (!joinedTrackFile->OpenForRead(joinedTrackPath.c_str()) ||
+                !session.LoadNew(joinedTrack.c_str(), joinedTrackFile, joinedLaps, allowWeapons, &buffer) ||
+                session.GetCurrentLevel() == nullptr || !session.CreateMainCharacter()) {
+                std::fprintf(stderr, "Could not load '%s' for the joined race\n", joinedTrack.c_str());
+                onlineClient.Disconnect();
+                return false;
+            }
+            level = session.GetCurrentLevel();
+            mainCharacter = session.GetMainCharacter();
+            remotePlayers.clear();
+        }
+
         session.SetSimulationTime(-6000);
 
         std::vector<int> raceClientIds;
