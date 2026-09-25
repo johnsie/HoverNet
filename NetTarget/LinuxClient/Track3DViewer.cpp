@@ -417,7 +417,6 @@ enum class HostSetupStep
     eTrack,
     eLaps,
     eWeapons,
-    eName,
 };
 
 // Tracks the server will actually accept (kept in sync with the whitelist in
@@ -592,20 +591,24 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         else if (hostStep == HostSetupStep::eLaps) {
             hostStep = HostSetupStep::eWeapons;
         }
-        else if (hostStep == HostSetupStep::eWeapons) {
-            hostStep = HostSetupStep::eName;
-            inputBuffer.clear();
-        }
-        else if (!inputBuffer.empty() &&
-                 client.HostRace(inputBuffer, kHostableTracks[hostPrefs.mTrackIndex],
+        else {
+            // The race name is just the track name -- no reason to make the host
+            // type one. Only one open race per track can exist at a time as a
+            // result (the server rejects a duplicate name), which is an acceptable
+            // trade for not prompting for a name.
+            const std::string raceName = kHostableTracks[hostPrefs.mTrackIndex];
+            if (client.HostRace(raceName, kHostableTracks[hostPrefs.mTrackIndex],
                                  hostPrefs.mLaps, hostPrefs.mWeapons)) {
-            outJoinedName = inputBuffer;
-            phase = LobbyPhase::eWaitingRoom;
-            inputMode = LobbyInputMode::eNone;
-            raceMembers.clear();
-            SaveHostPrefs(hostPrefs);
-            statusText = "Race created - waiting for players";
-            inputBuffer.clear();
+                outJoinedName = raceName;
+                phase = LobbyPhase::eWaitingRoom;
+                inputMode = LobbyInputMode::eNone;
+                raceMembers.clear();
+                SaveHostPrefs(hostPrefs);
+                statusText = "Race created - waiting for players";
+            }
+            else {
+                statusText = "Could not host: a " + raceName + " race is already open";
+            }
         }
     };
 
@@ -619,12 +622,6 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             }
             else if (inputMode == LobbyInputMode::eChat && event.type == SDL_TEXTINPUT) {
                 if (inputBuffer.size() < 60) {
-                    inputBuffer += event.text.text;
-                }
-            }
-            else if (inputMode == LobbyInputMode::eHostRace && hostStep == HostSetupStep::eName &&
-                     event.type == SDL_TEXTINPUT) {
-                if (inputBuffer.size() < 32) {
                     inputBuffer += event.text.text;
                 }
             }
@@ -724,14 +721,6 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                             hostPrefs.mWeapons = !hostPrefs.mWeapons;
                         }
                         else if (key == SDLK_RETURN) {
-                            advanceHostSetup();
-                        }
-                    }
-                    else if (hostStep == HostSetupStep::eName) {
-                        if (key == SDLK_BACKSPACE && !inputBuffer.empty()) {
-                            inputBuffer.pop_back();
-                        }
-                        else if (key == SDLK_RETURN && !inputBuffer.empty()) {
                             advanceHostSetup();
                         }
                     }
@@ -953,14 +942,8 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                           hostStep == HostSetupStep::eWeapons ? ">" : " ", hostPrefs.mWeapons ? "On" : "Off");
             DrawUiText(font, actionPanel.x + 20, fieldY, field, &viewport,
                        MR_Sprite::eLeft, MR_Sprite::eTop, bodyScale);
-            fieldY += lineHeight;
-            const std::string raceName = hostStep == HostSetupStep::eName
-                ? "> Race name: " + inputBuffer + "_" : "  Race name: not set";
-            const std::string fittedName = fitText(raceName, actionPanel.w - 40);
-            DrawUiText(font, actionPanel.x + 20, fieldY, fittedName.c_str(), &viewport,
-                       MR_Sprite::eLeft, MR_Sprite::eTop, bodyScale);
             DrawUiButton(buffer, font, viewport, primaryAction,
-                         hostStep == HostSetupStep::eName ? "Create Race" : "Next", true);
+                         hostStep == HostSetupStep::eWeapons ? "Create Race" : "Next", true);
             DrawUiButton(buffer, font, viewport, cancelAction, "Cancel");
         }
         else if (phase == LobbyPhase::eWaitingRoom) {
