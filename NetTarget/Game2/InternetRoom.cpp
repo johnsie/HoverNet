@@ -113,7 +113,7 @@ MR_InternetRoom* MR_InternetRoom::mThis = NULL;
 
 namespace
 {
-   const char* const kDefaultRaceServerHost = "192.168.10.181";
+   const char* const kDefaultRaceServerHost = "outiva.com";
    const unsigned kDefaultRaceServerPort = 9600;
    const UINT_PTR kRaceServerRefreshTimer = 2001;
    RaceServerClient gRaceServerLobby;
@@ -786,11 +786,11 @@ int MR_InternetRoom::ParseState( const char* pAnswer )
                            // (ignore what InternetRoom3 sends, as it may be incorrect)
                            const char* lLineStr = GetLine( lLinePtr );
                            if(lInitLog) fprintf(lInitLog, "Full line: '%s'\n", lLineStr), fflush(lInitLog);
-                           if(lInitLog) fprintf(lInitLog, "Ignoring received SERVER_ADDR, using hardcoded 192.168.10.181:9600\n"), fflush(lInitLog);
+                           if(lInitLog) fprintf(lInitLog, "Ignoring received SERVER_ADDR, using configured %s:%u\n",
+                              (const char*)gRaceServerHost, gRaceServerPort), fflush(lInitLog);
                            
-                           // Hardcode the RaceServer address
-                           mGameList[ lEntry ].mServerAddr = "192.168.10.181";
-                           mGameList[ lEntry ].mServerPort = 9600;
+                           mGameList[ lEntry ].mServerAddr = gRaceServerHost;
+                           mGameList[ lEntry ].mServerPort = gRaceServerPort;
                         }
                         else if(lLinePtr != NULL)
                         {
@@ -2882,13 +2882,17 @@ BOOL CALLBACK MR_InternetRoom::RoomCallBack( HWND pWindow, UINT  pMsgId, WPARAM 
                         lTrackName.Format( "%s  %d laps %s", (const char*)lCurrentTrack, lNbLap, lAllowWeapons?"with weapons":"no weapons" );
 
                         // Set connection mode to server-hosted before connecting
-                        mThis->mSession->SetConnectionMode( MR_CONNECTION_SERVER_HOSTED, "192.168.10.181", 9600 );
+                        mThis->mSession->SetConnectionMode( MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort );
 
                         // DEBUG: Confirm we're attempting server-hosted connection
-                        MessageBox( pWindow, "Attempting to connect to RaceServer on 192.168.10.181:9600...", "Server-Hosted Race", MB_ICONINFORMATION|MB_OK|MB_APPLMODAL );
+                        CString lConnectionMessage;
+                        lConnectionMessage.Format( "Attempting to connect to RaceServer on %s:%u...",
+                                                   (const char*)gRaceServerHost, gRaceServerPort );
+                        MessageBox( pWindow, lConnectionMessage, "Server-Hosted Race", MB_ICONINFORMATION|MB_OK|MB_APPLMODAL );
 
                         // Connect to RaceServer as a client (not as a peer master)
-                        lSuccess = mThis->mSession->ConnectToServer( pWindow, "192.168.10.181", 9600, (const char*)lTrackName, &mThis->mModelessDlg, MRM_DLG_END_ADD );                        if( !lSuccess )
+                        lSuccess = mThis->mSession->ConnectToServer( pWindow, gRaceServerHost, gRaceServerPort, (const char*)lTrackName, &mThis->mModelessDlg, MRM_DLG_END_ADD );
+                        if( !lSuccess )
                         {
                            // Unregister Game
                            mThis->DelGameOp( pWindow );

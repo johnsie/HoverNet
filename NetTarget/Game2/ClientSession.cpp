@@ -5,8 +5,8 @@
 // Licensed under GrokkSoft HoverRace SourceCode License v1.0(the "License");
 // you may not use this file except in compliance with the License.
 //
-// A copy of the license should have been attached to the package from which 
-// you have taken this file. If you can not find the license you can not use 
+// A copy of the license should have been attached to the package from which
+// you have taken this file. If you can not find the license you can not use
 // this file.
 //
 //
@@ -15,7 +15,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied.
 //
-// See the License for the specific language governing permissions 
+// See the License for the specific language governing permissions
 // and limitations under the License.
 //
 
@@ -70,7 +70,7 @@ void MR_ClientSession::ReadLevelAttrib( MR_RecordFile* pRecordFile, MR_VideoBuff
          if( lImageType == MR_RAWBITMAP )
          {
             MR_UInt8* lPalette = new MR_UInt8[ MR_BACK_COLORS*3 ];
-         
+
             if( mBackImage == NULL )
             {
                mBackImage = new MR_UInt8[ MR_BACK_X_RES*MR_BACK_Y_RES ];
@@ -127,16 +127,22 @@ BOOL MR_ClientSession::LoadNew( const char* pTitle, MR_RecordFile* pMazeFile, in
 {
    BOOL lReturnValue;
    FILE* logFile = NULL;
-   
+
    if(logFile) fprintf(logFile, "\n--- MR_ClientSession::LoadNew START ---\n"), fflush(logFile);
    if(logFile) fprintf(logFile, "  pTitle='%s'\n", pTitle), fflush(logFile);
    if(logFile) fprintf(logFile, "  pMazeFile=%p\n", pMazeFile), fflush(logFile);
    if(logFile) fprintf(logFile, "  pNbLap=%d, pAllowWeapons=%d\n", pNbLap, pAllowWeapons), fflush(logFile);
    if(logFile) fprintf(logFile, "  pVideo=%p\n", pVideo), fflush(logFile);
-   
+
    mNbLap        = pNbLap;
-   mAllowWeapons = pAllowWeapons; 
-   
+   mAllowWeapons = pAllowWeapons;
+
+   // A newly loaded track owns a completely new element graph. Clear every
+   // cached character pointer before MR_GameSession deletes the old level.
+   mMainCharacter1 = NULL;
+   mMainCharacter2 = NULL;
+   mRemoteCharacters.clear();
+
    if(logFile) fprintf(logFile, "  About to call mSession.LoadNew()\n"), fflush(logFile);
    try
    {
@@ -178,7 +184,7 @@ BOOL MR_ClientSession::LoadNew( const char* pTitle, MR_RecordFile* pMazeFile, in
 
    if(logFile) fprintf(logFile, "--- MR_ClientSession::LoadNew END, returning: %s ---\n", lReturnValue ? "TRUE" : "FALSE"), fflush(logFile);
    if(logFile) fclose(logFile);
-   
+
    return lReturnValue;
 }
 
@@ -194,8 +200,8 @@ BOOL MR_ClientSession::CreateMainCharacter()
    FILE* logFile = NULL;
    if(logFile) fprintf(logFile, "\n--- MR_ClientSession::CreateMainCharacter START ---\n"), fflush(logFile);
 
-   // Add a main character in 
-   
+   // Add a main character in
+
    ASSERT( mMainCharacter1 == NULL ); // why creating it twice?
    ASSERT( mSession.GetCurrentLevel() != NULL );
 
@@ -207,19 +213,19 @@ BOOL MR_ClientSession::CreateMainCharacter()
       // Insert the character in the current level
       MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
       if(logFile) fprintf(logFile, "  Got current level: %p\n", lCurrentLevel), fflush(logFile);
-      
+
       if(logFile) fprintf(logFile, "  About to set mRoom, mPosition, Orientation\n"), fflush(logFile);
-      mMainCharacter1->mRoom        = lCurrentLevel->GetStartingRoom( 0 ); 
+      mMainCharacter1->mRoom        = lCurrentLevel->GetStartingRoom( 0 );
       mMainCharacter1->mPosition    = lCurrentLevel->GetStartingPos( 0 );
       mMainCharacter1->SetOrientation( lCurrentLevel->GetStartingOrientation( 0 ));
       mMainCharacter1->SetHoverId( 0 );
       if(logFile) fprintf(logFile, "  Properties set successfully\n"), fflush(logFile);
 
       if(logFile) fprintf(logFile, "  About to InsertElement (starting room=%d)\n", lCurrentLevel->GetStartingRoom(0)), fflush(logFile);
-      
+
       int lStartingRoom = lCurrentLevel->GetStartingRoom(0);
       if(logFile) fprintf(logFile, "    Starting room value: %d\n", lStartingRoom), fflush(logFile);
-      
+
       try {
          lCurrentLevel->InsertElement( mMainCharacter1, lStartingRoom);
          if(logFile) fprintf(logFile, "  InsertElement succeeded\n"), fflush(logFile);
@@ -252,8 +258,8 @@ BOOL MR_ClientSession::CreateMainCharacter()
 BOOL MR_ClientSession::CreateMainCharacter2()
 {
 
-   // Add a main character in 
-   
+   // Add a main character in
+
    ASSERT( mMainCharacter2 == NULL ); // why creating it twice?
    ASSERT( mSession.GetCurrentLevel() != NULL );
 
@@ -262,7 +268,7 @@ BOOL MR_ClientSession::CreateMainCharacter2()
    // Insert the character in the current level
    MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
 
-   mMainCharacter2->mRoom        = lCurrentLevel->GetStartingRoom( 1 );      
+   mMainCharacter2->mRoom        = lCurrentLevel->GetStartingRoom( 1 );
    mMainCharacter2->mPosition    = lCurrentLevel->GetStartingPos( 1 );
    mMainCharacter2->SetOrientation( lCurrentLevel->GetStartingOrientation( 1 ) );
    mMainCharacter2->SetHoverId( 1 );
@@ -355,15 +361,14 @@ void MR_ClientSession::MoveRemoteCharacter( MR_FreeElementHandle pHandle, int pR
    lCurrentLevel->MoveElement( pHandle, pRoom );
 }
 
-
-MR_MainCharacter*  MR_ClientSession::GetMainCharacter()const      
+MR_MainCharacter*  MR_ClientSession::GetMainCharacter()const
 {
-   return mMainCharacter1; 
+   return mMainCharacter1;
 }
 
-MR_MainCharacter*  MR_ClientSession::GetMainCharacter2()const      
+MR_MainCharacter*  MR_ClientSession::GetMainCharacter2()const
 {
-   return mMainCharacter2; 
+   return mMainCharacter2;
 }
 
 void MR_ClientSession::SetSimulationTime( MR_SimulationTime pTime )
@@ -522,7 +527,7 @@ BOOL MR_ClientSession::GetMessageStack( int pLevel, char* pDest, int pExpiration
          strcpy( pDest, mMessageStack[ pLevel ].mBuffer );
       }
       LeaveCriticalSection( &((MR_ClientSession*)this)->mChatMutex );
-   }   
+   }
 
    return lReturnValue;
 }

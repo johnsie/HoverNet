@@ -75,6 +75,17 @@ int main()
 
     session.SetControlState(MR_MainCharacter::eMotorOn | MR_MainCharacter::eRight, 0);
     session.Process();
+
+    MR_RecordFile* freshTrack = new MR_RecordFile;
+    if (!freshTrack->OpenForRead("NetTarget/Tracks/ClassicH.trk") ||
+        !session.LoadNew("ClassicH", freshTrack, 1, FALSE, &buffer) ||
+        !session.CreateMainCharacter() || session.GetNbPlayers() != 1 ||
+        session.GetMainCharacter() == nullptr) {
+        std::fprintf(stderr, "Client session could not reload cleanly for another race\n");
+        return 1;
+    }
+
+    player = session.GetMainCharacter();
     std::printf("ClientSession smoke test passed: room=%d hover=%d\n",
                 player->mRoom, player->GetHoverId());
     return 0;

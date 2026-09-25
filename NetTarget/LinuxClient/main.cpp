@@ -17,6 +17,7 @@
 namespace
 {
 constexpr uint8_t kGameNameMessageType = 42;
+constexpr const char* kDefaultRaceServerHost = "outiva.com";
 
 bool SendServerHostedJoin(const char* host, const char* gameName)
 {
@@ -75,7 +76,7 @@ int ParseFrameCount(int argc, char** argv)
 int main(int argc, char** argv)
 {
     if (argc == 2 && strcmp(argv[1], "--server-check") == 0) {
-        const bool connected = SendServerHostedJoin("192.168.10.181", "linux-bootstrap");
+        const bool connected = SendServerHostedJoin(kDefaultRaceServerHost, "linux-bootstrap");
         fprintf(stdout, "RaceServer join %s\n", connected ? "succeeded" : "failed");
         return connected ? 0 : 1;
     }

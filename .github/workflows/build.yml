@@ -1,0 +1,167 @@
+name: Build and package HoverNet
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hovernet-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux game, race server and DEBs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential cmake dpkg-dev libsdl2-dev
+
+      - name: Configure
+        run: cmake -S . -B build/linux -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/linux --parallel 2
+
+      - name: Run tests
+        run: ctest --test-dir build/linux --output-on-failure
+
+      - name: Set package version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            package_version="${GITHUB_REF_NAME#v}"
+          else
+            package_version="0.0.0+${GITHUB_SHA::8}"
+          fi
+          echo "PACKAGE_VERSION=${package_version}" >> "$GITHUB_ENV"
+
+      - name: Build Debian packages
+        run: |
+          chmod +x packaging/debian/build-game-deb.sh packaging/debian/build-raceserver-deb.sh
+          packaging/debian/build-game-deb.sh "$PACKAGE_VERSION" build/linux/HoverNetGame2Player build/linux/ObjFac1.so
+          packaging/debian/build-raceserver-deb.sh "$PACKAGE_VERSION" build/linux/RaceServer
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: hovernet-linux-packages
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 30
+
+  windows:
+    name: Windows game and setup EXE
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Prepare SDL2 development files
+        shell: pwsh
+        run: |
+          $triplet = "x86-windows"
+          $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT "vcpkg.exe"
+          & $vcpkg install "sdl2:$triplet"
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg failed to install SDL2" }
+
+          $installed = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\$triplet"
+          New-Item -ItemType Directory -Force "C:\SDL2\include", "C:\SDL2\lib\x86" | Out-Null
+          Copy-Item "$installed\include\SDL2\*" "C:\SDL2\include" -Recurse -Force
+          Copy-Item "$installed\lib\SDL2.lib" "C:\SDL2\lib\x86\SDL2.lib" -Force
+          if (Test-Path "$installed\lib\manual-link\SDL2main.lib") {
+            Copy-Item "$installed\lib\manual-link\SDL2main.lib" "C:\SDL2\lib\x86\SDL2main.lib" -Force
+          }
+          Copy-Item "$installed\bin\SDL2.dll" "C:\SDL2\lib\x86\SDL2.dll" -Force
+
+      - name: Build Windows client
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+          if (-not $msbuild) { throw "MSBuild was not found" }
+
+          & $msbuild NetTarget/ObjFac1/ObjFac1.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /m /v:minimal
+          if ($LASTEXITCODE -ne 0) { throw "ObjFac1 build failed" }
+          & $msbuild NetTarget/Game2/Game2.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /m /v:minimal
+          if ($LASTEXITCODE -ne 0) { throw "Game2 build failed" }
+
+          Copy-Item "C:\SDL2\lib\x86\SDL2.dll" "Release\SDL2.dll" -Force
+          $required = @(
+            "Release\Game2.exe",
+            "Release\ObjFac1.dll",
+            "Release\ObjFac1.dat",
+            "Release\VideoServices.dll",
+            "Release\Model.dll",
+            "Release\MainCharacter.dll",
+            "Release\SDL2.dll"
+          )
+          $missing = $required | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "Missing Windows runtime files: $($missing -join ', ')" }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed" }
+          }
+
+      - name: Build Windows installer
+        shell: pwsh
+        env:
+          HOVERNET_REF_TYPE: ${{ github.ref_type }}
+          HOVERNET_REF_NAME: ${{ github.ref_name }}
+        run: |
+          if ($env:HOVERNET_REF_TYPE -eq "tag") {
+            $version = $env:HOVERNET_REF_NAME.TrimStart("v")
+          } else {
+            $version = "0.0.0-$($env:GITHUB_SHA.Substring(0, 8))"
+          }
+
+          $env:HOVERNET_VERSION = $version
+          $env:HOVERNET_RELEASE_DIR = (Resolve-Path "Release").Path
+          $env:CI_PROJECT_DIR = $env:GITHUB_WORKSPACE
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "packaging\windows\HoverNet.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup packaging failed" }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: hovernet-windows-installer
+          path: dist/*-setup.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" release-assets/* --generate-notes --verify-tag
