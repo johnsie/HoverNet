@@ -99,6 +99,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Game2 build failed" }
 
           Copy-Item "C:\SDL2\lib\x86\SDL2.dll" "Release\SDL2.dll" -Force
+          Copy-Item "NetTarget\ObjFac1\ObjFac1.dat" "Release\ObjFac1.dat" -Force
+          New-Item -ItemType Directory -Force -Path "Release\tracks" | Out-Null
+          Copy-Item "NetTarget\Tracks\*.trk" "Release\tracks\" -Force
           $required = @(
             "Release\Game2.exe",
             "Release\ObjFac1.dll",
@@ -106,7 +109,8 @@ jobs:
             "Release\VideoServices.dll",
             "Release\Model.dll",
             "Release\MainCharacter.dll",
-            "Release\SDL2.dll"
+            "Release\SDL2.dll",
+            "Release\tracks\ClassicH.trk"
           )
           $missing = $required | Where-Object { -not (Test-Path $_) }
           if ($missing) { throw "Missing Windows runtime files: $($missing -join ', ')" }
