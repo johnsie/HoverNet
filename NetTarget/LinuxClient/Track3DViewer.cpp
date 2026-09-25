@@ -1691,13 +1691,21 @@ int main(int argc, char** argv)
                     else if (netMessage.mType == eRSMsgHitMessage) {
                         int targetClientId = -1;
                         if (RaceServerClient::ParseHit(netMessage, targetClientId)) {
+                            // TriggerOutOfControl() alone only replays the visible spin-out --
+                            // it skips MR_MainCharacter::ApplyEffect entirely, which is where
+                            // the hit sound actually gets queued (along with mLastHits
+                            // tracking). ApplyNetworkMissileHit() routes through ApplyEffect
+                            // with a synthetic MR_LostOfControl, matching how a locally-
+                            // simulated missile hits a craft, so a hit reported by the server
+                            // sounds the same as one detected locally. The wire message
+                            // doesn't carry the shooter's id, so it's passed as unknown (-1).
                             if (targetClientId == localClientId) {
-                                mainCharacter->TriggerOutOfControl();
+                                mainCharacter->ApplyNetworkMissileHit(-1, level);
                             }
                             else {
                                 auto targetIt = remotePlayers.find(targetClientId);
                                 if (targetIt != remotePlayers.end()) {
-                                    targetIt->second.mCharacter->TriggerOutOfControl();
+                                    targetIt->second.mCharacter->ApplyNetworkMissileHit(-1, level);
                                 }
                             }
                         }

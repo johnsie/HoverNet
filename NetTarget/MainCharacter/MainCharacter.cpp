@@ -1155,6 +1155,19 @@ const MR_ShapeInterface* MR_MainCharacter::GetObstacleShape( )
 }
 
 
+void MR_MainCharacter::ApplyNetworkMissileHit( int pHoverId, const MR_Level* pLevel )
+{
+   MR_LostOfControl lHit;
+   lHit.mType      = MR_LostOfControl::eMissile;
+   lHit.mElementId = -1;
+   lHit.mHoverId   = pHoverId;
+
+   // ApplyEffect only mutates pLevel on the eMine branch (SetPermElementPos);
+   // an eMissile hit never reaches that branch, so treating this level as
+   // mutable here is safe even though the caller only has a const view of it.
+   ApplyEffect( &lHit, 0, 0, TRUE, 0, 0, 0, const_cast<MR_Level*>( pLevel ) );
+}
+
 void MR_MainCharacter::ApplyEffect( const MR_ContactEffect* pEffect,  MR_SimulationTime pTime, MR_SimulationTime pDuration, BOOL pValidDirection, MR_Angle pHorizontalDirection, MR_Int32 /*pZMin*/, MR_Int32 pZMax, MR_Level* pLevel )
 {
    MR_ContactEffect* lEffect = (MR_ContactEffect*)pEffect;

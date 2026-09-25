@@ -183,6 +183,14 @@ class MR_MainCharacter:public MR_FreeElement
 
       MR_DllDeclare void TriggerOutOfControl();
 
+      // Replays a missile hit reported by an external authority (e.g. a RaceServer
+      // hit notification) exactly as MR_Missile's own collision effect would --
+      // ApplyEffect() is protected since it's normally only reached through the
+      // contact-effect dispatch, but a network-reported hit has no local element
+      // to dispatch from. pHoverId identifies the shooter for "who hit me"
+      // tracking; pass -1 if unknown.
+      MR_DllDeclare void ApplyNetworkMissileHit( int pHoverId, const MR_Level* pLevel );
+
       MR_DllDeclare void SetOrientation( MR_Angle pOrientation );
       
       void AddRenderer();
