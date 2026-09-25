@@ -120,7 +120,6 @@ namespace
    std::vector<RaceServerGameInfo> gRaceServerGames;
    CString gRaceServerHost = kDefaultRaceServerHost;
    unsigned gRaceServerPort = kDefaultRaceServerPort;
-   CString gPendingRaceName;
 
    void RefreshRaceServerList(HWND pWindow)
    {
@@ -2024,37 +2023,6 @@ BOOL CALLBACK MR_InternetRoom::AskParamsCallBack( HWND pWindow, UINT  pMsgId, WP
 }
 
 
-BOOL CALLBACK MR_InternetRoom::RaceNameCallBack( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM )
-{
-   if( pMsgId == WM_INITDIALOG )
-   {
-      SetDlgItemText(pWindow, IDC_RACE_NAME, gPendingRaceName);
-      return TRUE;
-   }
-   if( pMsgId == WM_COMMAND )
-   {
-      if( LOWORD(pWParam) == IDOK )
-      {
-         char lName[64] = { 0 };
-         GetDlgItemTextA(pWindow, IDC_RACE_NAME, lName, sizeof(lName));
-         if( lName[0] == 0 )
-         {
-            MessageBoxA(pWindow, "Enter a race name.", "HoverNet Lobby", MB_OK | MB_ICONINFORMATION);
-            return TRUE;
-         }
-         gPendingRaceName = lName;
-         EndDialog(pWindow, IDOK);
-         return TRUE;
-      }
-      if( LOWORD(pWParam) == IDCANCEL )
-      {
-         EndDialog(pWindow, IDCANCEL);
-         return TRUE;
-      }
-   }
-   return FALSE;
-}
-
 BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM pLParam )
 {
    switch( pMsgId )
@@ -2197,8 +2165,6 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
             int lLaps = 3;
             BOOL lWeapons = TRUE;
             if( !MR_SelectTrack(pWindow, lTrack, lLaps, lWeapons, mThis->mAllowRegistred) ) return TRUE;
-            gPendingRaceName.Format("%s - %s", (const char*)mThis->mUser, (const char*)lTrack);
-            if( DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_RACE_NAME), pWindow, RaceNameCallBack) != IDOK ) return TRUE;
             MR_RecordFile* lTrackFile = MR_TrackOpen(pWindow, lTrack, mThis->mAllowRegistred);
             if( lTrackFile == NULL || !mThis->mSession->LoadNew(lTrack, lTrackFile, lLaps, lWeapons, mThis->mVideoBuffer) ) return TRUE;
 
@@ -2207,7 +2173,9 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
             mThis->mSession->SetConnectionMode(MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort);
             mThis->mSession->SetIsGameCreator(TRUE);
             mThis->mSession->ConfigureHostedRace(lTrack, lLaps, lWeapons);
-            if( mThis->mSession->ConnectToServer(pWindow, gRaceServerHost, gRaceServerPort, gPendingRaceName) )
+            // The race name is just the track name, matching the Linux client --
+            // no reason to make the host type one.
+            if( mThis->mSession->ConnectToServer(pWindow, gRaceServerHost, gRaceServerPort, lTrack) )
             {
                EndDialog(pWindow, IDOK);
             }
