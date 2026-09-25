@@ -33,7 +33,7 @@ Run from the repository root so the player can load `NetTarget/ObjFac1.dat` and 
 | Page Up / Page Down | Scroll display |
 | + / - | Decrease / increase display margin |
 | Home | Reset camera |
-| Escape | Exit |
+| Escape | Open the in-race menu; leave an online race or quit |
 
 ## Bounded Runs
 

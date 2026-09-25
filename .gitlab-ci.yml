@@ -8,6 +8,7 @@ stages:
   - validate
   - build
   - package
+  - publish
   - deploy
 
 variables:
@@ -114,6 +115,24 @@ package:game:windows:
       - dist/*-win32-setup.exe
   rules:
     - if: '$CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+publish:github-release:
+  stage: publish
+  tags: ["$SERVER_RUNNER_TAG"]
+  needs:
+    - job: package:raceserver:deb
+      artifacts: true
+    - job: package:game:deb
+      artifacts: true
+    - job: package:game:windows
+      artifacts: true
+  script:
+    - test -n "$GH_TOKEN" || { echo "GH_TOKEN CI/CD variable is not set (Settings > CI/CD > Variables, masked+protected)"; exit 1; }
+    - export GH_TOKEN
+    - ls -la dist/
+    - gh release create "$CI_COMMIT_TAG" dist/*.deb dist/*-win32-setup.exe --repo johnsie/HoverNet --title "$CI_COMMIT_TAG" --notes "Automated release for $CI_COMMIT_TAG" --latest
+  rules:
+    - if: '$CI_COMMIT_TAG'
 
 deploy:raceserver:
   stage: deploy

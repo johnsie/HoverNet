@@ -1,6 +1,6 @@
 # GitLab CI and Race Server Delivery
 
-The pipeline builds and packages the central `RaceServer` as an Ubuntu `amd64` Debian package. It also builds the current Windows client and creates an Inno Setup installer. A native Linux game installer cannot be produced until the MFC/Win32 client port is complete; the Linux artifact in this pipeline is the authoritative central server.
+The pipeline builds and packages the central `RaceServer` and native Linux game client as Ubuntu `amd64` Debian packages. It also builds the Windows client and creates an Inno Setup installer.
 
 ## GitLab runners
 
