@@ -916,8 +916,8 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                         OutlineUiRect(buffer, rowRect, kUiButtonActiveColor);
                     }
                     char rowText[256];
-                    std::snprintf(rowText, sizeof(rowText), "%s  |  %s  |  %d laps  |  %d player%s%s",
-                                  game.mName.c_str(), game.mTrack.c_str(), game.mNumLaps, game.mNumPlayers,
+                    std::snprintf(rowText, sizeof(rowText), "%s  |  %d laps  |  %d player%s%s",
+                                  game.mName.c_str(), game.mNumLaps, game.mNumPlayers,
                                   game.mNumPlayers == 1 ? "" : "s", game.mStarted ? "  |  Racing" : "");
                     const std::string fitted = fitText(rowText, rowRect.w - 18);
                     DrawUiText(font, rowRect.x + 9, rowRect.y + 4, fitted.c_str(), &viewport,
