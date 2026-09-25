@@ -177,7 +177,7 @@ void MR_ServerSocket::ProcessEvents(MR_RaceManager* pRaceManager)
     int maxSocket = mDatagramSocket;
     for (const auto& pair : mConnections) {
         if (pair.second && pair.second->mConnected) {
-            maxSocket = std::max(maxSocket, pair.second->mTcpSocket);
+            maxSocket = std::max(maxSocket, static_cast<int>(pair.second->mTcpSocket));
         }
     }
     int selectResult = select(maxSocket + 1, &readSet, NULL, NULL, &timeout);

@@ -11,6 +11,8 @@
 #include <windows.h>
 #include <winsock2.h>
 #pragma comment(lib, "ws2_32.lib")
+
+typedef int SocketLength;
 #else
 #include <arpa/inet.h>
 #include <cerrno>
