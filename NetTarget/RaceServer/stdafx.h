@@ -35,6 +35,7 @@ inline int WSAStartup(unsigned short, void*) { return 0; }
 inline int WSACleanup() { return 0; }
 #endif
 
+#include <csignal>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
