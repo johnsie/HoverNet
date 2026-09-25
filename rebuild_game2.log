@@ -1,9 +1,0 @@
-MSBuild version 17.9.5+33de0b227 for .NET Framework
-
-  Util.vcxproj -> c:\originalhr\HoverRace\Release\Util.dll
-  VideoServices.vcxproj -> C:\originalhr2\HoverRaceAI\Release\VideoServices.dll
-  ColorTools.vcxproj -> c:\originalhr\HoverRace\Release\ColorTools.dll
-  Model.vcxproj -> c:\originalhr\HoverRace\Release\Model.dll
-  ObjFacTools.vcxproj -> c:\originalhr\HoverRace\Release\ObjFacTools.dll
-  MainCharacter.vcxproj -> c:\originalhr\HoverRace\Release\MainCharacter.dll
-  Game2.vcxproj -> C:\originalhr2\HoverRaceAI\Release\Game2.exe

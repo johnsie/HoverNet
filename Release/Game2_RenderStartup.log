@@ -1,9 +1,0 @@
-=== RENDER FUNCTION CALLED ===
-Calling Render with:
-  pHoverId (int) = 0
-  pModel (int) = 10
-  pMotorOn (BOOL) = 0
-  Position.X = 0.0
-  Position.Y = 0.0
-  Position.Z = 0.0
-  MatrixOK = 1
