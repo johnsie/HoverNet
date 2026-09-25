@@ -130,7 +130,7 @@ publish:github-release:
     - test -n "$GH_TOKEN" || { echo "GH_TOKEN CI/CD variable is not set (Settings > CI/CD > Variables, masked+protected)"; exit 1; }
     - export GH_TOKEN
     - ls -la dist/
-    - gh release create "$CI_COMMIT_TAG" dist/*.deb dist/*-win32-setup.exe --repo johnsie/HoverNet --title "$CI_COMMIT_TAG" --notes "Automated release for $CI_COMMIT_TAG" --latest
+    - gh release create "$CI_COMMIT_TAG" dist/*.deb dist/*-win32-setup.exe --repo johnsie/HoverNet --title "$CI_COMMIT_TAG" --notes "Automated release for $CI_COMMIT_TAG"
   rules:
     - if: '$CI_COMMIT_TAG'
 
