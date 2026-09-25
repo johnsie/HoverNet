@@ -153,7 +153,7 @@ namespace
    // timeline when diagnosing the "Retrieving game info..." hang.
    void LogNetJoin( const char* pFormat, ... )
    {
-      FILE* lLog = fopen( "NetJoin_Debug.log", "a" );
+      FILE* lLog = NULL;
       if( lLog != NULL )
       {
          va_list lArgs;
@@ -690,7 +690,7 @@ int MR_InternetRoom::ParseState( const char* pAnswer )
 
                   if( lLinePtr != NULL )
                   {
-                     FILE* lInitLog = fopen("GameList_Debug.log", "a");
+                     FILE* lInitLog = NULL;
                      if(lInitLog) fprintf(lInitLog, "\n=== NEW Game Entry %d ===\n", lEntry), fflush(lInitLog);
                      
                      lReturnValue |= eGamesModified;
@@ -2174,6 +2174,10 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
             gRaceServerLobby.Disconnect();
             mThis->mSession->SetIsGameCreator(FALSE);
             mThis->mSession->SetConnectionMode(MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort);
+            // Join by the race's unique id, not its (possibly duplicated) display
+            // name -- hosting no longer rejects a repeat name, so two races can
+            // legitimately show up with the same label.
+            mThis->mSession->ConfigureJoinById(lGame.mRaceId);
             const BOOL lJoined = mThis->mSession->ConnectToServer(pWindow, gRaceServerHost, gRaceServerPort, lGame.mName.c_str());
             LogNetJoin( "IDC_JOIN: ConnectToServer returned %d", (int)lJoined );
             if( lJoined )
@@ -2694,7 +2698,7 @@ BOOL CALLBACK MR_InternetRoom::RoomCallBack( HWND pWindow, UINT  pMsgId, WPARAM 
                {
                   if( mThis->mModelessDlg == NULL )
                   {
-                     FILE* lLog = fopen("JoinGame_Debug.log", "a");
+                     FILE* lLog = NULL;
                      if(lLog) fprintf(lLog, "\n=== IDC_JOIN START ===\n"), fflush(lLog);
                      
                      // First verify if the selected track can be played
@@ -2783,13 +2787,13 @@ BOOL CALLBACK MR_InternetRoom::RoomCallBack( HWND pWindow, UINT  pMsgId, WPARAM 
                }
                catch(const std::exception& ex)
                {
-                  FILE* lLog = fopen("JoinGame_Debug.log", "a");
+                  FILE* lLog = NULL;
                   if(lLog) fprintf(lLog, "EXCEPTION in IDC_JOIN: %s\n", ex.what()), fflush(lLog);
                   if(lLog) fclose(lLog);
                }
                catch(...)
                {
-                  FILE* lLog = fopen("JoinGame_Debug.log", "a");
+                  FILE* lLog = NULL;
                   if(lLog) fprintf(lLog, "UNKNOWN EXCEPTION in IDC_JOIN\n"), fflush(lLog);
                   if(lLog) fclose(lLog);
                }

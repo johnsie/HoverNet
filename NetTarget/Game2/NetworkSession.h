@@ -142,6 +142,7 @@ class MR_NetworkSession: public MR_ClientSession
       void SetConnectionMode( MR_ConnectionMode pMode, const char* pServerAddr = NULL, unsigned pServerPort = 0 );
       MR_ConnectionMode GetConnectionMode()const;
       void ConfigureHostedRace( const char* pTrack, int pLaps, BOOL pWeapons );
+      void ConfigureJoinById( int pRaceId );
       void SetIsGameCreator( BOOL pIsCreator );
       BOOL GetIsGameCreator()const;
 

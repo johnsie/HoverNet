@@ -160,6 +160,7 @@ class MR_NetworkInterface
       CString          mHostedTrack;
       int              mHostedLaps;
       BOOL             mHostedWeapons;
+      int              mJoinRaceId;  // >= 0: join this specific race by id instead of by name
 
       // UDP port
       SOCKET   mUDPOutShortPort;
@@ -205,6 +206,10 @@ class MR_NetworkInterface
       void  SetConnectionMode( MR_ConnectionMode pMode, const char* pServerAddr = NULL, unsigned pServerPort = 0 );
       MR_ConnectionMode GetConnectionMode()const;
       void  ConfigureHostedRace( const char* pTrack, int pLaps, BOOL pWeapons );
+
+      // Join the specific race identified by pRaceId instead of by name -- avoids
+      // ambiguity when more than one open race shares a display name.
+      void  ConfigureJoinById( int pRaceId );
 
       // Game creator flag accessors
       void  SetIsGameCreator( BOOL pIsCreator );

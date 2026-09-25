@@ -36,7 +36,7 @@ namespace
    // craft's position never updates on Windows even though it spawns correctly.
    void LogNetSync( const char* pFormat, ... )
    {
-      FILE* lLog = fopen( "NetSync_Debug.log", "a" );
+      FILE* lLog = NULL;
       if( lLog != NULL )
       {
          va_list lArgs;
@@ -1730,6 +1730,11 @@ MR_ConnectionMode MR_NetworkSession::GetConnectionMode()const
 void MR_NetworkSession::ConfigureHostedRace( const char* pTrack, int pLaps, BOOL pWeapons )
 {
    mNetInterface.ConfigureHostedRace( pTrack, pLaps, pWeapons );
+}
+
+void MR_NetworkSession::ConfigureJoinById( int pRaceId )
+{
+   mNetInterface.ConfigureJoinById( pRaceId );
 }
 
 void MR_NetworkSession::SetIsGameCreator( BOOL pIsCreator )

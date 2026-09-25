@@ -40,7 +40,7 @@ namespace
    // down exactly which step the Windows client gets stuck on next time it's reproduced.
    void LogNetJoin( const char* pFormat, ... )
    {
-      FILE* lLog = fopen( "NetJoin_Debug.log", "a" );
+      FILE* lLog = NULL;
       if( lLog != NULL )
       {
          va_list lArgs;
@@ -75,6 +75,7 @@ namespace
 #define MRNM_START_RACE        52
 #define MRNM_RACE_STARTED      53
 #define MRNM_HOST_RACE         54
+#define MRNM_JOIN_RACE_BY_ID   55
 #define MRNM_JOINED_RACE       63
 
 #define MR_CONNECTION_TIMEOUT   21000 // 21 sec
@@ -126,6 +127,7 @@ MR_NetworkInterface::MR_NetworkInterface()
    mHostRaceRequest = FALSE;
    mHostedLaps       = 3;
    mHostedWeapons    = TRUE;
+   mJoinRaceId       = -1;
 
    mAllPreLoguedRecv = FALSE;
 
@@ -471,9 +473,16 @@ MR_ConnectionMode MR_NetworkInterface::GetConnectionMode()const
 void MR_NetworkInterface::ConfigureHostedRace( const char* pTrack, int pLaps, BOOL pWeapons )
 {
    mHostRaceRequest = TRUE;
+   mJoinRaceId = -1;
    mHostedTrack = pTrack != NULL ? pTrack : "ClassicH";
    mHostedLaps = max(1, min(255, pLaps));
    mHostedWeapons = pWeapons;
+}
+
+void MR_NetworkInterface::ConfigureJoinById( int pRaceId )
+{
+   mHostRaceRequest = FALSE;
+   mJoinRaceId = pRaceId;
 }
 
 void MR_NetworkInterface::SetIsGameCreator( BOOL pIsCreator )
@@ -1089,6 +1098,14 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
                      lJoinMsg.mData[lOffset++] = (MR_UInt8)lNameLen;
                      memcpy(lJoinMsg.mData + lOffset, (const char*)mActiveInterface->mGameName, lNameLen);
                      lJoinMsg.mDataLen = (MR_UInt8)(lOffset + lNameLen);
+                  }
+                  else if( mActiveInterface->mJoinRaceId >= 0 )
+                  {
+                     // Join a specific race by id -- avoids the ambiguity of a
+                     // name-based join when more than one open race shares a name.
+                     lJoinMsg.mMessageType = MRNM_JOIN_RACE_BY_ID;
+                     lJoinMsg.mDataLen = (MR_UInt8)sizeof(mActiveInterface->mJoinRaceId);
+                     memcpy(lJoinMsg.mData, &mActiveInterface->mJoinRaceId, lJoinMsg.mDataLen);
                   }
                   else
                   {
