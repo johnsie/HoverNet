@@ -177,6 +177,11 @@ bool RaceServerClient::JoinGame(const std::string& pGameName)
     return SendMessage(eRSMsgGameName, pGameName.data(), pGameName.size());
 }
 
+bool RaceServerClient::JoinGameById(int pRaceId)
+{
+    return SendMessage(eRSMsgJoinRaceById, &pRaceId, sizeof(pRaceId));
+}
+
 bool RaceServerClient::StartRace()
 {
     return SendMessage(eRSMsgStartRace, nullptr, 0);

@@ -352,8 +352,8 @@ namespace
         std::printf("Host-controlled race start works and reaches all players together\n");
 
         // Hosting with explicit track/laps/weapons: settings must round-trip into the
-        // lobby listing, and both an unknown track and a duplicate race name must be
-        // rejected (eRSMsgJoinedRace with raceId == -1), not silently accepted.
+        // lobby listing, and an unknown track must be rejected (eRSMsgJoinedRace with
+        // raceId == -1); a duplicate race name is checked separately below.
         RaceServerClient lConfiguredHost;
         if (!lConfiguredHost.Connect("127.0.0.1", pPort))
         {
@@ -421,6 +421,9 @@ namespace
             return false;
         }
 
+        // Races are joined by id (JoinGameById), not by name, so a duplicate name is
+        // no longer rejected -- the lobby can show two "configured-race" entries and
+        // each must still be joinable as the specific race it is.
         RaceServerClient lDupeNameHost;
         if (!lDupeNameHost.Connect("127.0.0.1", pPort) ||
             !lDupeNameHost.HostRace("configured-race", "ClassicH", 3, false))
@@ -438,12 +441,39 @@ namespace
                 lGotDupeNameAck = true;
             }
         }
-        if (!lGotDupeNameAck || lDupeNameAck.mRaceId != -1)
+        if (!lGotDupeNameAck || lDupeNameAck.mRaceId < 0 || !lDupeNameAck.mIsHost ||
+            lDupeNameAck.mRaceId == lConfiguredAck.mRaceId)
         {
-            std::fprintf(stderr, "HostRace with an already-taken race name was not rejected\n");
+            std::fprintf(stderr, "HostRace with a duplicate race name was not accepted as a distinct race\n");
             return false;
         }
-        std::printf("HostRace correctly rejects an unknown track and a duplicate race name\n");
+        std::printf("HostRace correctly rejects an unknown track and accepts a duplicate race name as a distinct race\n");
+
+        // With two same-named races now open, JoinGameById must land on the specific
+        // one asked for, not whichever one a name lookup happens to match first.
+        RaceServerClient lByIdJoiner;
+        if (!lByIdJoiner.Connect("127.0.0.1", pPort) ||
+            !lByIdJoiner.JoinGameById(lDupeNameAck.mRaceId))
+        {
+            std::fprintf(stderr, "Could not send JoinGameById\n");
+            return false;
+        }
+        RaceServerJoinAck lByIdAck;
+        bool lGotByIdAck = false;
+        for (int lTries = 0; lTries < 20 && !lGotByIdAck; ++lTries)
+        {
+            if (lByIdJoiner.PollMessage(lMessage, 200) &&
+                RaceServerClient::ParseJoinedRace(lMessage, lByIdAck))
+            {
+                lGotByIdAck = true;
+            }
+        }
+        if (!lGotByIdAck || lByIdAck.mRaceId != lDupeNameAck.mRaceId || lByIdAck.mIsHost)
+        {
+            std::fprintf(stderr, "JoinGameById did not join the specific race requested\n");
+            return false;
+        }
+        std::printf("JoinGameById disambiguates between two same-named races\n");
 
         // Player position sync: SendPlayerState's [senderClientId][state bytes]
         // envelope must round-trip through the server's opaque relay so a receiver

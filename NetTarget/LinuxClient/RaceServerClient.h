@@ -39,6 +39,7 @@ enum MR_RaceServerMessageType
     eRSMsgStartRace        = 52,  // Client -> Server: race creator asks to start (ignored otherwise)
     eRSMsgRaceStarted      = 53,  // Server -> Client: broadcast to every player in the race at once
     eRSMsgHostRace         = 54,  // Client -> Server: create a race with explicit track/laps/weapons
+    eRSMsgJoinRaceById     = 55,  // Client -> Server: join a specific race by its unique id (see JoinGameById)
 };
 
 // One race as reported by eRSMsgGameInfo.
@@ -95,7 +96,13 @@ public:
     bool SendMessage(int messageType, const void* pData, std::size_t pLen);
 
     // Convenience: joins race server matchmaking under the given game/session name.
+    // Ambiguous if more than one open race shares that name -- prefer JoinGameById
+    // when a specific RaceServerGameInfo (with its unique mRaceId) is available.
     bool JoinGame(const std::string& gameName);
+
+    // Convenience: joins the specific race identified by mRaceId (see RaceServerGameInfo),
+    // disambiguating even when multiple races share the same display name.
+    bool JoinGameById(int raceId);
 
     // Convenience: creates a race with explicit settings. Fails (returns false, no
     // message sent) if any field is oversized; the server separately rejects an

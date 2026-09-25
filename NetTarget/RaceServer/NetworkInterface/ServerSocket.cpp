@@ -402,9 +402,13 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             bool trackOk = false;
             for (const char* t : kValidTracks) { if (strcmp(t, trackName) == 0) { trackOk = true; break; } }
 
-            if (!trackOk || pRaceManager->FindRaceByName(raceName) >= 0) {
-                g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE rejected (track_ok=%d, name='%s' taken=%d)",
-                             pConn->mClientId, trackOk, raceName, pRaceManager->FindRaceByName(raceName) >= 0);
+            // Races are joined by id (eRSMsgJoinRaceById), not by name, so the name is
+            // just a display label -- duplicates are fine and no longer rejected. The
+            // legacy name-based join (eRSMsgGameName) still exists for older clients and
+            // matches whichever same-named race FindOrCreateRace finds first.
+            if (!trackOk) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE rejected (track_ok=%d, name='%s')",
+                             pConn->mClientId, trackOk, raceName);
                 MessageBuffer failMsg;
                 failMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE, raceId=-1 means "failed"
                 const int failId = -1;
@@ -428,6 +432,41 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             g_Logger.Log(MR_LOG_INFO, "Client %d hosted race %d '%s': track=%s laps=%d weapons=%s",
                          pConn->mClientId, pConn->mRaceId, raceName, trackName, numLaps,
                          weaponsAllowed ? "yes" : "no");
+
+            FinishJoiningRace(pConn, pRaceManager);
+            break;
+        }
+
+        case 55:  // MRNM_JOIN_RACE_BY_ID - join a specific race picked from the lobby list
+        {
+            // Unlike eRSMsgGameName, this disambiguates by the race's unique id instead
+            // of its (possibly duplicated, now that hosting no longer rejects repeat
+            // names) display name.
+            if (messageDataLen < static_cast<int>(sizeof(int))) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d: undersized JOIN_RACE_BY_ID message", pConn->mClientId);
+                break;
+            }
+            int targetRaceId = -1;
+            memcpy(&targetRaceId, &buffer[3], sizeof(targetRaceId));
+
+            RaceSession* pRace = pRaceManager->GetRace(targetRaceId);
+            if (pRace == nullptr) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d: tried to join unknown race %d", pConn->mClientId, targetRaceId);
+                MessageBuffer failMsg;
+                failMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE, raceId=-1 means "failed"
+                const int failId = -1;
+                memcpy(&failMsg.data[0], &failId, sizeof(failId));
+                failMsg.data[4] = 0;
+                memcpy(&failMsg.data[5], &pConn->mClientId, sizeof(pConn->mClientId));
+                failMsg.dataLen = 9;
+                send(pConn->mTcpSocket, (const char*)&failMsg, 3 + failMsg.dataLen, 0);
+                break;
+            }
+
+            pConn->mRaceId = targetRaceId;
+            snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
+            pRaceManager->JoinRace(pConn->mRaceId, pConn->mClientId, pConn->mPlayerName);
+            g_Logger.Log(MR_LOG_INFO, "Client %d joined race %d by id", pConn->mClientId, pConn->mRaceId);
 
             FinishJoiningRace(pConn, pRaceManager);
             break;

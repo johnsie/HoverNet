@@ -576,7 +576,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         if (!games.empty() && selected >= 0 && selected < static_cast<int>(games.size()) &&
             !games[static_cast<std::size_t>(selected)].mStarted) {
             const RaceServerGameInfo& game = games[static_cast<std::size_t>(selected)];
-            if (client.JoinGame(game.mName)) {
+            if (client.JoinGameById(game.mRaceId)) {
                 outJoinedName = game.mName;
                 phase = LobbyPhase::eWaitingRoom;
                 raceMembers.clear();
