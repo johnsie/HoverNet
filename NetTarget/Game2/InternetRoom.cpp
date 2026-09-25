@@ -1360,6 +1360,9 @@ BOOL MR_InternetRoom::DisplayChatRoom( HWND pParentWindow, MR_NetworkSession* pS
    mUser = pSession->GetPlayerName();
    mSession->SetPlayerName(mUser);
 
+   if( DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_USERNAME), pParentWindow, UsernameCallBack) != IDOK ) return FALSE;
+   mSession->SetPlayerName(mUser);
+
    gRaceServerHost = kDefaultRaceServerHost;
    gRaceServerPort = kDefaultRaceServerPort;
    char lOverride[256] = { 0 };
@@ -2022,6 +2025,37 @@ BOOL CALLBACK MR_InternetRoom::AskParamsCallBack( HWND pWindow, UINT  pMsgId, WP
 
 }
 
+
+BOOL CALLBACK MR_InternetRoom::UsernameCallBack( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM )
+{
+   if( pMsgId == WM_INITDIALOG )
+   {
+      SetDlgItemText(pWindow, IDC_USERNAME, mThis->mUser);
+      return TRUE;
+   }
+   if( pMsgId == WM_COMMAND )
+   {
+      if( LOWORD(pWParam) == IDOK )
+      {
+         char lName[40] = { 0 };
+         GetDlgItemTextA(pWindow, IDC_USERNAME, lName, sizeof(lName));
+         if( lName[0] == 0 )
+         {
+            MessageBox(pWindow, MR_LoadString(IDS_ENTER_ALIAS), MR_LoadString(IDS_IMR), MB_OK | MB_ICONINFORMATION);
+            return TRUE;
+         }
+         mThis->mUser = lName;
+         EndDialog(pWindow, IDOK);
+         return TRUE;
+      }
+      if( LOWORD(pWParam) == IDCANCEL )
+      {
+         EndDialog(pWindow, IDCANCEL);
+         return TRUE;
+      }
+   }
+   return FALSE;
+}
 
 BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM pLParam )
 {
