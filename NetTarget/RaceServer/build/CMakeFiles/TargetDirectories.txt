@@ -1,3 +1,0 @@
-C:/originalhr2/HoverRaceAI/NetTarget/RaceServer/build/CMakeFiles/RaceServer.dir
-C:/originalhr2/HoverRaceAI/NetTarget/RaceServer/build/CMakeFiles/ALL_BUILD.dir
-C:/originalhr2/HoverRaceAI/NetTarget/RaceServer/build/CMakeFiles/ZERO_CHECK.dir
