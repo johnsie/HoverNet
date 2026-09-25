@@ -1,54 +1,37 @@
 # HoverNet
 
-HoverNet is a modernization of the original HoverRace codebase. The repository contains the native Windows client, an SDL2 Linux client, and the authoritative multiplayer race server.
+HoverNet is a fast-paced hovercraft racing game: pick a track, race other hovercraft around tight, ramp-filled circuits, and use missiles to take out the competition. It's a modernization of the original HoverRace, with a native Windows client, a Linux client, and an online multiplayer lobby so you can race against other players over the internet.
 
-Multiplayer clients connect to `outiva.com:9600` by default. Linux can override this with `--lobby host:port`; Windows can set `HOVERNET_LOBBY=host:port`.
+## Playing online
 
-## Linux build
+Launch the game and open the multiplayer lobby to see races other players have open, or host your own. The first time you connect you'll be asked to pick a username, so other players can see who's racing. From the lobby you can:
 
-Install a C++ compiler, CMake, and the SDL2 development package, then run:
+- See a live list of open races and who else is currently in the lobby.
+- Host a race on any track, choosing lap count and whether weapons are allowed.
+- Join a race in progress or waiting to start.
+- Chat with other players while you wait.
 
-```bash
-cmake -S . -B build/linux -DCMAKE_BUILD_TYPE=Release
-cmake --build build/linux --parallel 2
-ctest --test-dir build/linux --output-on-failure
-```
+## Getting the game
 
-The primary outputs are:
+Downloads for both Windows and Linux are published on the [Releases page](../../releases).
 
-- `build/linux/HoverNetGame2Player` — game client
-- `build/linux/RaceServer` — multiplayer lobby and race server
-- `build/linux/HoverNetLobby` — command-line lobby client
+- **Windows**: download and run the installer (`HoverNet-setup.exe`).
+- **Linux**: download the `.deb` package and install it (`sudo apt install ./hovernet-game_*.deb`), then launch it from your applications menu or run `hovernet` from a terminal.
 
-Run the game from the repository root so it can locate its tracks and resource library:
+## Controls
 
-```bash
-./build/linux/HoverNetGame2Player
-```
+| Input | Action |
+| --- | --- |
+| Left Shift / Right Shift | Accelerate |
+| Left / Right | Steer; select hovercraft during the countdown |
+| Up | Jump |
+| Down | Brake / reverse |
+| Left Ctrl or Right Ctrl | Fire missile |
+| Tab | Select weapon |
+| F3 | Following camera |
+| F4 | Cockpit camera |
+| Escape | Open the in-race menu; leave an online race or quit |
 
-## Windows build
+## Building from source and technical documentation
 
-The Windows client targets Win32 with the Visual Studio 2022 `v143` toolset, MFC, and SDL2 installed under `C:\SDL2`:
-
-```powershell
-msbuild NetTarget\ObjFac1\ObjFac1.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32
-msbuild NetTarget\Game2\Game2.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32
-```
-
-The runnable client and its libraries are written to `Release\`. CI creates an Inno Setup installer from that directory.
-
-## Packaging and delivery
-
-- GitHub Actions builds both clients, the race server, Windows setup EXE, and Linux DEBs.
-- GitLab CI provides the existing protected production deployment path.
-- Linux packaging scripts live under `packaging/debian/`.
-- The Windows installer definition is `packaging/windows/HoverNet.iss`.
-
-## Documentation
-
-- [Linux client and controls](docs/linux-client.md)
-- [GitHub Actions](docs/github-actions.md)
-- [GitLab CI and deployment](docs/gitlab-ci.md)
-- [Track compiler format](docs/track-format.md)
-- [Race server](NetTarget/RaceServer/README.md)
-- [Resource decompiler](NetTarget/ResourceDecompiler/README.md)
+If you want to build HoverNet yourself, or you're interested in how the client, race server, and CI pipelines work, see the [technical overview](docs/technical.md).
