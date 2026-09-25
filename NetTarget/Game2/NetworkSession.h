@@ -92,6 +92,7 @@ class MR_NetworkSession: public MR_ClientSession
       void BroadcastChatMessage(            const char* pMessage );
       void BroadcastTime();
       void BroadcastHit(                    int pHoverIdSrc );
+      void BroadcastHostedImpact(           int pTargetServerClientId );
 
       void AddChatMessage( int pPlayerIndex, const char* Message, int pMessageLen );
       void AddResultEntry( int pPlayerIndex, MR_SimulationTime pFinishTime, MR_SimulationTime pBestLap, int pNbLap );

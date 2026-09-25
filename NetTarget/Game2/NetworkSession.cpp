@@ -507,7 +507,8 @@ void MR_NetworkSession::ReadNet( )
                {
                   // Drop the message if there was a recent collision on that item
                   int lLastCollisionAge = mSession.GetSimulationTime()-mClientCharacter[ lClientId ]->mLastCollisionTime;
-                  const BOOL lDropped = lLastCollisionAge < (mNetInterface.GetAvgLag( lClientId )+40);
+                  const BOOL lDropped = mNetInterface.GetConnectionMode() != MR_CONNECTION_SERVER_HOSTED &&
+                                        lLastCollisionAge < (mNetInterface.GetAvgLag( lClientId )+40);
 
                   if( lShouldLog )
                   {
@@ -650,7 +651,20 @@ void MR_NetworkSession::ReadNet( )
             break;
 
          case MRNM_HIT_MESSAGE:
-            AddHitEntry( lClientId, (char)lMessage[0] );
+            if( mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED &&
+                lMessageLen >= (int)sizeof(int) )
+            {
+               int lTargetClientId = -1;
+               memcpy( &lTargetClientId, lMessage, sizeof(lTargetClientId) );
+               if( lTargetClientId == mNetInterface.GetLocalClientId() && mMainCharacter1 != NULL )
+               {
+                  mMainCharacter1->TriggerOutOfControl();
+               }
+            }
+            else
+            {
+               AddHitEntry( lClientId, (char)lMessage[0] );
+            }
             break;
 
          case MRNM_CONN_NAME_SET:
@@ -746,6 +760,18 @@ void MR_NetworkSession::WriteNet( )
       while( mMainCharacter1->HitQueueCount() > 0 )
       {
          BroadcastHit( mMainCharacter1->GetHitQueue() );
+      }
+
+      if( mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
+      {
+         for( int lClient = 0; lClient < MR_NetworkInterface::eMaxClient; ++lClient )
+         {
+            while( mClientCharacter[lClient] != NULL && mClientCharacter[lClient]->HitQueueCount() > 0 )
+            {
+               mClientCharacter[lClient]->GetHitQueue();
+               BroadcastHostedImpact( mNetInterface.GetServerPeerId(lClient) );
+            }
+         }
       }
    }
 
@@ -1180,7 +1206,18 @@ void MR_NetworkSession::BroadcastTime( )
 
 void MR_NetworkSession::BroadcastMainElementState( const MR_ElementNetState& pState )
 {
-   MR_NetMessageBuffer lMessage;
+   if( mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
+   {
+      const int lCurrentTime = timeGetTime();
+      if( lCurrentTime - mLastSendElemStateFuncTime < 33 )
+      {
+         return;
+      }
+      mLastSendElemStateFuncTime = lCurrentTime;
+      mMainCharacter1->mNetPriority = FALSE;
+   }
+
+   MR_NetMessageBuffer lMessage = {};
 
    // lMessage.mSendingTime            = mSession.GetSimulationTime()>>2;
    lMessage.mMessageType = MRNM_SET_MAIN_ELEM_STATE;
@@ -1407,7 +1444,14 @@ void MR_NetworkSession::BroadcastChatMessage( const char* pMessage )
 
 void MR_NetworkSession::BroadcastHit( int pHoverIdSrc )
 {
-   MR_NetMessageBuffer lMessage;
+   if( mNetInterface.GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
+   {
+      BroadcastHostedImpact( mNetInterface.GetLocalClientId() );
+      AddHitEntry( -1, pHoverIdSrc );
+      return;
+   }
+
+   MR_NetMessageBuffer lMessage = {};
 
    // lMessage.mSendingTime    = mSession.GetSimulationTime()>>2;
    lMessage.mMessageType    = MRNM_HIT_MESSAGE;
@@ -1420,6 +1464,20 @@ void MR_NetworkSession::BroadcastHit( int pHoverIdSrc )
    AddHitEntry( -1, pHoverIdSrc );
 }
 
+
+void MR_NetworkSession::BroadcastHostedImpact( int pTargetServerClientId )
+{
+   if( pTargetServerClientId < 0 )
+   {
+      return;
+   }
+
+   MR_NetMessageBuffer lMessage = {};
+   lMessage.mMessageType = MRNM_HIT_MESSAGE;
+   lMessage.mDataLen = sizeof(pTargetServerClientId);
+   memcpy( lMessage.mData, &pTargetServerClientId, sizeof(pTargetServerClientId) );
+   mNetInterface.BroadcastMessage( &lMessage, MR_NET_REQUIRED );
+}
 
 void MR_NetworkSession::AddHitEntry( int pPlayerIndex, int pPlayerFromId )
 {

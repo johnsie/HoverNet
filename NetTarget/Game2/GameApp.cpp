@@ -1311,7 +1311,10 @@ void MR_GameApp::RefreshTitleBar()
 
 BOOL MR_GameApp::InitGame()
 {
-   FILE* logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_TrackLoad.log", "a");
+   char lInitLogPath[MAX_PATH] = { 0 };
+   GetTempPathA( sizeof(lInitLogPath), lInitLogPath );
+   strcat_s( lInitLogPath, sizeof(lInitLogPath), "HoverNet-Game2-Init.log" );
+   FILE* logFile = fopen( lInitLogPath, "a" );
    if(logFile) fprintf(logFile, "\n--- MR_GameApp::InitGame START ---\n"), fflush(logFile);
    
    BOOL lReturnValue =TRUE;
@@ -1387,24 +1390,7 @@ BOOL MR_GameApp::InitGame()
       }
    }
 
-   if(logFile) fprintf(logFile, "Skipping display first screen dialog\n"), fflush(logFile);
-   // FOR TESTING: Always start a new local session instead of showing menu
-   mDisplayFirstScreen = FALSE;
-   
-   if(logFile) fprintf(logFile, "About to call NewLocalSession()\n"), fflush(logFile);
-   if(logFile) fflush(logFile);
-   // DON'T close logFile yet - NewLocalSession will use it too
-   
-   try {
-      NewLocalSession();
-      if(logFile) fprintf(logFile, "Returned from NewLocalSession() successfully\n"), fflush(logFile);
-   }
-   catch(const std::exception& e) {
-      if(logFile) fprintf(logFile, "EXCEPTION in NewLocalSession: %s\n", e.what()), fflush(logFile);
-   }
-   catch(...) {
-      if(logFile) fprintf(logFile, "UNKNOWN EXCEPTION in NewLocalSession\n"), fflush(logFile);
-   }
+   if(logFile) fprintf(logFile, "Initialization complete; waiting for a menu command\n"), fflush(logFile);
    
    if(logFile) fclose(logFile);
 
@@ -2699,7 +2685,7 @@ void MR_GameApp::NewInternetSession( )
          if( lSuccess )
          {
             if(lDebugLog) fprintf(lDebugLog, "Setting simulation time\n"), fflush(lDebugLog);
-            lCurrentSession->SetSimulationTime( -20000 ); // start in 20 seconds (this time may be readjusted by the server)
+            lCurrentSession->SetSimulationTime( -6000 ); // shared six-second RaceServer countdown (matches Linux)
          }
 
          if( lSuccess )

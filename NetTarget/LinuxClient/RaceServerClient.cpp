@@ -396,6 +396,21 @@ bool RaceServerClient::ParsePlayerState(const RaceServerMessage& pMessage, int& 
     return true;
 }
 
+bool RaceServerClient::SendHit(int pTargetClientId)
+{
+    return SendMessage(eRSMsgHitMessage, &pTargetClientId, sizeof(pTargetClientId));
+}
+
+bool RaceServerClient::ParseHit(const RaceServerMessage& pMessage, int& pOutTargetClientId)
+{
+    if (pMessage.mType != eRSMsgHitMessage || pMessage.mData.size() < sizeof(int))
+    {
+        return false;
+    }
+    std::memcpy( &pOutTargetClientId, pMessage.mData.data(), sizeof(pOutTargetClientId) );
+    return true;
+}
+
 bool RaceServerClient::SendAutoElement(int pDllId, int pClassId, int pRoom,
                                        const void* pStateData, std::size_t pStateLen)
 {

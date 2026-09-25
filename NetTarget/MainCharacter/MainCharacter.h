@@ -181,6 +181,8 @@ class MR_MainCharacter:public MR_FreeElement
       MR_DllDeclare void SetHoverModel( int pModel );
       MR_DllDeclare int  GetHoverModel()const;
 
+      MR_DllDeclare void TriggerOutOfControl();
+
       MR_DllDeclare void SetOrientation( MR_Angle pOrientation );
       
       void AddRenderer();

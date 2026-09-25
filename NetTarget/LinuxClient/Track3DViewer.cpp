@@ -1081,6 +1081,9 @@ int main(int argc, char** argv)
                                    lobbyHost, lobbyPort, joinedRace, localClientId, knownPeers, frameLimit)) {
                     std::printf("Joined race '%s' via the lobby (%zu other player(s) already in)\n",
                                joinedRace.c_str(), knownPeers.size());
+                    // RaceStarted is the shared synchronization point. Both native clients
+                    // begin the same six-second countdown when that message is received.
+                    session.SetSimulationTime(-6000);
 
                     // Spawn a MainCharacter for each racer already in the race when it
                     // started; the main loop below spawns any that join afterward the
@@ -1217,6 +1220,22 @@ int main(int argc, char** argv)
             if (selectWeapon) controlState |= MR_MainCharacter::eSelectWeapon;
             session.SetControlState(controlState, 0);
             session.Process();
+
+#ifdef HOVERNET_GAME2_PLAYER
+            if (onlineClient.IsConnected() && localClientId >= 0) {
+                while (mainCharacter->HitQueueCount() > 0) {
+                    mainCharacter->GetHitQueue();
+                    onlineClient.SendHit(localClientId);
+                }
+                for (auto& remoteEntry : remotePlayers) {
+                    while (remoteEntry.second.mCharacter->HitQueueCount() > 0) {
+                        remoteEntry.second.mCharacter->GetHitQueue();
+                        onlineClient.SendHit(remoteEntry.first);
+                    }
+                }
+            }
+#endif
+
             room = mainCharacter->mRoom;
             camera = mainCharacter->mPosition;
             camera.mZ += 700;
@@ -1269,6 +1288,20 @@ int main(int argc, char** argv)
                                 }
                                 else if (remote->mRoom != oldRoom) {
                                     session.MoveRemoteCharacter(remoteIt->second.mHandle, remote->mRoom);
+                                }
+                            }
+                        }
+                    }
+                    else if (netMessage.mType == eRSMsgHitMessage) {
+                        int targetClientId = -1;
+                        if (RaceServerClient::ParseHit(netMessage, targetClientId)) {
+                            if (targetClientId == localClientId) {
+                                mainCharacter->TriggerOutOfControl();
+                            }
+                            else {
+                                auto targetIt = remotePlayers.find(targetClientId);
+                                if (targetIt != remotePlayers.end()) {
+                                    targetIt->second.mCharacter->TriggerOutOfControl();
                                 }
                             }
                         }

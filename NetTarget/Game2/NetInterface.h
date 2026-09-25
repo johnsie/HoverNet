@@ -62,6 +62,7 @@ class MR_NetMessageBuffer
 };
 
 #define MR_NET_HEADER_LEN  (sizeof( MR_NetMessageBuffer )-MR_MAX_NET_MESSAGE_LEN)
+#define MR_TCP_INPUT_QUEUE_LEN (64*1024)
 
 
 class MR_NetworkPort
@@ -88,6 +89,11 @@ class MR_NetworkPort
 
       int                 mInputMessageBufferIndex;
       MR_NetMessageBuffer mInputMessageBuffer;
+
+      // TCP is a byte stream: one recv() may contain part of a message or many
+      // messages. Keep unread bytes until Poll() can extract a complete frame.
+      MR_UInt8            mTCPInputQueue[ MR_TCP_INPUT_QUEUE_LEN ];
+      int                 mTCPInputQueueLen;
 
       // Output queue
       // This queue is only used for messages that must absolutly be sent

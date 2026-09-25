@@ -337,6 +337,12 @@ int  MR_MainCharacter::GetHoverModel()const
 }
 
 
+void MR_MainCharacter::TriggerOutOfControl()
+{
+   mOutOfControlDuration = 2000;
+   mNetPriority = TRUE;
+}
+
 void MR_MainCharacter::SetOrientation( MR_Angle pOrientation )
 {
    mOrientation      = pOrientation;
@@ -1236,7 +1242,7 @@ void MR_MainCharacter::ApplyEffect( const MR_ContactEffect* pEffect,  MR_Simulat
    if( lLostOfControl != NULL )
    {
 
-      if( mMasterMode && mOutOfControlDuration < 1750 )
+      if( mOutOfControlDuration < 1750 && !mLastHits.Full() )
       {
          mLastHits.Add( lLostOfControl->mHoverId );
       }
@@ -1244,7 +1250,7 @@ void MR_MainCharacter::ApplyEffect( const MR_ContactEffect* pEffect,  MR_Simulat
       // Apply the visible reaction on both authoritative and replicated craft.
       // Previously slave craft ignored missile effects, so the shooter saw a
       // missile disappear on impact while the remote hovercraft did nothing.
-      mOutOfControlDuration = 2000;
+      TriggerOutOfControl();
 
       if( mRenderer != NULL )
       {

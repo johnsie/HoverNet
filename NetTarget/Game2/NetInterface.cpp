@@ -2114,6 +2114,7 @@ void MR_NetworkPort::Disconnect()
    mOutQueueHead = 0;
 
    mInputMessageBufferIndex = 0;
+   mTCPInputQueueLen = 0;
 
 }
 
@@ -2137,7 +2138,7 @@ SOCKET MR_NetworkPort::GetUDPSocket()const
 const MR_NetMessageBuffer* MR_NetworkPort::Poll( )
 {   
    // Socket is assume to be non-blocking
-   if( (mInputMessageBufferIndex == 0)&&(mUDPRecvSocket!=INVALID_SOCKET ) )
+   if( (mTCPInputQueueLen == 0)&&(mUDPRecvSocket!=INVALID_SOCKET ) )
    {
       while( 1 )
       {
@@ -2174,45 +2175,60 @@ const MR_NetMessageBuffer* MR_NetworkPort::Poll( )
 
    if( mSocket != INVALID_SOCKET )
    {
-      if( mInputMessageBufferIndex < MR_NET_HEADER_LEN )
+      // TCP is a byte stream. Drain all currently available bytes, then
+      // extract exactly one complete HoverNet frame for the caller.
+      while( mTCPInputQueueLen < MR_TCP_INPUT_QUEUE_LEN )
       {
-         // Try to read message header
-         int lLen = recv( mSocket, ((char*)&mInputMessageBuffer)+mInputMessageBufferIndex, MR_NET_HEADER_LEN-mInputMessageBufferIndex, 0 );
-
+         int lLen = recv( mSocket,
+                          (char*)mTCPInputQueue + mTCPInputQueueLen,
+                          MR_TCP_INPUT_QUEUE_LEN - mTCPInputQueueLen, 0 );
          if( lLen > 0 )
          {
-            mInputMessageBufferIndex += lLen;
+            mTCPInputQueueLen += lLen;
+            mWatchdog = timeGetTime();
+            continue;
          }
-      }
 
-      if( mInputMessageBufferIndex >= MR_NET_HEADER_LEN && (mInputMessageBuffer.mDataLen>0) )
-      {
-         int lLen = recv( mSocket, ((char*)&mInputMessageBuffer)+mInputMessageBufferIndex, mInputMessageBuffer.mDataLen-(mInputMessageBufferIndex-MR_NET_HEADER_LEN), 0 );
-
-         if( lLen > 0 )
+         if( lLen == 0 )
          {
-            mInputMessageBufferIndex += lLen;
+            Disconnect();
          }
+         else
+         {
+            const int lError = WSAGetLastError();
+            if( lError != WSAEWOULDBLOCK )
+            {
+               TRACE( "TCP receive error %d\n", lError );
+               Disconnect();
+            }
+         }
+         break;
       }
 
-      if( (mInputMessageBufferIndex >= MR_NET_HEADER_LEN) && (mInputMessageBufferIndex == (MR_NET_HEADER_LEN+mInputMessageBuffer.mDataLen)) )
+      if( mTCPInputQueueLen >= MR_NET_HEADER_LEN )
       {
-         mInputMessageBufferIndex = 0;
-         mWatchdog = timeGetTime();
-         return &mInputMessageBuffer;
+         const int lMessageLen = MR_NET_HEADER_LEN + mTCPInputQueue[2];
+         if( mTCPInputQueueLen >= lMessageLen )
+         {
+            memcpy( &mInputMessageBuffer, mTCPInputQueue, lMessageLen );
+            mTCPInputQueueLen -= lMessageLen;
+            if( mTCPInputQueueLen > 0 )
+            {
+               memmove( mTCPInputQueue, mTCPInputQueue + lMessageLen, mTCPInputQueueLen );
+            }
+            mInputMessageBufferIndex = 0;
+            return &mInputMessageBuffer;
+         }
       }
 
       if( (mLastSendedDatagramNumber[1]>16)&&(timeGetTime()-mWatchdog) > MR_CONNECTION_TIMEOUT )
       {
-         // (mLastSendedDatagramNumber[1]>16) -- this condition avoid disconnecting 
-         //                                   -- before game start
-         TRACE( "Reception TimeOut %d %d\n", timeGetTime()-mWatchdog, mInputMessageBufferIndex );
-
-         if( mInputMessageBufferIndex != 0 )
+         // Avoid disconnecting before the race starts, as in the legacy path.
+         TRACE( "Reception TimeOut %d %d\n", timeGetTime()-mWatchdog, mTCPInputQueueLen );
+         if( mTCPInputQueueLen != 0 )
          {
-            TRACE( "Message: %d %d\n", mInputMessageBuffer.mMessageType, mInputMessageBuffer.mDataLen );
+            TRACE( "Partial TCP message: %d bytes\n", mTCPInputQueueLen );
          }
-
          Disconnect();
       }
    }

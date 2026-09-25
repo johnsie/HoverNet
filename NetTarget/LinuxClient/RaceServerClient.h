@@ -22,6 +22,7 @@ enum MR_RaceServerMessageType
     eRSMsgSetMainElemState = 3,
     eRSMsgCreateAutoElem   = 4,
     eRSMsgChatMessage      = 6,
+    eRSMsgHitMessage       = 10,
     eRSMsgGameName         = 42,  // Client -> Server: join (or create) a race by name
     eRSMsgConnNameGetSet   = 43,
     eRSMsgConnNameSet      = 44,  // Server -> Client: a peer's UDP port + name
@@ -135,6 +136,9 @@ public:
     // pOutStateData/pOutStateLen point into pMessage's own storage.
     static bool ParsePlayerState(const RaceServerMessage& pMessage, int& pOutSenderClientId,
                                  const std::uint8_t*& pOutStateData, std::size_t& pOutStateLen);
+
+    bool SendHit(int pTargetClientId);
+    static bool ParseHit(const RaceServerMessage& pMessage, int& pOutTargetClientId);
 
     // Replicates a short-lived automatically-created world element (notably a
     // missile) using the legacy MRNM_CREATE_AUTO_ELEM payload:

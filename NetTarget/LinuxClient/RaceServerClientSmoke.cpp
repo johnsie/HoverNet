@@ -553,6 +553,34 @@ namespace
         }
         std::printf("Missile creation sync reaches every other racer intact\n");
 
+        if (!lHost.SendHit(lJoinerAck.mClientId))
+        {
+            std::fprintf(stderr, "Failed to send targeted missile impact\n");
+            return false;
+        }
+        auto lReceivesHit = [&](RaceServerClient& pClient) {
+            for (int lTries = 0; lTries < 20; ++lTries)
+            {
+                if (!pClient.PollMessage(lMessage, 100))
+                {
+                    continue;
+                }
+                int lTargetClientId = -1;
+                if (RaceServerClient::ParseHit(lMessage, lTargetClientId) &&
+                    lTargetClientId == lJoinerAck.mClientId)
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
+        if (!lReceivesHit(lJoiner) || !lReceivesHit(lThirdRacer))
+        {
+            std::fprintf(stderr, "Targeted missile impact did not reach every other racer\n");
+            return false;
+        }
+        std::printf("Targeted missile impact reaches every other racer\n");
+
         return true;
     }
 }

@@ -465,12 +465,14 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             // another player's craft by spoofing its envelope prefix.
             memcpy(&buffer[3], &pConn->mClientId, sizeof(pConn->mClientId));
             [[fallthrough]];
+        case 10:  // MRNM_HIT_MESSAGE (payload: target RaceServer client id)
         case 51:  // MRNM_READY
         case 2:   // MRNM_CREATE_MAIN_ELEM
         case 4:   // MRNM_CREATE_AUTO_ELEM (missiles and other transient elements)
         case 47:  // MRNM_LAG_TEST
         {
-            g_Logger.Log(MR_LOG_INFO, "Client %d (Race %d): Relaying message type %d to race members",
+            g_Logger.Log(messageType == 3 ? MR_LOG_DEBUG : MR_LOG_INFO,
+                         "Client %d (Race %d): Relaying message type %d to race members",
                          pConn->mClientId, pConn->mRaceId, messageType);
 
             // Broadcast this message to all OTHER clients in the SAME race
