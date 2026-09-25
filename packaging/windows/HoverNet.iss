@@ -16,7 +16,10 @@ Compression=lzma2
 SolidCompression=yes
 
 [Files]
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+Source: "{#SourceDir}\Game2.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\ObjFac1.dat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\tracks\*"; DestDir: "{app}\tracks"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\HoverNet"; Filename: "{app}\Game2.exe"; WorkingDir: "{app}"

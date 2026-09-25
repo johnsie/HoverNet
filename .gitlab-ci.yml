@@ -89,7 +89,7 @@ build:game:windows:
   tags: ["$WINDOWS_RUNNER_TAG"]
   script:
     - '$msbuild = "C:\BuildTools\MSBuild\Current\Bin\MSBuild.exe"; if (-not (Test-Path $msbuild)) { throw "MSBuild not found at $msbuild" }; & $msbuild NetTarget/ObjFac1/ObjFac1.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & $msbuild NetTarget/Game2/Game2.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal'
-    - 'Copy-Item "C:\SDL2\lib\x86\SDL2.dll" "Release\SDL2.dll" -Force; $required = @("Game2.exe", "ObjFac1.dll", "ObjFac1.dat", "VideoServices.dll", "Model.dll", "MainCharacter.dll"); foreach ($file in $required) { if (-not (Test-Path (Join-Path "Release" $file))) { throw "Missing Windows runtime file: $file" } }'
+    - 'Copy-Item "C:\SDL2\lib\x86\SDL2.dll" "Release\SDL2.dll" -Force; Copy-Item "NetTarget\ObjFac1\ObjFac1.dat" "Release\ObjFac1.dat" -Force; New-Item -ItemType Directory -Force -Path "Release\tracks" | Out-Null; Copy-Item "NetTarget\Tracks\*.trk" "Release\tracks\" -Force; $required = @("Game2.exe", "ObjFac1.dll", "ObjFac1.dat", "VideoServices.dll", "Model.dll", "MainCharacter.dll", "tracks\ClassicH.trk"); foreach ($file in $required) { if (-not (Test-Path (Join-Path "Release" $file))) { throw "Missing Windows runtime file: $file" } }'
   artifacts:
     expire_in: 7 days
     paths:
