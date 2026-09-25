@@ -87,7 +87,7 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&GrokkSoft's WWW site...",    ID_HELP_SITE
         MENUITEM SEPARATOR
-        MENUITEM "&About HoverRace...",         ID_APP_ABOUT
+        MENUITEM "&About HoverNet...",         ID_APP_ABOUT
     END
 END
 
@@ -146,10 +146,10 @@ BEGIN
             VALUE "CompanyName", "GrokkSoft inc."
             VALUE "FileDescription", "Racing game"
             VALUE "FileVersion", "1, 0, 0, 1"
-            VALUE "InternalName", "HoverRace"
+            VALUE "InternalName", "HoverNet"
             VALUE "LegalCopyright", "Copyright � 1996"
-            VALUE "OriginalFilename", "HRace.exe"
-            VALUE "ProductName", "HoverRace"
+            VALUE "OriginalFilename", "Game2.exe"
+            VALUE "ProductName", "HoverNet"
             VALUE "ProductVersion", "1, 0, 0, 1"
             VALUE "SpecialBuild", "Demo version"
         END
@@ -267,7 +267,7 @@ END
 IDD_ABOUT DIALOG  0, 0, 252, 189
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | 
     WS_SYSMENU
-CAPTION "About HoverRace"
+CAPTION "About HoverNet"
 FONT 8, "MS Sans Serif"
 BEGIN
     DEFPUSHBUTTON   "OK",IDOK,195,167,50,14
@@ -518,7 +518,7 @@ END
 
 IDD_REGISTER DIALOG  0, 0, 238, 173
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "HoverRace Registration Key"
+CAPTION "HoverNet Registration Key"
 FONT 8, "MS Sans Serif"
 BEGIN
     EDITTEXT        IDC_OWNER,86,63,145,14,ES_AUTOHSCROLL
@@ -534,7 +534,7 @@ BEGIN
                     95,42,136,14
     LTEXT           "Owner:",IDC_STATIC,7,66,58,8
     LTEXT           "User ID:",IDC_STATIC,7,94,42,8
-    LTEXT           "You must fill all the fields of this window in order to have access to all of the HoverRace features.  Registration key can be bought from GrokkSoft inc at very low price.",
+    LTEXT           "You must fill all the fields of this window in order to have access to all of the HoverNet features.  Registration key can be bought from GrokkSoft inc at very low price.",
                     IDC_STATIC,7,7,224,28
     CONTROL         "",IDC_STATIC,"Static",SS_BLACKFRAME,14,59,209,1
     LTEXT           "Registration Key Part 1:",IDC_STATIC,7,108,78,8
@@ -547,15 +547,15 @@ END
 IDD_LOGIN_PASSWD DIALOGEX 0, 0, 284, 245
 STYLE DS_SETFONT | DS_MODALFRAME | DS_3DLOOK | DS_CENTER | WS_POPUP | 
     WS_CAPTION | WS_SYSMENU
-CAPTION "HoverRace(Registred version)"
+CAPTION "HoverNet(Registred version)"
 FONT 8, "MS Sans Serif", 0, 0, 0x1
 BEGIN
     EDITTEXT        IDC_PASSWD,53,192,95,14,ES_PASSWORD | ES_AUTOHSCROLL
-    DEFPUSHBUTTON   "Start HoverRace",IDOK,193,166,84,14
+    DEFPUSHBUTTON   "Start HoverNet",IDOK,193,166,84,14
     PUSHBUTTON      "Start Demo version",IDC_DEMO,193,182,84,14
     LTEXT           "Password:",IDC_STATIC,14,195,35,8
     CONTROL         "",IDC_STATIC,"Static",SS_BLACKFRAME,75,210,134,2
-    LTEXT           "This is a registred copy of HoverRace. You must supply a valid password if you want to have access to all the features of the game. Pressing ""Start Demo version"" will give you access only to the features of the Free version.",
+    LTEXT           "This is a registred copy of HoverNet. You must supply a valid password if you want to have access to all the features of the game. Pressing ""Start Demo version"" will give you access only to the features of the Free version.",
                     IDC_STATIC,7,214,270,27
     LTEXT           "Owner:",IDC_STATIC,14,167,30,8
     LTEXT           "",IDC_OWNER,53,166,128,11,0,WS_EX_STATICEDGE
@@ -567,7 +567,7 @@ END
 
 IDD_REGKEY_PASSWD DIALOG  0, 0, 209, 95
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "HoverRace login password"
+CAPTION "HoverNet login password"
 FONT 8, "MS Sans Serif"
 BEGIN
     EDITTEXT        IDC_PASSWD,57,52,95,14,ES_PASSWORD | ES_AUTOHSCROLL
@@ -583,11 +583,11 @@ END
 IDD_LOGIN DIALOG  0, 0, 272, 207
 STYLE DS_SETFONT | DS_MODALFRAME | DS_3DLOOK | DS_CENTER | WS_POPUP | 
     WS_CAPTION | WS_SYSMENU
-CAPTION "HoverRace (Demo version)"
+CAPTION "HoverNet (Demo version)"
 FONT 8, "MS Sans Serif"
 BEGIN
-    DEFPUSHBUTTON   "Start HoverRace",IDOK,182,186,83,14
-    LTEXT           "This is a non-registred copy of HoverRace. Non-registred version let you play the game but some of the features are only availlable to registred users. ",
+    DEFPUSHBUTTON   "Start HoverNet",IDOK,182,186,83,14
+    LTEXT           "This is a non-registred copy of HoverNet. Non-registred version let you play the game but some of the features are only availlable to registred users. ",
                     -1,7,170,167,30
     PUSHBUTTON      "Registration info...",ID_GAME_REGISTER,182,169,83,14
     PUSHBUTTON      "www.grokksoft.com",ID_HELP_SITE,7,155,258,11,BS_FLAT
@@ -618,7 +618,7 @@ END
 
 IDD_INTERNET_MEETING_PUB DIALOG  0, 0, 388, 277
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "HoverRace Internet meeting room"
+CAPTION "HoverNet Lobby"
 FONT 8, "MS Sans Serif"
 BEGIN
     EDITTEXT        IDC_CHAT_IN,120,218,265,14,ES_AUTOHSCROLL | 
@@ -688,7 +688,7 @@ END
 
 IDD_FIRST_CHOICE DIALOG  0, 0, 208, 103
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "HoverRace"
+CAPTION "HoverNet"
 FONT 8, "MS Sans Serif"
 BEGIN
     DEFPUSHBUTTON   "OK",IDOK,151,7,50,14
@@ -701,17 +701,17 @@ BEGIN
                     38
     LTEXT           "support@grokksoft.com",IDC_STATIC,99,71,83,8
     ICON            IDI_HOVER_ICON,IDC_STATIC,7,16,18,20
-    CONTROL         "Show this screen each time HoverRace starts",IDC_CHECK,
+    CONTROL         "Show this screen each time HoverNet starts",IDC_CHECK,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,86,194,10
 END
 
 IDD_SPONSOR DIALOG  0, 0, 236, 182
-STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | 
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION |
     WS_SYSMENU
-CAPTION "HoverRace"
+CAPTION "HoverNet"
 FONT 8, "MS Sans Serif"
 BEGIN
-    DEFPUSHBUTTON   "Start HoverRace",IDOK,150,161,79,16
+    DEFPUSHBUTTON   "Start HoverNet",IDOK,150,161,79,16
     PUSHBUTTON      "Button1",IDC_BITMAP,7,7,222,151,BS_BITMAP | BS_FLAT | 
                     NOT WS_TABSTOP
 END
@@ -1106,7 +1106,7 @@ IDB_INTRO               BITMAP                  "intro1.bmp"
 
 STRINGTABLE 
 BEGIN
-    ID_GAME_REGISTER        "Register HoverRace"
+    ID_GAME_REGISTER        "Register HoverNet"
     IDS_DISABLE             "Disable"
 END
 
@@ -1180,19 +1180,19 @@ BEGIN
     IDS_KEY_Z               "Z Key"
     IDS_DEFAULT_ALIAS       "your name"
     IDS_ABORT_GAME          "Abort current game?"
-    IDS_GAME_NAME           "HoverRace"
+    IDS_GAME_NAME           "HoverNet"
     IDS_HELP_REQ            "To be able to display Hover Race Help\nyou must have a Word document viewer installed\non your system\n"
-    IDS_ERROR               "HoverRace Error"
+    IDS_ERROR               "HoverNet Error"
     IDS_WWW_REQ             "Unable to activate your WebBrowser. Please start your WebBrowser and go to:\n%s"
-    IDS_CAPTION             "HoverRace v1.01"
-    IDS_REG_CAPTION         "HoverRace v1.01 [REGISTERED VERSION]"
-    IDS_DEMO_CAPTION        "HoverRace v1.01 [DEMO MODE]"
+    IDS_CAPTION             "HoverNet v1.01"
+    IDS_REG_CAPTION         "HoverNet v1.01 [REGISTERED VERSION]"
+    IDS_DEMO_CAPTION        "HoverNet v1.01 [DEMO MODE]"
 END
 
-STRINGTABLE 
+STRINGTABLE
 BEGIN
-    IDS_MODE_SWITCH_TRY     "HoverRace will try to switch your screen to a 256 colors mode"
-    IDS_CANT_SWITCH_MODE    "HoverRace was unable to switch the video mode. You will need to play in full screen"
+    IDS_MODE_SWITCH_TRY     "HoverNet will try to switch your screen to a 256 colors mode"
+    IDS_CANT_SWITCH_MODE    "HoverNet was unable to switch the video mode. You will need to play in full screen"
     IDS_BAD_MODE            "Incompatible video mode. You will need to play in full screen"
     IDS_CAR_FOR_REG         "You need to register to use this craft model"
     IDS_COLOR_INTENSITY     "Colors intensity"
@@ -1200,7 +1200,7 @@ BEGIN
     IDS_PROP_SETTING        "Properties setting"
     IDS_READ_NOTICE         "Please take the time to read the notice"
     IDS_BAD_PASSWD          "Wrong password"
-    IDS_NOT_HR_KEY          "Not an HoverRace Key"
+    IDS_NOT_HR_KEY          "Not an HoverNet Key"
     IDS_FILL_OWNER          "Please fill the ""Owner"" field"
     IDS_PASSWD_LEN          "Password must have at max 10 characters"
     IDS_KEY1_LEN            "Registration Key part 1 must have 20 character long"
@@ -1216,7 +1216,7 @@ BEGIN
     IDS_CLEAR_REGINFO       "Are you sure that you want to clear current registration key info?"
     IDS_IMR_CONNECT         "Connecting to the Internet Meeting Room..."
     IDS_UR_CONNECT          "You are Connected"
-    IDS_IMR_WELCOME         "Welcome to the HoverRace Internet Meeting Room"
+    IDS_IMR_WELCOME         "Welcome to the HoverNet Lobby"
     IDS_IMR_DISCONNECT      "Disconnecting from the Internet Meeting Room..."
     IDS_IMR_ADD_GAME        "Registering game with the Internet Meeting Room..."
     IDS_IMR_DEL_GAME        "Unregistering game from the Internet Meeting Room..."

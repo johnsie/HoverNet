@@ -270,7 +270,7 @@ static BOOL FetchHTTPSContent(const char* pHost, const char* pPath, CString& pBu
    }
 
    try {
-      hInternet = InternetOpen("HoverRace/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+      hInternet = InternetOpen("HoverNet/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
       if (!hInternet) {
          DWORD dwError = GetLastError();
          char szBuffer[256];
@@ -3122,7 +3122,7 @@ BOOL CALLBACK MR_InternetRoom::NetOpCallBack( HWND pWindow, UINT  pMsgId, WPARAM
                {
                   CString lMessage;
                   lMessage = "This is a demo server entry that is currently offline.\n\n"
-                            "The main HoverRace Internet Room server at steeky.com is not available.\n\n"
+                            "The main HoverNet Internet Room server at steeky.com is not available.\n\n"
                             "Internet multiplayer rooms require an active server to function.\n\n"
                             "For single-player or local network play, use the other game modes.";
                   
