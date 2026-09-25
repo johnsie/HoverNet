@@ -182,6 +182,20 @@ bool RaceServerClient::JoinGameById(int pRaceId)
     return SendMessage(eRSMsgJoinRaceById, &pRaceId, sizeof(pRaceId));
 }
 
+bool RaceServerClient::SetPlayerName(const std::string& pName)
+{
+    if (pName.empty() || pName.size() > 20)
+    {
+        return false;
+    }
+    return SendMessage(eRSMsgSetPlayerName, pName.data(), pName.size());
+}
+
+bool RaceServerClient::ListLobbyUsers()
+{
+    return SendMessage(eRSMsgListLobbyUsers, nullptr, 0);
+}
+
 bool RaceServerClient::StartRace()
 {
     return SendMessage(eRSMsgStartRace, nullptr, 0);
@@ -265,7 +279,10 @@ bool RaceServerClient::PollMessage(RaceServerMessage& pOut, int pTimeoutMs)
 
 bool RaceServerClient::ParsePeer(const RaceServerMessage& pMessage, RaceServerPeer& pOut)
 {
-    if (pMessage.mType != eRSMsgConnNameSet || pMessage.mData.size() < 4)
+    // eRSMsgLobbyUserPresent uses the identical [clientId][name] wire shape as
+    // eRSMsgConnNameSet -- one parser covers both.
+    if ((pMessage.mType != eRSMsgConnNameSet && pMessage.mType != eRSMsgLobbyUserPresent) ||
+        pMessage.mData.size() < 4)
     {
         return false;
     }
@@ -274,6 +291,16 @@ bool RaceServerClient::ParsePeer(const RaceServerMessage& pMessage, RaceServerPe
     std::memcpy(&lClientId, pMessage.mData.data(), sizeof(lClientId));
     pOut.mClientId = lClientId;
     pOut.mName.assign(pMessage.mData.begin() + 4, pMessage.mData.end());
+    return true;
+}
+
+bool RaceServerClient::ParseLobbyUserLeft(const RaceServerMessage& pMessage, int& pOutClientId)
+{
+    if (pMessage.mType != eRSMsgLobbyUserLeft || pMessage.mData.size() < sizeof(int))
+    {
+        return false;
+    }
+    std::memcpy(&pOutClientId, pMessage.mData.data(), sizeof(pOutClientId));
     return true;
 }
 

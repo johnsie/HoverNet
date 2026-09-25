@@ -340,6 +340,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 // same name join it. The wire message only carries a name today, so a
                 // freshly-created race uses fixed defaults; picking a track/lap count
                 // when hosting would need a richer message than eRSMsgGameName.
+                const bool lWasBrowsing = (pConn->mRaceId == -1);
                 pConn->mRaceId = pRaceManager->FindOrCreateRace(
                     gameName, "ClassicH", 3, TRUE, pConn->mClientId);
 
@@ -349,8 +350,11 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                     break;
                 }
 
-                snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
+                if (pConn->mPlayerName[0] == '\0') {
+                    snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
+                }
                 pRaceManager->JoinRace(pConn->mRaceId, pConn->mClientId, pConn->mPlayerName);
+                if (lWasBrowsing) { BroadcastLobbyUserLeft(pConn->mClientId); }
 
                 g_Logger.Log(MR_LOG_INFO, "Client %d assigned to race %d", pConn->mClientId, pConn->mRaceId);
 
@@ -420,6 +424,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 break;
             }
 
+            const bool lWasBrowsing = (pConn->mRaceId == -1);
             pConn->mRaceId = pRaceManager->CreateRace(raceName, trackName, numLaps, weaponsAllowed ? TRUE : FALSE,
                                                        pConn->mClientId);
             if (pConn->mRaceId < 0) {
@@ -427,8 +432,11 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 break;
             }
 
-            snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
+            if (pConn->mPlayerName[0] == '\0') {
+                snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
+            }
             pRaceManager->JoinRace(pConn->mRaceId, pConn->mClientId, pConn->mPlayerName);
+            if (lWasBrowsing) { BroadcastLobbyUserLeft(pConn->mClientId); }
             g_Logger.Log(MR_LOG_INFO, "Client %d hosted race %d '%s': track=%s laps=%d weapons=%s",
                          pConn->mClientId, pConn->mRaceId, raceName, trackName, numLaps,
                          weaponsAllowed ? "yes" : "no");
@@ -463,12 +471,74 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 break;
             }
 
+            const bool lWasBrowsing = (pConn->mRaceId == -1);
             pConn->mRaceId = targetRaceId;
-            snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
+            if (pConn->mPlayerName[0] == '\0') {
+                snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
+            }
             pRaceManager->JoinRace(pConn->mRaceId, pConn->mClientId, pConn->mPlayerName);
+            if (lWasBrowsing) { BroadcastLobbyUserLeft(pConn->mClientId); }
             g_Logger.Log(MR_LOG_INFO, "Client %d joined race %d by id", pConn->mClientId, pConn->mRaceId);
 
             FinishJoiningRace(pConn, pRaceManager);
+            break;
+        }
+
+        case 46:  // MRNM_SET_PLAYER_NAME - client chose a display name
+        {
+            const unsigned char nameLen = static_cast<unsigned char>(
+                std::min<int>(messageDataLen, MR_MAX_PLAYER_NAME));
+            if (nameLen == 0) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d: empty SET_PLAYER_NAME message", pConn->mClientId);
+                break;
+            }
+            memcpy(pConn->mPlayerName, &buffer[3], nameLen);
+            pConn->mPlayerName[nameLen] = '\0';
+            g_Logger.Log(MR_LOG_INFO, "Client %d set player name to '%s'", pConn->mClientId, pConn->mPlayerName);
+
+            // Announce to whoever's already browsing the lobby; ListLobbyUsers (56)
+            // is how a client learns about everyone who was already there before it
+            // connected.
+            if (pConn->mRaceId == -1) {
+                MessageBuffer msg;
+                msg.header = MakeMessageHeader(48);  // MRNM_LOBBY_USER_PRESENT
+                memcpy(&msg.data[0], &pConn->mClientId, sizeof(pConn->mClientId));
+                memcpy(&msg.data[4], pConn->mPlayerName, nameLen);
+                msg.dataLen = static_cast<unsigned char>(4 + nameLen);
+                const int msgSize = 3 + msg.dataLen;
+
+                for (auto& pair : mConnections) {
+                    ClientConnection* pTarget = pair.second;
+                    if (pTarget && pTarget->mConnected && pTarget->mClientId != pConn->mClientId &&
+                        pTarget->mRaceId == -1) {
+                        send(pTarget->mTcpSocket, (const char*)&msg, msgSize, 0);
+                    }
+                }
+            }
+            break;
+        }
+
+        case 56:  // MRNM_LIST_LOBBY_USERS - client wants who's currently browsing
+        {
+            for (auto& pair : mConnections) {
+                ClientConnection* pTarget = pair.second;
+                if (!pTarget || !pTarget->mConnected || pTarget->mClientId == pConn->mClientId ||
+                    pTarget->mRaceId != -1 || pTarget->mPlayerName[0] == '\0') {
+                    continue;
+                }
+                MessageBuffer msg;
+                msg.header = MakeMessageHeader(48);  // MRNM_LOBBY_USER_PRESENT
+                memcpy(&msg.data[0], &pTarget->mClientId, sizeof(pTarget->mClientId));
+                const unsigned char nameLen = static_cast<unsigned char>(strlen(pTarget->mPlayerName));
+                memcpy(&msg.data[4], pTarget->mPlayerName, nameLen);
+                msg.dataLen = static_cast<unsigned char>(4 + nameLen);
+                send(pConn->mTcpSocket, (const char*)&msg, 3 + msg.dataLen, 0);
+            }
+
+            MessageBuffer endMsg;
+            endMsg.header = MakeMessageHeader(57);  // MRNM_LOBBY_USER_LIST_END
+            endMsg.dataLen = 0;
+            send(pConn->mTcpSocket, (const char*)&endMsg, 3, 0);
             break;
         }
 
@@ -700,11 +770,30 @@ void MR_ServerSocket::CloseConnection(int clientId, MR_RaceManager* pRaceManager
         if (pRaceManager && pConn->mRaceId >= 0) {
             pRaceManager->LeaveRace(pConn->mRaceId, clientId);
         }
+        if (pConn->mRaceId == -1 && pConn->mPlayerName[0] != '\0') {
+            BroadcastLobbyUserLeft(clientId);
+        }
         if (pConn->mTcpSocket != INVALID_SOCKET) {
             closesocket(pConn->mTcpSocket);
         }
         delete pConn;
         mConnections.erase(it);
+    }
+}
+
+void MR_ServerSocket::BroadcastLobbyUserLeft(int clientId)
+{
+    MessageBuffer msg;
+    msg.header = MakeMessageHeader(49);  // MRNM_LOBBY_USER_LEFT
+    memcpy(msg.data, &clientId, sizeof(clientId));
+    msg.dataLen = sizeof(clientId);
+    const int msgSize = 3 + msg.dataLen;
+
+    for (auto& pair : mConnections) {
+        ClientConnection* pTarget = pair.second;
+        if (pTarget && pTarget->mConnected && pTarget->mClientId != clientId && pTarget->mRaceId == -1) {
+            send(pTarget->mTcpSocket, (const char*)&msg, msgSize, 0);
+        }
     }
 }
 

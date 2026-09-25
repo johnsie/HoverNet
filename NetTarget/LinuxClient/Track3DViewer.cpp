@@ -410,6 +410,7 @@ enum class LobbyInputMode
     eNone,
     eHostRace,
     eChat,
+    eEnteringName,
 };
 
 enum class HostSetupStep
@@ -461,9 +462,31 @@ void SaveHostPrefs(const HostPrefs& prefs)
 
 enum class LobbyPhase
 {
+    eEnteringName, // First time in the lobby with no saved username yet
     eBrowsing,    // Picking or naming a race
     eWaitingRoom, // Joined a race, waiting for its creator to start it
 };
+
+std::string UsernamePath()
+{
+    const char* home = std::getenv("HOME");
+    return std::string(home != nullptr ? home : ".") + "/.hovernet_username";
+}
+
+// Empty return means no username has been chosen yet (RunLobbyScreen prompts for one).
+std::string LoadUsername()
+{
+    std::ifstream in(UsernamePath());
+    std::string name;
+    std::getline(in, name);
+    return name;
+}
+
+void SaveUsername(const std::string& name)
+{
+    std::ofstream out(UsernamePath());
+    out << name << '\n';
+}
 
 struct RemotePlayer
 {
@@ -513,8 +536,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     const UiRect racePanel{margin, contentTop, leftWidth, contentHeight * 3 / 5};
     const UiRect actionPanel{margin, racePanel.y + racePanel.h + gap, leftWidth,
                              contentBottom - racePanel.y - racePanel.h - gap};
-    const UiRect chatPanel{racePanel.x + racePanel.w + gap, contentTop,
-                           screenWidth - margin - racePanel.x - racePanel.w - gap, contentHeight};
+    const int rightWidth = screenWidth - margin - racePanel.x - racePanel.w - gap;
+    const UiRect usersPanel{racePanel.x + racePanel.w + gap, contentTop, rightWidth, contentHeight * 2 / 5};
+    const UiRect chatPanel{racePanel.x + racePanel.w + gap, usersPanel.y + usersPanel.h + gap, rightWidth,
+                           contentBottom - usersPanel.y - usersPanel.h - gap};
     const UiRect joinButton{racePanel.x + 14, racePanel.y + racePanel.h - 48, 132, 34};
     const UiRect hostButton{joinButton.x + joinButton.w + 12, joinButton.y, 150, joinButton.h};
     const UiRect refreshButton{hostButton.x + hostButton.w + 12, joinButton.y, 150, joinButton.h};
@@ -542,6 +567,16 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         }
     };
 
+    // Who else is browsing the lobby right now (not the race roster -- that's
+    // raceMembers, populated once eWaitingRoom starts). The first batch of
+    // eRSMsgLobbyUserPresent after ListLobbyUsers is people already there before
+    // us, so it's populated silently; receivedInitialRoster (set by
+    // eRSMsgLobbyUserListEnd) switches later eRSMsgLobbyUserPresent messages over
+    // to "someone just joined" chat announcements instead.
+    std::vector<RaceServerPeer> lobbyUsers;
+    bool receivedInitialRoster = false;
+
+    std::string username = LoadUsername();
     int selected = 0;
     LobbyInputMode inputMode = LobbyInputMode::eNone;
     LobbyPhase phase = LobbyPhase::eBrowsing;
@@ -553,6 +588,16 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     bool isHost = false;
     std::vector<std::string> raceMembers;
     int framesShown = 0;
+
+    if (username.empty()) {
+        phase = LobbyPhase::eEnteringName;
+        inputMode = LobbyInputMode::eEnteringName;
+        statusText = "Choose a name to show other players";
+    }
+    else {
+        client.SetPlayerName(username);
+        client.ListLobbyUsers();
+    }
 
     HostSetupStep hostStep = HostSetupStep::eTrack;
     HostPrefs hostPrefs = LoadHostPrefs();
@@ -632,6 +677,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     inputBuffer += event.text.text;
                 }
             }
+            else if (inputMode == LobbyInputMode::eEnteringName && event.type == SDL_TEXTINPUT) {
+                if (inputBuffer.size() < 20) {
+                    inputBuffer += event.text.text;
+                }
+            }
             else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
                 const int mouseX = event.button.x;
                 const int mouseY = event.button.y;
@@ -692,12 +742,32 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             else if (event.type == SDL_KEYDOWN) {
                 const SDL_Keycode key = event.key.keysym.sym;
                 if (key == SDLK_ESCAPE) {
-                    if (inputMode != LobbyInputMode::eNone) {
+                    if (phase == LobbyPhase::eEnteringName) {
+                        // A name is required before browsing -- nothing sensible
+                        // to fall back to here, so just leave the lobby.
+                        running = false;
+                    }
+                    else if (inputMode != LobbyInputMode::eNone) {
                         inputMode = LobbyInputMode::eNone;
                         inputBuffer.clear();
                     }
                     else {
                         running = false;
+                    }
+                }
+                else if (inputMode == LobbyInputMode::eEnteringName) {
+                    if (key == SDLK_BACKSPACE && !inputBuffer.empty()) {
+                        inputBuffer.pop_back();
+                    }
+                    else if (key == SDLK_RETURN && !inputBuffer.empty()) {
+                        username = inputBuffer;
+                        SaveUsername(username);
+                        client.SetPlayerName(username);
+                        client.ListLobbyUsers();
+                        phase = LobbyPhase::eBrowsing;
+                        inputMode = LobbyInputMode::eNone;
+                        inputBuffer.clear();
+                        statusText = "Connected - refreshing races...";
                     }
                 }
                 else if (inputMode == LobbyInputMode::eHostRace) {
@@ -842,6 +912,31 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 joined = true;
                 running = false;
             }
+            else if (message.mType == eRSMsgLobbyUserPresent) {
+                RaceServerPeer peer;
+                if (RaceServerClient::ParsePeer(message, peer) &&
+                    std::none_of(lobbyUsers.begin(), lobbyUsers.end(),
+                                 [&](const RaceServerPeer& u) { return u.mClientId == peer.mClientId; })) {
+                    lobbyUsers.push_back(peer);
+                    if (receivedInitialRoster) {
+                        pushChat("* " + peer.mName + " entered the lobby");
+                    }
+                }
+            }
+            else if (message.mType == eRSMsgLobbyUserListEnd) {
+                receivedInitialRoster = true;
+            }
+            else if (message.mType == eRSMsgLobbyUserLeft) {
+                int leftClientId = -1;
+                if (RaceServerClient::ParseLobbyUserLeft(message, leftClientId)) {
+                    const auto it = std::find_if(lobbyUsers.begin(), lobbyUsers.end(),
+                                                 [&](const RaceServerPeer& u) { return u.mClientId == leftClientId; });
+                    if (it != lobbyUsers.end()) {
+                        pushChat("* " + it->mName + " left the lobby");
+                        lobbyUsers.erase(it);
+                    }
+                }
+            }
         }
 
         viewport.Clear(0);
@@ -851,8 +946,27 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         DrawUiText(font, margin, headerHeight - bodyHeight - 4, statusText.c_str(), &viewport,
                    MR_Sprite::eLeft, MR_Sprite::eTop, bodyScale);
 
+        if (phase == LobbyPhase::eEnteringName) {
+            const UiRect namePanel{screenWidth / 2 - 220, screenHeight / 2 - 70, 440, 140};
+            DrawUiPanel(buffer, namePanel);
+            DrawUiText(font, screenWidth / 2, namePanel.y + 20, "WELCOME TO HOVERNET", &viewport,
+                       MR_Sprite::eCenter, MR_Sprite::eTop, bodyScale);
+            DrawUiText(font, screenWidth / 2, namePanel.y + 20 + lineHeight, "Enter a username:", &viewport,
+                       MR_Sprite::eCenter, MR_Sprite::eTop, bodyScale);
+            const UiRect nameInput{namePanel.x + 20, namePanel.y + 20 + lineHeight * 2, namePanel.w - 40, 34};
+            FillUiRect(buffer, nameInput, kUiSelectionColor);
+            OutlineUiRect(buffer, nameInput, kUiButtonActiveColor);
+            const std::string namePrompt = inputBuffer + "_";
+            DrawUiText(font, nameInput.x + 8, nameInput.y + 5, namePrompt.c_str(), &viewport,
+                       MR_Sprite::eLeft, MR_Sprite::eTop, bodyScale);
+            DrawUiText(font, screenWidth / 2, nameInput.y + nameInput.h + 10, "Press Enter to continue",
+                       &viewport, MR_Sprite::eCenter, MR_Sprite::eTop, bodyScale);
+        }
+        else {
+
         DrawUiPanel(buffer, racePanel);
         DrawUiPanel(buffer, actionPanel);
+        DrawUiPanel(buffer, usersPanel);
         DrawUiPanel(buffer, chatPanel);
 
         const int bodyCharWidth = std::max(1, font.GetItemWidth() * 3 / (4 * bodyScale));
@@ -986,6 +1100,29 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             }
         }
 
+        char usersHeader[64];
+        std::snprintf(usersHeader, sizeof(usersHeader), "USERS IN LOBBY (%d)",
+                      static_cast<int>(lobbyUsers.size()));
+        DrawUiText(font, usersPanel.x + 12, usersPanel.y + 12, usersHeader, &viewport,
+                   MR_Sprite::eLeft, MR_Sprite::eTop, bodyScale);
+        int usersY = usersPanel.y + 12 + lineHeight;
+        const int usersWidth = usersPanel.w - 24;
+        if (lobbyUsers.empty()) {
+            DrawUiText(font, usersPanel.x + 12, usersY, "No one else here yet.", &viewport,
+                       MR_Sprite::eLeft, MR_Sprite::eTop, bodyScale);
+        }
+        else {
+            for (const RaceServerPeer& user : lobbyUsers) {
+                if (usersY + lineHeight >= usersPanel.y + usersPanel.h) {
+                    break;
+                }
+                const std::string fittedUser = fitText(user.mName, usersWidth);
+                DrawUiText(font, usersPanel.x + 12, usersY, fittedUser.c_str(), &viewport,
+                           MR_Sprite::eLeft, MR_Sprite::eTop, bodyScale);
+                usersY += lineHeight;
+            }
+        }
+
         DrawUiText(font, chatPanel.x + 12, chatPanel.y + 12, "CHAT", &viewport,
                    MR_Sprite::eLeft, MR_Sprite::eTop, bodyScale);
         int chatY = chatPanel.y + 48;
@@ -1013,6 +1150,8 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         DrawUiText(font, margin, screenHeight - footerHeight + 16, shortcuts, &viewport,
                    MR_Sprite::eLeft, MR_Sprite::eTop, bodyScale);
         DrawUiButton(buffer, font, viewport, backButton, "Back");
+
+        }
 
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
         SDL_Delay(16);

@@ -27,8 +27,13 @@ enum MR_RaceServerMessageType
     eRSMsgConnNameGetSet   = 43,
     eRSMsgConnNameSet      = 44,  // Server -> Client: a peer's UDP port + name
     eRSMsgClientAddrReq    = 45,
+    eRSMsgSetPlayerName    = 46,  // Client -> Server: set this connection's display name
     eRSMsgLagTest          = 47,
+    eRSMsgLobbyUserPresent = 48,  // Server -> Client: a user in the lobby (join announce, or a ListLobbyUsers row)
+    eRSMsgLobbyUserLeft    = 49,  // Server -> Client: a user is no longer browsing the lobby
     eRSMsgReady            = 51,
+    eRSMsgListLobbyUsers   = 56,  // Client -> Server: request who else is currently browsing
+    eRSMsgLobbyUserListEnd = 57,  // Server -> Client: the ListLobbyUsers burst is complete
     eRSMsgListGames        = 60,  // Client -> Server: request the lobby listing
     eRSMsgGameInfo         = 61,  // Server -> Client: one open race (see ParseGameInfo)
     eRSMsgGameListEnd      = 62,  // Server -> Client: listing is complete
@@ -59,9 +64,11 @@ struct RaceServerMessage
     std::vector<std::uint8_t> mData;
 };
 
-// A peer discovered via eRSMsgConnNameSet. mClientId identifies them in later
-// eRSMsgSetMainElemState updates. The server stamps that id from the sending
-// connection, allowing races with multiple remote players to attribute updates.
+// A peer discovered via eRSMsgConnNameSet (a race member) or eRSMsgLobbyUserPresent
+// (someone browsing the lobby) -- same shape either way. mClientId identifies them
+// in later eRSMsgSetMainElemState updates; the server stamps that id from the
+// sending connection, allowing races with multiple remote players to attribute
+// updates.
 struct RaceServerPeer
 {
     int mClientId = -1;
@@ -116,6 +123,22 @@ public:
 
     // Parses an eRSMsgConnNameSet payload ([4-byte little-endian clientId][name]).
     static bool ParsePeer(const RaceServerMessage& pMessage, RaceServerPeer& pOut);
+
+    // Sets this connection's display name, shown in the lobby user list and (once
+    // a race is joined/hosted) to other racers instead of the server's "Player_N"
+    // fallback. Fails (no message sent) if pName is empty or over 20 bytes.
+    bool SetPlayerName(const std::string& pName);
+
+    // Requests the roster of everyone else currently browsing the lobby (not yet
+    // in a race). Each of them arrives as a separate eRSMsgLobbyUserPresent message
+    // (same wire shape/parser as eRSMsgConnNameSet, see ParsePeer), terminated by
+    // eRSMsgLobbyUserListEnd -- unlike ListGames, this doesn't block and collect,
+    // since new arrivals/departures after this snapshot come the same way as
+    // eRSMsgLobbyUserPresent/eRSMsgLobbyUserLeft broadcasts from then on.
+    bool ListLobbyUsers();
+
+    // Parses an eRSMsgLobbyUserLeft payload ([4-byte little-endian clientId]).
+    static bool ParseLobbyUserLeft(const RaceServerMessage& pMessage, int& pOutClientId);
 
     // Sends eRSMsgListGames and collects every eRSMsgGameInfo up to eRSMsgGameListEnd
     // (or pTimeoutMs of silence). Returns false only on a transport-level failure;

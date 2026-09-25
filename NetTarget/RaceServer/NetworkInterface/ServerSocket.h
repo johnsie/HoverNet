@@ -56,4 +56,10 @@ private:
     // settings" (eRSMsgHostRace): acks the join (with host status) and exchanges
     // eRSMsgConnNameSet with every other player already in pConn->mRaceId.
     void FinishJoiningRace(ClientConnection* pConn, MR_RaceManager* pRaceManager);
+
+    // Tells every other client still browsing the lobby (mRaceId == -1) that
+    // clientId is no longer there -- either they disconnected or they just
+    // joined/hosted a race. No-op if clientId was never announced (never sent
+    // eRSMsgSetPlayerName), matching who ListLobbyUsers would have shown them to.
+    void BroadcastLobbyUserLeft(int clientId);
 };
