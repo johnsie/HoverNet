@@ -582,6 +582,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     LobbyPhase phase = LobbyPhase::eBrowsing;
     std::string inputBuffer;
     Uint32 lastRefresh = SDL_GetTicks();
+    Uint32 lastPing = SDL_GetTicks();
     std::string statusText = "Connected - refreshing races...";
     bool running = true;
     bool joined = false;
@@ -849,6 +850,16 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             gamesBeingListed.clear();
             client.SendMessage(eRSMsgListGames, nullptr, 0);
             lastRefresh = SDL_GetTicks();
+            lastPing = SDL_GetTicks();
+        }
+
+        // The race list refresh above already doubles as a keep-alive while
+        // browsing, but the waiting room (and eBrowsing between refreshes) can
+        // otherwise sit silent past the server's idle timeout -- ping so the
+        // server doesn't decide this connection went stale and drop it.
+        if (running && phase != LobbyPhase::eEnteringName && SDL_GetTicks() - lastPing > 10000) {
+            client.Ping();
+            lastPing = SDL_GetTicks();
         }
 
         // Drain every message currently waiting rather than blocking for a response

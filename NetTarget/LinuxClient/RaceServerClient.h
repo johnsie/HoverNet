@@ -137,6 +137,13 @@ public:
     // eRSMsgLobbyUserPresent/eRSMsgLobbyUserLeft broadcasts from then on.
     bool ListLobbyUsers();
 
+    // Keep-alive: sends an empty eRSMsgLagTest so the server's idle timeout
+    // (see ClientConnection::IsAlive) doesn't drop this connection during
+    // stretches with no other traffic, e.g. sitting in the lobby or a race's
+    // waiting room. Callers should call this periodically (every few seconds,
+    // well under MR_CONNECTION_TIMEOUT) whenever nothing else was just sent.
+    bool Ping();
+
     // Parses an eRSMsgLobbyUserLeft payload ([4-byte little-endian clientId]).
     static bool ParseLobbyUserLeft(const RaceServerMessage& pMessage, int& pOutClientId);
 

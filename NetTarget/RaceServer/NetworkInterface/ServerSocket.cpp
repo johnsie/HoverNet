@@ -205,6 +205,23 @@ void MR_ServerSocket::ProcessEvents(MR_RaceManager* pRaceManager)
             CloseConnection(clientId, pRaceManager);
         }
     }
+
+    // IsAlive()'s idle-timeout half only gets checked above for connections that
+    // were just read from -- a client that stops sending anything at all (frozen
+    // process, network black hole with no RST) is never in readSet again, so it
+    // would otherwise sit in mConnections, and its race, forever. Sweep every
+    // connection each tick so a truly silent one still gets timed out and
+    // cleaned up even though it never triggers select().
+    std::vector<int> idleClients;
+    for (auto& pair : mConnections) {
+        if (pair.second && pair.second->mConnected && !pair.second->IsAlive()) {
+            idleClients.push_back(pair.first);
+        }
+    }
+    for (int clientId : idleClients) {
+        g_Logger.Log(MR_LOG_WARN, "Client %d: Idle timeout, closing connection", clientId);
+        CloseConnection(clientId, pRaceManager);
+    }
 }
 
 void MR_ServerSocket::AcceptNewConnection()

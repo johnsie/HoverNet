@@ -196,6 +196,14 @@ bool RaceServerClient::ListLobbyUsers()
     return SendMessage(eRSMsgListLobbyUsers, nullptr, 0);
 }
 
+bool RaceServerClient::Ping()
+{
+    // Any message resets the server's idle timeout for this connection (see
+    // ClientConnection::IsAlive), so an empty eRSMsgLagTest works as a no-op
+    // keep-alive -- harmless even mid-race, where it's just relayed to peers.
+    return SendMessage(eRSMsgLagTest, nullptr, 0);
+}
+
 bool RaceServerClient::StartRace()
 {
     return SendMessage(eRSMsgStartRace, nullptr, 0);
