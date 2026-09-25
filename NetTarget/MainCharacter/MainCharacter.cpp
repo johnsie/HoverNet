@@ -23,6 +23,8 @@
 
 #include <math.h>
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 
 #include "MainCharacter.h"
 #include "../Model/RaceEffects.h"
@@ -1254,8 +1256,16 @@ void MR_MainCharacter::ApplyEffect( const MR_ContactEffect* pEffect,  MR_Simulat
 
       if( mRenderer != NULL )
       {
-         mInternalSoundList.Add( mRenderer->GetOutOfCtrlSound() );
-         mExternalSoundList.Add( mRenderer->GetOutOfCtrlSound() );
+         MR_ShortSound* lOutOfCtrlSound = mRenderer->GetOutOfCtrlSound();
+#ifndef _WIN32
+         if( std::getenv( "HOVERNET_SOUND_TRACE" ) != nullptr )
+         {
+            std::fprintf( stderr, "ApplyEffect(LostOfControl): type=%d master=%d sound=%p\n",
+                          (int)lLostOfControl->mType, (int)mMasterMode, (void*)lOutOfCtrlSound );
+         }
+#endif
+         mInternalSoundList.Add( lOutOfCtrlSound );
+         mExternalSoundList.Add( lOutOfCtrlSound );
       }
 
       if( lLostOfControl->mType == MR_LostOfControl::eMine && mMasterMode )

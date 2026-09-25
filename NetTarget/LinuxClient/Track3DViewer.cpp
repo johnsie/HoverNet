@@ -849,7 +849,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
 
         viewport.Clear(0);
 
-        DrawUiText(font, screenWidth / 2, 18, "HOVERRACE LOBBY", &viewport,
+        DrawUiText(font, screenWidth / 2, 18, "HOVERNET LOBBY", &viewport,
                    MR_Sprite::eCenter, MR_Sprite::eTop, 1);
         DrawUiText(font, margin, headerHeight - bodyHeight - 4, statusText.c_str(), &viewport,
                    MR_Sprite::eLeft, MR_Sprite::eTop, bodyScale);
@@ -1155,7 +1155,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 
         viewport.Clear(0);
         int y = lineHeight * 3;
-        DrawUiText(font, viewport.GetXRes() / 2, y, "HOVERRACE", &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
+        DrawUiText(font, viewport.GetXRes() / 2, y, "HOVERNET", &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
         y += lineHeight * 3;
         for (int index = 0; index < optionCount; ++index) {
             char line[64];
