@@ -117,8 +117,22 @@ BOOL MR_RaceManager::JoinRace(int raceId, int clientId, const char* playerName)
 void MR_RaceManager::LeaveRace(int raceId, int clientId)
 {
     RaceSession* pRace = GetRace(raceId);
-    if (pRace) {
-        pRace->RemovePlayer(clientId);
+    if (!pRace) {
+        return;
+    }
+    pRace->RemovePlayer(clientId);
+
+    // CleanupEmptyRaces (called from UpdateAllRaces) would reap this race for the
+    // same reason anyway, but only every 5 seconds -- a host who cancels while
+    // waiting for players has already closed their connection and expects the
+    // race gone from the listing right away, not up to 5 seconds later.
+    if (pRace->GetActivePlayerCount() == 0) {
+        auto it = mRaces.find(raceId);
+        if (it != mRaces.end()) {
+            g_Logger.Log(MR_LOG_DEBUG, "Race %d emptied by client %d leaving, removing immediately", raceId, clientId);
+            delete it->second;
+            mRaces.erase(it);
+        }
     }
 }
 
