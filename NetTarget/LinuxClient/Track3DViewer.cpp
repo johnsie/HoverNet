@@ -1305,6 +1305,7 @@ enum class PauseChoice
 {
     eResume,
     eLeaveRace,
+    eOnlineLobby,
     eQuit,
 };
 
@@ -1312,14 +1313,18 @@ enum class PauseChoice
 // their own context (onlineClient.IsConnected()) and interpret eLeaveRace as
 // "leave this race" when online or "set up a new local race" when offline,
 // so the enum itself doesn't need a second value for the same button slot.
+// eOnlineLobby is always available (whether currently racing online or off)
+// as a shortcut to the online lobby -- callers do exactly what eLeaveRace
+// already does when online (reset and rejoin the lobby).
 PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                          MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline)
 {
-    const char* options[] = {"Resume", pIsOnline ? "Leave Race" : "New Local Race", "Quit HoverNet"};
-    constexpr int optionCount = 3;
+    const char* options[] = {"Resume", pIsOnline ? "Leave Race" : "New Local Race",
+                             "Online Multiplayer Lobby", "Quit HoverNet"};
+    constexpr int optionCount = 4;
     int selected = 0;
     const int panelWidth = std::min(520, viewport.GetXRes() - 48);
-    const int panelHeight = 330;
+    const int panelHeight = 392;
     const UiRect panel{(viewport.GetXRes() - panelWidth) / 2,
                        (viewport.GetYRes() - panelHeight) / 2, panelWidth, panelHeight};
     const int buttonWidth = panelWidth - 80;
@@ -2092,6 +2097,12 @@ int main(int argc, char** argv)
                         else {
                             startNewLocalRace = true;
                         }
+                    }
+                    else if (pauseChoice == PauseChoice::eOnlineLobby) {
+                        // Same as "Leave Race" when already online -- reset and
+                        // rejoin the lobby -- but always offered, so offline
+                        // play has a way there too without quitting first.
+                        leaveForLobby = true;
                     }
                     else {
                         session.SetSimulationTime(session.GetSimulationTime());
