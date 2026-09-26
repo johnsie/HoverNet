@@ -174,7 +174,13 @@ class MR_InternetRoom
       static BOOL CALLBACK NetOpCallBack(       HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
       static BOOL CALLBACK FastNetOpCallBack(   HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
       static BOOL CALLBACK GetAddrCallBack(     HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
-      
+
+      // Drains queued RaceServer messages (chat, lobby roster, game list) for the
+      // live lobby dialog -- needs mThis/mUser, so unlike the other free-function
+      // helpers alongside it in InternetRoom.cpp's anonymous namespace, this one
+      // has to be an actual member.
+      static void DrainRaceServerMessages( HWND pWindow );
+
       BOOL AskRoomParams( HWND pParentWindow );
       BOOL LocateServers( HWND pWindow );
       BOOL AddUserOp( HWND pParentWindow );

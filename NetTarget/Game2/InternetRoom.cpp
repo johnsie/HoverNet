@@ -163,92 +163,6 @@ namespace
       gLobbyUserNames.erase(pClientId);
    }
 
-   // Drains every message currently waiting rather than acting on one -- lobby
-   // roster updates and chat share this connection with the game-list refresh
-   // and can arrive interleaved between timer ticks.
-   void DrainRaceServerMessages(HWND pWindow)
-   {
-      RaceServerMessage lMessage;
-      while( gRaceServerLobby.PollMessage(lMessage, 0) )
-      {
-         if( lMessage.mType == eRSMsgLobbyUserPresent )
-         {
-            RaceServerPeer lPeer;
-            if( RaceServerClient::ParsePeer(lMessage, lPeer) )
-            {
-               AddLobbyUser(pWindow, lPeer.mClientId, lPeer.mName.c_str());
-            }
-         }
-         else if( lMessage.mType == eRSMsgLobbyUserLeft )
-         {
-            int lClientId = -1;
-            if( RaceServerClient::ParseLobbyUserLeft(lMessage, lClientId) )
-            {
-               RemoveLobbyUser(pWindow, lClientId);
-            }
-         }
-         else if( lMessage.mType == eRSMsgChatMessage )
-         {
-            int lSenderId = -1;
-            std::string lText;
-            if( RaceServerClient::ParseChatMessage(lMessage, lSenderId, lText) )
-            {
-               CString lName = "Someone";
-               std::map<int, CString>::iterator lIt = gLobbyUserNames.find(lSenderId);
-               if( lIt != gLobbyUserNames.end() ) lName = lIt->second;
-
-               char lChatBuffer[4096] = { 0 };
-               GetDlgItemTextA(pWindow, IDC_CHAT_OUT, lChatBuffer, sizeof(lChatBuffer));
-               CString lChat = lChatBuffer;
-               lChat += "\r\n";
-               lChat += lName;
-               lChat += ": ";
-               lChat += lText.c_str();
-               SetDlgItemText(pWindow, IDC_CHAT_OUT, lChat);
-            }
-         }
-         else if( lMessage.mType == eRSMsgGameInfo )
-         {
-            RaceServerGameInfo lInfo;
-            if( RaceServerClient::ParseGameInfo(lMessage, lInfo) )
-            {
-               gGamesBeingListed.push_back(lInfo);
-            }
-         }
-         else if( lMessage.mType == eRSMsgGameListEnd )
-         {
-            gRaceServerGames.swap(gGamesBeingListed);
-            gGamesBeingListed.clear();
-            RenderGameList(pWindow);
-            RefreshRaceServerSelection(pWindow);
-         }
-         else if( lMessage.mType == eRSMsgPlayerNameAssigned )
-         {
-            // The name we asked for may already be taken by someone else
-            // currently connected -- the server disambiguates it (see
-            // ServerSocket.cpp's MRNM_SET_PLAYER_NAME handler) and tells us the
-            // real one back here. Adopt it for our own display (the self row in
-            // IDC_USER_LIST, and the "You: " prefix on outgoing chat).
-            std::string lAssignedName;
-            if( RaceServerClient::ParsePlayerNameAssigned(lMessage, lAssignedName) )
-            {
-               const CString lNewName = lAssignedName.c_str();
-               if( lNewName != MR_InternetRoom::mThis->mUser )
-               {
-                  MR_InternetRoom::mThis->mUser = lNewName;
-                  HWND lUserList = GetDlgItem(pWindow, IDC_USER_LIST);
-                  const int lSelfRow = FindUserListRow(lUserList, -1);
-                  if( lSelfRow >= 0 )
-                  {
-                     ListView_SetItemText(lUserList, lSelfRow, 0, (char*)(const char*)MR_InternetRoom::mThis->mUser);
-                  }
-               }
-            }
-         }
-         // eRSMsgLobbyUserListEnd and anything else: no UI action needed here.
-      }
-   }
-
    // Only rebuilds IDC_GAME_LIST from whatever's already in gRaceServerGames --
    // does not touch the network. Call sites request a refresh by sending
    // eRSMsgListGames directly and clearing gGamesBeingListed; the actual list
@@ -324,6 +238,98 @@ namespace
       CString lPlayers;
       lPlayers.Format("%d player%s connected", lGame.mNumPlayers, lGame.mNumPlayers == 1 ? "" : "s");
       SetDlgItemText(pWindow, IDC_PLAYER_LIST, lPlayers);
+   }
+}
+
+// Drains every message currently waiting rather than acting on one -- lobby
+// roster updates and chat share this connection with the game-list refresh and
+// can arrive interleaved between timer ticks. Defined here as an actual member
+// (unlike RenderGameList/RequestGameListRefresh/etc. just above, which are free
+// functions in the anonymous namespace) because it needs mThis/mUser -- both
+// protected, reachable only from the class's own member functions no matter how
+// a free function tries to qualify them. It can still see everything declared in
+// that anonymous namespace above (gRaceServerLobby, AddLobbyUser, RenderGameList,
+// ...): those names stay visible for the rest of this translation unit.
+void MR_InternetRoom::DrainRaceServerMessages(HWND pWindow)
+{
+   RaceServerMessage lMessage;
+   while( gRaceServerLobby.PollMessage(lMessage, 0) )
+   {
+      if( lMessage.mType == eRSMsgLobbyUserPresent )
+      {
+         RaceServerPeer lPeer;
+         if( RaceServerClient::ParsePeer(lMessage, lPeer) )
+         {
+            AddLobbyUser(pWindow, lPeer.mClientId, lPeer.mName.c_str());
+         }
+      }
+      else if( lMessage.mType == eRSMsgLobbyUserLeft )
+      {
+         int lClientId = -1;
+         if( RaceServerClient::ParseLobbyUserLeft(lMessage, lClientId) )
+         {
+            RemoveLobbyUser(pWindow, lClientId);
+         }
+      }
+      else if( lMessage.mType == eRSMsgChatMessage )
+      {
+         int lSenderId = -1;
+         std::string lText;
+         if( RaceServerClient::ParseChatMessage(lMessage, lSenderId, lText) )
+         {
+            CString lName = "Someone";
+            std::map<int, CString>::iterator lIt = gLobbyUserNames.find(lSenderId);
+            if( lIt != gLobbyUserNames.end() ) lName = lIt->second;
+
+            char lChatBuffer[4096] = { 0 };
+            GetDlgItemTextA(pWindow, IDC_CHAT_OUT, lChatBuffer, sizeof(lChatBuffer));
+            CString lChat = lChatBuffer;
+            lChat += "\r\n";
+            lChat += lName;
+            lChat += ": ";
+            lChat += lText.c_str();
+            SetDlgItemText(pWindow, IDC_CHAT_OUT, lChat);
+         }
+      }
+      else if( lMessage.mType == eRSMsgGameInfo )
+      {
+         RaceServerGameInfo lInfo;
+         if( RaceServerClient::ParseGameInfo(lMessage, lInfo) )
+         {
+            gGamesBeingListed.push_back(lInfo);
+         }
+      }
+      else if( lMessage.mType == eRSMsgGameListEnd )
+      {
+         gRaceServerGames.swap(gGamesBeingListed);
+         gGamesBeingListed.clear();
+         RenderGameList(pWindow);
+         RefreshRaceServerSelection(pWindow);
+      }
+      else if( lMessage.mType == eRSMsgPlayerNameAssigned )
+      {
+         // The name we asked for may already be taken by someone else currently
+         // connected -- the server disambiguates it (see ServerSocket.cpp's
+         // MRNM_SET_PLAYER_NAME handler) and tells us the real one back here.
+         // Adopt it for our own display (the self row in IDC_USER_LIST, and the
+         // "You: " prefix on outgoing chat).
+         std::string lAssignedName;
+         if( RaceServerClient::ParsePlayerNameAssigned(lMessage, lAssignedName) )
+         {
+            const CString lNewName = lAssignedName.c_str();
+            if( lNewName != mThis->mUser )
+            {
+               mThis->mUser = lNewName;
+               HWND lUserList = GetDlgItem(pWindow, IDC_USER_LIST);
+               const int lSelfRow = FindUserListRow(lUserList, -1);
+               if( lSelfRow >= 0 )
+               {
+                  ListView_SetItemText(lUserList, lSelfRow, 0, (char*)(const char*)mThis->mUser);
+               }
+            }
+         }
+      }
+      // eRSMsgLobbyUserListEnd and anything else: no UI action needed here.
    }
 }
 
