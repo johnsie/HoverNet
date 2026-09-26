@@ -233,14 +233,14 @@ namespace
             if( RaceServerClient::ParsePlayerNameAssigned(lMessage, lAssignedName) )
             {
                const CString lNewName = lAssignedName.c_str();
-               if( lNewName != mThis->mUser )
+               if( lNewName != MR_InternetRoom::mThis->mUser )
                {
-                  mThis->mUser = lNewName;
+                  MR_InternetRoom::mThis->mUser = lNewName;
                   HWND lUserList = GetDlgItem(pWindow, IDC_USER_LIST);
                   const int lSelfRow = FindUserListRow(lUserList, -1);
                   if( lSelfRow >= 0 )
                   {
-                     ListView_SetItemText(lUserList, lSelfRow, 0, (char*)(const char*)mThis->mUser);
+                     ListView_SetItemText(lUserList, lSelfRow, 0, (char*)(const char*)MR_InternetRoom::mThis->mUser);
                   }
                }
             }
