@@ -259,6 +259,18 @@ add_executable(HoverNetRaceServerClientSmoke
 add_dependencies(HoverNetRaceServerClientSmoke RaceServer)
 target_link_libraries(HoverNetRaceServerClientSmoke PRIVATE HoverNetRaceServerClient)
 
+add_executable(HoverNetInRaceChatSmoke
+    NetTarget/LinuxClient/InRaceChatSmoke.cpp
+)
+add_dependencies(HoverNetInRaceChatSmoke RaceServer HoverNetHeadlessObjFac1)
+target_link_libraries(HoverNetInRaceChatSmoke PRIVATE HoverNetClientSession HoverNetRaceServerClient)
+
+add_executable(HoverNetObserverChatRenderSmoke
+    NetTarget/LinuxClient/ObserverChatRenderSmoke.cpp
+)
+add_dependencies(HoverNetObserverChatRenderSmoke HoverNetHeadlessObjFac1)
+target_link_libraries(HoverNetObserverChatRenderSmoke PRIVATE HoverNetObserver HoverNetClientSession)
+
 add_executable(HoverNetLobby
     NetTarget/LinuxClient/LobbyCli.cpp
 )
@@ -317,6 +329,8 @@ if(BUILD_TESTING)
     add_hovernet_root_test(HoverNetViewportSmoke)
     add_hovernet_root_test(HoverNetActorRenderSmoke)
     add_hovernet_root_test(HoverNetRaceServerClientSmoke "$<TARGET_FILE:RaceServer>")
+    add_hovernet_root_test(HoverNetInRaceChatSmoke "$<TARGET_FILE:RaceServer>")
+    add_hovernet_root_test(HoverNetObserverChatRenderSmoke)
     add_hovernet_root_test(HoverNetMainCharacterSmoke)
     add_hovernet_root_test(HoverNetMainCharacterRenderSmoke)
     add_hovernet_root_test(HoverNetClientSessionSmoke)

@@ -1683,6 +1683,57 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       // Render timer text at top and bottom center of screen
       mBaseFont->GetSprite()->StrBlt( lXRes/2, lYRes/16, Ascii2Simple( lMainLineBuffer ), &m3DView, MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
       mBaseFont->GetSprite()->StrBlt( lXRes/2, lYRes-1,  Ascii2Simple( lLapLineBuffer ), &m3DView, MR_Sprite::eCenter, MR_Sprite::eBottom, 0 );
+
+      // In-race chat: the line currently being typed (AddMessageKey/GetCurrentMessage,
+      // real on Windows via MR_NetworkSession's override, a no-op stub on Linux) plus
+      // the scrollback (AddMessage/GetMessageStack, real and shared on both platforms).
+      // This used to exist only in Render3DView's "DISABLED SECTION" -- dead, commented-
+      // out code that this live function never called into, so nothing was ever drawn
+      // on screen for chat during a race on either platform. Reimplemented here instead.
+      const MR_Sprite* lChatFont = mBaseFont->GetSprite();
+      const int lChatFontScaling = 1 + (lChatFont->GetItemHeight()*12)/lYRes;
+      const int lChatLineSpacing = lChatFont->GetItemHeight()/lChatFontScaling;
+      const int lChatXMargin = 2*lChatFont->GetItemWidth()/lChatFontScaling;
+      int lChatYMargin = lYRes - lYRes/6 - lChatLineSpacing;
+      // The original (disabled) version of this logic divided directly by
+      // (ItemWidth*3/lChatFontScaling), flagged in its own comment as "subject to
+      // div/0" -- at small enough resolutions/scalings that inner division
+      // truncates to exactly 0. Clamp it before using it as a divisor rather than
+      // wrapping the whole expression in std::max, which can't protect against a
+      // crash that happens while evaluating its own argument.
+      const int lChatCharWidth = std::max( 1, lChatFont->GetItemWidth()*3/lChatFontScaling );
+      const int lChatPrintLen = std::max( 1, (lXRes-lChatXMargin)*4/lChatCharWidth );
+
+      char lChatLineBuffer[120];
+      pSession->GetCurrentMessage( lChatLineBuffer );
+      if( lChatLineBuffer[0] != 0 )
+      {
+         lChatFont->StrBlt( lChatXMargin, lChatYMargin, lChatLineBuffer, &m3DView,
+                            MR_Sprite::eLeft, MR_Sprite::eTop, lChatFontScaling );
+      }
+      lChatYMargin -= lChatLineSpacing;
+
+      constexpr int kChatMaxLines = 4;
+      constexpr int kChatMessageLifeSeconds = 20;
+      int lChatStackLevel = 0;
+      int lChatLineCount = 0;
+      while( pSession->GetMessageStack( lChatStackLevel++, lChatLineBuffer, kChatMessageLifeSeconds ) &&
+             lChatLineCount < kChatMaxLines && lChatYMargin > lYRes/4 )
+      {
+         const int lChatStrLen = static_cast<int>( strlen( lChatLineBuffer ) );
+         if( lChatStrLen > lChatPrintLen )
+         {
+            lChatFont->StrBlt( lChatXMargin, lChatYMargin, lChatLineBuffer+lChatPrintLen, &m3DView,
+                               MR_Sprite::eLeft, MR_Sprite::eTop, lChatFontScaling );
+            lChatYMargin -= lChatLineSpacing;
+            lChatLineBuffer[ lChatPrintLen ] = 0;
+            ++lChatLineCount;
+         }
+         lChatFont->StrBlt( lChatXMargin, lChatYMargin, lChatLineBuffer, &m3DView,
+                            MR_Sprite::eLeft, MR_Sprite::eTop, lChatFontScaling );
+         lChatYMargin -= lChatLineSpacing;
+         ++lChatLineCount;
+      }
    }
 }
 
