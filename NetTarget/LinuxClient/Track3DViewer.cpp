@@ -1468,7 +1468,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         const float centerWidth = std::min(460.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
-        ImGui::BeginChild("LocalRaceSetupPanel", ImVec2(centerWidth, 260), true);
+        ImGui::BeginChild("LocalRaceSetupPanel", ImVec2(centerWidth, 380), true);
 
         ImGui::PushItemWidth(-1.0f);
         ImGui::TextUnformatted("Track");
