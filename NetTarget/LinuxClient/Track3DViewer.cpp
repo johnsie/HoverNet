@@ -1271,21 +1271,24 @@ struct LocalRaceSetup
 LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                                  const MR_Sprite& font, int pFrameLimit)
 {
+    // Renders through Dear ImGui against the SDL_Renderer directly, exactly
+    // like RunLobbyScreen -- buffer/viewport/font are unused now, kept only so
+    // callers (which still pass them for the pre-ImGui menus) don't change.
+    (void)buffer;
+    (void)viewport;
+    (void)font;
+
     HostPrefs prefs = LoadHostPrefs();
 
-    enum Row { eTrack, eLaps, eWeapons, eStart, eCancel, eRowCount };
-    int selected = eTrack;
-    const int panelWidth = std::min(520, viewport.GetXRes() - 48);
-    const int panelHeight = 360;
-    const UiRect panel{(viewport.GetXRes() - panelWidth) / 2,
-                       (viewport.GetYRes() - panelHeight) / 2, panelWidth, panelHeight};
-    const int rowHeight = 36;
-    const int firstRowY = panel.y + 56;
-    const int buttonWidth = panelWidth - 80;
-    const int buttonHeight = 44;
-    const int firstButtonY = firstRowY + 3 * rowHeight + 20;
-    const UiRect startButton{panel.x + 40, firstButtonY, buttonWidth, buttonHeight};
-    const UiRect cancelButton{panel.x + 40, firstButtonY + buttonHeight + 12, buttonWidth, buttonHeight};
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    ImFontConfig fontConfig;
+    fontConfig.SizePixels = 19.0f;
+    io.Fonts->AddFontDefault(&fontConfig);
+    ApplyHoverNetLobbyStyle();
+    ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+    ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
     bool running = true;
     bool cancelled = false;
@@ -1295,91 +1298,82 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
+            ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
                 cancelled = true;
                 running = false;
             }
-            else if (event.type == SDL_KEYDOWN) {
-                const SDL_Keycode key = event.key.keysym.sym;
-                if (key == SDLK_ESCAPE) {
-                    cancelled = true;
-                    running = false;
-                }
-                else if (key == SDLK_UP) {
-                    selected = (selected + eRowCount - 1) % eRowCount;
-                }
-                else if (key == SDLK_DOWN) {
-                    selected = (selected + 1) % eRowCount;
-                }
-                else if (key == SDLK_LEFT || key == SDLK_RIGHT) {
-                    const int direction = (key == SDLK_RIGHT) ? 1 : -1;
-                    if (selected == eTrack) {
-                        prefs.mTrackIndex = (prefs.mTrackIndex + direction + kHostableTrackCount) % kHostableTrackCount;
-                    }
-                    else if (selected == eLaps) {
-                        prefs.mLaps = std::max(1, std::min(20, prefs.mLaps + direction));
-                    }
-                    else if (selected == eWeapons) {
-                        prefs.mWeapons = !prefs.mWeapons;
-                    }
-                }
-                else if (key == SDLK_RETURN) {
-                    if (selected == eWeapons) {
-                        prefs.mWeapons = !prefs.mWeapons;
-                    }
-                    else if (selected == eCancel) {
-                        cancelled = true;
-                        running = false;
-                    }
-                    else {
-                        // eTrack/eLaps/eStart all confirm -- Enter on an
-                        // adjustable row is a reasonable "I'm done" shortcut too.
-                        running = false;
-                    }
-                }
-            }
-            else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
-                if (startButton.Contains(event.button.x, event.button.y)) {
-                    running = false;
-                }
-                else if (cancelButton.Contains(event.button.x, event.button.y)) {
-                    cancelled = true;
-                    running = false;
-                }
-            }
-            else if (event.type == SDL_MOUSEMOTION) {
-                if (startButton.Contains(event.motion.x, event.motion.y)) {
-                    selected = eStart;
-                }
-                else if (cancelButton.Contains(event.motion.x, event.motion.y)) {
-                    selected = eCancel;
-                }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+                cancelled = true;
+                running = false;
             }
         }
 
-        DrawUiPanel(buffer, panel);
-        DrawUiText(font, panel.x + panel.w / 2, panel.y + 16, "LOCAL RACE SETUP", &viewport,
-                   MR_Sprite::eCenter, MR_Sprite::eTop, 1);
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
 
-        char lapsValue[16];
-        std::snprintf(lapsValue, sizeof(lapsValue), "%d", prefs.mLaps);
-        const char* rowLabels[3] = {"Track", "Laps", "Weapons"};
-        const std::string rowValues[3] = {kHostableTracks[prefs.mTrackIndex], lapsValue,
-                                          prefs.mWeapons ? "On" : "Off"};
-        for (int index = 0; index < 3; ++index) {
-            char line[80];
-            std::snprintf(line, sizeof(line), "%s%s:  < %s >", index == selected ? "> " : "  ",
-                          rowLabels[index], rowValues[index].c_str());
-            DrawUiText(font, panel.x + 32, firstRowY + index * rowHeight, line, &viewport,
-                       MR_Sprite::eLeft, MR_Sprite::eTop, 1);
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::Begin("HoverNet Local Race", nullptr,
+                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
+        ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
+        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+        ImGui::SetWindowFontScale(1.35f);
+        ImGui::TextUnformatted("LOCAL RACE SETUP");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        const float centerWidth = std::min(460.0f, ImGui::GetContentRegionAvail().x);
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
+        ImGui::BeginChild("LocalRaceSetupPanel", ImVec2(centerWidth, 260), true);
+
+        ImGui::PushItemWidth(-1.0f);
+        ImGui::TextUnformatted("Track");
+        ImGui::Combo("##Track", &prefs.mTrackIndex, kHostableTracks, kHostableTrackCount);
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Laps");
+        ImGui::SliderInt("##Laps", &prefs.mLaps, 1, 20);
+        ImGui::PopItemWidth();
+        ImGui::Spacing();
+        ImGui::Checkbox("Weapons enabled", &prefs.mWeapons);
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        if (HoverNetButton("Start Race", ImVec2(-FLT_MIN, 40))) {
+            running = false;
+        }
+        ImGui::Spacing();
+        if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, 36))) {
+            cancelled = true;
+            running = false;
         }
 
-        DrawUiButton(buffer, font, viewport, startButton, "Start Race", selected == eStart);
-        DrawUiButton(buffer, font, viewport, cancelButton, "Cancel", selected == eCancel);
+        ImGui::EndChild();
+        ImGui::End();
 
-        graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
+        ImGui::Render();
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        SDL_RenderPresent(renderer);
         SDL_Delay(16);
     }
+
+    ImGui_ImplSDLRenderer2_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
 
     LocalRaceSetup result;
     result.confirmed = !cancelled;
