@@ -22,7 +22,7 @@ static BOOL FetchHTTPSContent(const char* pHost, const char* pPath, CString& pBu
    printf("FetchHTTPSContent START: Host=%s, Path=%s\n", pHost, pPath);
 
    try {
-      hInternet = InternetOpen("HoverRace/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+      hInternet = InternetOpen("HoverNet/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
       if (!hInternet) {
          printf("ERROR: InternetOpen failed\n");
          return FALSE;

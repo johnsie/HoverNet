@@ -2524,7 +2524,17 @@ MR_UInt32 GetAddrFromStr( const char *pName )
    }
    else
    {
-      lReturnValue = INADDR_ANY;
+      // Not a dotted-decimal literal -- try resolving it as a hostname
+      // (e.g. "outiva.com") instead of silently connecting to INADDR_ANY.
+      struct hostent* lHostEnt = gethostbyname( pName );
+      if( lHostEnt != NULL && lHostEnt->h_addr_list[0] != NULL )
+      {
+         lReturnValue = *reinterpret_cast<MR_UInt32*>(lHostEnt->h_addr_list[0]);
+      }
+      else
+      {
+         lReturnValue = INADDR_ANY;
+      }
    }
    return lReturnValue;
 }

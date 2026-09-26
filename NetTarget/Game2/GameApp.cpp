@@ -70,7 +70,7 @@ void CaptureScreen( MR_VideoBuffer* pVideoBuffer );
 #endif
 */
 
-#define MR_APP_CLASS_NAME "HoverRaceClass"
+#define MR_APP_CLASS_NAME "HoverNetClass"
 
 #define MRM_RETURN2WINDOWMODE  1
 #define MRM_EXIT_MENU_LOOP     2
@@ -579,7 +579,7 @@ void MR_GameApp::LoadRegistry()
    HKEY lProgramKey;
 
    int lError = RegOpenKeyEx( HKEY_LOCAL_MACHINE,
-                     "SOFTWARE\\GrokkSoft\\HoverRace",
+                     "SOFTWARE\\GrokkSoft\\HoverNet",
                      // "SOFTWARE",
                      // NULL,
                      0,
@@ -740,7 +740,7 @@ void MR_GameApp::SaveRegistry()
 
    /*
    int lError = RegOpenKeyEx( HKEY_LOCAL_MACHINE,
-                     "SOFTWARE\\GrokkSoft\\HoverRace",
+                     "SOFTWARE\\GrokkSoft\\HoverNet",
                      0,
                      KEY_WRITE,
                      &lProgramKey          );
@@ -748,7 +748,7 @@ void MR_GameApp::SaveRegistry()
 
    DWORD lDummy;
    int lError = RegCreateKeyEx( HKEY_LOCAL_MACHINE,
-                                "SOFTWARE\\GrokkSoft\\HoverRace",
+                                "SOFTWARE\\GrokkSoft\\HoverNet",
                                 0,
                                 NULL,
                                 REG_OPTION_NON_VOLATILE,

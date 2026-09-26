@@ -1,6 +1,6 @@
 # HoverNet
 
-HoverNet is a fast-paced hovercraft racing game: pick a track, race other hovercraft around tight, ramp-filled circuits, and use missiles to take out the competition. It's a modernization of the original HoverRace, with a native Windows client, a Linux client, and an online multiplayer lobby so you can race against other players over the internet.
+HoverNet is a fast-paced hovercraft racing game: pick a track, race other hovercraft around tight, ramp-filled circuits, and use missiles to take out the competition. It's a modernization of the original HoverRace, created by GrokkSoft in 1996, with a native Windows client, a Linux client, and an online multiplayer lobby so you can race against other players over the internet.
 
 ## Playing online
 

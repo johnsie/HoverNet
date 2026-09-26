@@ -121,7 +121,6 @@ namespace
    std::vector<RaceServerGameInfo> gRaceServerGames;
    CString gRaceServerHost = kDefaultRaceServerHost;
    unsigned gRaceServerPort = kDefaultRaceServerPort;
-   CString gPendingRaceName;
 
    // Chat messages only carry the sender's client id (see ServerSocket.cpp's
    // MRNM_CHAT_MESSAGE relay), and IDC_USER_LIST needs a way to add/remove one
@@ -355,7 +354,7 @@ static BOOL FetchHTTPSContent(const char* pHost, const char* pPath, CString& pBu
    }
 
    try {
-      hInternet = InternetOpen("HoverRace/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+      hInternet = InternetOpen("HoverNet/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
       if (!hInternet) {
          DWORD dwError = GetLastError();
          char szBuffer[256];
@@ -1445,6 +1444,9 @@ BOOL MR_InternetRoom::DisplayChatRoom( HWND pParentWindow, MR_NetworkSession* pS
    mUser = pSession->GetPlayerName();
    mSession->SetPlayerName(mUser);
 
+   if( DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_USERNAME), pParentWindow, UsernameCallBack) != IDOK ) return FALSE;
+   mSession->SetPlayerName(mUser);
+
    gRaceServerHost = kDefaultRaceServerHost;
    gRaceServerPort = kDefaultRaceServerPort;
    char lOverride[256] = { 0 };
@@ -2108,25 +2110,25 @@ BOOL CALLBACK MR_InternetRoom::AskParamsCallBack( HWND pWindow, UINT  pMsgId, WP
 }
 
 
-BOOL CALLBACK MR_InternetRoom::RaceNameCallBack( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM )
+BOOL CALLBACK MR_InternetRoom::UsernameCallBack( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM )
 {
    if( pMsgId == WM_INITDIALOG )
    {
-      SetDlgItemText(pWindow, IDC_RACE_NAME, gPendingRaceName);
+      SetDlgItemText(pWindow, IDC_USERNAME, mThis->mUser);
       return TRUE;
    }
    if( pMsgId == WM_COMMAND )
    {
       if( LOWORD(pWParam) == IDOK )
       {
-         char lName[64] = { 0 };
-         GetDlgItemTextA(pWindow, IDC_RACE_NAME, lName, sizeof(lName));
+         char lName[40] = { 0 };
+         GetDlgItemTextA(pWindow, IDC_USERNAME, lName, sizeof(lName));
          if( lName[0] == 0 )
          {
-            MessageBoxA(pWindow, "Enter a race name.", "HoverNet Lobby", MB_OK | MB_ICONINFORMATION);
+            MessageBox(pWindow, MR_LoadString(IDS_ENTER_ALIAS), MR_LoadString(IDS_IMR), MB_OK | MB_ICONINFORMATION);
             return TRUE;
          }
-         gPendingRaceName = lName;
+         mThis->mUser = lName;
          EndDialog(pWindow, IDOK);
          return TRUE;
       }
@@ -2292,8 +2294,6 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
             int lLaps = 3;
             BOOL lWeapons = TRUE;
             if( !MR_SelectTrack(pWindow, lTrack, lLaps, lWeapons, mThis->mAllowRegistred) ) return TRUE;
-            gPendingRaceName.Format("%s - %s", (const char*)mThis->mUser, (const char*)lTrack);
-            if( DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_RACE_NAME), pWindow, RaceNameCallBack) != IDOK ) return TRUE;
             MR_RecordFile* lTrackFile = MR_TrackOpen(pWindow, lTrack, mThis->mAllowRegistred);
             if( lTrackFile == NULL || !mThis->mSession->LoadNew(lTrack, lTrackFile, lLaps, lWeapons, mThis->mVideoBuffer) ) return TRUE;
 
@@ -2302,7 +2302,9 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
             mThis->mSession->SetConnectionMode(MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort);
             mThis->mSession->SetIsGameCreator(TRUE);
             mThis->mSession->ConfigureHostedRace(lTrack, lLaps, lWeapons);
-            if( mThis->mSession->ConnectToServer(pWindow, gRaceServerHost, gRaceServerPort, gPendingRaceName) )
+            // The race name is just the track name, matching the Linux client --
+            // no reason to make the host type one.
+            if( mThis->mSession->ConnectToServer(pWindow, gRaceServerHost, gRaceServerPort, lTrack) )
             {
                EndDialog(pWindow, IDOK);
             }
@@ -3215,7 +3217,7 @@ BOOL CALLBACK MR_InternetRoom::NetOpCallBack( HWND pWindow, UINT  pMsgId, WPARAM
                {
                   CString lMessage;
                   lMessage = "This is a demo server entry that is currently offline.\n\n"
-                            "The main HoverRace Internet Room server at steeky.com is not available.\n\n"
+                            "The main HoverNet Internet Room server at steeky.com is not available.\n\n"
                             "Internet multiplayer rooms require an active server to function.\n\n"
                             "For single-player or local network play, use the other game modes.";
                   
