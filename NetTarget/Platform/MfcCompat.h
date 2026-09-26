@@ -499,6 +499,8 @@ private:
     std::string mValue;
 };
 
+using CMapStringToString = CMap<CString, const char*, CString, const char*>;
+
 class CArchive
 {
 public:

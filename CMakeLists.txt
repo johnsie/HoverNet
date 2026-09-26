@@ -230,6 +230,13 @@ add_dependencies(HoverNetDynamicFactorySmoke HoverNetHeadlessObjFac1)
 target_compile_definitions(HoverNetDynamicFactorySmoke PRIVATE HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(HoverNetDynamicFactorySmoke PRIVATE HoverNetPortableUtil HoverNetModelCore HoverNetResourceCore)
 
+add_executable(HoverNetMantaResourceBuilder
+    NetTarget/LinuxClient/MantaResourceBuilder.cpp
+    NetTarget/ResourceCompiler/ResActorBuilder.cpp
+    NetTarget/ResourceCompiler/TextParsing.cpp
+)
+target_link_libraries(HoverNetMantaResourceBuilder PRIVATE HoverNetResourceCore HoverNetPortableUtil)
+
 add_executable(HoverNetResourceSmoke
     NetTarget/LinuxClient/ResourceSmoke.cpp
 )

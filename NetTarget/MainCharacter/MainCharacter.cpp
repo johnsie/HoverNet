@@ -39,6 +39,8 @@
 #define MR_HITECH_CAR   11
 #define MR_BITURBO_CAR  12
 #define MR_EON_CRAFT  19
+#define MR_MANTA_CRAFT 24
+#define MR_SELECTABLE_HOVER_MODEL_COUNT 5
 
 // Helper class to access ResActor internals
 class MR_ResActorFriend
@@ -176,15 +178,17 @@ const int eCharacterMovementRay = 1100;
 const int eCharacterRay         = 1300;
 const int eCharacterHeight      = 1500;
 const int eCharacterContactRay  = 1450;
-const int eCharacterWeight[MR_NB_HOVER_MODEL] = {300, 250, 450, 300, 300, 300, 300, 300 };
+const int eCharacterWeight[MR_NB_HOVER_MODEL] = {300, 250, 450, 300, 240, 300, 300, 300 };
 const int eMissileRefillTime    = 10000;
+const int eMantaJumpRefillTime  = 400;
+const int eMantaMissileRefillTime = 150;
 const int ePwrUpDuration        = 5000;
 
 const double eSteadySpeed[MR_NB_HOVER_MODEL] = { 8.7*2222.0/1000.0, 
                                                  11.5*2222.0/1000.0,
                                                  10.5*2222.0/1000.0,
                                                  8.7*2222.0/1000.0, 
-                                                 8.7*2222.0/1000.0, 
+                                                 10.0*2222.0/1000.0,
                                                  8.7*2222.0/1000.0, 
                                                  8.7*2222.0/1000.0, 
                                                  8.1*2222.0/1000.0
@@ -205,7 +209,7 @@ const double eFrictionAccell[MR_NB_HOVER_MODEL] = {-eSteadySpeed[0]/4.0/1000.0,
                                                    -eSteadySpeed[0]/4.0/1200.0,
                                                    -eSteadySpeed[0]/4.0/900.0,
                                                    -eSteadySpeed[0]/4.0/1000.0,
-                                                   -eSteadySpeed[0]/4.0/1000.0,
+                                                   -eSteadySpeed[4]/4.0/800.0,
                                                    -eSteadySpeed[0]/4.0/1000.0,
                                                    -eSteadySpeed[0]/4.0/1000.0,
                                                    -eSteadySpeed[0]/4.0/700.0
@@ -215,7 +219,7 @@ const double eMotorAccell[MR_NB_HOVER_MODEL]    = { eSteadySpeed[0]/1000.0,
                                                     eSteadySpeed[0]/1400.0, 
                                                     eSteadySpeed[2]/1050.0,
                                                     eSteadySpeed[0]/1000.0,
-                                                    eSteadySpeed[0]/1000.0,
+                                                    eSteadySpeed[4]/850.0,
                                                     eSteadySpeed[0]/1000.0,
                                                     eSteadySpeed[0]/1000.0,
                                                     eSteadySpeed[7]/750.0
@@ -277,6 +281,7 @@ MR_MainCharacter::MR_MainCharacter( const MR_ObjectFromFactoryId& pId )
    mCabinOrientation      = 0; // mOrientation; mOrientation is not set yet
    mOutOfControlDuration  = 0;
    mMissileRefillDuration = 0;
+   mJumpRefillDuration    = 0;
 
    mFireDone         = FALSE;
 
@@ -398,7 +403,7 @@ void MR_MainCharacter::Render( MR_3DViewPort* pDest, MR_SimulationTime /*pTime*/
    // DEFENSIVE: Validate mHoverModel is in range (0-3)
    // If corrupted, use default model 0
    int lSafeModel = mHoverModel;
-   if( lSafeModel < 0 || lSafeModel > 3 )
+   if( lSafeModel < 0 || lSafeModel >= MR_SELECTABLE_HOVER_MODEL_COUNT )
    {
       lSafeModel = 0;  // Use default model instead of garbage
    }
@@ -419,6 +424,7 @@ void MR_MainCharacter::Render( MR_3DViewPort* pDest, MR_SimulationTime /*pTime*/
       case 1: lActorId = MR_HITECH_CAR; break;    // Actor 11
       case 2: lActorId = MR_BITURBO_CAR; break;   // Actor 12
       case 3: lActorId = MR_EON_CRAFT; break;     // Actor 19
+      case 4: lActorId = MR_MANTA_CRAFT; break;   // Actor 24
       default: lActorId = MR_ELECTRO_CAR; break;  // Default to Electro Car
    }
    
@@ -645,13 +651,13 @@ void MR_MainCharacter::SetControlState( int pState, MR_SimulationTime pTime )
       if( bRightPressed )
       {
          mHoverModel++;
-         mHoverModel = ((mHoverModel % 4) + 4) % 4;
+         mHoverModel = ((mHoverModel % MR_SELECTABLE_HOVER_MODEL_COUNT) + MR_SELECTABLE_HOVER_MODEL_COUNT) % MR_SELECTABLE_HOVER_MODEL_COUNT;
       }
       
       if( bLeftPressed )
       {
          mHoverModel--;
-         mHoverModel = ((mHoverModel % 4) + 4) % 4;
+         mHoverModel = ((mHoverModel % MR_SELECTABLE_HOVER_MODEL_COUNT) + MR_SELECTABLE_HOVER_MODEL_COUNT) % MR_SELECTABLE_HOVER_MODEL_COUNT;
       }
    }
 
@@ -671,9 +677,14 @@ void MR_MainCharacter::SetControlState( int pState, MR_SimulationTime pTime )
 
    if( !(mControlState & eJump)&&(lState & eJump) )
    {
-      if( mOnFloor )
+      const BOOL lMantaJumpReady = (mHoverModel == 4) && (mJumpRefillDuration == 0);
+      if( mOnFloor || lMantaJumpReady )
       {
          mZSpeed = 1.1*eMaxZSpeed[mHoverModel];
+         if( mHoverModel == 4 )
+         {
+            mJumpRefillDuration = eMantaJumpRefillTime;
+         }
 
          if( mRenderer != NULL )
          {
@@ -739,6 +750,25 @@ int MR_MainCharacter::Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, i
 
    mMotorDisplay -= pDuration;
 
+   mJumpRefillDuration -= pDuration;
+   if( mJumpRefillDuration < 0 )
+   {
+      mJumpRefillDuration = 0;
+   }
+
+   // The Manta can sustain its jump control in the air. This is deliberately
+   // handled during simulation (not only on the key-down edge), so holding the
+   // button produces another jump as soon as its short re-arm expires.
+   if( mHoverModel == 4 && (mControlState & eJump) && mJumpRefillDuration == 0 )
+   {
+      mZSpeed = 1.1*eMaxZSpeed[mHoverModel];
+      mJumpRefillDuration = eMantaJumpRefillTime;
+      if( mRenderer != NULL )
+      {
+         mInternalSoundList.Add( mRenderer->GetJumpSound() );
+      }
+   }
+
    if( mMotorDisplay < 0 )
    {
       mMotorDisplay = 0;
@@ -802,6 +832,15 @@ int MR_MainCharacter::Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, i
          mMissileRefillDuration = 0;
       }
 
+      // Unlike the other craft, the Manta repeats fire while the control is
+      // held. The short limiter avoids creating one missile per simulation
+      // frame while still feeling effectively immediate.
+      if( mHoverModel == 4 && (mControlState & eFire) &&
+          mCurrentWeapon == eMissile && mMissileRefillDuration == 0 )
+      {
+         mFireDone = FALSE;
+      }
+
       mPowerUpLeft -= pDuration*eFuelConsuming[mHoverModel];
 
       if( mPowerUpLeft < 0 )
@@ -818,7 +857,8 @@ int MR_MainCharacter::Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, i
          {
             if( (mMissileRefillDuration == 0) && mAllowWeapons )
             {
-               mMissileRefillDuration = eMissileRefillTime;
+               mMissileRefillDuration = (mHoverModel == 4) ?
+                  eMantaMissileRefillTime : eMissileRefillTime;
 
                MR_ObjectFromFactoryId lObjectId = { 1, 150 };
                // Create a new missile
@@ -1598,6 +1638,4 @@ void MR_MainCharacter::PlayExternalSounds( int pDB, int pPan )
       }
    }
 }
-
-
 

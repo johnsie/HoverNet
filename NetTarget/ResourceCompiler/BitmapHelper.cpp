@@ -19,8 +19,14 @@
 // and limitations under the License.
 //
 
-#include "stdafx.h"
+#include "StdAfx.h"
 #include "BitmapHelper.h"
+
+#ifndef _WIN32
+#include <strings.h>
+#define strcmpi strcasecmp
+#define stricmp strcasecmp
+#endif
 
 
 // Local prototypes
@@ -41,7 +47,7 @@ MR_UInt8* LoadBitmap( const char* lFileName, int& pXRes, int& pYRes, BOOL pRever
    }
    else
    {
-      char *lExtension = strrchr( lFileName, '.' );
+      const char *lExtension = strrchr( lFileName, '.' );
 
       if( !strcmpi( lExtension, ".PCX" ))
       {
@@ -208,4 +214,3 @@ MR_UInt8* PCXRead( FILE* pFile, int& pXRes, int& pYRes )
 
    return lReturnValue;
 }
-

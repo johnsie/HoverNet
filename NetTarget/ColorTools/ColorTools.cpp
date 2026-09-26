@@ -20,7 +20,7 @@
 //
 
 
-#include "stdafx.h"
+#include "StdAfx.h"
 
 #include <math.h>
 
@@ -349,7 +349,6 @@ const ColorStructure& MR_ColorMix( const ColorStructure& pColor0, const ColorStr
    return lReturnValue;
 
 }
-
 
 
 

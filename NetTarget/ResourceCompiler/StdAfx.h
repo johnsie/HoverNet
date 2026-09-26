@@ -3,6 +3,10 @@
 //      are changed infrequently
 //
 
+#ifndef _WIN32
+#include "../ObjFacTools/StdAfx.h"
+#else
+
 #define VC_EXTRALEAN		// Exclude rarely-used stuff from Windows headers
 
 #include <afxwin.h>         // MFC core and standard components
@@ -14,6 +18,7 @@
 #ifndef _AFX_NO_AFXCMN_SUPPORT
 #include <afxcmn.h>			// MFC support for Windows 95 Common Controls
 #endif // _AFX_NO_AFXCMN_SUPPORT
+#endif // _WIN32
 
 
 

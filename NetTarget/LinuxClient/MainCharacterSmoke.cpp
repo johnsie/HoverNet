@@ -70,7 +70,7 @@ int main()
 
     const int initialModel = player->GetHoverModel();
     player->SetControlState(MR_MainCharacter::eRight, -1);
-    if (player->GetHoverModel() != (initialModel + 1) % 4) {
+    if (player->GetHoverModel() != (initialModel + 1) % 5) {
         std::fprintf(stderr, "Pre-race right control did not select the next hovercraft\n");
         return 1;
     }

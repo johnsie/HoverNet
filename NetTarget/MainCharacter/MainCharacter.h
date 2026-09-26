@@ -128,6 +128,7 @@ class MR_MainCharacter:public MR_FreeElement
 
       eWeapon                    mCurrentWeapon;
       MR_SimulationTime          mMissileRefillDuration;  // Countdown
+      MR_SimulationTime          mJumpRefillDuration;     // Manta air-jump countdown
       MR_FixedFastFifo< int, 2 > mMineList;
       MR_FixedFastFifo< int, 4 > mPowerUpList;
       MR_SimulationTime          mPowerUpLeft;
@@ -265,4 +266,3 @@ class MR_MainCharacter:public MR_FreeElement
 #undef MR_DllDeclare
 
 #endif
-

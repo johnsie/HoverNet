@@ -28,7 +28,7 @@
 
 MR_ResourceLib::MR_ResourceLib( const char* pResFile )
 {
-   FILE* logFile = fopen("Game2_ResourceLib_Loading.log", "a");
+   FILE* logFile = NULL;
    if(logFile) { fprintf(logFile, "\n===== ResourceLib Loading Started =====\n"); fprintf(logFile, "Resource file: %s\n", pResFile); fflush(logFile); }
    
    DWORD startTime = GetTickCount();
@@ -251,7 +251,7 @@ int MR_ResourceLib::GetContinuousSoundCount() const
 void MR_ResourceLib::LoadBitmaps( CArchive& pArchive )
 {
    int lNbBitmap;
-   FILE* logFile = fopen("Game2_ResourceLib_Loading.log", "a");
+   FILE* logFile = NULL;
 
    pArchive >> lNbBitmap;
    if(logFile) { fprintf(logFile, "  Loading %d bitmaps...\n", lNbBitmap); fflush(logFile); }
@@ -282,7 +282,7 @@ void MR_ResourceLib::LoadBitmaps( CArchive& pArchive )
 void MR_ResourceLib::LoadActors( CArchive& pArchive )
 {
    int lNbActor;
-   FILE* logFile = fopen("Game2_ResourceLib_Loading.log", "a");
+   FILE* logFile = NULL;
 
    pArchive >> lNbActor;
    if(logFile) { fprintf(logFile, "  Loading %d actors...\n", lNbActor); fflush(logFile); }
@@ -312,7 +312,7 @@ void MR_ResourceLib::LoadActors( CArchive& pArchive )
 void MR_ResourceLib::LoadSprites( CArchive& pArchive )
 {
    int lNbSprite;
-   FILE* logFile = fopen("Game2_ResourceLib_Loading.log", "a");
+   FILE* logFile = NULL;
 
    pArchive >> lNbSprite;
    if(logFile) { fprintf(logFile, "  Loading %d sprites...\n", lNbSprite); fflush(logFile); }
@@ -377,3 +377,48 @@ void MR_ResourceLib::LoadSounds( CArchive& pArchive )
 }
 
 
+
+
+void MR_ResourceLib::ReplaceBitmap( MR_ResBitmap* pBitmap )
+{
+   if( pBitmap == NULL ) return;
+   MR_ResBitmap* lOld = NULL;
+   if( mBitmapList.Lookup( pBitmap->GetResourceId(), lOld ) ) delete lOld;
+   mBitmapList.SetAt( pBitmap->GetResourceId(), pBitmap );
+}
+
+void MR_ResourceLib::ReplaceActor( MR_ResActor* pActor )
+{
+   if( pActor == NULL ) return;
+   MR_ResActor* lOld = NULL;
+   if( mActorList.Lookup( pActor->GetResourceId(), lOld ) ) delete lOld;
+   mActorList.SetAt( pActor->GetResourceId(), pActor );
+}
+
+BOOL MR_ResourceLib::Export( const char* pFileName )
+{
+   MR_RecordFile lFile;
+   if( !lFile.CreateForWrite( pFileName, 1,
+      "\x8\rFireball object factory resource file, (c)GrokkSoft 1996\n\x1a" ) ) return FALSE;
+   lFile.BeginANewRecord();
+   CArchive lArchive( &lFile, CArchive::store );
+   lArchive << (int)MR_RESOURCE_FILE_MAGIC;
+
+   int lCount = mBitmapList.GetCount(); lArchive << lCount;
+   POSITION lPos = mBitmapList.GetStartPosition();
+   while( lPos != NULL ) { int lKey; MR_ResBitmap* lValue; mBitmapList.GetNextAssoc(lPos,lKey,lValue); lArchive << lKey; lValue->Serialize(lArchive); }
+   lCount = mActorList.GetCount(); lArchive << lCount;
+   lPos = mActorList.GetStartPosition();
+   while( lPos != NULL ) { int lKey; MR_ResActor* lValue; mActorList.GetNextAssoc(lPos,lKey,lValue); lArchive << lKey; lValue->Serialize(lArchive, this); }
+   lCount = mSpriteList.GetCount(); lArchive << lCount;
+   lPos = mSpriteList.GetStartPosition();
+   while( lPos != NULL ) { int lKey; MR_ResSprite* lValue; mSpriteList.GetNextAssoc(lPos,lKey,lValue); lArchive << lKey; lValue->Serialize(lArchive); }
+   lCount = mShortSoundList.GetCount(); lArchive << lCount;
+   lPos = mShortSoundList.GetStartPosition();
+   while( lPos != NULL ) { int lKey; MR_ResShortSound* lValue; mShortSoundList.GetNextAssoc(lPos,lKey,lValue); lArchive << lKey; lValue->Serialize(lArchive); }
+   lCount = mContinuousSoundList.GetCount(); lArchive << lCount;
+   lPos = mContinuousSoundList.GetStartPosition();
+   while( lPos != NULL ) { int lKey; MR_ResContinuousSound* lValue; mContinuousSoundList.GetNextAssoc(lPos,lKey,lValue); lArchive << lKey; lValue->Serialize(lArchive); }
+   lArchive.Close();
+   return TRUE;
+}

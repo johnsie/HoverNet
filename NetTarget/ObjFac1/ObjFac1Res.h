@@ -118,6 +118,10 @@
 #define MR_BLACK    109
 #define MR_GRAY     110
 #define MR_WHITE    111
+#define MR_MANTA_BODY_MAP 112
+#define MR_MANTA_DECK_MAP 113
+#define MR_MANTA_FLAME_MAP 114
+#define MR_MANTA_DRIVER_MAP 115
 
 #define MR_BALL          2
 #define MR_BABE          1
@@ -127,6 +131,8 @@
 #define MR_ELECTRO_CAR  10
 #define MR_HITECH_CAR   11
 #define MR_BITURBO_CAR  12
+#define MR_EON_CAR      19
+#define MR_MANTA_CRAFT  24
 
 #define MR_MISSILE      20
 #define MR_MINE         21
@@ -158,8 +164,5 @@
 
 #define MR_SND_MISSILE_MOTOR   20
 #define MR_SND_MISSILE_BOUNCE  21
-
-
-
 
 

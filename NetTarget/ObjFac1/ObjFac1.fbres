@@ -122,6 +122,10 @@ BITMAP bitmaps/bumpergate.pcx     MR_BUMPERGATE_MAP  1 1 0
 // BITMAP bitmaps/color/BLACK.pcx    MR_BLACK   1  1  0
 // BITMAP bitmaps/color/GRAY.pcx     MR_GRAY    1  1  0
 // BITMAP bitmaps/color/WHITE.pcx    MR_WHITE   1  1  0
+BITMAP bitmaps/color/black.pcx       MR_MANTA_BODY_MAP 1 1 0
+BITMAP bitmaps/color/red.pcx         MR_MANTA_DECK_MAP 1 1 0
+BITMAP bitmaps/color/orange.pcx      MR_MANTA_FLAME_MAP 1 1 0
+BITMAP bitmaps/color/white.pcx       MR_MANTA_DRIVER_MAP 1 1 0
 
 
 // ACTOR  objfac1/ball.msh    MR_BALL
@@ -136,6 +140,7 @@ ACTOR  /mesh/bumpergate/bumpergate.msh MR_BUMPERGATE
 ACTOR  /mesh/Mine/mine.msh             MR_MINE
 ACTOR  /mesh/Powerup/powerup.msh       MR_PWRUP
 ACTOR  /mesh/EOnCar/EOnCar.msh         MR_EON_CAR
+ACTOR  ObjFac1/Manta.msh                 MR_MANTA_CRAFT
 
 SPRITE bitmaps/Font1.pcx          MR_FONT1         96
 

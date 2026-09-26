@@ -27,11 +27,23 @@ public:
                      const MR_PositionMatrix& matrix, int sequence, int frame,
                      const MR_Bitmap* cockpitBitmap)
     {
-        if (actor == nullptr || destination == nullptr || sequence < 0 ||
-            sequence >= actor->mNbSequence || actor->mSequenceList == nullptr ||
-            frame < 0 || frame >= actor->mSequenceList[sequence].mNbFrame) {
+        if (actor == nullptr || destination == nullptr || actor->mSequenceList == nullptr ||
+            sequence < 0 || sequence >= actor->mNbSequence) {
             return;
         }
+
+        // Manta sequence 1 is an animated exhaust overlay. Draw its complete
+        // static hull first so acceleration cannot replace the craft with only
+        // the flame components on Linux.
+        if (actor->GetResourceId() == MR_MANTA_CRAFT && sequence == 1) {
+            Draw(actor, destination, matrix, 0, 0, cockpitBitmap);
+        }
+
+        const int frameCount = actor->mSequenceList[sequence].mNbFrame;
+        if (frameCount <= 0) {
+            return;
+        }
+        frame = ((frame % frameCount) + frameCount) % frameCount;
 
         const MR_ResActor::Frame& actorFrame = actor->mSequenceList[sequence].mFrameList[frame];
         for (int index = 0; index < actorFrame.mNbComponent; ++index) {

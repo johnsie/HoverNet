@@ -24,6 +24,7 @@
 #include "ResActorBuilder.h"
 #include "TextParsing.h"
 
+
 #define MR_MAX_SEQUENCE   1024
 #define MR_MAX_FRAME      2048
 
@@ -226,7 +227,7 @@ MR_ResActorBuilder::Patch* MR_ResActorBuilder::ReadPatch( FILE* pFile, MR_Resour
    if( sscanf( MR_PreProcLine( lBuffer ), " %d ", &lBitmapId )!= 1 )
    {
       delete lReturnValue;
-      lReturnValue = FALSE;
+      lReturnValue = NULL;
 
       fprintf( stderr, "ERROR No bitmap associated to the patch\n" );
    }
@@ -237,7 +238,7 @@ MR_ResActorBuilder::Patch* MR_ResActorBuilder::ReadPatch( FILE* pFile, MR_Resour
       if( lReturnValue->mBitmap == NULL )
       {
          delete lReturnValue;
-         lReturnValue = FALSE;
+         lReturnValue = NULL;
 
          fprintf( stderr, "ERROR Bad bitmap id\n" );
       }

@@ -77,6 +77,11 @@ class MR_ResourceLib
       MR_DllDeclare int GetShortSoundCount() const;
       MR_DllDeclare int GetContinuousSoundCount() const;
 
+      // Asset-pipeline support: replace/add one actor and write the complete archive.
+      MR_DllDeclare void ReplaceBitmap( MR_ResBitmap* pBitmap );
+      MR_DllDeclare void ReplaceActor( MR_ResActor* pActor );
+      MR_DllDeclare BOOL Export( const char* pFileName );
+
 };
 
 #define MR_RESOURCE_FILE_MAGIC    12345
@@ -84,6 +89,5 @@ class MR_ResourceLib
 #undef MR_DllDeclare
 
 #endif
-
 
 

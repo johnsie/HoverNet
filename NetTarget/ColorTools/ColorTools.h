@@ -24,7 +24,9 @@
 
 #include "../Util/MR_Types.h"
 
-#ifdef MR_COLOR_TOOLS
+#ifndef _WIN32
+   #define MR_DllDeclare
+#elif defined(MR_COLOR_TOOLS)
    #define MR_DllDeclare   __declspec( dllexport )
 #else
    #define MR_DllDeclare   __declspec( dllimport )
@@ -46,6 +48,5 @@ namespace MR_ColorTools
 #undef MR_DllDeclare
 
 #endif
-
 
 

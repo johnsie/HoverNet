@@ -19,7 +19,7 @@
 // and limitations under the License.
 //
 
-#include "stdafx.h"
+#include "StdAfx.h"
 #include "ResBitmapBuilder.h"
 #include "BitmapHelper.h"
 
@@ -561,4 +561,3 @@ MR_UInt8 GetBestColorWithError( MR_UInt8* pSrc,
    }
    return lReturnValue;
 }
-

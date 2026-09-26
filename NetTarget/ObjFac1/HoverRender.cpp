@@ -51,6 +51,8 @@ MR_HoverRender::MR_HoverRender( const MR_ObjectFromFactoryId& pId )
       mActor0 = NULL;
       mActor1 = NULL;
       mActor2 = NULL;
+      mActor3 = NULL;
+      mActor4 = NULL;
       mLineCrossingSound = NULL;
       mStartSound = NULL;
       mFinishSound = NULL;
@@ -71,6 +73,7 @@ MR_HoverRender::MR_HoverRender( const MR_ObjectFromFactoryId& pId )
    mActor1 = gObjectFactoryData->mResourceLib.GetActor( MR_HITECH_CAR );
    mActor2 = gObjectFactoryData->mResourceLib.GetActor( MR_BITURBO_CAR );
    mActor3 = gObjectFactoryData->mResourceLib.GetActor( 19 );
+   mActor4 = gObjectFactoryData->mResourceLib.GetActor( MR_MANTA_CRAFT );
    // DEFENSIVE: Initialize sound pointers - check for null before calling GetSound()
    auto lSoundBuf = gObjectFactoryData->mResourceLib.GetShortSound( MR_SND_LINE_CROSSING );
    mLineCrossingSound = (lSoundBuf != NULL) ? lSoundBuf->GetSound() : NULL;
@@ -107,7 +110,7 @@ MR_HoverRender::MR_HoverRender( const MR_ObjectFromFactoryId& pId )
 
    // Debug logging for sound system
    {
-      FILE* logFile = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_SoundInit.log", "a");
+      FILE* logFile = NULL;
       if(logFile) {
          fprintf(logFile, "[HoverRender] Motor sound: %p, Friction sound: %p\n", mMotorSound, mFrictionSound);
          fflush(logFile);
@@ -140,7 +143,7 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
    static int entry_count = 0;
    if( entry_count % 30 == 0 )
    {
-      FILE* entryLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_HoverRender_Entry.log", "a");
+      FILE* entryLog = NULL;
       if( entryLog )
       {
          fprintf(entryLog, "[Entry #%d] RECEIVED: Id=%d Mod=%d (pDest=%p)\n",
@@ -178,9 +181,13 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
    }
    else if( pModel == 19 )
    {
-      lModel = 3;        // Eon Craft (if supported)
+      lModel = 3;
    }
-   else if( pModel >= 0 && pModel <= 3 )
+   else if( pModel == MR_MANTA_CRAFT )
+   {
+      lModel = 4;
+   }
+   else if( pModel >= 0 && pModel <= 4 )
    {
       // Fallback: if pModel is already a model index, use it directly
       lModel = pModel;
@@ -198,7 +205,7 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
    static int final_count = 0;
    if( final_count % 30 == 0 )
    {
-      FILE* finalLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_HoverRender_Final.log", "a");
+      FILE* finalLog = NULL;
       if( finalLog )
       {
          fprintf(finalLog, "[Final #%d] Using: Model=%d HoverId=%d (Received: %d, %d)\n",
@@ -237,7 +244,7 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
    // Log STARTUP info once
    if( first_call )
    {
-      FILE* startLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_RenderStartup.log", "w");
+      FILE* startLog = NULL;
       if( startLog )
       {
          fprintf(startLog, "=== RENDER FUNCTION CALLED ===\n");
@@ -258,7 +265,7 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
    // Log every 30th call  
    if( total_render_calls % 30 == 0 )
    {
-      FILE* allLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_AllRenders.log", "a");
+      FILE* allLog = NULL;
       if( allLog )
       {
          fprintf(allLog, "[#%5d] X=%.0f Y=%.0f Z=%.0f Id=%d Mod=%d OK=%d\n",
@@ -275,7 +282,7 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
    else
    {
       failed_matrix_calls++;
-      FILE* failLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_RenderFailures.log", "a");
+      FILE* failLog = NULL;
       if( failLog )
       {
          fprintf(failLog, "[FAIL #%d] at X=%.0f Y=%.0f Z=%.0f, HoverId=%d Model=%d\n",
@@ -312,6 +319,10 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
       {
          lActor = mActor3;  // Eon Craft
       }
+      else if( lModel == 4 )
+      {
+         lActor = mActor4;  // Manta
+      }
       else
       {
          lActor = mActor0;  // Default to Electro Car
@@ -319,7 +330,7 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
 
       // DEBUG: Log render calls to diagnose coloring issue
       static int render_count = 0;
-      FILE* logFile = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_HoverRender.log", "a");
+      FILE* logFile = NULL;
       if( logFile && (render_count % 60 == 0) )  // Log every 60th call
       {
          fprintf(logFile, "[Render #%d] Model=%d, Motor=%s, HoverId=%d, Actor=%p, Draw=%s, Matrix=%s\n",
@@ -362,7 +373,7 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
       
       if( failure_count <= 3 )
       {
-         FILE* failLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_MatrixFailures.log", "a");
+         FILE* failLog = NULL;
          if( failLog )
          {
             fprintf(failLog, "[FAIL #%d] Pos=(%.0f, %.0f, %.0f) HoverId=%d Model=%d\n",
@@ -486,13 +497,25 @@ void MR_ResActorFriend::Draw( const MR_ResActor* pActor, MR_3DViewPort* pDest, c
    // DEFENSIVE: Validate all pointers and parameters
    if( pActor == NULL ) return;
    if( pDest == NULL ) return;
-   if( pSequence < 0 || pSequence >= 2 ) return;  // Only 2 sequences (0=off, 1=on)
-   if( pFrame < 0 || pFrame >= 2 ) return;  // Only 2 frames per sequence
+   if( pActor->mSequenceList == NULL || pActor->mNbSequence <= 0 ) return;
+   if( pSequence < 0 ) pSequence = 0;
+   pSequence %= pActor->mNbSequence;
 
-   // DEFENSIVE: Validate sequence list access
-   if( pActor->mSequenceList == NULL ) return;
+   // Manta sequence 1 contains only the animated thrust overlay. Keep its
+   // closed hull and fan ducts visible by drawing the static base first.
+   if( pActor->GetResourceId() == MR_MANTA_CRAFT && pSequence == 1 )
+   {
+      Draw( pActor, pDest, pMatrix, 0, pFrame, pCockpitBitmap );
+   }
+
+   MR_ResActor::Sequence* lSequence = &(pActor->mSequenceList[pSequence]);
+   if( lSequence->mFrameList == NULL || lSequence->mNbFrame <= 0 ) return;
+   // Static actors may contain one frame while the renderer's shared animation
+   // counter keeps advancing. Fold it into this actor's actual frame count.
+   if( pFrame < 0 ) pFrame = 0;
+   pFrame %= lSequence->mNbFrame;
    
-   MR_ResActor::Frame* lFrame = &(pActor->mSequenceList[ pSequence ].mFrameList[ pFrame ]);
+   MR_ResActor::Frame* lFrame = &(lSequence->mFrameList[pFrame]);
 
    if( lFrame == NULL ) return;  // Frame is invalid
    if( lFrame->mComponentList == NULL ) return;  // No components to render
