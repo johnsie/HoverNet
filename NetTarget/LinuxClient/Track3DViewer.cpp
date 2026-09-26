@@ -688,6 +688,37 @@ void HoverNetHint(const char* label)
 bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                  const MR_Sprite& font);
 
+// PauseChoice/RunPauseMenu and SettingsResult/RunSettingsScreen are fully
+// defined further below (where the pause menu and settings screen already
+// live), but RunLobbyScreen's own Escape handling needs to call them too --
+// pressing Escape while browsing/hosting/waiting in the lobby used to just
+// close the lobby screen outright with no way back except relaunching it,
+// unlike Escape everywhere else in the client.
+enum class PauseChoice
+{
+    eResume,
+    eLeaveRace,
+    eOnlineLobby,
+    eSettings,
+    eQuit,
+};
+
+PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
+                         MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline);
+
+struct SettingsResult
+{
+    bool confirmed = false;
+    std::string username;
+    std::string serverHost;
+    unsigned serverPort = 0;
+};
+
+SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
+                                 const MR_Sprite& font, const std::string& currentUsername,
+                                 const std::string& currentServerHost, unsigned currentServerPort,
+                                 int pFrameLimit);
+
 // pClient is caller-owned (not constructed here) and deliberately left connected
 // when this returns true: a joined-and-started race needs to keep talking to the
 // server afterward (player position sync), so the connection can't be scoped to
@@ -868,7 +899,43 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 }
             }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
-                running = false;
+                // Used to just close the lobby screen outright -- the same
+                // pause menu Escape brings up everywhere else in the client,
+                // so there's a way back out of an accidental press, and a way
+                // to reach Settings without leaving first.
+                const PauseChoice pauseChoice = RunPauseMenu(graphics, buffer, viewport, font, false);
+                if (pauseChoice == PauseChoice::eQuit) {
+                    g_QuitConfirmed = true;
+                    running = false;
+                }
+                else if (pauseChoice == PauseChoice::eLeaveRace) {
+                    // Labeled "New Local Race" here (pIsOnline=false) -- leaves
+                    // the lobby exactly like Escape used to unconditionally,
+                    // which already falls back to local play (and from there,
+                    // the local race setup screen) in the caller.
+                    running = false;
+                }
+                else if (pauseChoice == PauseChoice::eSettings) {
+                    const SettingsResult settings = RunSettingsScreen(
+                        graphics, buffer, viewport, font, username, host, port, pFrameLimit);
+                    if (settings.confirmed) {
+                        SaveUsername(settings.username);
+                        if (settings.username != username) {
+                            username = settings.username;
+                            std::snprintf(usernameBuf, sizeof(usernameBuf), "%s", username.c_str());
+                            if (client.IsConnected()) {
+                                client.SetPlayerName(username);
+                            }
+                        }
+                        // host/port here are this screen's own parameters, already
+                        // connected to whatever they were at entry -- a changed
+                        // server address can't retroactively apply to that live
+                        // connection, so just persist it for the next time the
+                        // lobby is (re)opened.
+                        SaveServerUrl(settings.serverHost, settings.serverPort);
+                    }
+                }
+                // eResume / eOnlineLobby: no-op -- already right here browsing.
             }
         }
 
@@ -1338,15 +1405,6 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
     }
 }
 
-enum class PauseChoice
-{
-    eResume,
-    eLeaveRace,
-    eOnlineLobby,
-    eSettings,
-    eQuit,
-};
-
 // pIsOnline only changes the middle option's label -- callers already know
 // their own context (onlineClient.IsConnected()) and interpret eLeaveRace as
 // "leave this race" when online or "set up a new local race" when offline,
@@ -1570,14 +1628,6 @@ bool IsBlank(const char* text)
     }
     return true;
 }
-
-struct SettingsResult
-{
-    bool confirmed = false;
-    std::string username;
-    std::string serverHost;
-    unsigned serverPort = 0;
-};
 
 // Lets the player change their display name and which RaceServer they connect
 // to, instead of the only options being a --lobby command-line flag (for the
