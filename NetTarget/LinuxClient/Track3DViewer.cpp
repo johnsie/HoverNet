@@ -37,6 +37,16 @@ namespace
 constexpr int kWidth = 1024;
 constexpr int kHeight = 768;
 
+// Set once the player has actually confirmed "yes, quit HoverNet" (see
+// ConfirmQuit, defined further down) from whichever screen they were on when
+// they clicked the window's close button. Every screen's own loop already
+// exits on its own "running" flag; this is what lets that exit propagate all
+// the way out to main() instead of just closing the current screen and
+// falling through to whatever came next (the main menu, a race, ...). Shared
+// by both the HoverNetTrack3DViewer and HoverNetGame2Player targets (the
+// latter's menus set it; the former's plain race loop only reads it).
+bool g_QuitConfirmed = false;
+
 #ifdef HOVERNET_GAME2_PLAYER
 // The public production RaceServer. --lobby overrides this.
 constexpr const char* kDefaultLobbyHost = "outiva.com";
@@ -636,6 +646,11 @@ void HoverNetSectionHeading(const char* label)
     ImGui::Separator();
 }
 
+// Forward-declared: defined below, but RunLobbyScreen (right below) already
+// needs to call it from its own SDL_QUIT handling.
+bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
+                 const MR_Sprite& font);
+
 // pClient is caller-owned (not constructed here) and deliberately left connected
 // when this returns true: a joined-and-started race needs to keep talking to the
 // server afterward (player position sync), so the connection can't be scoped to
@@ -810,7 +825,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
-                running = false;
+                if (ConfirmQuit(graphics, buffer, viewport, font)) {
+                    g_QuitConfirmed = true;
+                    running = false;
+                }
             }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
                 running = false;
@@ -1210,6 +1228,79 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     return joined;
 }
 
+// Clicking the window's close (X) button used to quit immediately, with no
+// chance to change your mind mid-race or reject an accidental click -- unlike
+// every other way to quit (the pause menu's own "Quit HoverNet" button, or
+// choosing not to via Resume), which is already itself a deliberate menu
+// choice. Returns true if the player actually wants to quit.
+bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
+                 const MR_Sprite& font)
+{
+    const char* options[] = {"Yes, quit HoverNet", "No, keep playing"};
+    constexpr int optionCount = 2;
+    int selected = 1;  // Defaults to "No" so a stray Enter doesn't quit.
+    const int panelWidth = std::min(420, viewport.GetXRes() - 48);
+    const int panelHeight = 220;
+    const UiRect panel{(viewport.GetXRes() - panelWidth) / 2,
+                       (viewport.GetYRes() - panelHeight) / 2, panelWidth, panelHeight};
+    const int buttonWidth = panelWidth - 80;
+    const int buttonHeight = 44;
+    const int firstButtonY = panel.y + 100;
+
+    while (true) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                // Clicking X again while this is up means they really do want out.
+                return true;
+            }
+            if (event.type == SDL_KEYDOWN) {
+                if (event.key.keysym.sym == SDLK_ESCAPE) {
+                    return false;
+                }
+                if (event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_LEFT) {
+                    selected = (selected + optionCount - 1) % optionCount;
+                }
+                else if (event.key.keysym.sym == SDLK_DOWN || event.key.keysym.sym == SDLK_RIGHT) {
+                    selected = (selected + 1) % optionCount;
+                }
+                else if (event.key.keysym.sym == SDLK_RETURN) {
+                    return selected == 0;
+                }
+            }
+            else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
+                for (int index = 0; index < optionCount; ++index) {
+                    const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
+                                        buttonWidth, buttonHeight};
+                    if (button.Contains(event.button.x, event.button.y)) {
+                        return index == 0;
+                    }
+                }
+            }
+            else if (event.type == SDL_MOUSEMOTION) {
+                for (int index = 0; index < optionCount; ++index) {
+                    const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
+                                        buttonWidth, buttonHeight};
+                    if (button.Contains(event.motion.x, event.motion.y)) {
+                        selected = index;
+                    }
+                }
+            }
+        }
+
+        DrawUiPanel(buffer, panel);
+        DrawUiText(font, panel.x + panel.w / 2, panel.y + 28, "QUIT HOVERNET?", &viewport,
+                   MR_Sprite::eCenter, MR_Sprite::eTop, 1);
+        for (int index = 0; index < optionCount; ++index) {
+            const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
+                                buttonWidth, buttonHeight};
+            DrawUiButton(buffer, font, viewport, button, options[index], index == selected);
+        }
+        graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
+        SDL_Delay(16);
+    }
+}
+
 enum class PauseChoice
 {
     eResume,
@@ -1239,7 +1330,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
-                return PauseChoice::eQuit;
+                return ConfirmQuit(graphics, buffer, viewport, font) ? PauseChoice::eQuit : PauseChoice::eResume;
             }
             if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_ESCAPE) {
@@ -1339,6 +1430,9 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
                 cancelled = true;
+                if (ConfirmQuit(graphics, buffer, viewport, font)) {
+                    g_QuitConfirmed = true;
+                }
                 running = false;
             }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
@@ -1452,7 +1546,10 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
-                running = false;
+                if (ConfirmQuit(graphics, buffer, viewport, font)) {
+                    g_QuitConfirmed = true;
+                    running = false;
+                }
             }
             else if (event.type == SDL_KEYDOWN) {
                 const SDL_Keycode key = event.key.keysym.sym;
@@ -1882,7 +1979,12 @@ int main(int argc, char** argv)
             pickingMode = false;
             const MenuChoice choice = RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
                                                   frameLimit);
-            if (choice == MenuChoice::eOnlineLobby) {
+            if (g_QuitConfirmed) {
+                // Confirmed quit from the main menu itself -- skip straight to
+                // the race loop below, which starts with running = !g_QuitConfirmed
+                // and so exits immediately without ever rendering a frame.
+            }
+            else if (choice == MenuChoice::eOnlineLobby) {
                 if (!joinOnlineRace()) {
                     std::printf("Lobby skipped or unavailable; continuing with local play\n");
                 }
@@ -1907,8 +2009,9 @@ int main(int argc, char** argv)
                 else {
                     // Cancelled -- back to the main menu instead of falling through
                     // to whatever was already loaded (interactive mode only; a
-                    // frame-limited run always confirms, see RunLocalRaceSetup).
-                    pickingMode = true;
+                    // frame-limited run always confirms, see RunLocalRaceSetup),
+                    // unless that "cancel" was actually a confirmed quit.
+                    pickingMode = !g_QuitConfirmed;
                 }
             }
         }
@@ -1918,7 +2021,9 @@ int main(int argc, char** argv)
     std::printf("ClassicH 3D view: room=%d surfaces=%d actors=%d pixels=%d\n",
                 room, renderStats.surfacesRendered, renderStats.actorsRendered, nonZeroPixels);
     int framesRendered = 0;
-    bool running = true;
+    // Already confirmed quitting from an earlier menu screen (see g_QuitConfirmed) --
+    // skip the race entirely instead of rendering a frame of it first.
+    bool running = !g_QuitConfirmed;
     bool cockpitView = false;
     bool missileSeen = false;
     bool finishAnnounced = false;
@@ -1936,7 +2041,17 @@ int main(int argc, char** argv)
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
-                running = false;
+#ifdef HOVERNET_GAME2_PLAYER
+                if (playerMode && menuFontHandle != nullptr) {
+                    if (ConfirmQuit(graphics, buffer, viewport, *menuFontHandle->GetSprite())) {
+                        running = false;
+                    }
+                }
+                else
+#endif
+                {
+                    running = false;
+                }
             }
 #ifdef HOVERNET_GAME2_PLAYER
             else if (event.type == SDL_TEXTINPUT && onlineClient.IsConnected()) {
