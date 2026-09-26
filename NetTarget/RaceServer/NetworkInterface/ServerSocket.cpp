@@ -5,6 +5,7 @@
 #include "MessageDispatcher.h"
 #include "RaceManager.h"
 #include "ServerLogger.h"
+#include <string>
 
 extern MR_ServerLogger g_Logger;
 
@@ -503,15 +504,56 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
         case 46:  // MRNM_SET_PLAYER_NAME - client chose a display name
         {
-            const unsigned char nameLen = static_cast<unsigned char>(
+            const unsigned char lRequestedLen = static_cast<unsigned char>(
                 std::min<int>(messageDataLen, MR_MAX_PLAYER_NAME));
-            if (nameLen == 0) {
+            if (lRequestedLen == 0) {
                 g_Logger.Log(MR_LOG_WARN, "Client %d: empty SET_PLAYER_NAME message", pConn->mClientId);
                 break;
             }
-            memcpy(pConn->mPlayerName, &buffer[3], nameLen);
+            std::string lBaseName(reinterpret_cast<const char*>(&buffer[3]), lRequestedLen);
+
+            // Two clients with the same display name would be indistinguishable in
+            // chat and the user list -- if it's already taken by someone else
+            // currently connected (lobby or race), suffix it with the lowest unused
+            // number (1, 2, 3, ...) instead of silently colliding.
+            std::string lFinalName = lBaseName;
+            for (int lSuffix = 0;; ) {
+                bool lTaken = false;
+                for (auto& pair : mConnections) {
+                    ClientConnection* pOther = pair.second;
+                    if (pOther && pOther->mConnected && pOther->mClientId != pConn->mClientId &&
+                        lFinalName == pOther->mPlayerName) {
+                        lTaken = true;
+                        break;
+                    }
+                }
+                if (!lTaken) {
+                    break;
+                }
+                ++lSuffix;
+                const std::string lSuffixText = std::to_string(lSuffix);
+                std::string lTruncatedBase = lBaseName;
+                if (lTruncatedBase.size() + lSuffixText.size() > MR_MAX_PLAYER_NAME) {
+                    lTruncatedBase.resize(MR_MAX_PLAYER_NAME - lSuffixText.size());
+                }
+                lFinalName = lTruncatedBase + lSuffixText;
+            }
+
+            const unsigned char nameLen = static_cast<unsigned char>(lFinalName.size());
+            memcpy(pConn->mPlayerName, lFinalName.data(), nameLen);
             pConn->mPlayerName[nameLen] = '\0';
             g_Logger.Log(MR_LOG_INFO, "Client %d set player name to '%s'", pConn->mClientId, pConn->mPlayerName);
+
+            // Tell the requester what name actually got assigned -- it may differ
+            // from what they asked for (see above), and their own UI (and locally
+            // echoed outgoing chat) needs to reflect the real one, not the request.
+            {
+                MessageBuffer lAckMsg;
+                lAckMsg.header = MakeMessageHeader(58);  // MRNM_PLAYER_NAME_ASSIGNED
+                memcpy(&lAckMsg.data[0], pConn->mPlayerName, nameLen);
+                lAckMsg.dataLen = nameLen;
+                send(pConn->mTcpSocket, (const char*)&lAckMsg, 3 + lAckMsg.dataLen, 0);
+            }
 
             // Announce to whoever's already browsing the lobby; ListLobbyUsers (56)
             // is how a client learns about everyone who was already there before it

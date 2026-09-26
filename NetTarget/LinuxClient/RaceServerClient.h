@@ -45,6 +45,7 @@ enum MR_RaceServerMessageType
     eRSMsgRaceStarted      = 53,  // Server -> Client: broadcast to every player in the race at once
     eRSMsgHostRace         = 54,  // Client -> Server: create a race with explicit track/laps/weapons
     eRSMsgJoinRaceById     = 55,  // Client -> Server: join a specific race by its unique id (see JoinGameById)
+    eRSMsgPlayerNameAssigned = 58,  // Server -> Client: the name it actually stored for you (see ParsePlayerNameAssigned)
 };
 
 // One race as reported by eRSMsgGameInfo.
@@ -154,6 +155,14 @@ public:
     // a display name.
     static bool ParseChatMessage(const RaceServerMessage& pMessage, int& pOutSenderClientId,
                                  std::string& pOutText);
+
+    // Parses an eRSMsgPlayerNameAssigned payload: the raw name bytes, nothing else
+    // (unlike ParseChatMessage, this is never addressed to anyone but the
+    // recipient, so there's no sender id to strip). The server sends this in
+    // reply to SetPlayerName with the name it actually stored -- which may differ
+    // from what was requested if that name was already taken by someone else
+    // currently connected (see ServerSocket.cpp's MRNM_SET_PLAYER_NAME handler).
+    static bool ParsePlayerNameAssigned(const RaceServerMessage& pMessage, std::string& pOutName);
 
     // Sends eRSMsgListGames and collects every eRSMsgGameInfo up to eRSMsgGameListEnd
     // (or pTimeoutMs of silence). Returns false only on a transport-level failure;

@@ -868,6 +868,20 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     }
                 }
             }
+            else if (message.mType == eRSMsgPlayerNameAssigned) {
+                // The name we asked for may already be taken by someone else
+                // currently connected -- the server disambiguates it (see
+                // ServerSocket.cpp's MRNM_SET_PLAYER_NAME handler) and tells us
+                // the real one back here, which we adopt as our own.
+                std::string assignedName;
+                if (RaceServerClient::ParsePlayerNameAssigned(message, assignedName) &&
+                    assignedName != username) {
+                    username = assignedName;
+                    SaveUsername(username);
+                    std::snprintf(usernameBuf, sizeof(usernameBuf), "%s", username.c_str());
+                    statusText = "That name was taken -- you're now '" + username + "'";
+                }
+            }
         }
 
         ImGui_ImplSDLRenderer2_NewFrame();

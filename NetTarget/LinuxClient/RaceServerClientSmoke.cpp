@@ -265,6 +265,79 @@ namespace
         }
         std::printf("Lobby chat and race chat are isolated from each other, as expected\n");
 
+        // Duplicate display names: the second, third, ... client to request an
+        // already-taken name must be told back (via eRSMsgPlayerNameAssigned) a
+        // disambiguated one, numbered from 1, not silently collide with whoever
+        // has it already.
+        RaceServerClient lNameClientG;
+        RaceServerClient lNameClientH;
+        RaceServerClient lNameClientI;
+        if (!lNameClientG.Connect("127.0.0.1", pPort) || !lNameClientH.Connect("127.0.0.1", pPort) ||
+            !lNameClientI.Connect("127.0.0.1", pPort))
+        {
+            std::fprintf(stderr, "Could not connect three clients for the duplicate-name check\n");
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+        // G, H and I are all still lobby-only (mRaceId == -1), same as E and F
+        // above, so each one's SetPlayerName broadcasts eRSMsgLobbyUserPresent to
+        // the *other* two -- those can arrive interleaved with the
+        // eRSMsgPlayerNameAssigned reply a client is waiting for on its own
+        // request, so this has to skip past anything of the wrong type rather
+        // than assume the very next message is the one it wants.
+        auto lWaitForNameAssigned = [](RaceServerClient& pClient, std::string& pOutName) -> bool {
+            RaceServerMessage lMsg;
+            for (int lTries = 0; lTries < 20; ++lTries)
+            {
+                if (pClient.PollMessage(lMsg, 200) && RaceServerClient::ParsePlayerNameAssigned(lMsg, pOutName))
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if (!lNameClientG.SetPlayerName("Racer"))
+        {
+            std::fprintf(stderr, "Failed to set the first client's name to 'Racer'\n");
+            return false;
+        }
+        std::string lAssignedG;
+        if (!lWaitForNameAssigned(lNameClientG, lAssignedG) || lAssignedG != "Racer")
+        {
+            std::fprintf(stderr, "First client claiming 'Racer' should keep it unchanged, got '%s'\n",
+                         lAssignedG.c_str());
+            return false;
+        }
+
+        if (!lNameClientH.SetPlayerName("Racer"))
+        {
+            std::fprintf(stderr, "Failed to set the second client's name to 'Racer'\n");
+            return false;
+        }
+        std::string lAssignedH;
+        if (!lWaitForNameAssigned(lNameClientH, lAssignedH) || lAssignedH != "Racer1")
+        {
+            std::fprintf(stderr, "Second client claiming 'Racer' should become 'Racer1', got '%s'\n",
+                         lAssignedH.c_str());
+            return false;
+        }
+
+        if (!lNameClientI.SetPlayerName("Racer"))
+        {
+            std::fprintf(stderr, "Failed to set the third client's name to 'Racer'\n");
+            return false;
+        }
+        std::string lAssignedI;
+        if (!lWaitForNameAssigned(lNameClientI, lAssignedI) || lAssignedI != "Racer2")
+        {
+            std::fprintf(stderr, "Third client claiming 'Racer' should become 'Racer2', got '%s'\n",
+                         lAssignedI.c_str());
+            return false;
+        }
+        std::printf("Duplicate display names are disambiguated as 'Racer', 'Racer1', 'Racer2'\n");
+
         // Host-controlled start: the creator of a race gets told it's the host via
         // eRSMsgJoinedRace, a non-creator does not, a non-host's start request is
         // ignored, and the host's start request broadcasts eRSMsgRaceStarted to

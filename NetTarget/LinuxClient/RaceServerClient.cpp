@@ -324,6 +324,16 @@ bool RaceServerClient::ParseChatMessage(const RaceServerMessage& pMessage, int& 
     return true;
 }
 
+bool RaceServerClient::ParsePlayerNameAssigned(const RaceServerMessage& pMessage, std::string& pOutName)
+{
+    if (pMessage.mType != eRSMsgPlayerNameAssigned || pMessage.mData.empty())
+    {
+        return false;
+    }
+    pOutName.assign(pMessage.mData.begin(), pMessage.mData.end());
+    return true;
+}
+
 bool RaceServerClient::ListGames(std::vector<RaceServerGameInfo>& pOutGames, int pTimeoutMs)
 {
     pOutGames.clear();
