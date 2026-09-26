@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cfloat>
 #include <cstdio>
 #include <cstdlib>
@@ -525,6 +526,33 @@ void SaveUsername(const std::string& name)
     out << name << '\n';
 }
 
+std::string ServerUrlPath()
+{
+    const char* home = std::getenv("HOME");
+    return std::string(home != nullptr ? home : ".") + "/.hovernet_server_url";
+}
+
+// Returns false (leaving outHost/outPort untouched) if nothing's been saved
+// yet -- callers already have the built-in default to fall back to.
+bool LoadServerUrl(std::string& outHost, unsigned& outPort)
+{
+    std::ifstream in(ServerUrlPath());
+    std::string host;
+    unsigned port = 0;
+    if (in >> host >> port && !host.empty() && port > 0 && port <= 65535) {
+        outHost = host;
+        outPort = port;
+        return true;
+    }
+    return false;
+}
+
+void SaveServerUrl(const std::string& host, unsigned port)
+{
+    std::ofstream out(ServerUrlPath());
+    out << host << ' ' << port << '\n';
+}
+
 struct RemotePlayer
 {
     MR_MainCharacter* mCharacter = nullptr;
@@ -644,6 +672,15 @@ void HoverNetSectionHeading(const char* label)
     ImGui::TextUnformatted(label);
     ImGui::PopStyleColor();
     ImGui::Separator();
+}
+
+// A one-line coral-accented note (e.g. inline field validation) without the
+// section rule HoverNetSectionHeading always adds after its text.
+void HoverNetHint(const char* label)
+{
+    ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
+    ImGui::TextUnformatted(label);
+    ImGui::PopStyleColor();
 }
 
 // Forward-declared: defined below, but RunLobbyScreen (right below) already
@@ -1306,6 +1343,7 @@ enum class PauseChoice
     eResume,
     eLeaveRace,
     eOnlineLobby,
+    eSettings,
     eQuit,
 };
 
@@ -1320,11 +1358,11 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                          MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline)
 {
     const char* options[] = {"Resume", pIsOnline ? "Leave Race" : "New Local Race",
-                             "Online Multiplayer Lobby", "Quit HoverNet"};
-    constexpr int optionCount = 4;
+                             "Online Multiplayer Lobby", "Settings", "Quit HoverNet"};
+    constexpr int optionCount = 5;
     int selected = 0;
     const int panelWidth = std::min(520, viewport.GetXRes() - 48);
-    const int panelHeight = 392;
+    const int panelHeight = 444;
     const UiRect panel{(viewport.GetXRes() - panelWidth) / 2,
                        (viewport.GetYRes() - panelHeight) / 2, panelWidth, panelHeight};
     const int buttonWidth = panelWidth - 80;
@@ -1520,6 +1558,186 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     if (result.confirmed) {
         SaveLocalRacePrefs(prefs);
     }
+    return result;
+}
+
+bool IsBlank(const char* text)
+{
+    for (const char* p = text; *p != '\0'; ++p) {
+        if (!std::isspace(static_cast<unsigned char>(*p))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+struct SettingsResult
+{
+    bool confirmed = false;
+    std::string username;
+    std::string serverHost;
+    unsigned serverPort = 0;
+};
+
+// Lets the player change their display name and which RaceServer they connect
+// to, instead of the only options being a --lobby command-line flag (for the
+// server) or waiting to be prompted the very first time the lobby ever opens
+// (for the name, and even then never again afterward). UX choices worth
+// calling out: fields are pre-filled with the CURRENT values, not blank
+// placeholders, so opening this to tweak one thing doesn't require
+// re-entering the other; Save is disabled (with an inline reason, not just a
+// silently inert button) whenever the name or host is blank or the port is
+// out of range, instead of accepting bad input that only fails later when
+// something tries to connect; a Reset button restores the built-in default
+// server without the player needing to know or retype it; and Escape/Cancel
+// discards edits entirely rather than applying whatever was typed so far.
+SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
+                                 const MR_Sprite& font, const std::string& currentUsername,
+                                 const std::string& currentServerHost, unsigned currentServerPort,
+                                 int pFrameLimit)
+{
+    (void)buffer;
+    (void)viewport;
+    (void)font;
+
+    char usernameBuf[24] = {0};
+    std::snprintf(usernameBuf, sizeof(usernameBuf), "%s", currentUsername.c_str());
+    char hostBuf[128] = {0};
+    std::snprintf(hostBuf, sizeof(hostBuf), "%s", currentServerHost.c_str());
+    int port = static_cast<int>(currentServerPort);
+
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    ImFontConfig fontConfig;
+    fontConfig.SizePixels = 19.0f;
+    io.Fonts->AddFontDefault(&fontConfig);
+    ApplyHoverNetLobbyStyle();
+    ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+    ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+    SDL_StartTextInput();
+
+    bool running = true;
+    bool cancelled = false;
+    int framesShown = 0;
+
+    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_QUIT) {
+                cancelled = true;
+                if (ConfirmQuit(graphics, buffer, viewport, font)) {
+                    g_QuitConfirmed = true;
+                }
+                running = false;
+            }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+                cancelled = true;
+                running = false;
+            }
+        }
+
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::Begin("HoverNet Settings", nullptr,
+                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
+        ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
+        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+        ImGui::SetWindowFontScale(1.35f);
+        ImGui::TextUnformatted("SETTINGS");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        const float centerWidth = std::min(460.0f, ImGui::GetContentRegionAvail().x);
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
+        ImGui::BeginChild("SettingsPanel", ImVec2(centerWidth, 340), true);
+
+        ImGui::TextUnformatted("Display Name");
+        ImGui::PushItemWidth(-1.0f);
+        ImGui::InputText("##Username", usernameBuf, sizeof(usernameBuf));
+        ImGui::PopItemWidth();
+        const bool usernameBlank = IsBlank(usernameBuf);
+        if (usernameBlank) {
+            HoverNetHint("Enter a display name");
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::TextUnformatted("RaceServer Address");
+        ImGui::SetNextItemWidth(-96.0f);
+        ImGui::InputText("##ServerHost", hostBuf, sizeof(hostBuf));
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputInt("##ServerPort", &port, 0);
+        const bool hostBlank = IsBlank(hostBuf);
+        const bool portValid = port > 0 && port <= 65535;
+        if (hostBlank) {
+            HoverNetHint("Enter a server address");
+        }
+        else if (!portValid) {
+            HoverNetHint("Port must be between 1 and 65535");
+        }
+        ImGui::Spacing();
+        if (HoverNetButton("Reset to default server", ImVec2(-FLT_MIN, 0))) {
+            std::snprintf(hostBuf, sizeof(hostBuf), "%s", kDefaultLobbyHost);
+            port = static_cast<int>(kDefaultLobbyPort);
+        }
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        const bool canSave = !usernameBlank && !hostBlank && portValid;
+        ImGui::BeginDisabled(!canSave);
+        if (HoverNetButton("Save", ImVec2(-FLT_MIN, 40))) {
+            running = false;
+        }
+        ImGui::EndDisabled();
+        ImGui::Spacing();
+        if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, 36))) {
+            cancelled = true;
+            running = false;
+        }
+
+        ImGui::EndChild();
+        ImGui::End();
+
+        ImGui::Render();
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        SDL_RenderPresent(renderer);
+        SDL_Delay(16);
+    }
+
+    SDL_StopTextInput();
+    ImGui_ImplSDLRenderer2_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
+
+    SettingsResult result;
+    result.confirmed = !cancelled;
+    result.username = usernameBuf;
+    result.serverHost = hostBuf;
+    result.serverPort = static_cast<unsigned>(port);
     return result;
 }
 
@@ -1815,7 +2033,8 @@ int main(int argc, char** argv)
     MR_SpriteHandle* menuFontHandle = playerMode ? LoadUiFont() : nullptr;
     std::string lobbyHost = kDefaultLobbyHost;
     unsigned lobbyPort = kDefaultLobbyPort;
-    ParseLobbyArg(argc, argv, lobbyHost, lobbyPort);
+    LoadServerUrl(lobbyHost, lobbyPort);  // a Settings change from a previous run, if any
+    ParseLobbyArg(argc, argv, lobbyHost, lobbyPort);  // --lobby always wins, for dev/testing
 
     auto resetRaceSession = [&]() -> bool {
         session.SetElementCreationBroadcastHook(nullptr, nullptr);
@@ -2103,6 +2322,17 @@ int main(int argc, char** argv)
                         // rejoin the lobby -- but always offered, so offline
                         // play has a way there too without quitting first.
                         leaveForLobby = true;
+                    }
+                    else if (pauseChoice == PauseChoice::eSettings) {
+                        const SettingsResult settings = RunSettingsScreen(
+                            graphics, buffer, viewport, *menuFontHandle->GetSprite(),
+                            LoadUsername(), lobbyHost, lobbyPort, frameLimit);
+                        if (settings.confirmed) {
+                            SaveUsername(settings.username);
+                            lobbyHost = settings.serverHost;
+                            lobbyPort = settings.serverPort;
+                            SaveServerUrl(lobbyHost, lobbyPort);
+                        }
                     }
                     else {
                         session.SetSimulationTime(session.GetSimulationTime());
