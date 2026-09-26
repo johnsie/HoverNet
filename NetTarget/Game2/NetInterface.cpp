@@ -1411,6 +1411,26 @@ BOOL CALLBACK MR_NetworkInterface::ListCallBack( HWND pWindow, UINT  pMsgId, WPA
                SetTimer( pWindow, 999, 100, NULL );  // Check every 100ms
             }
 
+            if( mActiveInterface->GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
+            {
+               // Nothing else sends anything on this TCP connection while sitting in
+               // this dialog waiting for players/race start -- the periodic lag-test
+               // timer below (SetTimer(..., lClient+10, ...)) pings peers over UDP,
+               // which is unrelated to this connection and never fires for slot 0 in
+               // server-hosted mode anyway (no P2P UDP peer is ever configured for
+               // it). The RaceServer disconnects any connection that's gone silent
+               // for MR_CONNECTION_TIMEOUT (ClientConnection.h, 30s), and once it
+               // does, CleanupEmptyRaces deletes the now-playerless race within 5
+               // seconds -- so a host or joiner idling here for half a minute (which
+               // is trivially easy: just sit in this dialog waiting for someone else)
+               // silently loses the race server-side with zero on-screen indication;
+               // the dialog just keeps showing "waiting". Use timer ID 998 to send a
+               // minimal real TCP message over the RaceServer connection well inside
+               // that window, matching what the Linux client's lobby already does
+               // (RaceServerClient::Ping every 10s).
+               SetTimer( pWindow, 998, 10000, NULL );
+            }
+
             // Put the registry socket in listen mode
             listen( mActiveInterface->mRegistrySocket, 5 );
             WSAAsyncSelect( mActiveInterface->mRegistrySocket, pWindow, MRM_NEW_CLIENT, FD_ACCEPT );
@@ -1620,11 +1640,23 @@ BOOL CALLBACK MR_NetworkInterface::ListCallBack( HWND pWindow, UINT  pMsgId, WPA
                   }
                }
             }
+            else if( pWParam == 998 )
+            {
+               // Keep-alive for the actual RaceServer TCP connection while this
+               // dialog sits waiting (see the SetTimer(..., 998, ...) comment in
+               // WM_INITDIALOG) -- any real message resets the server's
+               // mLastMessageTime idle watchdog, so the payload content doesn't
+               // matter. Repeats automatically (SetTimer interval), no KillTimer.
+               MR_NetMessageBuffer lKeepAlive;
+               lKeepAlive.mMessageType = MRNM_LAG_TEST;
+               lKeepAlive.mDataLen = 0;
+               mActiveInterface->mClient[0].Send( &lKeepAlive, MR_NET_TRY );
+            }
             else
             {
                // Original lag test timer code
                KillTimer( pWindow, pWParam );
-               
+
                int lClient = pWParam-10;
 
                if( (lClient >=0) && (lClient<eMaxClient) )
