@@ -1498,6 +1498,10 @@ int main(int argc, char** argv)
     OnlineElementBroadcastContext elementBroadcastContext{&onlineClient};
     int localClientId = -1;
     std::map<int, RemotePlayer> remotePlayers;
+    // Resolves a race-scoped chat message's stamped sender id (see
+    // RaceServerClient::ParseChatMessage) to a display name -- populated from the
+    // pre-race roster and from eRSMsgConnNameSet for anyone who joins mid-race.
+    std::map<int, std::string> raceNames;
 #endif
 
 #ifdef HOVERNET_GAME2_PLAYER
@@ -1510,6 +1514,7 @@ int main(int argc, char** argv)
         session.SetElementCreationBroadcastHook(nullptr, nullptr);
         onlineClient.Disconnect();
         remotePlayers.clear();
+        raceNames.clear();
         localClientId = -1;
 
         MR_RecordFile* freshTrack = new MR_RecordFile;
@@ -1579,6 +1584,10 @@ int main(int argc, char** argv)
 
         session.SetSimulationTime(-6000);
 
+        for (const RaceServerPeer& peer : knownPeers) {
+            raceNames[peer.mClientId] = peer.mName;
+        }
+
         std::vector<int> raceClientIds;
         raceClientIds.push_back(localClientId);
         for (const RaceServerPeer& peer : knownPeers) {
@@ -1645,6 +1654,11 @@ int main(int argc, char** argv)
     bool running = true;
     bool cockpitView = false;
     bool missileSeen = false;
+    // In-race chat, scoped to whatever race this connection is in (see the
+    // eRSMsgChatMessage handling below) -- text input only actually does
+    // anything once online, but it's harmless to leave enabled for local play.
+    std::string chatBuffer;
+    SDL_StartTextInput();
     while (running && (frameLimit < 0 || framesRendered < frameLimit)) {
         bool sceneChanged = renderStats.actorsRendered > 0;
         bool horizontalMovement = false;
@@ -1655,6 +1669,23 @@ int main(int argc, char** argv)
             if (event.type == SDL_QUIT) {
                 running = false;
             }
+#ifdef HOVERNET_GAME2_PLAYER
+            else if (event.type == SDL_TEXTINPUT && onlineClient.IsConnected()) {
+                if (chatBuffer.size() < 60) {
+                    chatBuffer += event.text.text;
+                }
+            }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_BACKSPACE &&
+                     onlineClient.IsConnected() && !chatBuffer.empty()) {
+                chatBuffer.pop_back();
+            }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN &&
+                     onlineClient.IsConnected() && !chatBuffer.empty()) {
+                onlineClient.SendMessage(eRSMsgChatMessage, chatBuffer.data(), chatBuffer.size());
+                session.AddMessage(("You: " + chatBuffer).c_str());
+                chatBuffer.clear();
+            }
+#endif
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
 #ifdef HOVERNET_GAME2_PLAYER
                 if (playerMode && onlineClient.IsConnected() && menuFontHandle != nullptr) {
@@ -1790,19 +1821,22 @@ int main(int argc, char** argv)
                 while (onlineClient.PollMessage(netMessage, 0)) {
                     if (netMessage.mType == eRSMsgConnNameSet) {
                         RaceServerPeer peer;
-                        if (RaceServerClient::ParsePeer(netMessage, peer) &&
-                            remotePlayers.count(peer.mClientId) == 0) {
-                            // A player who joined after the race started -- spawn them
-                            // the same way the pre-race roster was spawned, just with
-                            // no free starting slot to reserve at this point.
-                            MR_MainCharacter* remote = MR_MainCharacter::New(5, TRUE);
-                            if (remote != nullptr) {
-                                remote->mPosition = mainCharacter->mPosition;
-                                remote->mRoom = mainCharacter->mRoom;
-                                remote->SetHoverId(static_cast<int>(remotePlayers.size()) + 1);
-                                MR_FreeElementHandle remoteHandle = session.InsertRemoteCharacter(remote, remote->mRoom);
-                                if (remoteHandle != nullptr) {
-                                    remotePlayers[peer.mClientId] = {remote, remoteHandle};
+                        if (RaceServerClient::ParsePeer(netMessage, peer)) {
+                            raceNames[peer.mClientId] = peer.mName;
+                            if (remotePlayers.count(peer.mClientId) == 0) {
+                                // A player who joined after the race started -- spawn them
+                                // the same way the pre-race roster was spawned, just with
+                                // no free starting slot to reserve at this point.
+                                MR_MainCharacter* remote = MR_MainCharacter::New(5, TRUE);
+                                if (remote != nullptr) {
+                                    remote->mPosition = mainCharacter->mPosition;
+                                    remote->mRoom = mainCharacter->mRoom;
+                                    remote->SetHoverId(static_cast<int>(remotePlayers.size()) + 1);
+                                    MR_FreeElementHandle remoteHandle =
+                                        session.InsertRemoteCharacter(remote, remote->mRoom);
+                                    if (remoteHandle != nullptr) {
+                                        remotePlayers[peer.mClientId] = {remote, remoteHandle};
+                                    }
                                 }
                             }
                         }
@@ -1873,6 +1907,22 @@ int main(int argc, char** argv)
                             }
                         }
                     }
+                    else if (netMessage.mType == eRSMsgChatMessage) {
+                        // Same relay the lobby uses (see ServerSocket.cpp's MRNM_CHAT_MESSAGE
+                        // case), scoped to this race by the server's own mRaceId check -- a
+                        // race in progress is still just a connection with mRaceId set, so
+                        // this needed no server-side change, only somewhere on each client to
+                        // send and show it once actual racing starts.
+                        int senderClientId = -1;
+                        std::string chatText;
+                        if (RaceServerClient::ParseChatMessage(netMessage, senderClientId, chatText)) {
+                            const auto nameIt = raceNames.find(senderClientId);
+                            const std::string senderName = (nameIt != raceNames.end())
+                                ? nameIt->second
+                                : ("Player " + std::to_string(senderClientId));
+                            session.AddMessage((senderName + ": " + chatText).c_str());
+                        }
+                    }
                 }
             }
 #endif
@@ -1918,6 +1968,11 @@ int main(int argc, char** argv)
                 else {
                     observer->RenderNormalDisplay(&buffer, &session, mainCharacter, session.GetSimulationTime(),
                                                   session.GetBackImage());
+                }
+                if (!chatBuffer.empty() && menuFontHandle != nullptr) {
+                    const std::string prompt = "Chat: " + chatBuffer + "_";
+                    DrawUiText(*menuFontHandle->GetSprite(), 20, kHeight - 40, prompt.c_str(), &viewport,
+                               MR_Sprite::eLeft, MR_Sprite::eTop, 2);
                 }
                 observer->PlaySoundsSafe(session.GetCurrentLevel(), mainCharacter);
                 MR_SoundServer::ApplyContinuousPlay();

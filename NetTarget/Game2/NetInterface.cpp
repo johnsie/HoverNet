@@ -60,6 +60,7 @@ namespace
 
 
 #define MRNM_SET_MAIN_ELEM_STATE 3
+#define MRNM_CHAT_MESSAGE      6
 #define MRNM_GET_GAME_NAME     40
 #define MRNM_REMOVE_ENTRY      41
 #define MRNM_GAME_NAME         42
@@ -436,6 +437,29 @@ BOOL MR_NetworkInterface::FetchMessage( DWORD& pTimeStamp, int& pMessageType, in
             memcpy( &lServerClientId, pMessage, sizeof(lServerClientId) );
             pClientId = RegisterServerPeer( lServerClientId, (const char*)pMessage + sizeof(lServerClientId),
                                             pMessageLen - sizeof(lServerClientId) );
+         }
+         else if( mConnectionMode == MR_CONNECTION_SERVER_HOSTED && pMessageType == MRNM_CHAT_MESSAGE )
+         {
+            // The RaceServer stamps the sender's client id onto the front of every
+            // relayed chat message now (see ServerSocket.cpp's MRNM_CHAT_MESSAGE
+            // case) -- without stripping it here the same way MRNM_SET_MAIN_ELEM_STATE
+            // and MRNM_CONN_NAME_SET already do above, those 4 bytes would show up
+            // as garbage prepended to the chat text, and pClientId would stay the
+            // meaningless local poll slot from line 413 instead of the real sender.
+            if( pMessageLen < (int)sizeof(int) )
+            {
+               lReturnValue = FALSE;
+               continue;
+            }
+            int lServerClientId = -1;
+            memcpy( &lServerClientId, pMessage, sizeof(lServerClientId) );
+            const int lPeerSlot = RegisterServerPeer( lServerClientId );
+            if( lPeerSlot >= 0 )
+            {
+               pClientId = lPeerSlot;
+            }
+            pMessage += sizeof(lServerClientId);
+            pMessageLen -= sizeof(lServerClientId);
          }
 
       }

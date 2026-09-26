@@ -434,6 +434,34 @@ namespace
         }
         std::printf("Host-controlled race start works and reaches all players together\n");
 
+        // Chat must keep working once the race is actually in progress, not just
+        // while it was still a waiting room -- mRaceId (what the server scopes
+        // chat by) is set at join/host time and is never touched by StartRace, but
+        // this proves that rather than assuming it from reading the server code.
+        const std::string lInRaceText = "gg, race is on";
+        if (!lJoiner.SendMessage(eRSMsgChatMessage, lInRaceText.data(), lInRaceText.size()))
+        {
+            std::fprintf(stderr, "Failed to send chat after the race started\n");
+            return false;
+        }
+        bool lSawInRaceChat = false;
+        for (int lTries = 0; lTries < 20 && !lSawInRaceChat; ++lTries)
+        {
+            if (lHost.PollMessage(lMessage, 200) && lMessage.mType == eRSMsgChatMessage)
+            {
+                int lSenderId = -1;
+                std::string lReceived;
+                lSawInRaceChat = RaceServerClient::ParseChatMessage(lMessage, lSenderId, lReceived) &&
+                                 lReceived == lInRaceText;
+            }
+        }
+        if (!lSawInRaceChat)
+        {
+            std::fprintf(stderr, "Host never received the joiner's chat after the race started\n");
+            return false;
+        }
+        std::printf("Chat still works once the race has actually started\n");
+
         // Hosting with explicit track/laps/weapons: settings must round-trip into the
         // lobby listing, and an unknown track must be rejected (eRSMsgJoinedRace with
         // raceId == -1); a duplicate race name is checked separately below.
