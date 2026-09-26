@@ -178,35 +178,48 @@ namespace
         std::printf("Lobby listing shows '%s' on track '%s' with %d players\n", lFound->mName.c_str(),
                     lFound->mTrack.c_str(), lFound->mNumPlayers);
 
-        // A fourth client naming a *different* race must be isolated from the first
-        // race's traffic -- distinct game names must mean genuinely separate races.
+        // A fourth client naming a *different* race, still just a waiting room (not
+        // started) -- chat is scoped by mRaceStarted, not mRaceId, so a waiting
+        // room is still part of the wider lobby conversation. Distinct game names
+        // mean genuinely separate races once they start, but not before.
         RaceServerClient lClientD;
         if (!lClientD.Connect("127.0.0.1", pPort) || !lClientD.JoinGame("smoke-test-race-2"))
         {
             std::fprintf(stderr, "Could not join the second, independent race\n");
             return false;
         }
-        // Drain D's own eRSMsgJoinedRace ack before checking isolation -- that's
-        // expected traffic addressed to D, not a leak from the other race.
+        // Drain D's own eRSMsgJoinedRace ack before checking what it does/doesn't
+        // see next -- that's expected traffic addressed to D, not lobby chat.
         RaceServerMessage lMessage;
         while (lClientD.PollMessage(lMessage, 200)) { }
 
-        const std::string lLeakText = "should not leak";
-        if (!lClientA.SendMessage(eRSMsgChatMessage, lLeakText.data(), lLeakText.size()))
+        const std::string lWaitingRoomText = "still just a waiting room";
+        if (!lClientA.SendMessage(eRSMsgChatMessage, lWaitingRoomText.data(), lWaitingRoomText.size()))
         {
-            std::fprintf(stderr, "Failed to send isolation-check chat message\n");
+            std::fprintf(stderr, "Failed to send waiting-room chat message\n");
             return false;
         }
-        if (lClientD.PollMessage(lMessage, 500))
+        bool lSawWaitingRoomChat = false;
+        for (int lTries = 0; lTries < 20 && !lSawWaitingRoomChat; ++lTries)
         {
-            std::fprintf(stderr, "Client D received traffic from an unrelated race (no isolation)\n");
+            if (lClientD.PollMessage(lMessage, 200) && lMessage.mType == eRSMsgChatMessage)
+            {
+                int lSenderId = -1;
+                std::string lReceived;
+                lSawWaitingRoomChat = RaceServerClient::ParseChatMessage(lMessage, lSenderId, lReceived) &&
+                                      lReceived == lWaitingRoomText;
+            }
+        }
+        if (!lSawWaitingRoomChat)
+        {
+            std::fprintf(stderr, "A different not-yet-started race should still share lobby chat\n");
             return false;
         }
-        std::printf("Second race is isolated from the first, as expected\n");
+        std::printf("Two separate waiting rooms still share one lobby-wide chat, as expected\n");
 
         // Lobby-wide chat: two clients that haven't joined any race yet (mRaceId
-        // stays -1 on the server) should still be able to chat with each other, and
-        // that chat must not leak to clients already in a race, nor vice versa.
+        // stays -1 on the server) should be able to chat with each other, and with
+        // anyone else not yet racing (browsers and every waiting room alike).
         RaceServerClient lLobbyClientE;
         RaceServerClient lLobbyClientF;
         if (!lLobbyClientE.Connect("127.0.0.1", pPort) || !lLobbyClientF.Connect("127.0.0.1", pPort))
@@ -245,25 +258,48 @@ namespace
         }
         std::printf("Lobby-wide chat between unjoined clients works\n");
 
-        // The already-in-a-race clients must not see lobby chat...
-        if (lClientA.PollMessage(lMessage, 300) && lMessage.mType == eRSMsgChatMessage)
+        // A client sitting in a waiting room (not yet started) must ALSO see that
+        // same lobby-wide chat -- it hasn't narrowed to race-only yet.
+        bool lWaitingRoomSawLobbyChat = false;
+        for (int lTries = 0; lTries < 20 && !lWaitingRoomSawLobbyChat; ++lTries)
         {
-            std::fprintf(stderr, "A client in a race received lobby-wide chat (no isolation)\n");
+            if (lClientA.PollMessage(lMessage, 200) && lMessage.mType == eRSMsgChatMessage)
+            {
+                int lSenderId = -1;
+                std::string lReceived;
+                lWaitingRoomSawLobbyChat = RaceServerClient::ParseChatMessage(lMessage, lSenderId, lReceived) &&
+                                          lReceived == lLobbyChatText;
+            }
+        }
+        if (!lWaitingRoomSawLobbyChat)
+        {
+            std::fprintf(stderr, "A client in a not-yet-started waiting room should still see lobby-wide chat\n");
             return false;
         }
-        // ...and a lobby-only client must not see race-scoped chat.
-        const std::string lRaceOnlyText = "should stay in the race";
-        if (!lClientB.SendMessage(eRSMsgChatMessage, lRaceOnlyText.data(), lRaceOnlyText.size()))
+        // ...and a lobby-only browser must likewise see a waiting room's chat.
+        const std::string lWaitingRoomText2 = "still in the waiting room";
+        if (!lClientB.SendMessage(eRSMsgChatMessage, lWaitingRoomText2.data(), lWaitingRoomText2.size()))
         {
-            std::fprintf(stderr, "Failed to send race-scoped chat for the reverse isolation check\n");
+            std::fprintf(stderr, "Failed to send waiting-room chat for the reverse check\n");
             return false;
         }
-        if (lLobbyClientE.PollMessage(lMessage, 300) || lLobbyClientF.PollMessage(lMessage, 300))
+        bool lLobbySawWaitingRoomChat = false;
+        for (int lTries = 0; lTries < 20 && !lLobbySawWaitingRoomChat; ++lTries)
         {
-            std::fprintf(stderr, "A lobby-only client received race-scoped chat (no isolation)\n");
+            if (lLobbyClientE.PollMessage(lMessage, 200) && lMessage.mType == eRSMsgChatMessage)
+            {
+                int lSenderId = -1;
+                std::string lReceived;
+                lLobbySawWaitingRoomChat = RaceServerClient::ParseChatMessage(lMessage, lSenderId, lReceived) &&
+                                          lReceived == lWaitingRoomText2;
+            }
+        }
+        if (!lLobbySawWaitingRoomChat)
+        {
+            std::fprintf(stderr, "A lobby-only browser should still see a waiting room's chat\n");
             return false;
         }
-        std::printf("Lobby chat and race chat are isolated from each other, as expected\n");
+        std::printf("Lobby browsers and not-yet-started waiting rooms share one chat, as expected\n");
 
         // Duplicate display names: the second, third, ... client to request an
         // already-taken name must be told back (via eRSMsgPlayerNameAssigned) a
@@ -435,9 +471,11 @@ namespace
         std::printf("Host-controlled race start works and reaches all players together\n");
 
         // Chat must keep working once the race is actually in progress, not just
-        // while it was still a waiting room -- mRaceId (what the server scopes
-        // chat by) is set at join/host time and is never touched by StartRace, but
-        // this proves that rather than assuming it from reading the server code.
+        // while it was still a waiting room, and -- unlike the waiting room -- it
+        // must now have actually narrowed to just this race: StartRace flips
+        // mRaceStarted for lHost and lJoiner (see ServerSocket.cpp's
+        // MRNM_START_RACE case), which is what takes their chat out of the wider
+        // lobby pool from here on.
         const std::string lInRaceText = "gg, race is on";
         if (!lJoiner.SendMessage(eRSMsgChatMessage, lInRaceText.data(), lInRaceText.size()))
         {
@@ -461,6 +499,45 @@ namespace
             return false;
         }
         std::printf("Chat still works once the race has actually started\n");
+
+        // D, E and F all legitimately received earlier waiting-room/lobby chat
+        // (that's what the checks above just proved) and some of those messages
+        // were never drained -- clear all of that out first so the isolation check
+        // below can't mistake old, already-correct traffic for a fresh leak.
+        while (lClientD.PollMessage(lMessage, 100)) { }
+        while (lLobbyClientE.PollMessage(lMessage, 100)) { }
+        while (lLobbyClientF.PollMessage(lMessage, 100)) { }
+
+        // Now that lHost/lJoiner's race has actually started, it must be isolated
+        // from everyone else: a lobby-only browser, and a client still sitting in
+        // an unrelated, not-yet-started waiting room (lClientD) -- both of whom
+        // could see waiting-room chat a moment ago -- must NOT see this.
+        if ((lClientD.PollMessage(lMessage, 300) && lMessage.mType == eRSMsgChatMessage) ||
+            (lLobbyClientE.PollMessage(lMessage, 300) && lMessage.mType == eRSMsgChatMessage) ||
+            (lLobbyClientF.PollMessage(lMessage, 300) && lMessage.mType == eRSMsgChatMessage))
+        {
+            std::fprintf(stderr, "A started race's chat leaked to the lobby or another waiting room\n");
+            return false;
+        }
+        // ...and the reverse: further lobby-wide chat must not reach the now-racing
+        // host or joiner either. Drain whatever's already queued for them first
+        // (e.g. leftover position-sync traffic from the race itself) so the check
+        // below can't mistake old traffic for this specific message leaking in.
+        while (lHost.PollMessage(lMessage, 100)) { }
+        while (lJoiner.PollMessage(lMessage, 100)) { }
+        const std::string lStillInLobbyText = "still just browsing";
+        if (!lLobbyClientE.SendMessage(eRSMsgChatMessage, lStillInLobbyText.data(), lStillInLobbyText.size()))
+        {
+            std::fprintf(stderr, "Failed to send post-start lobby chat for the reverse isolation check\n");
+            return false;
+        }
+        if ((lHost.PollMessage(lMessage, 300) && lMessage.mType == eRSMsgChatMessage) ||
+            (lJoiner.PollMessage(lMessage, 300) && lMessage.mType == eRSMsgChatMessage))
+        {
+            std::fprintf(stderr, "Lobby-wide chat leaked into a race that's already started\n");
+            return false;
+        }
+        std::printf("A started race is isolated from the lobby and other waiting rooms, as expected\n");
 
         // Hosting with explicit track/laps/weapons: settings must round-trip into the
         // lobby listing, and an unknown track must be rejected (eRSMsgJoinedRace with

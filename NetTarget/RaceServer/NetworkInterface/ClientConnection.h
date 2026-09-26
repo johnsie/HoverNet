@@ -26,6 +26,11 @@ public:
     
     // Race participation
     int mRaceId;
+    // False while mRaceId's race is still a waiting room (hosted/joined but not
+    // yet started) -- chat is scoped by mRaceStarted, not mRaceId, so players
+    // filling a waiting room stay part of the wider lobby conversation, and only
+    // narrow down to their own race once it actually gets under way.
+    BOOL mRaceStarted;
     
     // Lag statistics
     int mAvgLag;                      // Average latency in ms

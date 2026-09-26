@@ -7,6 +7,7 @@ ClientConnection::ClientConnection()
     : mClientId(-1),
       mTcpSocket(INVALID_SOCKET),
       mRaceId(-1),
+      mRaceStarted(FALSE),
       mAvgLag(0),
       mMinLag(0),
       mNbLagTests(0),

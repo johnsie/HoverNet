@@ -603,11 +603,15 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
         case 6:   // MRNM_CHAT_MESSAGE
         {
-            // Chat is scoped to wherever the sender currently is: other members of
-            // their race if they've joined one, or everyone else still browsing the
-            // lobby (mRaceId == -1) if they haven't -- this is what makes lobby chat
-            // work without a separate message type or connection state.
-            g_Logger.Log(MR_LOG_INFO, "Client %d (Race %d): Relaying chat", pConn->mClientId, pConn->mRaceId);
+            // Chat is scoped by whether the race has actually *started*
+            // (mRaceStarted), not by mRaceId alone: a waiting room (hosted/joined
+            // but not yet started) is still part of the wider lobby conversation,
+            // so browsers and every other not-yet-started waiting room all share
+            // one chat -- only once a race starts does it narrow to just that
+            // race's own players.
+            const BOOL lSenderInStartedRace = pConn->mRaceId >= 0 && pConn->mRaceStarted;
+            g_Logger.Log(MR_LOG_INFO, "Client %d (Race %d, started %d): Relaying chat", pConn->mClientId,
+                         pConn->mRaceId, (int)lSenderInStartedRace);
 
             // A recipient has no other way to learn who sent this -- the relayed
             // buffer used to be the sender's original bytes verbatim, so every chat
@@ -630,9 +634,16 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             for (auto& pair : mConnections) {
                 int targetId = pair.first;
                 ClientConnection* pTarget = pair.second;
+                if (!pTarget || !pTarget->mConnected || targetId == pConn->mClientId) {
+                    continue;
+                }
 
-                if (pTarget && pTarget->mConnected && targetId != pConn->mClientId &&
-                    pTarget->mRaceId == pConn->mRaceId) {
+                const BOOL lTargetInStartedRace = pTarget->mRaceId >= 0 && pTarget->mRaceStarted;
+                const bool lShouldRelay = lSenderInStartedRace
+                    ? (pTarget->mRaceId == pConn->mRaceId)   // race chat: only your own started race
+                    : !lTargetInStartedRace;                 // lobby-wide: anyone not already racing
+
+                if (lShouldRelay) {
                     int sendResult = send(pTarget->mTcpSocket, (const char*)&relayMsg, relayBytes, 0);
                     if (sendResult == SOCKET_ERROR) {
                         g_Logger.Log(MR_LOG_WARN, "Failed to send chat to client %d: %ld", targetId, WSAGetLastError());
@@ -737,12 +748,16 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
             // Broadcast to every player in the race, including the creator, so
             // everyone transitions from the lobby into the race on the same signal.
+            // Also flips mRaceStarted for each of them -- see ClientConnection.h --
+            // which is what narrows their chat scope from the wider lobby down to
+            // just each other, starting now.
             MessageBuffer startedMsg;
             startedMsg.header = MakeMessageHeader(53);  // MRNM_RACE_STARTED
             startedMsg.dataLen = 0;
             for (auto& pair : mConnections) {
                 ClientConnection* pTarget = pair.second;
                 if (pTarget && pTarget->mConnected && pTarget->mRaceId == pConn->mRaceId) {
+                    pTarget->mRaceStarted = TRUE;
                     send(pTarget->mTcpSocket, (const char*)&startedMsg, 3, 0);
                 }
             }
