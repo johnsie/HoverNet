@@ -726,6 +726,29 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             statusText = "Could not send host request";
         }
     };
+    // Leaves the current hosted/joined race and goes back to browsing, without
+    // tearing down the whole lobby screen the way Quit does. There's no
+    // explicit "leave race" wire message -- disconnecting and reconnecting is
+    // what actually removes this client's ClientConnection server-side (which
+    // is what reaps a hosted race immediately now, see RaceManager::LeaveRace),
+    // so just do that and re-announce as browsing, same as a fresh connect.
+    auto cancelWaitingRoom = [&]() {
+        client.Disconnect();
+        isHost = false;
+        raceMembers.clear();
+        lobbyUsers.clear();
+        receivedInitialRoster = false;
+        phase = LobbyPhase::eBrowsing;
+        statusText = "Left the race.";
+        if (client.Connect(host, port)) {
+            client.SetPlayerName(username);
+            client.ListLobbyUsers();
+            refreshGames();
+        }
+        else {
+            statusText = "Left the race, but could not reconnect to the lobby.";
+        }
+    };
 
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -1035,6 +1058,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 else {
                     ImGui::TextDisabled("Waiting for host...");
                 }
+                ImGui::Spacing();
+                if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, 0))) {
+                    cancelWaitingRoom();
+                }
             }
             else {
                 const bool canJoin = selectedGame != nullptr && !selectedGame->mStarted;
@@ -1152,10 +1179,14 @@ enum class PauseChoice
     eQuit,
 };
 
+// pIsOnline only changes the middle option's label -- callers already know
+// their own context (onlineClient.IsConnected()) and interpret eLeaveRace as
+// "leave this race" when online or "set up a new local race" when offline,
+// so the enum itself doesn't need a second value for the same button slot.
 PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
-                         MR_3DViewPort& viewport, const MR_Sprite& font)
+                         MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline)
 {
-    const char* options[] = {"Resume", "Leave Race", "Quit HoverNet"};
+    const char* options[] = {"Resume", pIsOnline ? "Leave Race" : "New Local Race", "Quit HoverNet"};
     constexpr int optionCount = 3;
     int selected = 0;
     const int panelWidth = std::min(520, viewport.GetXRes() - 48);
@@ -1217,6 +1248,148 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
         SDL_Delay(16);
     }
+}
+
+struct LocalRaceSetup
+{
+    bool confirmed = false;
+    std::string trackName = "ClassicH";
+    int laps = 5;
+    bool weapons = false;
+};
+
+// Lets the player pick track/laps/weapons for an offline race instead of
+// silently reusing whatever was already loaded (always ClassicH, 1 lap,
+// weapons on -- see main()'s startup load) -- reachable from the main menu's
+// "Local Play" and the in-race pause menu's "New Local Race". Shares the same
+// persisted defaults as the online host dialog (~/.hovernet_host_prefs); under
+// an automated/headless run (pFrameLimit bounded, no real input arriving),
+// falls through to confirmed with whatever prefs were already loaded, the
+// same way RunMainMenu defaults to Local Play, so bounded test runs still
+// terminate deterministically instead of bouncing between this and the main
+// menu forever.
+LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
+                                 const MR_Sprite& font, int pFrameLimit)
+{
+    HostPrefs prefs = LoadHostPrefs();
+
+    enum Row { eTrack, eLaps, eWeapons, eStart, eCancel, eRowCount };
+    int selected = eTrack;
+    const int panelWidth = std::min(520, viewport.GetXRes() - 48);
+    const int panelHeight = 360;
+    const UiRect panel{(viewport.GetXRes() - panelWidth) / 2,
+                       (viewport.GetYRes() - panelHeight) / 2, panelWidth, panelHeight};
+    const int rowHeight = 36;
+    const int firstRowY = panel.y + 56;
+    const int buttonWidth = panelWidth - 80;
+    const int buttonHeight = 44;
+    const int firstButtonY = firstRowY + 3 * rowHeight + 20;
+    const UiRect startButton{panel.x + 40, firstButtonY, buttonWidth, buttonHeight};
+    const UiRect cancelButton{panel.x + 40, firstButtonY + buttonHeight + 12, buttonWidth, buttonHeight};
+
+    bool running = true;
+    bool cancelled = false;
+    int framesShown = 0;
+
+    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                cancelled = true;
+                running = false;
+            }
+            else if (event.type == SDL_KEYDOWN) {
+                const SDL_Keycode key = event.key.keysym.sym;
+                if (key == SDLK_ESCAPE) {
+                    cancelled = true;
+                    running = false;
+                }
+                else if (key == SDLK_UP) {
+                    selected = (selected + eRowCount - 1) % eRowCount;
+                }
+                else if (key == SDLK_DOWN) {
+                    selected = (selected + 1) % eRowCount;
+                }
+                else if (key == SDLK_LEFT || key == SDLK_RIGHT) {
+                    const int direction = (key == SDLK_RIGHT) ? 1 : -1;
+                    if (selected == eTrack) {
+                        prefs.mTrackIndex = (prefs.mTrackIndex + direction + kHostableTrackCount) % kHostableTrackCount;
+                    }
+                    else if (selected == eLaps) {
+                        prefs.mLaps = std::max(1, std::min(20, prefs.mLaps + direction));
+                    }
+                    else if (selected == eWeapons) {
+                        prefs.mWeapons = !prefs.mWeapons;
+                    }
+                }
+                else if (key == SDLK_RETURN) {
+                    if (selected == eWeapons) {
+                        prefs.mWeapons = !prefs.mWeapons;
+                    }
+                    else if (selected == eCancel) {
+                        cancelled = true;
+                        running = false;
+                    }
+                    else {
+                        // eTrack/eLaps/eStart all confirm -- Enter on an
+                        // adjustable row is a reasonable "I'm done" shortcut too.
+                        running = false;
+                    }
+                }
+            }
+            else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
+                if (startButton.Contains(event.button.x, event.button.y)) {
+                    running = false;
+                }
+                else if (cancelButton.Contains(event.button.x, event.button.y)) {
+                    cancelled = true;
+                    running = false;
+                }
+            }
+            else if (event.type == SDL_MOUSEMOTION) {
+                if (startButton.Contains(event.motion.x, event.motion.y)) {
+                    selected = eStart;
+                }
+                else if (cancelButton.Contains(event.motion.x, event.motion.y)) {
+                    selected = eCancel;
+                }
+            }
+        }
+
+        DrawUiPanel(buffer, panel);
+        DrawUiText(font, panel.x + panel.w / 2, panel.y + 16, "LOCAL RACE SETUP", &viewport,
+                   MR_Sprite::eCenter, MR_Sprite::eTop, 1);
+
+        char lapsValue[16];
+        std::snprintf(lapsValue, sizeof(lapsValue), "%d", prefs.mLaps);
+        const char* rowLabels[3] = {"Track", "Laps", "Weapons"};
+        const std::string rowValues[3] = {kHostableTracks[prefs.mTrackIndex], lapsValue,
+                                          prefs.mWeapons ? "On" : "Off"};
+        for (int index = 0; index < 3; ++index) {
+            char line[80];
+            std::snprintf(line, sizeof(line), "%s%s:  < %s >", index == selected ? "> " : "  ",
+                          rowLabels[index], rowValues[index].c_str());
+            DrawUiText(font, panel.x + 32, firstRowY + index * rowHeight, line, &viewport,
+                       MR_Sprite::eLeft, MR_Sprite::eTop, 1);
+        }
+
+        DrawUiButton(buffer, font, viewport, startButton, "Start Race", selected == eStart);
+        DrawUiButton(buffer, font, viewport, cancelButton, "Cancel", selected == eCancel);
+
+        graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
+        SDL_Delay(16);
+    }
+
+    LocalRaceSetup result;
+    result.confirmed = !cancelled;
+    result.trackName = kHostableTracks[prefs.mTrackIndex];
+    result.laps = prefs.mLaps;
+    result.weapons = prefs.mWeapons;
+    if (result.confirmed) {
+        SaveHostPrefs(prefs);
+    }
+    return result;
 }
 
 enum class MenuChoice
@@ -1544,6 +1717,38 @@ int main(int argc, char** argv)
         return true;
     };
 
+    // Loads whatever track/laps/weapons the player actually picked in
+    // RunLocalRaceSetup, instead of resetRaceSession's fixed "back to a neutral
+    // ClassicH state" (that one's for bailing out of an online race before
+    // trying to join another, not for starting the local race the player asked
+    // for). Mirrors joinOnlineRace's track-reload shape below.
+    auto loadLocalRace = [&](const std::string& newTrackName, int newLaps, bool newWeapons) -> bool {
+        session.SetElementCreationBroadcastHook(nullptr, nullptr);
+        onlineClient.Disconnect();
+        remotePlayers.clear();
+        raceNames.clear();
+        localClientId = -1;
+
+        MR_RecordFile* newTrackFile = new MR_RecordFile;
+        const std::string newTrackPath = SourcePath(("NetTarget/Tracks/" + newTrackName + ".trk").c_str());
+        if (!newTrackFile->OpenForRead(newTrackPath.c_str()) ||
+            !session.LoadNew(newTrackName.c_str(), newTrackFile, newLaps, newWeapons ? TRUE : FALSE, &buffer) ||
+            session.GetCurrentLevel() == nullptr || !session.CreateMainCharacter()) {
+            std::fprintf(stderr, "Could not load '%s' for local play\n", newTrackName.c_str());
+            return false;
+        }
+        level = session.GetCurrentLevel();
+        mainCharacter = session.GetMainCharacter();
+        session.SetSimulationTime(-6000);
+        room = mainCharacter->mRoom;
+        camera = mainCharacter->mPosition;
+        camera.mZ += 700;
+        orientation = mainCharacter->GetCabinOrientation();
+        renderStats = RenderScene(*level, room, camera, orientation, viewport, resources,
+                                  SDL_GetTicks(), mainCharacter);
+        return true;
+    };
+
     auto joinOnlineRace = [&]() -> bool {
         std::string joinedRace;
         std::string joinedTrack;
@@ -1640,10 +1845,40 @@ int main(int argc, char** argv)
     };
 
     if (playerMode && menuFontHandle != nullptr) {
-        const MenuChoice choice = RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                                              frameLimit);
-        if (choice == MenuChoice::eOnlineLobby && !joinOnlineRace()) {
-            std::printf("Lobby skipped or unavailable; continuing with local play\n");
+        bool pickingMode = true;
+        while (pickingMode) {
+            pickingMode = false;
+            const MenuChoice choice = RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
+                                                  frameLimit);
+            if (choice == MenuChoice::eOnlineLobby) {
+                if (!joinOnlineRace()) {
+                    std::printf("Lobby skipped or unavailable; continuing with local play\n");
+                }
+            }
+            else if (autoPlay) {
+                // --autoplay already primed the session (SetSimulationTime(0) on
+                // the ClassicH session loaded at startup, above) before this menu
+                // ever ran -- loadLocalRace's LoadNew/CreateMainCharacter/
+                // SetSimulationTime(-6000) would silently undo that priming, so
+                // skip the setup screen entirely and keep the pre-primed session
+                // exactly as every autoplay-driven ctest expects.
+            }
+            else {
+                const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
+                                                                *menuFontHandle->GetSprite(), frameLimit);
+                if (setup.confirmed) {
+                    if (!loadLocalRace(setup.trackName, setup.laps, setup.weapons)) {
+                        std::printf("Could not load '%s'; continuing with the default track\n",
+                                    setup.trackName.c_str());
+                    }
+                }
+                else {
+                    // Cancelled -- back to the main menu instead of falling through
+                    // to whatever was already loaded (interactive mode only; a
+                    // frame-limited run always confirms, see RunLocalRaceSetup).
+                    pickingMode = true;
+                }
+            }
         }
     }
 #endif
@@ -1654,6 +1889,7 @@ int main(int argc, char** argv)
     bool running = true;
     bool cockpitView = false;
     bool missileSeen = false;
+    bool finishAnnounced = false;
     // In-race chat, scoped to whatever race this connection is in (see the
     // eRSMsgChatMessage handling below) -- text input only actually does
     // anything once online, but it's harmless to leave enabled for local play.
@@ -1664,6 +1900,7 @@ int main(int argc, char** argv)
         bool horizontalMovement = false;
         const MR_3DCoordinate previousCamera = camera;
         bool leaveForLobby = false;
+        bool startNewLocalRace = false;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
@@ -1689,14 +1926,25 @@ int main(int argc, char** argv)
 #endif
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
 #ifdef HOVERNET_GAME2_PLAYER
-                if (playerMode && onlineClient.IsConnected() && menuFontHandle != nullptr) {
+                // Used to only show this menu online -- offline play just quit
+                // immediately on Escape, with no way back to it short of
+                // relaunching, and no way to start a different local race
+                // without doing so. Same menu either way now; only the
+                // "Leave Race"/"New Local Race" label and what it does differ.
+                if (playerMode && menuFontHandle != nullptr) {
+                    const bool isOnline = onlineClient.IsConnected();
                     const PauseChoice pauseChoice = RunPauseMenu(
-                        graphics, buffer, viewport, *menuFontHandle->GetSprite());
+                        graphics, buffer, viewport, *menuFontHandle->GetSprite(), isOnline);
                     if (pauseChoice == PauseChoice::eQuit) {
                         running = false;
                     }
                     else if (pauseChoice == PauseChoice::eLeaveRace) {
-                        leaveForLobby = true;
+                        if (isOnline) {
+                            leaveForLobby = true;
+                        }
+                        else {
+                            startNewLocalRace = true;
+                        }
                     }
                     else {
                         session.SetSimulationTime(session.GetSimulationTime());
@@ -1716,9 +1964,23 @@ int main(int argc, char** argv)
 #ifdef HOVERNET_GAME2_PLAYER
         if (leaveForLobby) {
             missileSeen = false;
+            finishAnnounced = false;
             if (!resetRaceSession() || !joinOnlineRace()) {
                 running = false;
                 break;
+            }
+            continue;
+        }
+        if (startNewLocalRace) {
+            const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
+                                                            *menuFontHandle->GetSprite(), frameLimit);
+            if (setup.confirmed) {
+                missileSeen = false;
+                finishAnnounced = false;
+                if (!loadLocalRace(setup.trackName, setup.laps, setup.weapons)) {
+                    running = false;
+                    break;
+                }
             }
             continue;
         }
@@ -1789,6 +2051,17 @@ int main(int argc, char** argv)
             session.Process();
 
 #ifdef HOVERNET_GAME2_PLAYER
+            if (!finishAnnounced && mainCharacter->HasFinish()) {
+                finishAnnounced = true;
+                // Windows used to say "press F2 to return to the internet
+                // meeting room" here (IDS_F2_TORETURN, NetworkSession.cpp) --
+                // that's the online-only legacy dialog flow this client
+                // doesn't have. Escape already opens the pause menu (with a
+                // Quit option) whether the race just finished or not, so
+                // there's nothing race-finish-specific for it to do beyond
+                // telling the player it's there.
+                session.AddMessage("Press ESC to exit the race");
+            }
             if (onlineClient.IsConnected() && localClientId >= 0) {
                 while (mainCharacter->HitQueueCount() > 0) {
                     mainCharacter->GetHitQueue();
