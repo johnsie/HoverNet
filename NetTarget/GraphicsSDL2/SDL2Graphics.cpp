@@ -2,8 +2,17 @@
 
 #ifdef _HAVE_SDL2
 #include <cstring>
+#include <string>
 #ifdef _WIN32
 #include <Windows.h>
+#endif
+
+// Only HoverNetGame2Player's CMake target defines this (from `git describe`, see
+// the root CMakeLists.txt) -- the other SDL2Graphics-linking binaries (track
+// viewers, the bootstrap smoke test) are internal dev tools, not the shipped
+// client, so a plain fallback title is fine for them.
+#ifndef HOVERNET_VERSION
+#define HOVERNET_VERSION "dev"
 #endif
 
 SDL2GraphicsBackend::SDL2GraphicsBackend()
@@ -39,7 +48,8 @@ bool SDL2GraphicsBackend::Initialize(void* windowHandle, int width, int height)
     m_window = SDL_CreateWindowFrom(hwnd);
 #else
     (void)windowHandle;
-    m_window = SDL_CreateWindow("HoverNet", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    const std::string windowTitle = std::string("HoverNet ") + HOVERNET_VERSION;
+    m_window = SDL_CreateWindow(windowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                 width, height, SDL_WINDOW_SHOWN);
 #endif
     if (!m_window) { SDL_QuitSubSystem(SDL_INIT_VIDEO); return false; }

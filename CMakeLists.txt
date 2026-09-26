@@ -10,6 +10,28 @@ find_package(SDL2 REQUIRED)
 include(CTest)
 find_package(Threads REQUIRED)
 
+# Shown in the Linux client's window title (see SDL2Graphics.cpp). Matches the
+# vX.Y.Z tags CI builds releases from (see .gitlab-ci.yml's PACKAGE_VERSION);
+# an untagged dev build instead gets the nearest tag plus commit count/hash
+# (or just the hash with no tags yet), and "dev" if git isn't available at all
+# (e.g. building from a source tarball with no .git directory).
+find_package(Git QUIET)
+set(HOVERNET_VERSION "dev")
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --always --dirty
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE HOVERNET_VERSION_OUTPUT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE HOVERNET_GIT_DESCRIBE_RESULT
+    )
+    if(HOVERNET_GIT_DESCRIBE_RESULT EQUAL 0 AND NOT HOVERNET_VERSION_OUTPUT STREQUAL "")
+        set(HOVERNET_VERSION "${HOVERNET_VERSION_OUTPUT}")
+    endif()
+endif()
+message(STATUS "HoverNet version: ${HOVERNET_VERSION}")
+
 file(GLOB HOVERNET_RACESERVER_SOURCES CONFIGURE_DEPENDS
     NetTarget/RaceServer/*.cpp
     NetTarget/RaceServer/NetworkInterface/*.cpp
@@ -274,7 +296,7 @@ add_executable(HoverNetGame2Player
 )
 
 add_dependencies(HoverNetGame2Player HoverNetHeadlessObjFac1)
-target_compile_definitions(HoverNetGame2Player PRIVATE _HAVE_SDL2 HOVERNET_GAME2_PLAYER HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_compile_definitions(HoverNetGame2Player PRIVATE _HAVE_SDL2 HOVERNET_GAME2_PLAYER HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}" HOVERNET_VERSION="${HOVERNET_VERSION}")
 target_link_libraries(HoverNetGame2Player PRIVATE HoverNetObserver HoverNetClientSession HoverNetResourceCore HoverNetVideoCore HoverNetRaceServerClient HoverNetImGui SDL2::SDL2)
 
 if(BUILD_TESTING)
