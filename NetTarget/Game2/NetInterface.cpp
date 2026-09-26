@@ -1196,20 +1196,42 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
 
                case FD_READ:
                   WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, 0 );
-                  lBuffer = mActiveInterface->mClient[0].Poll();
 
-                  LogNetJoin( "MRM_CLIENT: FD_READ, Poll() returned %s (type=%d dataLen=%d)",
-                              lBuffer != NULL ? "message" : "NULL",
-                              lBuffer != NULL ? (int)lBuffer->mMessageType : -1,
-                              lBuffer != NULL ? (int)lBuffer->mDataLen : -1 );
-
-                  if( lBuffer != NULL )
+                  // A single FD_READ notification only means "at least one byte
+                  // arrived" -- Poll() drains every byte currently sitting in the
+                  // OS socket buffer in one call, but only returns ONE parsed
+                  // message per call. The server can (and often does, on a fast
+                  // local connection) send two replies back-to-back -- e.g. the
+                  // SET_PLAYER_NAME ack immediately followed by the JOINED_RACE
+                  // ack -- and if both land in the same recv(), a single Poll()
+                  // here would extract only the first and silently strand the
+                  // second inside mTCPInputQueue: those bytes are already out of
+                  // the OS socket, so no further FD_READ event will ever fire for
+                  // them, and this dialog just sits until its 10-second timeout
+                  // fires with no indication anything was ever received. Keep
+                  // polling until it actually runs dry.
+                  for(;;)
                   {
+                     lBuffer = mActiveInterface->mClient[0].Poll();
+
+                     LogNetJoin( "MRM_CLIENT: FD_READ, Poll() returned %s (type=%d dataLen=%d)",
+                                 lBuffer != NULL ? "message" : "NULL",
+                                 lBuffer != NULL ? (int)lBuffer->mMessageType : -1,
+                                 lBuffer != NULL ? (int)lBuffer->mDataLen : -1 );
+
+                     if( lBuffer == NULL )
+                     {
+                        // Nothing left buffered, reenable reception
+                        WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, FD_READ|FD_CLOSE );
+                        break;
+                     }
+
                      if( lBuffer->mMessageType == MRNM_GAME_NAME )
                      {
                         KillTimer( pWindow, 1000 );
                         mActiveInterface->mGameName = CString( (const char*)lBuffer->mData, lBuffer->mDataLen );
                         EndDialog( pWindow, IDOK );
+                        break;
                      }
                      else if( lBuffer->mMessageType == MRNM_JOINED_RACE )
                      {
@@ -1235,17 +1257,12 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
                                         "HoverNet Multiplayer", MB_OK | MB_ICONERROR );
                            EndDialog( pWindow, IDCANCEL );
                         }
+                        break;
                      }
-                     else
-                     {
-                        // Bad message, reenable reception
-                        WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, FD_READ|FD_CLOSE );
-                     }
-                  }
-                  else
-                  {
-                     // Null message, reenable reception
-                     WSAAsyncSelect( sNewSocket, pWindow, MRM_CLIENT, FD_READ|FD_CLOSE );
+                     // else: a message this dialog doesn't care about (e.g.
+                     // MRNM_PLAYER_NAME_ASSIGNED) -- loop back and keep draining
+                     // rather than re-arming and waiting for an FD_READ event
+                     // that may never come.
                   }
 
                   break;
