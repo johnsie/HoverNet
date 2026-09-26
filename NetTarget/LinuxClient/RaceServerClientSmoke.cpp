@@ -69,8 +69,10 @@ namespace
         {
             if (pClientB.PollMessage(lMessage, 200) && lMessage.mType == eRSMsgChatMessage)
             {
-                const std::string lReceived(lMessage.mData.begin(), lMessage.mData.end());
-                lSawChat = (lReceived == lChatText);
+                int lSenderId = -1;
+                std::string lReceived;
+                lSawChat = RaceServerClient::ParseChatMessage(lMessage, lSenderId, lReceived) &&
+                           lReceived == lChatText;
             }
         }
         if (!lSawChat)
@@ -101,7 +103,13 @@ namespace
                 std::fprintf(stderr, "Burst message %d missing or wrong type\n", lIndex);
                 return false;
             }
-            const std::string lReceived(lMessage.mData.begin(), lMessage.mData.end());
+            int lSenderId = -1;
+            std::string lReceived;
+            if (!RaceServerClient::ParseChatMessage(lMessage, lSenderId, lReceived))
+            {
+                std::fprintf(stderr, "Burst message %d failed to parse\n", lIndex);
+                return false;
+            }
             if (lReceived != lExpected)
             {
                 std::fprintf(stderr, "Burst message %d corrupted: expected '%s', got '%s'\n", lIndex,
@@ -224,8 +232,10 @@ namespace
         {
             if (lLobbyClientF.PollMessage(lMessage, 200) && lMessage.mType == eRSMsgChatMessage)
             {
-                const std::string lReceived(lMessage.mData.begin(), lMessage.mData.end());
-                lLobbyChatSeen = (lReceived == lLobbyChatText);
+                int lSenderId = -1;
+                std::string lReceived;
+                lLobbyChatSeen = RaceServerClient::ParseChatMessage(lMessage, lSenderId, lReceived) &&
+                                 lReceived == lLobbyChatText;
             }
         }
         if (!lLobbyChatSeen)

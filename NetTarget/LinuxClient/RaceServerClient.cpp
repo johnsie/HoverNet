@@ -312,6 +312,18 @@ bool RaceServerClient::ParseLobbyUserLeft(const RaceServerMessage& pMessage, int
     return true;
 }
 
+bool RaceServerClient::ParseChatMessage(const RaceServerMessage& pMessage, int& pOutSenderClientId,
+                                        std::string& pOutText)
+{
+    if (pMessage.mType != eRSMsgChatMessage || pMessage.mData.size() < sizeof(int))
+    {
+        return false;
+    }
+    std::memcpy(&pOutSenderClientId, pMessage.mData.data(), sizeof(pOutSenderClientId));
+    pOutText.assign(pMessage.mData.begin() + sizeof(int), pMessage.mData.end());
+    return true;
+}
+
 bool RaceServerClient::ListGames(std::vector<RaceServerGameInfo>& pOutGames, int pTimeoutMs)
 {
     pOutGames.clear();

@@ -27,6 +27,7 @@
 #include "../Util/StrRes.h"
 #include "../LinuxClient/RaceServerClient.h"
 #include <cstdarg>
+#include <map>
 #include <string>
 #include <vector>
 #include <wininet.h>
@@ -121,6 +122,89 @@ namespace
    CString gRaceServerHost = kDefaultRaceServerHost;
    unsigned gRaceServerPort = kDefaultRaceServerPort;
    CString gPendingRaceName;
+
+   // Chat messages only carry the sender's client id (see ServerSocket.cpp's
+   // MRNM_CHAT_MESSAGE relay), and IDC_USER_LIST needs a way to add/remove one
+   // specific row by id -- this is that id-to-name map, rebuilt fresh each time
+   // the lobby dialog is opened.
+   std::map<int, CString> gLobbyUserNames;
+
+   int FindUserListRow(HWND pList, int pClientId)
+   {
+      LVFINDINFO lFind = {};
+      lFind.flags = LVFI_PARAM;
+      lFind.lParam = static_cast<LPARAM>(pClientId);
+      return ListView_FindItem(pList, -1, &lFind);
+   }
+
+   void AddLobbyUser(HWND pWindow, int pClientId, const CString& pName)
+   {
+      HWND lList = GetDlgItem(pWindow, IDC_USER_LIST);
+      if( FindUserListRow(lList, pClientId) >= 0 ) return;
+      LV_ITEM lItem = {};
+      lItem.mask = LVIF_TEXT | LVIF_PARAM;
+      lItem.iItem = ListView_GetItemCount(lList);
+      lItem.pszText = (char*)(const char*)pName;
+      lItem.lParam = static_cast<LPARAM>(pClientId);
+      ListView_InsertItem(lList, &lItem);
+      gLobbyUserNames[pClientId] = pName;
+   }
+
+   void RemoveLobbyUser(HWND pWindow, int pClientId)
+   {
+      HWND lList = GetDlgItem(pWindow, IDC_USER_LIST);
+      const int lRow = FindUserListRow(lList, pClientId);
+      if( lRow >= 0 ) ListView_DeleteItem(lList, lRow);
+      gLobbyUserNames.erase(pClientId);
+   }
+
+   // Drains every message currently waiting rather than acting on one -- lobby
+   // roster updates and chat share this connection with the game-list refresh
+   // and can arrive interleaved between timer ticks.
+   void DrainRaceServerMessages(HWND pWindow)
+   {
+      RaceServerMessage lMessage;
+      while( gRaceServerLobby.PollMessage(lMessage, 0) )
+      {
+         if( lMessage.mType == eRSMsgLobbyUserPresent )
+         {
+            RaceServerPeer lPeer;
+            if( RaceServerClient::ParsePeer(lMessage, lPeer) )
+            {
+               AddLobbyUser(pWindow, lPeer.mClientId, lPeer.mName.c_str());
+            }
+         }
+         else if( lMessage.mType == eRSMsgLobbyUserLeft )
+         {
+            int lClientId = -1;
+            if( RaceServerClient::ParseLobbyUserLeft(lMessage, lClientId) )
+            {
+               RemoveLobbyUser(pWindow, lClientId);
+            }
+         }
+         else if( lMessage.mType == eRSMsgChatMessage )
+         {
+            int lSenderId = -1;
+            std::string lText;
+            if( RaceServerClient::ParseChatMessage(lMessage, lSenderId, lText) )
+            {
+               CString lName = "Someone";
+               std::map<int, CString>::iterator lIt = gLobbyUserNames.find(lSenderId);
+               if( lIt != gLobbyUserNames.end() ) lName = lIt->second;
+
+               char lChatBuffer[4096] = { 0 };
+               GetDlgItemTextA(pWindow, IDC_CHAT_OUT, lChatBuffer, sizeof(lChatBuffer));
+               CString lChat = lChatBuffer;
+               lChat += "\r\n";
+               lChat += lName;
+               lChat += ": ";
+               lChat += lText.c_str();
+               SetDlgItemText(pWindow, IDC_CHAT_OUT, lChat);
+            }
+         }
+         // eRSMsgLobbyUserListEnd and anything else: no UI action needed here.
+      }
+   }
 
    void RefreshRaceServerList(HWND pWindow)
    {
@@ -2075,10 +2159,15 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
          lColumn.cx = lRect.right - GetSystemMetrics(SM_CXVSCROLL);
          ListView_InsertColumn(lUserList, 0, &lColumn);
          LV_ITEM lUserItem = {};
-         lUserItem.mask = LVIF_TEXT;
+         lUserItem.mask = LVIF_TEXT | LVIF_PARAM;
          lUserItem.iItem = 0;
          lUserItem.pszText = (char*)(const char*)mThis->mUser;
+         // -1 can never collide with a real server-assigned client id (see
+         // RaceServerClient.h), so AddLobbyUser/RemoveLobbyUser's id lookups can
+         // never mistake this row for another player's.
+         lUserItem.lParam = -1;
          ListView_InsertItem(lUserList, &lUserItem);
+         gLobbyUserNames.clear();
 
          ShowWindow(GetDlgItem(pWindow, IDC_ADD), SW_HIDE);
          SetDlgItemTextA(pWindow, IDC_ADD_SERVER, "Host Race...");
@@ -2092,6 +2181,11 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
             return TRUE;
          }
          SetDlgItemTextA(pWindow, IDC_CHAT_OUT, "Connected to the shared HoverNet lobby.");
+         // Without this, the server only ever knows us by its "Player_N" fallback
+         // (see RaceServerClient::SetPlayerName), so other clients' user lists and
+         // chat lines would show that instead of our actual name.
+         gRaceServerLobby.SetPlayerName((const char*)mThis->mUser);
+         gRaceServerLobby.ListLobbyUsers();
          RefreshRaceServerList(pWindow);
          RefreshRaceServerSelection(pWindow);
          SetTimer(pWindow, kRaceServerRefreshTimer, 2000, NULL);
@@ -2103,6 +2197,7 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
          {
             RefreshRaceServerList(pWindow);
             RefreshRaceServerSelection(pWindow);
+            DrainRaceServerMessages(pWindow);
             return TRUE;
          }
          break;

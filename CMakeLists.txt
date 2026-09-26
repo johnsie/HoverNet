@@ -30,6 +30,21 @@ target_include_directories(RaceServer PRIVATE
 )
 target_link_libraries(RaceServer PRIVATE Threads::Threads)
 
+add_library(HoverNetImGui STATIC
+    NetTarget/ThirdParty/imgui/imgui.cpp
+    NetTarget/ThirdParty/imgui/imgui_draw.cpp
+    NetTarget/ThirdParty/imgui/imgui_tables.cpp
+    NetTarget/ThirdParty/imgui/imgui_widgets.cpp
+    NetTarget/ThirdParty/imgui/backends/imgui_impl_sdl2.cpp
+    NetTarget/ThirdParty/imgui/backends/imgui_impl_sdlrenderer2.cpp
+)
+target_include_directories(HoverNetImGui PUBLIC
+    NetTarget/ThirdParty/imgui
+    NetTarget/ThirdParty/imgui/backends
+)
+target_link_libraries(HoverNetImGui PUBLIC SDL2::SDL2)
+set_target_properties(HoverNetImGui PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 add_library(HoverNetPortableUtil STATIC
     NetTarget/Util/DllObjectFactory.cpp
     NetTarget/Util/FuzzyLogic.cpp
@@ -260,7 +275,7 @@ add_executable(HoverNetGame2Player
 
 add_dependencies(HoverNetGame2Player HoverNetHeadlessObjFac1)
 target_compile_definitions(HoverNetGame2Player PRIVATE _HAVE_SDL2 HOVERNET_GAME2_PLAYER HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-target_link_libraries(HoverNetGame2Player PRIVATE HoverNetObserver HoverNetClientSession HoverNetResourceCore HoverNetVideoCore HoverNetRaceServerClient SDL2::SDL2)
+target_link_libraries(HoverNetGame2Player PRIVATE HoverNetObserver HoverNetClientSession HoverNetResourceCore HoverNetVideoCore HoverNetRaceServerClient HoverNetImGui SDL2::SDL2)
 
 if(BUILD_TESTING)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/linux")

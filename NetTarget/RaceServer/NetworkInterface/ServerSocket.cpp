@@ -567,13 +567,31 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             // work without a separate message type or connection state.
             g_Logger.Log(MR_LOG_INFO, "Client %d (Race %d): Relaying chat", pConn->mClientId, pConn->mRaceId);
 
+            // A recipient has no other way to learn who sent this -- the relayed
+            // buffer used to be the sender's original bytes verbatim, so every chat
+            // line arrived anonymous. Stamp the sender's client id onto the front of
+            // the payload (clients resolve it to a name via the lobby/race roster
+            // they already track from eRSMsgLobbyUserPresent/eRSMsgConnNameSet), the
+            // same way case 3 below stamps MRNM_SET_MAIN_ELEM_STATE's sender.
+            MessageBuffer relayMsg;
+            relayMsg.header = MakeMessageHeader(6);
+            int relayDataLen = messageDataLen + static_cast<int>(sizeof(pConn->mClientId));
+            if (relayDataLen > 256) {
+                relayDataLen = 256;
+            }
+            memcpy(&relayMsg.data[0], &pConn->mClientId, sizeof(pConn->mClientId));
+            memcpy(&relayMsg.data[sizeof(pConn->mClientId)], &buffer[3],
+                   relayDataLen - static_cast<int>(sizeof(pConn->mClientId)));
+            relayMsg.dataLen = static_cast<unsigned char>(relayDataLen);
+            const int relayBytes = 3 + relayDataLen;
+
             for (auto& pair : mConnections) {
                 int targetId = pair.first;
                 ClientConnection* pTarget = pair.second;
 
                 if (pTarget && pTarget->mConnected && targetId != pConn->mClientId &&
                     pTarget->mRaceId == pConn->mRaceId) {
-                    int sendResult = send(pTarget->mTcpSocket, (const char*)buffer, bytesReceived, 0);
+                    int sendResult = send(pTarget->mTcpSocket, (const char*)&relayMsg, relayBytes, 0);
                     if (sendResult == SOCKET_ERROR) {
                         g_Logger.Log(MR_LOG_WARN, "Failed to send chat to client %d: %ld", targetId, WSAGetLastError());
                     }

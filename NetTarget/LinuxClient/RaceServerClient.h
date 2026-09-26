@@ -147,6 +147,14 @@ public:
     // Parses an eRSMsgLobbyUserLeft payload ([4-byte little-endian clientId]).
     static bool ParseLobbyUserLeft(const RaceServerMessage& pMessage, int& pOutClientId);
 
+    // Parses an eRSMsgChatMessage payload: [4-byte little-endian senderClientId]
+    // [chat text bytes]. The server stamps the sender's id on before relaying (see
+    // ServerSocket.cpp's MRNM_CHAT_MESSAGE case) since the recipient has no other
+    // way to know who sent it; look the id up against the lobby/race roster to get
+    // a display name.
+    static bool ParseChatMessage(const RaceServerMessage& pMessage, int& pOutSenderClientId,
+                                 std::string& pOutText);
+
     // Sends eRSMsgListGames and collects every eRSMsgGameInfo up to eRSMsgGameListEnd
     // (or pTimeoutMs of silence). Returns false only on a transport-level failure;
     // an empty lobby is a successful, empty pOutGames.

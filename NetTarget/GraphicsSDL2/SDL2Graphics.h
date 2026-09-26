@@ -45,6 +45,11 @@ public:
     int GetHeight() const { return m_height; }
     bool IsInitialized() const { return m_initialized; }
 
+    // Raw SDL handles, for overlay UI (e.g. Dear ImGui) drawn via the same
+    // renderer this backend already owns. Null until Initialize() succeeds.
+    SDL_Window* GetWindow() const { return m_window; }
+    SDL_Renderer* GetRenderer() const { return m_renderer; }
+
 private:
     // SDL2 objects
     SDL_Window* m_window;
