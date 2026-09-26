@@ -1745,6 +1745,7 @@ enum class MenuChoice
 {
     eLocalPlay,
     eOnlineLobby,
+    eSettings,
 };
 
 // The very first screen in player mode: pick local play or the online lobby. Bounded
@@ -1757,8 +1758,8 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 {
     const int lineHeight = std::max(1, font.GetItemHeight());
     int selected = 0;
-    const char* options[] = {"Local Play", "Online Lobby"};
-    const int optionCount = 2;
+    const char* options[] = {"Local Play", "Online Lobby", "Settings"};
+    const int optionCount = 3;
 
     bool running = true;
     MenuChoice choice = MenuChoice::eLocalPlay;
@@ -1786,7 +1787,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                     selected = (selected + 1) % optionCount;
                 }
                 else if (key == SDLK_RETURN) {
-                    choice = (selected == 1) ? MenuChoice::eOnlineLobby : MenuChoice::eLocalPlay;
+                    choice = static_cast<MenuChoice>(selected);
                     running = false;
                 }
             }
@@ -2212,6 +2213,22 @@ int main(int argc, char** argv)
                 if (!joinOnlineRace()) {
                     std::printf("Lobby skipped or unavailable; continuing with local play\n");
                 }
+            }
+            else if (choice == MenuChoice::eSettings) {
+                // Always back to the main menu afterward (Save or Cancel alike)
+                // instead of falling through to Local Play -- there's nothing
+                // else for this choice to lead to, and the player shouldn't have
+                // to relaunch or stumble into a race just to get back out of it.
+                const SettingsResult settings = RunSettingsScreen(
+                    graphics, buffer, viewport, *menuFontHandle->GetSprite(),
+                    LoadUsername(), lobbyHost, lobbyPort, frameLimit);
+                if (settings.confirmed) {
+                    SaveUsername(settings.username);
+                    lobbyHost = settings.serverHost;
+                    lobbyPort = settings.serverPort;
+                    SaveServerUrl(lobbyHost, lobbyPort);
+                }
+                pickingMode = !g_QuitConfirmed;
             }
             else if (autoPlay) {
                 // --autoplay already primed the session (SetSimulationTime(0) on
