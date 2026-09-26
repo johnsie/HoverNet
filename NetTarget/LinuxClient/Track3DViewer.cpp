@@ -1666,7 +1666,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         const float centerWidth = std::min(460.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
-        ImGui::BeginChild("SettingsPanel", ImVec2(centerWidth, 340), true);
+        ImGui::BeginChild("SettingsPanel", ImVec2(centerWidth, 480), true);
 
         ImGui::TextUnformatted("Display Name");
         ImGui::PushItemWidth(-1.0f);
