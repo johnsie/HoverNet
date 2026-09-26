@@ -29,6 +29,8 @@
 #include "NetworkSession.h"
 #include "Banner.h"
 
+struct RaceServerMessage;  // RaceServerClient.h, included by InternetRoom.cpp
+
 
 
 class MR_InternetRequest
@@ -180,6 +182,12 @@ class MR_InternetRoom
       // helpers alongside it in InternetRoom.cpp's anonymous namespace, this one
       // has to be an actual member.
       static void DrainRaceServerMessages( HWND pWindow );
+
+      // Per-message handling shared by DrainRaceServerMessages and
+      // WaitForJoinedRaceAck below (both drain the same gRaceServerLobby
+      // connection, just with different stop conditions) -- same mThis/mUser
+      // access requirement as DrainRaceServerMessages above.
+      static void HandleRaceServerMessage( HWND pWindow, const RaceServerMessage& pMessage );
 
       // Waits (briefly, blocking) for eRSMsgJoinedRace on gRaceServerLobby --
       // the ack for an eRSMsgHostRace/eRSMsgJoinRaceById request just sent on

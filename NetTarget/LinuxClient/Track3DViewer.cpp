@@ -449,6 +449,44 @@ void SaveHostPrefs(const HostPrefs& prefs)
     out << prefs.mTrackIndex << ' ' << prefs.mLaps << ' ' << (prefs.mWeapons ? 1 : 0) << '\n';
 }
 
+std::string LocalRacePrefsPath()
+{
+    const char* home = std::getenv("HOME");
+    return std::string(home != nullptr ? home : ".") + "/.hovernet_local_race_prefs";
+}
+
+// Local play's own remembered track/laps/weapons choice, deliberately kept
+// separate from the online host dialog's ~/.hovernet_host_prefs above: before
+// RunLocalRaceSetup existed, local play always used ClassicH at 1 lap with
+// weapons forced on (see main()'s startup LoadNew call), which every ctest
+// smoke test that drives local play headlessly (--fire, --combat, etc.) still
+// expects by default. Reusing LoadHostPrefs' defaults here (5 laps, weapons
+// off) would silently change that the moment this screen's timeout-confirms
+// under a frame-limited run with no prefs file yet on a fresh machine -- which
+// is exactly what broke HoverNetGame2PlayerFire in CI (it passed locally only
+// because this sandbox already had a leftover ~/.hovernet_host_prefs with
+// weapons on, from unrelated interactive testing).
+HostPrefs LoadLocalRacePrefs()
+{
+    HostPrefs prefs;
+    prefs.mLaps = 1;
+    prefs.mWeapons = true;
+    std::ifstream in(LocalRacePrefsPath());
+    int track = 0, laps = 0, weapons = 0;
+    if (in >> track >> laps >> weapons) {
+        if (track >= 0 && track < kHostableTrackCount) { prefs.mTrackIndex = track; }
+        if (laps >= 1 && laps <= 20) { prefs.mLaps = laps; }
+        prefs.mWeapons = weapons != 0;
+    }
+    return prefs;
+}
+
+void SaveLocalRacePrefs(const HostPrefs& prefs)
+{
+    std::ofstream out(LocalRacePrefsPath());
+    out << prefs.mTrackIndex << ' ' << prefs.mLaps << ' ' << (prefs.mWeapons ? 1 : 0) << '\n';
+}
+
 enum class LobbyPhase
 {
     eEnteringName, // First time in the lobby with no saved username yet
@@ -1278,7 +1316,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     (void)viewport;
     (void)font;
 
-    HostPrefs prefs = LoadHostPrefs();
+    HostPrefs prefs = LoadLocalRacePrefs();
 
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -1381,7 +1419,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     result.laps = prefs.mLaps;
     result.weapons = prefs.mWeapons;
     if (result.confirmed) {
-        SaveHostPrefs(prefs);
+        SaveLocalRacePrefs(prefs);
     }
     return result;
 }
