@@ -86,6 +86,11 @@ namespace
             std::fprintf(stderr, "Could not connect both clients to RaceServer\n");
             return false;
         }
+        if (!lClientA.SetPlayerName("Linux Racer") || !lClientB.SetPlayerName("Windows Racer"))
+        {
+            std::fprintf(stderr, "Could not publish player names\n");
+            return false;
+        }
         if (!lClientA.HostRace("in-race-chat-test", "ClassicH", 3, true))
         {
             std::fprintf(stderr, "HostRace failed\n");
@@ -125,9 +130,25 @@ namespace
             std::fprintf(stderr, "Joiner never got a valid eRSMsgJoinedRace ack\n");
             return false;
         }
-        // Drain A's eRSMsgConnNameSet announcement of B joining -- expected
-        // traffic, not chat.
-        while (lClientA.PollMessage(lMessage, 200)) { }
+        // The server must advertise B's chosen name to A. This is the piece the
+        // Windows client previously skipped before joining, leaving every peer to
+        // see the generated Player_<id> fallback instead.
+        std::string lRemoteName;
+        while (lClientA.PollMessage(lMessage, 200))
+        {
+            RaceServerPeer lPeer;
+            if (lMessage.mType == eRSMsgConnNameSet &&
+                RaceServerClient::ParsePeer(lMessage, lPeer) &&
+                lPeer.mClientId == lJoinAck.mClientId)
+            {
+                lRemoteName = lPeer.mName;
+            }
+        }
+        if (lRemoteName != "Windows Racer")
+        {
+            std::fprintf(stderr, "Chosen peer name was not advertised (got '%s')\n", lRemoteName.c_str());
+            return false;
+        }
 
         if (!lClientA.StartRace())
         {
@@ -158,7 +179,8 @@ namespace
         // SDLK_RETURN: send over the network, then push the same text onto this
         // client's own MR_ClientSession message stack as a local echo.
         const std::string lChatText = "gg everyone";
-        if (!lClientB.SendMessage(eRSMsgChatMessage, lChatText.data(), lChatText.size()))
+        const std::string lWireChatText = RaceServerClient::EncodeInRaceChat(lChatText);
+        if (!lClientB.SendMessage(eRSMsgChatMessage, lWireChatText.data(), lWireChatText.size()))
         {
             std::fprintf(stderr, "Failed to send in-race chat\n");
             return false;
@@ -177,9 +199,13 @@ namespace
             {
                 int lSenderId = -1;
                 std::string lText;
-                if (RaceServerClient::ParseChatMessage(lMessage, lSenderId, lText) && lText == lChatText)
+                if (RaceServerClient::ParseChatMessage(lMessage, lSenderId, lText))
                 {
-                    lExpectedDisplayLine = "Player " + std::to_string(lSenderId) + ": " + lText;
+                    lText = RaceServerClient::DecodeInRaceChat(lText);
+                }
+                if (lText == lChatText)
+                {
+                    lExpectedDisplayLine = lRemoteName + ": " + lText;
                     lSessionA.AddMessage(lExpectedDisplayLine.c_str());
                     lReceived = true;
                 }

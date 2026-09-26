@@ -324,6 +324,29 @@ bool RaceServerClient::ParseChatMessage(const RaceServerMessage& pMessage, int& 
     return true;
 }
 
+std::string RaceServerClient::EncodeInRaceChat(const std::string& pText)
+{
+    std::string lEncoded;
+    lEncoded.reserve(pText.size());
+    for (unsigned char lCharacter : pText)
+    {
+        lEncoded.push_back(static_cast<char>(
+            lCharacter >= 32 && lCharacter < 127 ? lCharacter - 31 : '_' - 31));
+    }
+    return lEncoded;
+}
+
+std::string RaceServerClient::DecodeInRaceChat(const std::string& pText)
+{
+    std::string lDecoded;
+    lDecoded.reserve(pText.size());
+    for (unsigned char lGlyph : pText)
+    {
+        lDecoded.push_back(static_cast<char>(lGlyph >= 1 && lGlyph <= 95 ? lGlyph + 31 : '_'));
+    }
+    return lDecoded;
+}
+
 bool RaceServerClient::ParsePlayerNameAssigned(const RaceServerMessage& pMessage, std::string& pOutName)
 {
     if (pMessage.mType != eRSMsgPlayerNameAssigned || pMessage.mData.empty())

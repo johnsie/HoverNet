@@ -68,6 +68,7 @@ namespace
 #define MRNM_CONN_NAME_SET     44
 #define MRNM_CLIENT_ADDR_REQ   45
 #define MRNM_CLIENT_ADDR       46
+#define MRNM_SET_PLAYER_NAME   46  // Server-hosted protocol; same legacy slot, different context
 #define MRNM_LAG_TEST          47
 #define MRNM_LAG_ANSWER        48
 #define MRNM_LAG_INFO          49
@@ -1107,6 +1108,19 @@ BOOL CALLBACK MR_NetworkInterface::WaitGameNameCallBack( HWND pWindow, UINT  pMs
                // For server-hosted races, send GAME_NAME message to RaceServer
                if( mActiveInterface->GetConnectionMode() == MR_CONNECTION_SERVER_HOSTED )
                {
+                  // The legacy client kept mPlayer locally and went straight to the join
+                  // request. RaceServer therefore had no name for this connection and
+                  // registered/advertised Player_<client id>. TCP preserves ordering, so
+                  // publish the selected name immediately before joining the race.
+                  MR_NetMessageBuffer lNameMsg;
+                  lNameMsg.mMessageType = MRNM_SET_PLAYER_NAME;
+                  lNameMsg.mDataLen = (MR_UInt8)min(20, mActiveInterface->mPlayer.GetLength());
+                  if( lNameMsg.mDataLen > 0 )
+                  {
+                     memcpy(lNameMsg.mData, (const char*)mActiveInterface->mPlayer, lNameMsg.mDataLen);
+                     mActiveInterface->mClient[0].Send( &lNameMsg, MR_NET_REQUIRED );
+                  }
+
                   MR_NetMessageBuffer lJoinMsg;
                   if( mActiveInterface->mHostRaceRequest )
                   {

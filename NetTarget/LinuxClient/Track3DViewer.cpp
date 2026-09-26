@@ -1681,7 +1681,8 @@ int main(int argc, char** argv)
             }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN &&
                      onlineClient.IsConnected() && !chatBuffer.empty()) {
-                onlineClient.SendMessage(eRSMsgChatMessage, chatBuffer.data(), chatBuffer.size());
+                const std::string wireChat = RaceServerClient::EncodeInRaceChat(chatBuffer);
+                onlineClient.SendMessage(eRSMsgChatMessage, wireChat.data(), wireChat.size());
                 session.AddMessage(("You: " + chatBuffer).c_str());
                 chatBuffer.clear();
             }
@@ -1916,6 +1917,7 @@ int main(int argc, char** argv)
                         int senderClientId = -1;
                         std::string chatText;
                         if (RaceServerClient::ParseChatMessage(netMessage, senderClientId, chatText)) {
+                            chatText = RaceServerClient::DecodeInRaceChat(chatText);
                             const auto nameIt = raceNames.find(senderClientId);
                             const std::string senderName = (nameIt != raceNames.end())
                                 ? nameIt->second

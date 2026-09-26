@@ -156,6 +156,12 @@ public:
     static bool ParseChatMessage(const RaceServerMessage& pMessage, int& pOutSenderClientId,
                                  std::string& pOutText);
 
+    // The original in-race protocol carries the bitmap font's 1..95 glyph
+    // indices, not ASCII. Lobby chat remains plain text, so callers use these
+    // only after a race has started.
+    static std::string EncodeInRaceChat(const std::string& pText);
+    static std::string DecodeInRaceChat(const std::string& pText);
+
     // Parses an eRSMsgPlayerNameAssigned payload: the raw name bytes, nothing else
     // (unlike ParseChatMessage, this is never addressed to anyone but the
     // recipient, so there's no sender id to strip). The server sends this in
