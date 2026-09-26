@@ -1698,11 +1698,15 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       // The original (disabled) version of this logic divided directly by
       // (ItemWidth*3/lChatFontScaling), flagged in its own comment as "subject to
       // div/0" -- at small enough resolutions/scalings that inner division
-      // truncates to exactly 0. Clamp it before using it as a divisor rather than
-      // wrapping the whole expression in std::max, which can't protect against a
-      // crash that happens while evaluating its own argument.
-      const int lChatCharWidth = std::max( 1, lChatFont->GetItemWidth()*3/lChatFontScaling );
-      const int lChatPrintLen = std::max( 1, (lXRes-lChatXMargin)*4/lChatCharWidth );
+      // truncates to exactly 0. Clamp it before using it as a divisor. Plain
+      // comparisons rather than std::max: this file's precompiled header pulls in
+      // windows.h without NOMINMAX, which macro-replaces any bare "max(" token
+      // sequence -- including std::max(...) -- and breaks the parse (the same
+      // issue hit RaceServer's own build previously; see its commit history).
+      int lChatCharWidth = lChatFont->GetItemWidth()*3/lChatFontScaling;
+      if( lChatCharWidth < 1 ) lChatCharWidth = 1;
+      int lChatPrintLen = (lXRes-lChatXMargin)*4/lChatCharWidth;
+      if( lChatPrintLen < 1 ) lChatPrintLen = 1;
 
       char lChatLineBuffer[120];
       pSession->GetCurrentMessage( lChatLineBuffer );
