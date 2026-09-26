@@ -119,8 +119,14 @@ namespace
    const UINT_PTR kRaceServerRefreshTimer = 2001;
    RaceServerClient gRaceServerLobby;
    std::vector<RaceServerGameInfo> gRaceServerGames;
+   std::vector<RaceServerGameInfo> gGamesBeingListed;
    CString gRaceServerHost = kDefaultRaceServerHost;
    unsigned gRaceServerPort = kDefaultRaceServerPort;
+
+   // Forward declarations: DrainRaceServerMessages (below) calls both of these,
+   // but they're defined further down the file.
+   void RefreshRaceServerSelection(HWND pWindow);
+   void RenderGameList(HWND pWindow);
 
    // Chat messages only carry the sender's client id (see ServerSocket.cpp's
    // MRNM_CHAT_MESSAGE relay), and IDC_USER_LIST needs a way to add/remove one
@@ -201,15 +207,39 @@ namespace
                SetDlgItemText(pWindow, IDC_CHAT_OUT, lChat);
             }
          }
+         else if( lMessage.mType == eRSMsgGameInfo )
+         {
+            RaceServerGameInfo lInfo;
+            if( RaceServerClient::ParseGameInfo(lMessage, lInfo) )
+            {
+               gGamesBeingListed.push_back(lInfo);
+            }
+         }
+         else if( lMessage.mType == eRSMsgGameListEnd )
+         {
+            gRaceServerGames.swap(gGamesBeingListed);
+            gGamesBeingListed.clear();
+            RenderGameList(pWindow);
+            RefreshRaceServerSelection(pWindow);
+         }
          // eRSMsgLobbyUserListEnd and anything else: no UI action needed here.
       }
    }
 
-   void RefreshRaceServerList(HWND pWindow)
+   // Only rebuilds IDC_GAME_LIST from whatever's already in gRaceServerGames --
+   // does not touch the network. Call sites request a refresh by sending
+   // eRSMsgListGames directly and clearing gGamesBeingListed; the actual list
+   // repaint happens once eRSMsgGameListEnd arrives, in DrainRaceServerMessages.
+   //
+   // This used to be one function that both sent the request and blocked (via
+   // RaceServerClient::ListGames) waiting for the reply -- but that helper's poll
+   // loop silently discards any message that isn't part of the game list, so a
+   // chat or lobby-roster message arriving during that wait was lost before
+   // DrainRaceServerMessages ever got a chance to see it. Splitting the request
+   // from the repaint lets both share one drain loop instead, exactly like the
+   // Linux lobby already does.
+   void RenderGameList(HWND pWindow)
    {
-      std::vector<RaceServerGameInfo> lGames;
-      if( !gRaceServerLobby.ListGames(lGames, 750) ) return;
-      gRaceServerGames.swap(lGames);
       HWND lList = GetDlgItem(pWindow, IDC_GAME_LIST);
       ListView_DeleteAllItems(lList);
       for( size_t i = 0; i < gRaceServerGames.size(); ++i )
@@ -229,6 +259,12 @@ namespace
       {
          ListView_SetItemState(lList, 0, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
       }
+   }
+
+   void RequestGameListRefresh(HWND)
+   {
+      gGamesBeingListed.clear();
+      gRaceServerLobby.SendMessage(eRSMsgListGames, nullptr, 0);
    }
 
    // Shares NetJoin_Debug.log with NetInterface.cpp's WaitGameNameCallBack breadcrumbs so
@@ -2188,8 +2224,7 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
          // chat lines would show that instead of our actual name.
          gRaceServerLobby.SetPlayerName((const char*)mThis->mUser);
          gRaceServerLobby.ListLobbyUsers();
-         RefreshRaceServerList(pWindow);
-         RefreshRaceServerSelection(pWindow);
+         RequestGameListRefresh(pWindow);
          SetTimer(pWindow, kRaceServerRefreshTimer, 2000, NULL);
          return TRUE;
       }
@@ -2197,8 +2232,7 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
       case WM_TIMER:
          if( pWParam == kRaceServerRefreshTimer && gRaceServerLobby.IsConnected() )
          {
-            RefreshRaceServerList(pWindow);
-            RefreshRaceServerSelection(pWindow);
+            RequestGameListRefresh(pWindow);
             DrainRaceServerMessages(pWindow);
             return TRUE;
          }
