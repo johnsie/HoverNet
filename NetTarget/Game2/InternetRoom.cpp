@@ -255,6 +255,42 @@ void MR_InternetRoom::DrainRaceServerMessages(HWND pWindow)
    RaceServerMessage lMessage;
    while( gRaceServerLobby.PollMessage(lMessage, 0) )
    {
+      HandleRaceServerMessage(pWindow, lMessage);
+   }
+}
+
+bool MR_InternetRoom::WaitForJoinedRaceAck(HWND pWindow, int& pOutRaceId, BOOL& pOutIsCreator, int& pOutClientId)
+{
+   const DWORD lDeadline = GetTickCount() + 5000;
+   RaceServerMessage lMessage;
+   while( (long)(lDeadline - GetTickCount()) > 0 )
+   {
+      if( !gRaceServerLobby.IsConnected() )
+      {
+         return false;
+      }
+      if( gRaceServerLobby.PollMessage(lMessage, 100) )
+      {
+         if( lMessage.mType == eRSMsgJoinedRace )
+         {
+            RaceServerJoinAck lAck;
+            if( !RaceServerClient::ParseJoinedRace(lMessage, lAck) || lAck.mRaceId < 0 )
+            {
+               return false;
+            }
+            pOutRaceId    = lAck.mRaceId;
+            pOutIsCreator = lAck.mIsHost ? TRUE : FALSE;
+            pOutClientId  = lAck.mClientId;
+            return true;
+         }
+         HandleRaceServerMessage(pWindow, lMessage);
+      }
+   }
+   return false;
+}
+
+void MR_InternetRoom::HandleRaceServerMessage(HWND pWindow, const RaceServerMessage& lMessage)
+{
       if( lMessage.mType == eRSMsgLobbyUserPresent )
       {
          RaceServerPeer lPeer;
@@ -330,7 +366,6 @@ void MR_InternetRoom::DrainRaceServerMessages(HWND pWindow)
          }
       }
       // eRSMsgLobbyUserListEnd and anything else: no UI action needed here.
-   }
 }
 
 
@@ -2327,27 +2362,45 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
                LogNetJoin( "IDC_JOIN: track open/LoadNew failed, aborting" );
                return TRUE;
             }
-            LogNetJoin( "IDC_JOIN: LoadNew ok, connecting to %s:%u",
-                        (const char*)gRaceServerHost, gRaceServerPort );
 
             KillTimer(pWindow, kRaceServerRefreshTimer);
-            gRaceServerLobby.Disconnect();
-            mThis->mSession->SetIsGameCreator(FALSE);
-            mThis->mSession->SetConnectionMode(MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort);
-            // Join by the race's unique id, not its (possibly duplicated) display
+
+            // Join on the SAME connection that's been browsing/chatting all
+            // along, instead of opening a second one just for the game session:
+            // keeps one server-side identity (and its lobby-wide chat) all the
+            // way through joining, the waiting room, and the race itself. Join
+            // by the race's unique id, not its (possibly duplicated) display
             // name -- hosting no longer rejects a repeat name, so two races can
-            // legitimately show up with the same label.
-            mThis->mSession->ConfigureJoinById(lGame.mRaceId);
-            const BOOL lJoined = mThis->mSession->ConnectToServer(pWindow, gRaceServerHost, gRaceServerPort, lGame.mName.c_str());
-            LogNetJoin( "IDC_JOIN: ConnectToServer returned %d", (int)lJoined );
+            // legitimately share a label.
+            BOOL lJoined = FALSE;
+            if( gRaceServerLobby.JoinGameById(lGame.mRaceId) )
+            {
+               int lRaceId = -1, lClientId = -1;
+               BOOL lIsCreator = FALSE;
+               if( MR_InternetRoom::WaitForJoinedRaceAck(pWindow, lRaceId, lIsCreator, lClientId) )
+               {
+                  mThis->mSession->SetConnectionMode(MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort);
+                  const SOCKET lSocket = static_cast<SOCKET>(gRaceServerLobby.ReleaseSocket());
+                  lJoined = mThis->mSession->ConnectAdopted(pWindow, lSocket, lIsCreator, lClientId,
+                                                             gRaceServerHost, gRaceServerPort, lGame.mName.c_str());
+               }
+            }
+            LogNetJoin( "IDC_JOIN: join+adopt result %d", (int)lJoined );
             if( lJoined )
             {
                EndDialog(pWindow, IDOK);
             }
             else
             {
-               gRaceServerLobby.Connect((const char*)gRaceServerHost, gRaceServerPort);
+               MessageBoxA(pWindow, "Could not join that race.", "HoverNet Lobby", MB_OK | MB_ICONERROR);
+               if( !gRaceServerLobby.IsConnected() )
+               {
+                  gRaceServerLobby.Connect((const char*)gRaceServerHost, gRaceServerPort);
+                  gRaceServerLobby.SetPlayerName((const char*)mThis->mUser);
+                  gRaceServerLobby.ListLobbyUsers();
+               }
                SetTimer(pWindow, kRaceServerRefreshTimer, 2000, NULL);
+               RequestGameListRefresh(pWindow);
             }
             return TRUE;
          }
@@ -2361,20 +2414,39 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
             if( lTrackFile == NULL || !mThis->mSession->LoadNew(lTrack, lTrackFile, lLaps, lWeapons, mThis->mVideoBuffer) ) return TRUE;
 
             KillTimer(pWindow, kRaceServerRefreshTimer);
-            gRaceServerLobby.Disconnect();
-            mThis->mSession->SetConnectionMode(MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort);
-            mThis->mSession->SetIsGameCreator(TRUE);
-            mThis->mSession->ConfigureHostedRace(lTrack, lLaps, lWeapons);
-            // The race name is just the track name, matching the Linux client --
-            // no reason to make the host type one.
-            if( mThis->mSession->ConnectToServer(pWindow, gRaceServerHost, gRaceServerPort, lTrack) )
+
+            // Hosted on the same connection that's been browsing/chatting all
+            // along -- see the IDC_JOIN comment above. The race name is just the
+            // track name, matching the Linux client -- no reason to make the
+            // host type one.
+            BOOL lHosted = FALSE;
+            if( gRaceServerLobby.HostRace((const char*)lTrack, (const char*)lTrack, lLaps, lWeapons != FALSE) )
+            {
+               int lRaceId = -1, lClientId = -1;
+               BOOL lIsCreator = FALSE;
+               if( MR_InternetRoom::WaitForJoinedRaceAck(pWindow, lRaceId, lIsCreator, lClientId) )
+               {
+                  mThis->mSession->SetConnectionMode(MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort);
+                  const SOCKET lSocket = static_cast<SOCKET>(gRaceServerLobby.ReleaseSocket());
+                  lHosted = mThis->mSession->ConnectAdopted(pWindow, lSocket, lIsCreator, lClientId,
+                                                             gRaceServerHost, gRaceServerPort, lTrack);
+               }
+            }
+            if( lHosted )
             {
                EndDialog(pWindow, IDOK);
             }
             else
             {
-               gRaceServerLobby.Connect((const char*)gRaceServerHost, gRaceServerPort);
+               MessageBoxA(pWindow, "Could not host that race (perhaps an unknown track).", "HoverNet Lobby", MB_OK | MB_ICONERROR);
+               if( !gRaceServerLobby.IsConnected() )
+               {
+                  gRaceServerLobby.Connect((const char*)gRaceServerHost, gRaceServerPort);
+                  gRaceServerLobby.SetPlayerName((const char*)mThis->mUser);
+                  gRaceServerLobby.ListLobbyUsers();
+               }
                SetTimer(pWindow, kRaceServerRefreshTimer, 2000, NULL);
+               RequestGameListRefresh(pWindow);
             }
             return TRUE;
          }

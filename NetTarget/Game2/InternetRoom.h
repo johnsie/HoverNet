@@ -181,6 +181,17 @@ class MR_InternetRoom
       // has to be an actual member.
       static void DrainRaceServerMessages( HWND pWindow );
 
+      // Waits (briefly, blocking) for eRSMsgJoinedRace on gRaceServerLobby --
+      // the ack for an eRSMsgHostRace/eRSMsgJoinRaceById request just sent on
+      // it -- routing anything else that arrives in the meantime through the
+      // same handling DrainRaceServerMessages uses instead of dropping it.
+      // Returns false on timeout/rejection/disconnect. See IDC_ADD_SERVER and
+      // IDC_JOIN: hosting/joining now happens directly on the already-open
+      // lobby connection instead of opening a second one, so the same
+      // connection/identity carries lobby browsing, hosting/joining, the
+      // waiting room and the race itself.
+      static bool WaitForJoinedRaceAck( HWND pWindow, int& pOutRaceId, BOOL& pOutIsCreator, int& pOutClientId );
+
       BOOL AskRoomParams( HWND pParentWindow );
       BOOL LocateServers( HWND pWindow );
       BOOL AddUserOp( HWND pParentWindow );

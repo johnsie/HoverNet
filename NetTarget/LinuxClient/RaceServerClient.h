@@ -100,6 +100,15 @@ public:
     void Disconnect();
     bool IsConnected() const;
 
+    // Hands ownership of the underlying, already-connected socket to the caller:
+    // this object forgets about it (Disconnect()/the destructor will no longer
+    // close it) so the same live connection/server-side identity can continue
+    // under a different owner -- e.g. the Windows client's legacy per-frame-poll
+    // netcode (MR_NetworkPort::Connect takes a raw SOCKET) once a hosted/joined
+    // race is ready to actually play, instead of opening a second connection
+    // (and thus a second server-side identity) just for that.
+    int ReleaseSocket();
+
     // Sends a raw message. pData/pLen may be null/0 for an empty payload.
     bool SendMessage(int messageType, const void* pData, std::size_t pLen);
 

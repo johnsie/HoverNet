@@ -232,6 +232,20 @@ class MR_NetworkInterface
       BOOL SlavePreConnect( HWND pWindow, CString& pGameName );
       BOOL SlaveConnect( HWND pWindow, const char* pServerIP=NULL, unsigned pPort = MR_DEFAULT_NET_PORT, const char* pGameName = NULL, HWND* pModalessDlg = NULL, int pReturnMessage = 0 );
 
+      // Adopts an already-connected, already-joined/-hosted RaceServer socket
+      // (handed over from a RaceServerClient that did the actual HostRace/
+      // JoinGameById handshake) instead of opening a brand new connection and
+      // repeating that handshake -- see AskRoomParams' IDC_ADD_SERVER/IDC_JOIN
+      // handlers in InternetRoom.cpp. This is what keeps lobby browsing, chat,
+      // hosting/joining, the waiting room, and the race itself all on one
+      // connection/server-side identity, instead of the lobby using one
+      // connection and the game session opening a second one (which used to
+      // make the RaceServer's duplicate-name check fire against yourself, and
+      // stranded the lobby's chat connection the moment you hosted or joined).
+      BOOL ConnectAdopted( HWND pWindow, SOCKET pSocket, BOOL pIsCreator, int pLocalClientId,
+                           const char* pServerIP, unsigned pPort, const char* pGameName,
+                           HWND* pModalessDlg = NULL, int pReturnMessage = 0 );
+
       void Disconnect();
 
       int  GetClientCount()const;

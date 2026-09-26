@@ -125,6 +125,9 @@ class MR_NetworkSession: public MR_ClientSession
       BOOL WaitConnections( HWND pWindow, const char* pTrackName, BOOL pPromptForPort = TRUE, unsigned pDefaultPort = MR_DEFAULT_NET_PORT, HWND* pModalessDlg = NULL, int pReturnMessage = 0 );
       BOOL PreConnectToServer( HWND pWindow, CString& pTrackName );
       BOOL ConnectToServer( HWND pWindow, const char* pServerIP=NULL, unsigned pPort = MR_DEFAULT_NET_PORT, const char* pGameName = NULL, HWND* pModalessDlg = NULL, int pReturnMessage = 0 );
+      BOOL ConnectAdopted( HWND pWindow, SOCKET pSocket, BOOL pIsCreator, int pLocalClientId,
+                           const char* pServerIP, unsigned pPort, const char* pGameName,
+                           HWND* pModalessDlg = NULL, int pReturnMessage = 0 );
 
       int   ResultAvaillable()const; // Return the number of players desc avail
       void  GetResult( int pPosition, const char*& pPlayerName, int& pId, BOOL& pConnected, int& pNbLap, MR_SimulationTime& pFinishTime, MR_SimulationTime& pBestLap )const;

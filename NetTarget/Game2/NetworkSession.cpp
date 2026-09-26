@@ -842,10 +842,20 @@ BOOL MR_NetworkSession::PreConnectToServer( HWND pWindow, CString& pTrackName )
 }
 
 BOOL MR_NetworkSession::ConnectToServer( HWND pWindow, const char* pServerIP, unsigned pPort, const char* pGameName, HWND* pModalessDlg, int pReturnMessage )
-{  
+{
    mMasterMode = FALSE;
 
    return mNetInterface.SlaveConnect( pWindow, pServerIP, pPort, pGameName, pModalessDlg, pReturnMessage );
+}
+
+BOOL MR_NetworkSession::ConnectAdopted( HWND pWindow, SOCKET pSocket, BOOL pIsCreator, int pLocalClientId,
+                                        const char* pServerIP, unsigned pPort, const char* pGameName,
+                                        HWND* pModalessDlg, int pReturnMessage )
+{
+   mMasterMode = FALSE;
+
+   return mNetInterface.ConnectAdopted( pWindow, pSocket, pIsCreator, pLocalClientId, pServerIP, pPort, pGameName,
+                                        pModalessDlg, pReturnMessage );
 }
 
 void MR_NetworkSession::SetSimulationTime( MR_SimulationTime pTime )

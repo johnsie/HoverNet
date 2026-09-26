@@ -130,6 +130,14 @@ bool RaceServerClient::IsConnected() const
     return mSocket >= 0;
 }
 
+int RaceServerClient::ReleaseSocket()
+{
+    const int lSocket = mSocket;
+    mSocket = -1;
+    mReceiveBuffer.clear();
+    return lSocket;
+}
+
 bool RaceServerClient::SendMessage(int pMessageType, const void* pData, std::size_t pLen)
 {
     if (mSocket < 0 || pLen > 255)

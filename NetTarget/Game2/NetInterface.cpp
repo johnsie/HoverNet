@@ -870,6 +870,68 @@ BOOL MR_NetworkInterface::SlaveConnect( HWND pWindow, const char* pServerIP, uns
    return lReturnValue;
 }
 
+BOOL MR_NetworkInterface::ConnectAdopted( HWND pWindow, SOCKET pSocket, BOOL pIsCreator, int pLocalClientId,
+                                          const char* pServerIP, unsigned pPort, const char* pGameName,
+                                          HWND* pModalessDlg, int pReturnMessage )
+{
+   ASSERT( !mServerMode );
+   ASSERT( pSocket != INVALID_SOCKET );
+
+   mGameName    = pGameName;
+   mServerAddr  = pServerIP;
+   mServerPort  = pPort;
+   mActiveInterface = this;
+
+   // The connection is already open, authenticated and joined/hosting -- just
+   // wrap the socket instead of repeating any of that over a second one.
+   mClient[0].Connect( pSocket );
+   SetIsGameCreator( pIsCreator );
+   mLocalClientId = pLocalClientId;
+
+   // Only used by the old peer-to-peer path for other players to connect
+   // directly to a hosting player; server-hosted races never receive
+   // connections on it (everyone talks through the RaceServer instead), but
+   // ListCallBack's WM_INITDIALOG unconditionally listen()s on it, so it still
+   // needs to exist. listen() implicitly binds an unbound socket on Winsock.
+   mRegistrySocket = socket( PF_INET, SOCK_STREAM, 0 );
+   if( mRegistrySocket == INVALID_SOCKET )
+   {
+      MessageBox( pWindow, MR_LoadString( IDS_CANT_CREATE_SOCK ), MR_LoadString( IDS_TCP_SERVER ), MB_ICONERROR|MB_OK|MB_APPLMODAL );
+      Disconnect();
+      return FALSE;
+   }
+
+   BOOL lReturnValue = TRUE;
+   HMODULE lModuleHandle = GetModuleHandle( NULL );
+   int lDialogId = (mConnectionMode == MR_CONNECTION_SERVER_HOSTED) ? IDD_TCP_SERVER : IDD_TCP_CLIENT;
+
+   if( pModalessDlg == NULL )
+   {
+      mReturnMessage = 0;
+      if( DialogBox( lModuleHandle, MAKEINTRESOURCE( lDialogId ), pWindow, ListCallBack ) != IDOK )
+      {
+         lReturnValue = FALSE;
+      }
+   }
+   else
+   {
+      ASSERT( pReturnMessage != 0 );
+      mReturnMessage = pReturnMessage;
+      *pModalessDlg = CreateDialog( lModuleHandle, MAKEINTRESOURCE( lDialogId ), pWindow, ListCallBack );
+      if( *pModalessDlg == NULL )
+      {
+         lReturnValue = FALSE;
+      }
+   }
+
+   if( !lReturnValue )
+   {
+      Disconnect();
+   }
+
+   return lReturnValue;
+}
+
 
 BOOL CALLBACK MR_NetworkInterface::ServerPortCallBack( HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam )
 {
