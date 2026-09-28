@@ -239,6 +239,24 @@ toggling fullscreen and confirming the Lobby, Settings, and pause menu are
 all fully visible and clickable, with the cursor landing where it visually
 appears, at both window sizes.
 
+Even that (v0.1.75) still didn't line up. Both prior attempts computed the
+window-to-logical conversion by hand, from `SDL_GetWindowSize` and the same
+scale/offset formula `SDL_RenderSetLogicalSize` is documented to use
+internally -- correct in principle, but window size isn't necessarily what
+`SDL_RenderSetLogicalSize`'s viewport math is actually based on. It uses the
+renderer's real output size (`SDL_GetRendererOutputSize`), which differs from
+window size whenever the display applies HiDPI or fractional scaling, and
+reverse-deriving that from window size alone can't account for it. Rather
+than keep guessing at SDL's internal math, `WindowToLogicalPoint` now calls
+`SDL_RenderWindowToLogical` (SDL 2.0.18+) directly -- the one API SDL ships
+specifically to reverse a `SDL_RenderSetLogicalSize` mapping, using whatever
+mapping it actually set up rather than a reimplementation of it. This could
+only be diagnosed by reading the SDL2 source and API docs, not by
+interactive testing (unavailable in this environment) -- please re-verify by
+toggling fullscreen and confirming the Lobby, Settings, and pause menu are
+all fully visible and clickable, with the cursor landing where it visually
+appears, at both window sizes.
+
 The rest of Phase 3 (ImGui menu
 consolidation, remappable controls/controller support, actual
 resolution/scaling options, HUD improvements, onboarding, accessibility,

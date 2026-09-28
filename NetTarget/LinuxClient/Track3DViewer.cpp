@@ -50,42 +50,41 @@ constexpr int kHeight = 768;
 // real window pixels. Without translating them back to logical space here,
 // every click lands wherever it would have if the window were exactly
 // kWidth x kHeight, which is only ever true by coincidence.
-void WindowToLogicalPoint(SDL_Window* pWindow, float pWindowX, float pWindowY, float& pOutLogicalX,
+// Delegates to SDL's own SDL_RenderWindowToLogical (SDL 2.0.18+) rather than
+// reimplementing the letterbox scale/offset math by hand -- a from-scratch
+// version based on SDL_GetWindowSize alone was tried first and didn't hold
+// up, most likely because it can't account for cases where the renderer's
+// actual output size (what SDL_RenderSetLogicalSize's viewport math is
+// really based on) differs from window size, e.g. HiDPI/fractional display
+// scaling. SDL already tracks whatever mapping it set up internally, so ask
+// it directly instead of guessing.
+void WindowToLogicalPoint(SDL_Renderer* pRenderer, float pWindowX, float pWindowY, float& pOutLogicalX,
                           float& pOutLogicalY)
 {
-    int lWindowWidth = kWidth;
-    int lWindowHeight = kHeight;
-    if (pWindow != nullptr) {
-        SDL_GetWindowSize(pWindow, &lWindowWidth, &lWindowHeight);
-    }
-    if (lWindowWidth <= 0 || lWindowHeight <= 0) {
+    if (pRenderer == nullptr) {
         pOutLogicalX = pWindowX;
         pOutLogicalY = pWindowY;
         return;
     }
-    const float lScale = std::min(static_cast<float>(lWindowWidth) / kWidth,
-                                  static_cast<float>(lWindowHeight) / kHeight);
-    const float lOffsetX = (lWindowWidth - kWidth * lScale) * 0.5f;
-    const float lOffsetY = (lWindowHeight - kHeight * lScale) * 0.5f;
-    pOutLogicalX = (pWindowX - lOffsetX) / lScale;
-    pOutLogicalY = (pWindowY - lOffsetY) / lScale;
+    SDL_RenderWindowToLogical(pRenderer, static_cast<int>(pWindowX), static_cast<int>(pWindowY),
+                             &pOutLogicalX, &pOutLogicalY);
 }
 
 // Call on every SDL_Event right after SDL_PollEvent, before any raw (i.e.
 // non-ImGui) SDL_MOUSEBUTTONDOWN/SDL_MOUSEMOTION handling -- ConfirmQuit and
 // RunPauseMenu. NOT used for the ImGui-driven screens: see CorrectImGuiMousePos
 // for why rewriting the SDL_Event isn't enough there.
-void RewriteMouseEventToLogical(SDL_Event& pEvent, SDL_Window* pWindow)
+void RewriteMouseEventToLogical(SDL_Event& pEvent, SDL_Renderer* pRenderer)
 {
     float lLogicalX = 0.0f, lLogicalY = 0.0f;
     if (pEvent.type == SDL_MOUSEMOTION) {
-        WindowToLogicalPoint(pWindow, static_cast<float>(pEvent.motion.x),
+        WindowToLogicalPoint(pRenderer, static_cast<float>(pEvent.motion.x),
                              static_cast<float>(pEvent.motion.y), lLogicalX, lLogicalY);
         pEvent.motion.x = static_cast<Sint32>(lLogicalX);
         pEvent.motion.y = static_cast<Sint32>(lLogicalY);
     }
     else if (pEvent.type == SDL_MOUSEBUTTONDOWN || pEvent.type == SDL_MOUSEBUTTONUP) {
-        WindowToLogicalPoint(pWindow, static_cast<float>(pEvent.button.x),
+        WindowToLogicalPoint(pRenderer, static_cast<float>(pEvent.button.x),
                              static_cast<float>(pEvent.button.y), lLogicalX, lLogicalY);
         pEvent.button.x = static_cast<Sint32>(lLogicalX);
         pEvent.button.y = static_cast<Sint32>(lLogicalY);
@@ -116,12 +115,12 @@ void SyncImGuiToLogicalSize()
 // of the time between clicks. ImGui::NewFrame() then drains that queue into
 // io.MousePos. The only point nothing overwrites it again before widgets
 // hit-test against it is right here, after NewFrame() has returned.
-void CorrectImGuiMousePos(SDL_Window* pWindow)
+void CorrectImGuiMousePos(SDL_Renderer* pRenderer)
 {
     ImGuiIO& lIo = ImGui::GetIO();
     if (lIo.MousePos.x > -FLT_MAX / 2.0f && lIo.MousePos.y > -FLT_MAX / 2.0f) {
         float lLogicalX, lLogicalY;
-        WindowToLogicalPoint(pWindow, lIo.MousePos.x, lIo.MousePos.y, lLogicalX, lLogicalY);
+        WindowToLogicalPoint(pRenderer, lIo.MousePos.x, lIo.MousePos.y, lLogicalX, lLogicalY);
         lIo.MousePos = ImVec2(lLogicalX, lLogicalY);
     }
 }
@@ -1307,7 +1306,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         ImGui_ImplSDL2_NewFrame();
         SyncImGuiToLogicalSize();
         ImGui::NewFrame();
-        CorrectImGuiMousePos(graphics.GetWindow());
+        CorrectImGuiMousePos(graphics.GetRenderer());
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
@@ -1592,7 +1591,7 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
     while (true) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            RewriteMouseEventToLogical(event, graphics.GetWindow());
+            RewriteMouseEventToLogical(event, graphics.GetRenderer());
             if (event.type == SDL_QUIT) {
                 // Clicking X again while this is up means they really do want out.
                 return true;
@@ -1669,7 +1668,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
     while (true) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            RewriteMouseEventToLogical(event, graphics.GetWindow());
+            RewriteMouseEventToLogical(event, graphics.GetRenderer());
             if (event.type == SDL_QUIT) {
                 return ConfirmQuit(graphics, buffer, viewport, font) ? PauseChoice::eQuit : PauseChoice::eResume;
             }
@@ -1786,7 +1785,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui_ImplSDL2_NewFrame();
         SyncImGuiToLogicalSize();
         ImGui::NewFrame();
-        CorrectImGuiMousePos(graphics.GetWindow());
+        CorrectImGuiMousePos(graphics.GetRenderer());
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
@@ -1937,7 +1936,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui_ImplSDL2_NewFrame();
         SyncImGuiToLogicalSize();
         ImGui::NewFrame();
-        CorrectImGuiMousePos(graphics.GetWindow());
+        CorrectImGuiMousePos(graphics.GetRenderer());
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
