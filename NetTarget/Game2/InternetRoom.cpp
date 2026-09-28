@@ -209,7 +209,6 @@ namespace
    // timeline when diagnosing the "Retrieving game info..." hang.
    void LogNetJoin( const char* pFormat, ... )
    {
-      FILE* lLog = NULL;
       if( lLog != NULL )
       {
          va_list lArgs;
@@ -564,19 +563,6 @@ BOOL MR_InternetRequest::Send( HWND pWindow, unsigned long pIP, unsigned pPort, 
 {
    BOOL lReturnValue = FALSE;
 
-   // DEBUG: Log connection details
-   {
-      char lDebugBuf[512];
-      sprintf(lDebugBuf, "DEBUG MR_InternetRequest::Send: IP=%u.%u.%u.%u, Port=%u, URL=%s",
-              (pIP >> 24) & 0xFF,
-              (pIP >> 16) & 0xFF,
-              (pIP >> 8) & 0xFF,
-              (pIP) & 0xFF,
-              pPort,
-              pURL);
-      OutputDebugString(lDebugBuf);
-   }
-
    if( !Working() )
    {
       Clear();
@@ -873,8 +859,6 @@ int MR_InternetRoom::ParseState( const char* pAnswer )
 
                   if( lLinePtr != NULL )
                   {
-                     FILE* lInitLog = NULL;
-                     if(lInitLog) fprintf(lInitLog, "\n=== NEW Game Entry %d ===\n", lEntry), fflush(lInitLog);
                      
                      lReturnValue |= eGamesModified;
 
@@ -887,29 +871,23 @@ int MR_InternetRoom::ParseState( const char* pAnswer )
                      mGameList[ lEntry ].mServerHosted = FALSE;  // Phase 4: Initialize
                      
                      mGameList[ lEntry ].mName = GetLine( lLinePtr );
-                     if(lInitLog) fprintf(lInitLog, "Line 1 (Name): %s\n", (const char*)mGameList[ lEntry ].mName), fflush(lInitLog);
 
                      lLinePtr = GetNextLine( lLinePtr );
                      mGameList[ lEntry ].mTrack = GetLine( lLinePtr );
-                     if(lInitLog) fprintf(lInitLog, "Line 2 (Track): %s\n", (const char*)mGameList[ lEntry ].mTrack), fflush(lInitLog);
                      mGameList[ lEntry ].mAvailCode = MR_GetTrackAvail( mGameList[ lEntry ].mTrack, mAllowRegistred );
 
                      lLinePtr = GetNextLine( lLinePtr );
                      mGameList[ lEntry ].mIPAddr = GetLine( lLinePtr );
-                     if(lInitLog) fprintf(lInitLog, "Line 3 (IP): %s\n", (const char*)mGameList[ lEntry ].mIPAddr), fflush(lInitLog);
 
                      lLinePtr = GetNextLine( lLinePtr );
 
                      int lNbClient;
                      int lDummyBool;
                      
-                     if(lInitLog) fprintf(lInitLog, "Line 4 (Port/Laps): %s\n", GetLine(lLinePtr)), fflush(lInitLog);
 
                      if( sscanf( lLinePtr, "%u %d %d %d", &mGameList[ lEntry ].mPort, &mGameList[ lEntry ].mNbLap, &lDummyBool, &lNbClient ) == 4 )
                      {
                         mGameList[ lEntry ].mAllowWeapons = lDummyBool;
-                        if(lInitLog) fprintf(lInitLog, "Parsed: Port=%u, Laps=%d, Weapons=%d, NbClient=%d\n", 
-                           mGameList[ lEntry ].mPort, mGameList[ lEntry ].mNbLap, mGameList[ lEntry ].mAllowWeapons, lNbClient), fflush(lInitLog);
 
                         if( lNbClient > eMaxPlayerGame )
                         {
@@ -919,7 +897,6 @@ int MR_InternetRoom::ParseState( const char* pAnswer )
                         if( lNbClient != 0 )
                         {
                            lLinePtr = GetNextLine( lLinePtr );
-                           if(lInitLog) fprintf(lInitLog, "Player list line: %s\n", GetLine(lLinePtr)), fflush(lInitLog);
 
                            if( lLinePtr != NULL )
                            {
@@ -950,38 +927,24 @@ int MR_InternetRoom::ParseState( const char* pAnswer )
 
                         // Phase 4: Check for SERVER_ADDR line (server-hosted race)
                         lLinePtr = GetNextLine( lLinePtr );
-                        if(lInitLog) fprintf(lInitLog, "Checking SERVER_ADDR line, lLinePtr=%p\n", lLinePtr), fflush(lInitLog);
                         if( lLinePtr != NULL )
                         {
-                           if(lInitLog) {
-                              const char* lLineContent = GetLine(lLinePtr);
-                              fprintf(lInitLog, "Line content (text): %s\n", lLineContent);
-                              fflush(lInitLog);
-                           }
                         }
                         if( lLinePtr != NULL && !strncmp( lLinePtr, "SERVER_ADDR", 11 ) )
                         {
-                           if(lInitLog) fprintf(lInitLog, "Found SERVER_ADDR line\n"), fflush(lInitLog);
                            mGameList[ lEntry ].mServerHosted = TRUE;
                            
                            // Parse "SERVER_ADDR address:port"
                            // Use the configured HoverNet RaceServer for hosted races.
                            // (ignore what InternetRoom3 sends, as it may be incorrect)
                            const char* lLineStr = GetLine( lLinePtr );
-                           if(lInitLog) fprintf(lInitLog, "Full line: '%s'\n", lLineStr), fflush(lInitLog);
-                           if(lInitLog) fprintf(lInitLog, "Ignoring received SERVER_ADDR, using configured %s:%u\n",
-                              (const char*)gRaceServerHost, gRaceServerPort), fflush(lInitLog);
                            
                            mGameList[ lEntry ].mServerAddr = gRaceServerHost;
                            mGameList[ lEntry ].mServerPort = gRaceServerPort;
                         }
                         else if(lLinePtr != NULL)
                         {
-                           if(lInitLog) fprintf(lInitLog, "No SERVER_ADDR line - next line is: %s\n", GetLine(lLinePtr)), fflush(lInitLog);
                         }
-                        if(lInitLog) fprintf(lInitLog, "Final values: ServerHosted=%d, ServerAddr=%s, ServerPort=%u\n", 
-                           mGameList[lEntry].mServerHosted, (const char*)mGameList[lEntry].mServerAddr, mGameList[lEntry].mServerPort), fflush(lInitLog);
-                        if(lInitLog) fclose(lInitLog);
                      }
                   }
                }
@@ -1252,23 +1215,6 @@ BOOL MR_InternetRoom::AddUserOp( HWND pParentWindow )
                          mKey3,
                          (const char*)MR_Pad( mUser ) );
 
-   // DEBUG: Log connection details
-   {
-      char lDebugBuf[512];
-      sprintf(lDebugBuf, "DEBUG AddUserOp: ServerEntry=%d, Name=%s, URL=%s, Address=%u.%u.%u.%u, Port=%u",
-              gCurrentServerEntry,
-              (const char*)gServerList[gCurrentServerEntry].mName,
-              (const char*)gServerList[gCurrentServerEntry].mURL,
-              (gServerList[gCurrentServerEntry].mAddress >> 24) & 0xFF,
-              (gServerList[gCurrentServerEntry].mAddress >> 16) & 0xFF,
-              (gServerList[gCurrentServerEntry].mAddress >> 8) & 0xFF,
-              (gServerList[gCurrentServerEntry].mAddress) & 0xFF,
-              gServerList[gCurrentServerEntry].mPort);
-      OutputDebugString(lDebugBuf);
-      sprintf(lDebugBuf, "DEBUG AddUserOp: Full request=%s", (const char*)mNetOpRequest);
-      OutputDebugString(lDebugBuf);
-   }
-
    lReturnValue = DialogBox( GetModuleHandle( NULL ), MAKEINTRESOURCE( IDD_NET_PROGRESS ), pParentWindow, NetOpCallBack )==IDOK;
 
    if( lReturnValue )
@@ -1394,10 +1340,6 @@ BOOL MR_InternetRoom::AddGameHostedOp( HWND pParentWindow, const char* pGameName
    if( lReturnValue )
    {
       const char* lData = mOpRequest.GetBuffer();
-      
-      // DEBUG: Log the full response
-      CString lDebugResponse = lData ? lData : "(null)";
-      MessageBox( pParentWindow, "ADD_GAME_HOSTED Response:\n" + lDebugResponse, "DEBUG: ADD_GAME_HOSTED", MB_OK );
 
       while( (lData != NULL)&&strncmp( lData, "SUCCESS", 7 ) )
       {
@@ -1407,18 +1349,13 @@ BOOL MR_InternetRoom::AddGameHostedOp( HWND pParentWindow, const char* pGameName
       {
          ASSERT( FALSE );
          lReturnValue = FALSE;
-         MessageBox( pParentWindow, "SUCCESS not found in response!", "DEBUG: ERROR", MB_ICONERROR|MB_OK );
       }
       else
       {
          lData = GetNextLine( lData );
 
          sscanf( lData, "GAME_ID %d-%u", &mCurrentGameIndex, &mCurrentGameId );
-      }      
-   }
-   else
-   {
-      MessageBox( pParentWindow, "FastNetOpCallBack dialog failed", "DEBUG: ERROR", MB_ICONERROR|MB_OK );
+      }
    }
 
    mOpRequest.Clear();
@@ -2930,19 +2867,15 @@ BOOL CALLBACK MR_InternetRoom::RoomCallBack( HWND pWindow, UINT  pMsgId, WPARAM 
                {
                   if( mThis->mModelessDlg == NULL )
                   {
-                     FILE* lLog = NULL;
-                     if(lLog) fprintf(lLog, "\n=== IDC_JOIN START ===\n"), fflush(lLog);
                      
                      // First verify if the selected track can be played
                      int lFocus  = FindFocusItem( GetDlgItem( pWindow, IDC_GAME_LIST ) );
-                     if(lLog) fprintf(lLog, "FindFocusItem returned: %d\n", lFocus), fflush(lLog);
 
                      if( (lFocus != -1)&&(mThis->mGameList[lFocus].mAvailCode==eTrackAvail) )
                      {
                         BOOL lSuccess = FALSE;
 
                         // Cache game data BEFORE calling JoinGameOp to avoid corruption
-                        if(lLog) fprintf(lLog, "Caching game data before JoinGameOp\n"), fflush(lLog);
                         CString lGameTrack = mThis->mGameList[lFocus].mTrack;
                         int lGameNbLap = mThis->mGameList[lFocus].mNbLap;
                         BOOL lGameAllowWeapons = mThis->mGameList[lFocus].mAllowWeapons;
@@ -2951,43 +2884,31 @@ BOOL CALLBACK MR_InternetRoom::RoomCallBack( HWND pWindow, UINT  pMsgId, WPARAM 
                         BOOL lGameServerHosted = mThis->mGameList[lFocus].mServerHosted;
                         CString lGameServerAddr = mThis->mGameList[lFocus].mServerAddr;
                         unsigned lGameServerPort = mThis->mGameList[lFocus].mServerPort;
-                        if(lLog) fprintf(lLog, "Game data cached: %s, laps=%d, IP=%s:%d\n", (const char*)lGameTrack, lGameNbLap, (const char*)lGameIPAddr, lGamePort), fflush(lLog);
 
-                        if(lLog) fprintf(lLog, "Calling JoinGameOp\n"), fflush(lLog);
                         // Register to the InternetServer
                         lSuccess = mThis->JoinGameOp( pWindow, lFocus );
-                        if(lLog) fprintf(lLog, "JoinGameOp returned: %d\n", lSuccess), fflush(lLog);
 
                         if( lSuccess )
                         {
-                           if(lLog) fprintf(lLog, "About to call MR_TrackOpen\n"), fflush(lLog);
                            // Try to load the track using cached data
                            MR_RecordFile* lTrackFile = MR_TrackOpen( pWindow, lGameTrack, mThis->mAllowRegistred );
-                           if(lLog) fprintf(lLog, "MR_TrackOpen returned\n"), fflush(lLog);
                            
-                           if(lLog) fprintf(lLog, "About to call LoadNew with track=%s\n", (const char*)lGameTrack), fflush(lLog);
                            lSuccess = mThis->mSession->LoadNew( lGameTrack, lTrackFile, lGameNbLap, lGameAllowWeapons, mThis->mVideoBuffer );
-                           if(lLog) fprintf(lLog, "LoadNew returned: %d\n", lSuccess), fflush(lLog);
 
                            if( lSuccess )
                            {
                               // connect to the game server
                               CString lCurrentTrack;
 
-                              if(lLog) fprintf(lLog, "About to format track label\n"), fflush(lLog);
                               lCurrentTrack.Format( "%s  %d laps %s", (const char*)lGameTrack, lGameNbLap, lGameAllowWeapons?"with weapons":"no weapons" );
-                              if(lLog) fprintf(lLog, "Track label: %s\n", (const char*)lCurrentTrack), fflush(lLog);
 
                               // Phase 4: Check if this is a server-hosted race and set connection mode
-                              if(lLog) fprintf(lLog, "Server hosted: %d\n", lGameServerHosted), fflush(lLog);
                               if( lGameServerHosted )
                               {
-                                 if(lLog) fprintf(lLog, "Setting SERVER_HOSTED mode with addr=%s port=%d\n", (const char*)lGameServerAddr, lGameServerPort), fflush(lLog);
                                  mThis->mSession->SetConnectionMode( MR_CONNECTION_SERVER_HOSTED, (const char*)lGameServerAddr, lGameServerPort );
                               }
                               else
                               {
-                                 if(lLog) fprintf(lLog, "Setting PEER_TO_PEER mode\n"), fflush(lLog);
                                  mThis->mSession->SetConnectionMode( MR_CONNECTION_PEER_TO_PEER );
                               }
 
@@ -3000,34 +2921,24 @@ BOOL CALLBACK MR_InternetRoom::RoomCallBack( HWND pWindow, UINT  pMsgId, WPARAM 
                                  lConnectPort = lGameServerPort;
                               }
                               
-                              if(lLog) fprintf(lLog, "About to call ConnectToServer with addr=%s port=%d (hosted=%d)\n", lConnectAddr, lConnectPort, lGameServerHosted), fflush(lLog);
                               lSuccess = mThis->mSession->ConnectToServer( pWindow, lConnectAddr, lConnectPort, lCurrentTrack, &mThis->mModelessDlg, MRM_DLG_END_JOIN );
-                              if(lLog) fprintf(lLog, "ConnectToServer returned: %d\n", lSuccess), fflush(lLog);
                            }
 
                            if( !lSuccess )
                            {
-                              if(lLog) fprintf(lLog, "lSuccess is FALSE, calling LeaveGameOp\n"), fflush(lLog);
                               // Unregister from Game
                               mThis->LeaveGameOp( pWindow );
                            }
                         }
                         
-                        if(lLog) fclose(lLog);
                      }
                   }
                }
                catch(const std::exception& ex)
                {
-                  FILE* lLog = NULL;
-                  if(lLog) fprintf(lLog, "EXCEPTION in IDC_JOIN: %s\n", ex.what()), fflush(lLog);
-                  if(lLog) fclose(lLog);
                }
                catch(...)
                {
-                  FILE* lLog = NULL;
-                  if(lLog) fprintf(lLog, "UNKNOWN EXCEPTION in IDC_JOIN\n"), fflush(lLog);
-                  if(lLog) fclose(lLog);
                }
                
                break;
@@ -3104,8 +3015,6 @@ BOOL CALLBACK MR_InternetRoom::RoomCallBack( HWND pWindow, UINT  pMsgId, WPARAM 
                      // Send ADD_GAME_HOSTED command to InternetRoom
                      lSuccess = mThis->AddGameHostedOp( pWindow, lCurrentTrack, lCurrentTrack, lNbLap, lAllowWeapons );
 
-                     MessageBox( pWindow, lSuccess ? "AddGameHostedOp succeeded" : "AddGameHostedOp FAILED", "DEBUG", MB_OK );
-
                      if( lSuccess )
                      {
                         // Mark this player as the game creator
@@ -3119,12 +3028,6 @@ BOOL CALLBACK MR_InternetRoom::RoomCallBack( HWND pWindow, UINT  pMsgId, WPARAM 
 
                         // Set connection mode to server-hosted before connecting
                         mThis->mSession->SetConnectionMode( MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort );
-
-                        // DEBUG: Confirm we're attempting server-hosted connection
-                        CString lConnectionMessage;
-                        lConnectionMessage.Format( "Attempting to connect to RaceServer on %s:%u...",
-                                                   (const char*)gRaceServerHost, gRaceServerPort );
-                        MessageBox( pWindow, lConnectionMessage, "Server-Hosted Race", MB_ICONINFORMATION|MB_OK|MB_APPLMODAL );
 
                         // Connect to RaceServer as a client (not as a peer master)
                         lSuccess = mThis->mSession->ConnectToServer( pWindow, gRaceServerHost, gRaceServerPort, (const char*)lTrackName, &mThis->mModelessDlg, MRM_DLG_END_ADD );
@@ -3366,20 +3269,6 @@ BOOL CALLBACK MR_InternetRoom::NetOpCallBack( HWND pWindow, UINT  pMsgId, WPARAM
 
             // Initiate the request
             mThis->mOpRequest.Send( pWindow, gServerList[gCurrentServerEntry].mAddress, gServerList[gCurrentServerEntry].mPort, mThis->mNetOpRequest );
-
-            // DEBUG: Log the actual send call
-            {
-               char lDebugBuf[512];
-               sprintf(lDebugBuf, "DEBUG NetOpCallBack: Calling Send with ServerEntry=%d, Name=%s, IP=%u.%u.%u.%u, Port=%u",
-                       gCurrentServerEntry,
-                       (const char*)gServerList[gCurrentServerEntry].mName,
-                       (gServerList[gCurrentServerEntry].mAddress >> 24) & 0xFF,
-                       (gServerList[gCurrentServerEntry].mAddress >> 16) & 0xFF,
-                       (gServerList[gCurrentServerEntry].mAddress >> 8) & 0xFF,
-                       (gServerList[gCurrentServerEntry].mAddress) & 0xFF,
-                       gServerList[gCurrentServerEntry].mPort);
-               OutputDebugString(lDebugBuf);
-            }
 
             // start a timeout timer
             SetTimer( pWindow, OP_TIMEOUT_EVENT, OP_TIMEOUT, NULL );            

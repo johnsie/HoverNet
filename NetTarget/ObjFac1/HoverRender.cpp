@@ -108,16 +108,6 @@ MR_HoverRender::MR_HoverRender( const MR_ObjectFromFactoryId& pId )
    lContSoundBuf = gObjectFactoryData->mResourceLib.GetContinuousSound( MR_SND_FRICTION );
    mFrictionSound = (lContSoundBuf != NULL) ? lContSoundBuf->GetSound() : NULL;
 
-   // Debug logging for sound system
-   {
-      FILE* logFile = NULL;
-      if(logFile) {
-         fprintf(logFile, "[HoverRender] Motor sound: %p, Friction sound: %p\n", mMotorSound, mFrictionSound);
-         fflush(logFile);
-         fclose(logFile);
-      }
-   }
-
    for( int lCounter = 0; lCounter < 10; lCounter++ )
    {
       mCockpitBitmap[ lCounter ] = gObjectFactoryData->mResourceLib.GetBitmap( MR_CAR_COCKPIT1+lCounter );
@@ -138,22 +128,6 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
                              int      pHoverId,
                              int      pModel        )
 {
-   // DIAGNOSTIC: Log RECEIVED parameters at function entry
-   // This happens BEFORE any modifications to detect if they're already corrupted
-   static int entry_count = 0;
-   if( entry_count % 30 == 0 )
-   {
-      FILE* entryLog = NULL;
-      if( entryLog )
-      {
-         fprintf(entryLog, "[Entry #%d] RECEIVED: Id=%d Mod=%d (pDest=%p)\n",
-            entry_count, pHoverId, pModel, pDest);
-         fflush(entryLog);
-         fclose(entryLog);
-      }
-   }
-   entry_count++;
-
    // DEFENSIVE: Validate all input parameters
    if( pDest == NULL ) return;
    
@@ -200,22 +174,7 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
       lHoverId = pHoverId;  // Valid ID - use it
    }
    // else: stick with default ID 0
-   
-   // DIAGNOSTIC: Log FINAL parameters to be used for rendering
-   static int final_count = 0;
-   if( final_count % 30 == 0 )
-   {
-      FILE* finalLog = NULL;
-      if( finalLog )
-      {
-         fprintf(finalLog, "[Final #%d] Using: Model=%d HoverId=%d (Received: %d, %d)\n",
-            final_count, lModel, lHoverId, pModel, pHoverId);
-         fflush(finalLog);
-         fclose(finalLog);
-      }
-   }
-   final_count++;
-   
+
    // DEFENSIVE: Check for NaN or infinity in position
    if( !_finite(pPosition.mX) || !_finite(pPosition.mY) || !_finite(pPosition.mZ) )
    {
@@ -232,66 +191,7 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
    // IMPORTANT: We only render if we have a valid matrix
    // The large tolerance above should make this succeed in almost all cases
    // If it still fails, skip rendering rather than crash
-   
-   // DIAGNOSTIC: Aggressive logging to trace hovercraft rendering
-   static int total_render_calls = 0;
-   static int successful_renders = 0;
-   static int failed_matrix_calls = 0;
-   static int first_call = 1;
-   
-   total_render_calls++;
-   
-   // Log STARTUP info once
-   if( first_call )
-   {
-      FILE* startLog = NULL;
-      if( startLog )
-      {
-         fprintf(startLog, "=== RENDER FUNCTION CALLED ===\n");
-         fprintf(startLog, "Calling Render with:\n");
-         fprintf(startLog, "  pHoverId (int) = %d\n", pHoverId);
-         fprintf(startLog, "  pModel (int) = %d\n", pModel);
-         fprintf(startLog, "  pMotorOn (BOOL) = %d\n", pMotorOn);
-         fprintf(startLog, "  Position.X = %.1f\n", pPosition.mX);
-         fprintf(startLog, "  Position.Y = %.1f\n", pPosition.mY);
-         fprintf(startLog, "  Position.Z = %.1f\n", pPosition.mZ);
-         fprintf(startLog, "  MatrixOK = %d\n", matrix_ok);
-         fflush(startLog);
-         fclose(startLog);
-      }
-      first_call = 0;
-   }
-   
-   // Log every 30th call  
-   if( total_render_calls % 30 == 0 )
-   {
-      FILE* allLog = NULL;
-      if( allLog )
-      {
-         fprintf(allLog, "[#%5d] X=%.0f Y=%.0f Z=%.0f Id=%d Mod=%d OK=%d\n",
-            total_render_calls, pPosition.mX, pPosition.mY, pPosition.mZ, lHoverId, lModel, matrix_ok);
-         fflush(allLog);
-         fclose(allLog);
-      }
-   }
-   
-   if( matrix_ok )
-   {
-      successful_renders++;
-   }
-   else
-   {
-      failed_matrix_calls++;
-      FILE* failLog = NULL;
-      if( failLog )
-      {
-         fprintf(failLog, "[FAIL #%d] at X=%.0f Y=%.0f Z=%.0f, HoverId=%d Model=%d\n",
-            failed_matrix_calls, pPosition.mX, pPosition.mY, pPosition.mZ, lHoverId, lModel);
-         fflush(failLog);
-         fclose(failLog);
-      }
-   }
-   
+
    if( matrix_ok )
    {
       int lSeq   = pMotorOn?1:0;
@@ -328,26 +228,6 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
          lActor = mActor0;  // Default to Electro Car
       }
 
-      // DEBUG: Log render calls to diagnose coloring issue
-      static int render_count = 0;
-      FILE* logFile = NULL;
-      if( logFile && (render_count % 60 == 0) )  // Log every 60th call
-      {
-         fprintf(logFile, "[Render #%d] Model=%d, Motor=%s, HoverId=%d, Actor=%p, Draw=%s, Matrix=%s\n",
-            render_count, lModel, pMotorOn ? "ON" : "OFF", lHoverId,
-            lActor, lActor != NULL ? "YES" : "NO", matrix_ok ? "OK" : "FAILED");
-         
-         if( lActor == NULL )
-         {
-            fprintf(logFile, "  WARNING: Actor is NULL! mActor0=%p, mActor1=%p, mActor2=%p\n",
-               mActor0, mActor1, mActor2);
-            fprintf(logFile, "  gObjectFactoryData=%p\n", gObjectFactoryData);
-         }
-         fflush(logFile);
-         fclose(logFile);
-      }
-      render_count++;
-
       // DEFENSIVE: Only draw if actor is valid
       if( lActor != NULL )
       {
@@ -368,21 +248,6 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
    {
       // Matrix computation failed even with 10 million unit tolerance
       // IMPORTANT: Still render with fallback identity matrix so craft doesn't disappear
-      static int failure_count = 0;
-      failure_count++;
-      
-      if( failure_count <= 3 )
-      {
-         FILE* failLog = NULL;
-         if( failLog )
-         {
-            fprintf(failLog, "[FAIL #%d] Pos=(%.0f, %.0f, %.0f) HoverId=%d Model=%d\n",
-               failure_count, pPosition.mX, pPosition.mY, pPosition.mZ, pHoverId, pModel);
-            fflush(failLog);
-            fclose(failLog);
-         }
-      }
-      
       // Create identity matrix as safe fallback
       // Identity rotation: [1 0; 0 1], Displacement at origin
       MR_PositionMatrix identityMatrix;

@@ -189,37 +189,6 @@ BOOL CheckKeyState( int pKeyIndex )
          // Must test for the bit, not just assign directly to BOOL
          SHORT keyState = GetAsyncKeyState( KeyChoice[ pKeyIndex ].mKeyValue );
          lReturnValue = (keyState & 0x8000) != 0;
-         
-         // DEBUG: Log key press attempts
-         static int debugCount = 0;
-         static int focusLogCount = 0;
-         if( debugCount % 30 == 0 || lReturnValue )
-         {
-            FILE* dbgLog = NULL;
-            if( dbgLog )
-            {
-               fprintf(dbgLog, "[CheckKeyState] Index=%d, KeyValue=%d, Raw=%d (0x%04X), Masked=%d, Return=%d\n",
-                  pKeyIndex, KeyChoice[ pKeyIndex ].mKeyValue, keyState, (unsigned short)keyState, (keyState & 0x8000), lReturnValue);
-               fflush(dbgLog);
-               fclose(dbgLog);
-            }
-         }
-         
-         // Log focus every 60 calls
-         if( focusLogCount % 60 == 0 )
-         {
-            HWND foreground = GetForegroundWindow();
-            HWND gameWindow = GetActiveWindow();
-            FILE* focusLog = NULL;
-            if( focusLog )
-            {
-               fprintf(focusLog, "[FocusCheck] Foreground=%p, ActiveWindow=%p\n", foreground, gameWindow);
-               fflush(focusLog);
-               fclose(focusLog);
-            }
-         }
-         focusLogCount++;
-         debugCount++;
          break;
       }
 
@@ -1073,42 +1042,28 @@ int MR_GameApp::MainLoop()
    MSG  lMessage;
    BOOL lEofGame = FALSE;
    int lFrameCount = 0;
-   FILE *logFile = NULL;
 
-   if(logFile) fprintf(logFile, "--- MainLoop START ---\n");
-   if(logFile) { fprintf(logFile, "Frame 0 STARTUP: About to enter while loop\n"); fflush(logFile); }
-   if(logFile) fflush(logFile);
 
    while( !lEofGame )  // Run indefinitely
    {
-      if(logFile) { fprintf(logFile, "Frame %d: Checking messages\n", lFrameCount); fflush(logFile); }
 
       // Validate window before message pump
-      if(logFile) { fprintf(logFile, "Frame %d: mMainWindow = %p\n", lFrameCount, mMainWindow); fflush(logFile); }
       if( mMainWindow == NULL ) {
-         if(logFile) { fprintf(logFile, "Frame %d: ERROR - mMainWindow is NULL!\n", lFrameCount); fflush(logFile); }
          break;
       }
-      if(logFile) { fprintf(logFile, "Frame %d: About to call IsWindow\n", lFrameCount); fflush(logFile); }
       BOOL windowValid = IsWindow(mMainWindow);
-      if(logFile) { fprintf(logFile, "Frame %d: IsWindow returned %d\n", lFrameCount, (int)windowValid); fflush(logFile); }
       if( !windowValid ) {
-         if(logFile) { fprintf(logFile, "Frame %d: ERROR - mMainWindow is invalid!\n", lFrameCount); fflush(logFile); }
          break;
       }
 
       // Check for messages without blocking
-      if(logFile) { fprintf(logFile, "Frame %d: About to call PeekMessage\n", lFrameCount); fflush(logFile); }
       BOOL hasMessage = PeekMessage( &lMessage, mMainWindow, 0, 0, PM_REMOVE);
-      if(logFile) { fprintf(logFile, "Frame %d: PeekMessage returned %d\n", lFrameCount, (int)hasMessage); fflush(logFile); }
 
       if( hasMessage )
       {
-         if(logFile) { fprintf(logFile, "Frame %d: Got message %d\n", lFrameCount, lMessage.message); fflush(logFile); }
 
          if( lMessage.message == WM_QUIT )
          {
-            if(logFile) { fprintf(logFile, "Frame %d: WM_QUIT received\n", lFrameCount); fflush(logFile); }
             lEofGame = TRUE;
          }
          else if( !TranslateAccelerator( mMainWindow, mAccelerators, &lMessage ) )
@@ -1120,18 +1075,15 @@ int MR_GameApp::MainLoop()
       else
       {
          // No message, do game processing
-         if(logFile) { fprintf(logFile, "Frame %d: No message, processing game\n", lFrameCount); fflush(logFile); }
 
          if( mCurrentSession != NULL )
          {
             try
             {
-               if(logFile) { fprintf(logFile, "Frame %d:   About to call mCurrentSession->Process()\n", lFrameCount); fflush(logFile); }
 
                // Game processing
                mCurrentSession->Process();
 
-               if(logFile) { fprintf(logFile, "Frame %d:   Process() succeeded\n", lFrameCount); fflush(logFile); }
                
                // FIX: Replicate the "unfocused effect" that stops flickering
                // When window loses focus (menu/dialog opens), flickering stops because:
@@ -1149,12 +1101,10 @@ int MR_GameApp::MainLoop()
                // Skipping presentation causes color corruption from partial renders
                BOOL shouldPresent = TRUE;
                
-               if(logFile) { fprintf(logFile, "Frame %d:   About to call RefreshView() - shouldPresent=%d\n", lFrameCount, shouldPresent ? 1 : 0); fflush(logFile); }
                
                // Refresh display - present every frame for complete renders
                RefreshView(shouldPresent);
 
-               if(logFile) { fprintf(logFile, "Frame %d:   RefreshView() succeeded\n", lFrameCount); fflush(logFile); }
                
                // Use consistent 16ms timing for 60Hz rendering (~16.67ms per frame)
                // This ensures smooth rendering without frame skipping artifacts
@@ -1164,38 +1114,30 @@ int MR_GameApp::MainLoop()
                
                // Log every 100 frames
                if(lFrameCount % 100 == 0) {
-                  if(logFile) { fprintf(logFile, "Frame %d: Milestone - 100 frames checkpoint\n", lFrameCount); fflush(logFile); }
                }
             }
             catch(const std::exception &e)
             {
                // Catch and log exceptions
-               if(logFile) { fprintf(logFile, "Frame %d: STD EXCEPTION: %s\n", lFrameCount, e.what()); fflush(logFile); }
                lEofGame = TRUE;
             }
             catch(...)
             {
                // Catch and log unknown exceptions
-               if(logFile) { fprintf(logFile, "Frame %d: UNKNOWN EXCEPTION CAUGHT - EXITING\n", lFrameCount); fflush(logFile); }
                lEofGame = TRUE;
             }
          }
          else
          {
-            if(logFile) { fprintf(logFile, "Frame %d: mCurrentSession is NULL\n", lFrameCount); fflush(logFile); }
             Sleep(10);
          }
       }
    }
 
-   if(logFile) { fprintf(logFile, "MainLoop exited after %d frames\n", lFrameCount); fflush(logFile); }
 
-   if(logFile) { fprintf(logFile, "MainLoop: About to call Clean()\n"); fflush(logFile); fclose(logFile); logFile = NULL; }
 
    Clean();
 
-   logFile = NULL;
-   if(logFile) { fprintf(logFile, "--- MainLoop END ---\n"); fflush(logFile); fclose(logFile); }
 
    return 0;
 }
@@ -1314,61 +1256,49 @@ BOOL MR_GameApp::InitGame()
    char lInitLogPath[MAX_PATH] = { 0 };
    GetTempPathA( sizeof(lInitLogPath), lInitLogPath );
    strcat_s( lInitLogPath, sizeof(lInitLogPath), "HoverNet-Game2-Init.log" );
-   FILE* logFile = NULL;
-   if(logFile) fprintf(logFile, "\n--- MR_GameApp::InitGame START ---\n"), fflush(logFile);
    
    BOOL lReturnValue =TRUE;
 
-   if(logFile) fprintf(logFile, "Calling InitCommonControls\n"), fflush(logFile);
    InitCommonControls(); // Allow some special and complex controls
  
    // Display a Flash window
    // TODO
 
    // Init needed modules
-   if(logFile) fprintf(logFile, "Initializing modules\n"), fflush(logFile);
    MR_InitTrigoTables();
    MR_InitFuzzyModule();
    MR_DllObjectFactory::Init();
    MR_MainCharacter::RegisterFactory();
 
    // Load accelerators
-   if(logFile) fprintf(logFile, "Loading accelerators\n"), fflush(logFile);
    mAccelerators = LoadAccelerators( mInstance, MAKEINTRESOURCE( IDR_ACCELERATOR ));
 
-   if(logFile) fprintf(logFile, "Creating main window\n"), fflush(logFile);
    lReturnValue = CreateMainWindow();
 
    if( lReturnValue )
    {
-      if(logFile) fprintf(logFile, "Creating video buffer\n"), fflush(logFile);
       mVideoBuffer = new MR_VideoBuffer( mMainWindow, mGamma, mContrast, mBrightness );
    }
 
    if( lReturnValue )
    {
-      if(logFile) fprintf(logFile, "Calling SetVideoMode (window mode)\n"), fflush(logFile);
       
       // Now supports GDI fallback rendering when DirectDraw initialization fails
       try {
          if( !mVideoBuffer->SetVideoMode() )
          {
-            if(logFile) fprintf(logFile, "WARNING: SetVideoMode failed\n"), fflush(logFile);
             lReturnValue = FALSE;
          }
          else {
-            if(logFile) fprintf(logFile, "SetVideoMode succeeded (DirectDraw or GDI mode)\n"), fflush(logFile);
          }
       }
       catch(...) {
-         if(logFile) fprintf(logFile, "EXCEPTION in SetVideoMode\n"), fflush(logFile);
          lReturnValue = FALSE;
       }
    }
 
    if( lReturnValue )
    {  
-      if(logFile) fprintf(logFile, "Skipping movie window for faster startup\n"), fflush(logFile);
       // FOR TESTING: Skip MCI movie which can hang on modern systems
       // mMovieWnd = MCIWndCreate( mMainWindow, 
       //                          mInstance,
@@ -1381,18 +1311,13 @@ BOOL MR_GameApp::InitGame()
 
    if( lReturnValue )
    {
-      if(logFile) fprintf(logFile, "Calling OnDisplayChange\n"), fflush(logFile);
       try {
          OnDisplayChange();
-         if(logFile) fprintf(logFile, "OnDisplayChange completed\n"), fflush(logFile);
       } catch(...) {
-         if(logFile) fprintf(logFile, "EXCEPTION in OnDisplayChange\n"), fflush(logFile);
       }
    }
 
-   if(logFile) fprintf(logFile, "Initialization complete; waiting for a menu command\n"), fflush(logFile);
    
-   if(logFile) fclose(logFile);
 
    return lReturnValue;
 }
@@ -1489,8 +1414,6 @@ void MR_GameApp::RenderGameInfoOverlay( MR_VideoBuffer* pDest, const MR_ClientSe
 void MR_GameApp::RefreshView(BOOL pShouldPresent)
 {
    static int lColor = 0;
-   FILE *logFile = NULL;
-   if(logFile) { fprintf(logFile, "RefreshView: ENTERED - pShouldPresent=%d\n", pShouldPresent ? 1 : 0); fflush(logFile); fclose(logFile); }
 
    // CRITICAL: Skip rendering if a menu or modal dialog is active
    // This allows Windows to draw menus on top of the game window
@@ -1502,8 +1425,6 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
    // In this case, skip rendering to let Windows draw the menu/dialog
    if (foregroundWindow != mMainWindow || activeWindow != mMainWindow)
    {
-      logFile = NULL;
-      if(logFile) { fprintf(logFile, "RefreshView: SKIPPED - modal dialog or menu is active (foreground=%p, active=%p, main=%p)\n", foregroundWindow, activeWindow, mMainWindow); fflush(logFile); fclose(logFile); }
       return;  // Skip rendering entirely when menu/dialog is active
    }
 
@@ -1511,23 +1432,15 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
 
    try {
       // Game processing
-      logFile = NULL;
-      if(logFile) { fprintf(logFile, "RefreshView: mVideoBuffer = %p\n", mVideoBuffer); fflush(logFile); fclose(logFile); }
       if( mVideoBuffer != NULL )
       {
-         logFile = NULL;
-         if(logFile) { fprintf(logFile, "RefreshView: About to call Lock()\n"); fflush(logFile); fclose(logFile); }
          if( mVideoBuffer->Lock() )
          {
             bLocked = TRUE;  // Mark that we successfully locked
-            logFile = NULL;
-            if(logFile) { fprintf(logFile, "RefreshView: Lock() succeeded, mCurrentSession=%p\n", mCurrentSession); fflush(logFile); fclose(logFile); }
             
             try {
                if( mCurrentSession != NULL )
                {
-               logFile = NULL;
-               if(logFile) { fprintf(logFile, "RefreshView: mCurrentSession is NOT NULL, proceeding with rendering\n"); fflush(logFile); fclose(logFile); }
                MR_SimulationTime lTime = mCurrentSession->GetSimulationTime();
 
                if( !gKeyFilled && (lTime<20000) )
@@ -1558,16 +1471,10 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
                   }
                }
 
-               logFile = NULL;
-               if(logFile) { fprintf(logFile, "RefreshView: MODE CHECK - mCurrentMode=%d, e3DView=%d, eDebugView=%d\n", (int)mCurrentMode, (int)e3DView, (int)eDebugView); fflush(logFile); fclose(logFile); }
 
                if( mCurrentMode == e3DView )
                {
-                  logFile = NULL;
-                  if(logFile) { fprintf(logFile, "RefreshView: ENTERING e3DView block\n"); fflush(logFile); fclose(logFile); }
                   
-                  logFile = NULL;
-                  if(logFile) { fprintf(logFile, "RefreshView: In e3DView mode\n"); fflush(logFile); fclose(logFile); }
                   
                      // Initialization: decrement mClrScrTodo and DO NOT call DrawBackground
                      // DrawBackground is no longer needed - the SDL2 adapter handles buffer clearing
@@ -1577,73 +1484,43 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
                         mClrScrTodo--;
                      }
 
-                     logFile = NULL;
-                     if(logFile) { fprintf(logFile, "RefreshView: mObserver1=%p\n", mObserver1); fflush(logFile); fclose(logFile); }
                      
                      MR_MainCharacter* lCharacter1 = mCurrentSession->GetMainCharacter();
-                     logFile = NULL;
-                     if(logFile) { fprintf(logFile, "RefreshView: GetMainCharacter() returned %p\n", lCharacter1); fflush(logFile); fclose(logFile); }
                      
                      if( mObserver1 != NULL && lCharacter1 != NULL )
                      {
-                        logFile = NULL;
-                        if(logFile) { fprintf(logFile, "RefreshView: About to call Observer1 RenderNormalDisplay\n"); fflush(logFile); fclose(logFile); }
                         
                         try {
                            mObserver1->RenderNormalDisplay( mVideoBuffer, mCurrentSession, lCharacter1, lTime, mCurrentSession->GetBackImage() );
-                           logFile = NULL;
-                           if(logFile) { fprintf(logFile, "RefreshView: Observer1 RenderNormalDisplay completed\n"); fflush(logFile); fclose(logFile); }
                         }
                         catch(...) {
-                           logFile = NULL;
-                           if(logFile) { fprintf(logFile, "RefreshView: EXCEPTION in Observer1 RenderNormalDisplay!\n"); fflush(logFile); fclose(logFile); }
                         }
                      }
                      else
                      {
-                        logFile = NULL;
-                        if(logFile) { fprintf(logFile, "RefreshView: Cannot render - observer1=%p, character1=%p\n", mObserver1, lCharacter1); fflush(logFile); fclose(logFile); }
                      }
 
-                  logFile = NULL;
-                  if(logFile) { fprintf(logFile, "RefreshView: mObserver2=%p\n", mObserver2); fflush(logFile); fclose(logFile); }
                   
                   MR_MainCharacter* lCharacter2 = mCurrentSession->GetMainCharacter2();
-                  logFile = NULL;
-                  if(logFile) { fprintf(logFile, "RefreshView: GetMainCharacter2() returned %p\n", lCharacter2); fflush(logFile); fclose(logFile); }
                      
                      if( mObserver2 != NULL && lCharacter2 != NULL )
                      {
-                        logFile = NULL;
-                        if(logFile) { fprintf(logFile, "RefreshView: About to call Observer2 RenderNormalDisplay\n"); fflush(logFile); fclose(logFile); }
                         
                         try {
                            mObserver2->RenderNormalDisplay( mVideoBuffer, mCurrentSession, lCharacter2, lTime, mCurrentSession->GetBackImage() );
-                           logFile = NULL;
-                           if(logFile) { fprintf(logFile, "RefreshView: Observer2 RenderNormalDisplay completed\n"); fflush(logFile); fclose(logFile); }
                         }
                         catch(...) {
-                           logFile = NULL;
-                           if(logFile) { fprintf(logFile, "RefreshView: EXCEPTION in Observer2 RenderNormalDisplay!\n"); fflush(logFile); fclose(logFile); }
                         }
                      }
                      else
                      {
-                        logFile = NULL;
-                        if(logFile) { fprintf(logFile, "RefreshView: Cannot render observer2 - observer2=%p, character2=%p\n", mObserver2, lCharacter2); fflush(logFile); fclose(logFile); }
                      }
 
                   // Render UI overlay with game information AFTER 3D view
-                  logFile = NULL;
-                  if(logFile) { fprintf(logFile, "RefreshView: About to render UI overlay\n"); fflush(logFile); fclose(logFile); }
                   
                   RenderGameInfoOverlay( mVideoBuffer, mCurrentSession, lCharacter1, lCharacter2, lTime );
                   
-                  logFile = NULL;
-                  if(logFile) { fprintf(logFile, "RefreshView: UI overlay rendering completed\n"); fflush(logFile); fclose(logFile); }
                   
-                  logFile = NULL;
-                  if(logFile) { fprintf(logFile, "RefreshView: EXITING e3DView block\n"); fflush(logFile); fclose(logFile); }
                }
                else if( mCurrentMode == eDebugView )
                {
@@ -1666,12 +1543,8 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
             }
             else
             {
-               logFile = NULL;
-               if(logFile) { fprintf(logFile, "RefreshView: mCurrentSession is NULL! Clearing buffer instead of rendering\n"); fflush(logFile); fclose(logFile); }
                mVideoBuffer->Clear( lColor++ );
             }
-            logFile = NULL;
-            if(logFile) { fprintf(logFile, "RefreshView: About to call Unlock()\n"); fflush(logFile); fclose(logFile); }
             
             if( bLocked && mVideoBuffer != NULL )
             {
@@ -1683,21 +1556,15 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
                   {
                      MemoryBarrier();
                      mVideoBuffer->Unlock();
-                     logFile = NULL;
-                     if(logFile) { fprintf(logFile, "RefreshView: Unlock() and Present() called\n"); fflush(logFile); fclose(logFile); }
                   }
                   else
                   {
                      // Skip presentation - keeps last frame on screen instead of partial render
                      // This replicates the "unfocused window effect" that eliminates flickering
                      mVideoBuffer->Unlock();
-                     logFile = NULL;
-                     if(logFile) { fprintf(logFile, "RefreshView: Unlock() called but Present SKIPPED to stabilize display\n"); fflush(logFile); fclose(logFile); }
                   }
                }
                catch(...) {
-                  logFile = NULL;
-                  if(logFile) { fprintf(logFile, "RefreshView: EXCEPTION in Unlock()!\n"); fflush(logFile); fclose(logFile); }
                }
             }
             
@@ -1709,19 +1576,13 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
             {
                // Inner catch - catches exceptions during rendering
                // CRITICAL: Must unlock the buffer even if rendering fails
-               logFile = NULL;
-               if(logFile) { fprintf(logFile, "RefreshView: CAUGHT EXCEPTION in rendering pipeline, attempting Unlock()\n"); fflush(logFile); fclose(logFile); }
                
                if( bLocked && mVideoBuffer != NULL )
                {
                   try {
                      mVideoBuffer->Unlock();
-                     logFile = NULL;
-                     if(logFile) { fprintf(logFile, "RefreshView: Emergency Unlock() succeeded\n"); fflush(logFile); fclose(logFile); }
                   }
                   catch(...) {
-                     logFile = NULL;
-                     if(logFile) { fprintf(logFile, "RefreshView: Emergency Unlock() also failed!\n"); fflush(logFile); fclose(logFile); }
                   }
                }
             }
@@ -1732,8 +1593,6 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
    catch(...)
    {
       // Outer catch - catches any uncaught exceptions
-      logFile = NULL;
-      if(logFile) { fprintf(logFile, "RefreshView: OUTER EXCEPTION CATCH\n"); fflush(logFile); fclose(logFile); }
    }
 
    // Sound processing - Using safe wrapper
@@ -1756,34 +1615,24 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
                MR_SoundServer::ApplyContinuousPlay();
             }
             catch(...) {
-               logFile = NULL;
-               if(logFile) { fprintf(logFile, "RefreshView: EXCEPTION in ApplyContinuousPlay\n"); fflush(logFile); fclose(logFile); }
             }
             
-            logFile = NULL;
-            if(logFile) { fprintf(logFile, "RefreshView: ApplyContinuousPlay completed\n"); fflush(logFile); fclose(logFile); }
          }
       }
    }
    */
-   logFile = NULL;
-   if(logFile) { fprintf(logFile, "RefreshView: EXITING (success)\n"); fflush(logFile); fclose(logFile); }
 }
 
 
 
 void MR_GameApp::ReadAssyncInputControler()
 {
-   FILE *logFile = NULL;
-   if(logFile) { fprintf(logFile, "ReadAssyncInputControler: ENTRY, mCurrentSession=%p\n", mCurrentSession); fflush(logFile); fclose(logFile); }
    
    gFirstKDBResetJoy1 = TRUE;
    gFirstKDBResetJoy2 = TRUE;
 
    if( mCurrentSession != NULL )
    {
-      logFile = NULL;
-      if(logFile) { fprintf(logFile, "ReadAssyncInputControler: Session valid, checking controls\n"); fflush(logFile); fclose(logFile); }
       
       // Check controls regardless of window focus for gameplay
       {
@@ -1794,14 +1643,10 @@ void MR_GameApp::ReadAssyncInputControler()
          int lControlState2 = 0;
 
          // Log to main loop for debugging
-         logFile = NULL;
-         if(logFile) { fprintf(logFile, "ReadAssyncInput: mMotorOn1=%d, Shift check result=%d\n", mMotorOn1, CheckKeyState(mMotorOn1)); fflush(logFile); fclose(logFile); }
 
          if( CheckKeyState( mMotorOn1 ) )
          {
             lControlState1 |= MR_MainCharacter::eMotorOn;
-            logFile = NULL;
-            if(logFile) { fprintf(logFile, "Motor ON DETECTED\n"); fflush(logFile); fclose(logFile); }
          }
 
          if( CheckKeyState(  mJump1 ) )
@@ -2133,62 +1978,42 @@ void MR_GameApp::NewLocalSession()
    int     lNbLap;
    BOOL    lAllowWeapons;
 
-   FILE* logFile = NULL;
-   if(logFile) fprintf(logFile, "\n=== NewLocalSession Start ===\n"), fflush(logFile);
    
    // Auto-load ClassicH.trk without dialog for graphics rendering
-   if(logFile) fprintf(logFile, "Auto-loading ClassicH track (bypassing dialog)\n"), fflush(logFile);
    lCurrentTrack = "ClassicH";
    lNbLap = 1;           // Default 1 lap
    lAllowWeapons = FALSE; // Default no weapons
    lSuccess = TRUE;
    
-   if(logFile) fprintf(logFile, "Track auto-selected: lCurrentTrack='%s', lNbLap=%d, lAllowWeapons=%d, lSuccess=%d\n", 
-                                 (const char*)lCurrentTrack, lNbLap, lAllowWeapons, lSuccess), fflush(logFile);
 
    if( lSuccess )
    {
-      if(logFile) fprintf(logFile, "1. About to call DeleteMovieWnd()\n"), fflush(logFile);
-      try { DeleteMovieWnd(); } catch(...) { if(logFile) fprintf(logFile, "EXCEPTION in DeleteMovieWnd\n"), fflush(logFile); throw; }
-      if(logFile) fprintf(logFile, "2. DeleteMovieWnd() succeeded\n"), fflush(logFile);
+      try { DeleteMovieWnd(); } catch(...) { throw; }
+
+      try { MR_SoundServer::Init( mMainWindow ); } catch(...) { throw; }
+
+      try { MR_DllObjectFactory::Init(); } catch(...) { throw; }
       
-      if(logFile) fprintf(logFile, "3. About to call MR_SoundServer::Init()\n"), fflush(logFile);
-      try { MR_SoundServer::Init( mMainWindow ); } catch(...) { if(logFile) fprintf(logFile, "EXCEPTION in MR_SoundServer::Init\n"), fflush(logFile); throw; }
-      if(logFile) fprintf(logFile, "4. MR_SoundServer::Init() succeeded\n"), fflush(logFile);
-      
-      if(logFile) fprintf(logFile, "4b. About to call MR_DllObjectFactory::Init()\n"), fflush(logFile);
-      try { MR_DllObjectFactory::Init(); } catch(...) { if(logFile) fprintf(logFile, "EXCEPTION in MR_DllObjectFactory::Init\n"), fflush(logFile); throw; }
-      if(logFile) fprintf(logFile, "4c. MR_DllObjectFactory::Init() succeeded\n"), fflush(logFile);
-      
-      if(logFile) fprintf(logFile, "5. About to call MR_Observer::New()\n"), fflush(logFile);
       try { 
          mObserver1 = MR_Observer::New(); 
-         if(logFile) fprintf(logFile, "6. MR_Observer::New() succeeded, pointer: %p\n", mObserver1), fflush(logFile);
       } catch(const std::exception& e) { 
-         if(logFile) fprintf(logFile, "EXCEPTION in MR_Observer::New: %s (continuing anyway)\n", e.what()), fflush(logFile);
          mObserver1 = NULL;
          // Don't set lSuccess = FALSE - we'll try to continue without the observer
       } catch(...) { 
-         if(logFile) fprintf(logFile, "UNKNOWN EXCEPTION in MR_Observer::New (continuing anyway)\n"), fflush(logFile); 
          mObserver1 = NULL;
          // Don't set lSuccess = FALSE - we'll try to continue without the observer
       }
 
-      if(logFile) fprintf(logFile, "7. About to create new MR_ClientSession\n"), fflush(logFile);
       MR_ClientSession* lCurrentSession = NULL;
       try { 
          lCurrentSession = new MR_ClientSession; 
-         if(logFile) fprintf(logFile, "8. MR_ClientSession created successfully\n"), fflush(logFile);
       } catch(...) { 
-         if(logFile) fprintf(logFile, "EXCEPTION in new MR_ClientSession\n"), fflush(logFile); 
          throw; 
       }
-      if(logFile) fprintf(logFile, "8. MR_ClientSession pointer: %p\n", lCurrentSession), fflush(logFile);
 
       // Load the selected maze
       if( lSuccess )
       {
-         if(logFile) fprintf(logFile, "About to call MR_TrackOpen for '%s'\n", (const char*)lCurrentTrack), fflush(logFile);
          
          // Verify the track file exists before opening
          char trackPath[MAX_PATH];
@@ -2201,59 +2026,47 @@ void MR_GameApp::NewLocalSession()
          strcat_s(trackPath, sizeof(trackPath), lCurrentTrack);
          strcat_s(trackPath, sizeof(trackPath), ".trk");
          
-         if(logFile) fprintf(logFile, "Checking track file at: %s\n", trackPath), fflush(logFile);
          
          HANDLE hFile = CreateFileA(trackPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
          if (hFile == INVALID_HANDLE_VALUE) {
-            if(logFile) fprintf(logFile, "ERROR: Track file not found at %s\n", trackPath), fflush(logFile);
          } else {
-            if(logFile) fprintf(logFile, "Track file verified to exist\n"), fflush(logFile);
             CloseHandle(hFile);
          }
          
          try
          {
             MR_RecordFile* lTrackFile = MR_TrackOpen( mMainWindow, lCurrentTrack, gKeyFilled );
-            if(logFile) fprintf(logFile, "MR_TrackOpen returned: %p\n", lTrackFile), fflush(logFile);
 
             if( lTrackFile )
             {
-               if(logFile) fprintf(logFile, "About to call LoadNew()\n"), fflush(logFile);
                try
                {
                   lSuccess = lCurrentSession->LoadNew( lCurrentTrack, lTrackFile, lNbLap, lAllowWeapons, mVideoBuffer );
-                  if(logFile) fprintf(logFile, "LoadNew returned: %s\n", lSuccess ? "SUCCESS" : "FAILED"), fflush(logFile);
                }
                catch( const std::exception& e )
                {
-                  if(logFile) fprintf(logFile, "std::exception in LoadNew: %s\n", e.what()), fflush(logFile);
                   lSuccess = FALSE;
                }
                catch( int e )
                {
-                  if(logFile) fprintf(logFile, "int exception in LoadNew: %d\n", e), fflush(logFile);
                   lSuccess = FALSE;
                }
                catch( ... )
                {
-                  if(logFile) fprintf(logFile, "UNKNOWN exception in LoadNew\n"), fflush(logFile);
                   lSuccess = FALSE;
                }
             }
             else
             {
-               if(logFile) fprintf(logFile, "ERROR - lTrackFile is NULL\n"), fflush(logFile);
                lSuccess = FALSE;
             }
          }
          catch( const std::exception& e )
          {
-            if(logFile) fprintf(logFile, "std::exception caught during track load: %s\n", e.what()), fflush(logFile);
             lSuccess = FALSE;
          }
          catch( ... )
          {
-            if(logFile) fprintf(logFile, "UNKNOWN EXCEPTION caught during track load\n"), fflush(logFile);
             lSuccess = FALSE;
          }
       }
@@ -2261,15 +2074,11 @@ void MR_GameApp::NewLocalSession()
       // Create the main character
       if( lSuccess )
       {
-         if(logFile) fprintf(logFile, "About to call SetSimulationTime(-6000)\n"), fflush(logFile);
          try {
             lCurrentSession->SetSimulationTime( -6000 );
-            if(logFile) fprintf(logFile, "SetSimulationTime(-6000) succeeded\n"), fflush(logFile);
          } catch(const std::exception& e) {
-            if(logFile) fprintf(logFile, "EXCEPTION in SetSimulationTime: %s\n", e.what()), fflush(logFile);
             lSuccess = FALSE;
          } catch(...) {
-            if(logFile) fprintf(logFile, "UNKNOWN EXCEPTION in SetSimulationTime\n"), fflush(logFile);
             lSuccess = FALSE;
          }
       }
@@ -2277,42 +2086,31 @@ void MR_GameApp::NewLocalSession()
       // Create the main character
       if( lSuccess )
       {
-         if(logFile) fprintf(logFile, "About to call CreateMainCharacter()\n"), fflush(logFile);
          try {
             lSuccess = lCurrentSession->CreateMainCharacter();
-            if(logFile) fprintf(logFile, "CreateMainCharacter() returned: %s\n", lSuccess ? "TRUE" : "FALSE"), fflush(logFile);
             
             // Always log room count, even if CreateMainCharacter failed
-            if(logFile) fprintf(logFile, "=== ROOM COUNT QUERY START ===\n"), fflush(logFile);
             
-            if(logFile) fprintf(logFile, "lCurrentSession = %p\n", lCurrentSession), fflush(logFile);
             
             if(lCurrentSession)
             {
                const MR_Level* pLevel = lCurrentSession->GetCurrentLevel();
-               if(logFile) fprintf(logFile, "GetCurrentLevel() returned: %p\n", pLevel), fflush(logFile);
                
                if(pLevel)
                {
                   int roomCount = pLevel->GetRoomCount();
-                  if(logFile) fprintf(logFile, "*** TRACK ROOM COUNT: %d rooms ***\n", roomCount), fflush(logFile);
                }
                else
                {
-                  if(logFile) fprintf(logFile, "ERROR: GetCurrentLevel returned NULL\n"), fflush(logFile);
                }
             }
             else
             {
-               if(logFile) fprintf(logFile, "ERROR: lCurrentSession is NULL\n"), fflush(logFile);
             }
             
-            if(logFile) fprintf(logFile, "=== ROOM COUNT QUERY END ===\n"), fflush(logFile);
          } catch(const std::exception& e) {
-            if(logFile) fprintf(logFile, "EXCEPTION in CreateMainCharacter: %s\n", e.what()), fflush(logFile);
             lSuccess = FALSE;
          } catch(...) {
-            if(logFile) fprintf(logFile, "UNKNOWN EXCEPTION in CreateMainCharacter\n"), fflush(logFile);
             lSuccess = FALSE;
          }
       }
@@ -2320,19 +2118,14 @@ void MR_GameApp::NewLocalSession()
       if( !lSuccess )
       {
          // Clean everytings
-         if(logFile) fprintf(logFile, "lSuccess is FALSE, calling Clean()\n"), fflush(logFile);
          try {
             Clean();
-            if(logFile) fprintf(logFile, "Clean() succeeded\n"), fflush(logFile);
          } catch(...) {
-            if(logFile) fprintf(logFile, "EXCEPTION during Clean()\n"), fflush(logFile);
          }
-         if(logFile) fprintf(logFile, "About to delete lCurrentSession (ptr=%p)\n", lCurrentSession), fflush(logFile);
          // NOTE: Don't actually delete lCurrentSession here, just set to NULL
          // The object might be partially constructed if LoadNew() failed
          // Setting to NULL prevents double-deletion
          lCurrentSession = NULL;
-         if(logFile) fprintf(logFile, "lCurrentSession set to NULL (not deleted)\n"), fflush(logFile);
       }
       else
       {
@@ -2350,12 +2143,6 @@ void MR_GameApp::NewLocalSession()
 
    AssignPalette();
    
-   if(logFile) fprintf(logFile, "About to close logFile\n"), fflush(logFile);
-   if( logFile )
-   {
-      fclose( logFile );
-      logFile = NULL;
-   }
 }
 
 
@@ -2618,62 +2405,47 @@ void MR_GameApp::NewInternetSession( )
    GetCurrentDirectoryA(sizeof(lLogPath), lLogPath);
    strcat_s(lLogPath, sizeof(lLogPath), "\\NewInternetSession.log");
    
-   FILE* lDebugLog = NULL;
-   if(lDebugLog) fprintf(lDebugLog, "\n=== NewInternetSession START at %I64d ===\n", __int64(timeGetTime())), fflush(lDebugLog);
 
    try
    {
       try 
       {
-         if(lDebugLog) fprintf(lDebugLog, "Step 1: Creating MR_InternetRoom\n"), fflush(lDebugLog);
          // MR_InternetRoom    lInternetRoom( gKeyFilled, gKeyFilled?mMajorID:-1, gKeyFilled?mMinorID:-1, gKeyFilled?gKey.mKeySumHard2:0, gKeyFilled?gKey.mKeySumHard3:0 );
          MR_InternetRoom    lInternetRoom( gKeyFilled, gKeyFilled?mMajorID:-1, gKeyFilled?mMinorID:-1, gKeyFilled?gKey.mIDSum:0, 0 );
 
-         if(lDebugLog) fprintf(lDebugLog, "MR_InternetRoom created OK\n"), fflush(lDebugLog);
 
          // Verify is user acknowledge
          if( AskUserToAbortGame() != IDOK )
          {
-            if(lDebugLog) fprintf(lDebugLog, "User canceled\n"), fflush(lDebugLog);
-            if(lDebugLog) fclose(lDebugLog);
             return;
          }
 
-         if(lDebugLog) fprintf(lDebugLog, "Calling Clean() and DeleteMovieWnd()\n"), fflush(lDebugLog);
          // Delete the current session
          Clean();
          DeleteMovieWnd();
          
-         if(lDebugLog) fprintf(lDebugLog, "Initializing MR_SoundServer\n"), fflush(lDebugLog);
          MR_SoundServer::Init( mMainWindow );
 
-         if(lDebugLog) fprintf(lDebugLog, "Creating MR_NetworkSession\n"), fflush(lDebugLog);
          lCurrentSession = new MR_NetworkSession( TRUE, gKeyFilled?mMajorID:-1, gKeyFilled?mMinorID:-1, mMainWindow );
 
-         if(lDebugLog) fprintf(lDebugLog, "MR_NetworkSession created OK\n"), fflush(lDebugLog);
 
          if( lSuccess )
          {
-            if(lDebugLog) fprintf(lDebugLog, "Setting player name: %s\n", (const char*)mNickName), fflush(lDebugLog);
             lCurrentSession->SetPlayerName( mNickName );
 
-            if(lDebugLog) fprintf(lDebugLog, "Calling DisplayChatRoom\n"), fflush(lDebugLog);
             try 
             {
                lSuccess = lInternetRoom.DisplayChatRoom( mMainWindow, lCurrentSession, mVideoBuffer );
             }
             catch(const std::exception& ex)
             {
-               if(lDebugLog) fprintf(lDebugLog, "DisplayChatRoom threw std::exception: %s\n", ex.what()), fflush(lDebugLog);
                lSuccess = FALSE;
             }
             catch(...)
             {
-               if(lDebugLog) fprintf(lDebugLog, "DisplayChatRoom threw unknown exception\n"), fflush(lDebugLog);
                lSuccess = FALSE;
             }
 
-            if(lDebugLog) fprintf(lDebugLog, "DisplayChatRoom returned: %d\n", lSuccess), fflush(lDebugLog);
 
             if( mNickName != lCurrentSession->GetPlayerName() )
             {
@@ -2684,55 +2456,45 @@ void MR_GameApp::NewInternetSession( )
 
          if( lSuccess )
          {
-            if(lDebugLog) fprintf(lDebugLog, "Setting simulation time\n"), fflush(lDebugLog);
             lCurrentSession->SetSimulationTime( -6000 ); // shared six-second RaceServer countdown (matches Linux)
          }
 
          if( lSuccess )
          {
-            if(lDebugLog) fprintf(lDebugLog, "Creating observer\n"), fflush(lDebugLog);
             mObserver1 = MR_Observer::New();
             
-            if(lDebugLog) fprintf(lDebugLog, "Calling CreateMainCharacter\n"), fflush(lDebugLog);
             lSuccess = lCurrentSession->CreateMainCharacter();
-            if(lDebugLog) fprintf(lDebugLog, "CreateMainCharacter returned: %d\n", lSuccess), fflush(lDebugLog);
          }
 
          
          if( !lSuccess )
          {
-            if(lDebugLog) fprintf(lDebugLog, "lSuccess is FALSE, cleaning up\n"), fflush(lDebugLog);
             // Clean everytings
             Clean();
             delete lCurrentSession;
          }
          else
          {
-            if(lDebugLog) fprintf(lDebugLog, "Setting mCurrentSession and creating game thread\n"), fflush(lDebugLog);
             mCurrentSession = lCurrentSession;
             mGameThread = MR_GameThread::New( this );
 
             if( mGameThread == NULL )
             {
-               if(lDebugLog) fprintf(lDebugLog, "MR_GameThread::New returned NULL\n"), fflush(lDebugLog);
                mCurrentSession = NULL;
                delete lCurrentSession;
             }
             else
             {
-               if(lDebugLog) fprintf(lDebugLog, "Game thread created successfully\n"), fflush(lDebugLog);
             }
          }
       }
       catch (const std::exception& e)
       {
-         if(lDebugLog) fprintf(lDebugLog, "Inner EXCEPTION caught: %s\n", e.what()), fflush(lDebugLog);
          throw;  // Re-throw to outer catch
       }
    }
    catch (const std::exception& e)
    {
-      if(lDebugLog) fprintf(lDebugLog, "EXCEPTION caught: %s\n", e.what()), fflush(lDebugLog);
       char lDetailedMsg[512];
       sprintf_s(lDetailedMsg, sizeof(lDetailedMsg), 
          "An error occurred while starting the Internet session.\n\n"
@@ -2746,7 +2508,6 @@ void MR_GameApp::NewInternetSession( )
    }
    catch (...)
    {
-      if(lDebugLog) fprintf(lDebugLog, "UNKNOWN EXCEPTION caught\n"), fflush(lDebugLog);
       MessageBoxA( mMainWindow, "An unknown error occurred while starting the Internet session.", "Error", MB_OK | MB_ICONERROR );
       if( lCurrentSession != NULL )
       {
@@ -2755,8 +2516,6 @@ void MR_GameApp::NewInternetSession( )
       Clean();
    }
    
-   if(lDebugLog) fprintf(lDebugLog, "=== NewInternetSession END ===\n"), fflush(lDebugLog);
-   if(lDebugLog) fclose(lDebugLog);
 
    AssignPalette();
  

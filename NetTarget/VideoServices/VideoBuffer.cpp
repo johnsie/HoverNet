@@ -511,14 +511,6 @@ void MR_VideoBuffer::CreatePalette( double pGamma, double pContrast, double pBri
          rgbPalette[i*3 + 2] = lPalette[i].peBlue;
       }
       
-      FILE* paletteLog = NULL;
-      if(paletteLog) {
-         fprintf(paletteLog, "CreatePalette: Setting palette via adapter, adapter=%p\n", g_SDL2GraphicsAdapter);
-         fprintf(paletteLog, "  Palette[0] = RGB(%d,%d,%d)\n", rgbPalette[0], rgbPalette[1], rgbPalette[2]);
-         fprintf(paletteLog, "  Palette[1] = RGB(%d,%d,%d)\n", rgbPalette[3], rgbPalette[4], rgbPalette[5]);
-         fflush(paletteLog);
-         fclose(paletteLog);
-      }
       
       g_SDL2GraphicsAdapter->SetPalette( rgbPalette );
       PRINT_LOG( "Updated SDL2Graphics palette from CreatePalette" );
@@ -691,24 +683,18 @@ BOOL MR_VideoBuffer::SetVideoMode()
       mYRes = lRect.bottom;
    }
    
-   FILE* dbgFile = NULL;
-   if(dbgFile) { fprintf(dbgFile, "SetVideoMode: Window dimensions: %dx%d\n", mXRes, mYRes); fflush(dbgFile); }
    
    // Always try SDL2Graphics when available for consistent rendering
    BOOL used_sdl2 = FALSE;
    BOOL sdl2_available = IsSDL2GraphicsAvailable();
-   if(dbgFile) { fprintf(dbgFile, "SetVideoMode: IsSDL2GraphicsAvailable() returned: %s\n", sdl2_available ? "TRUE" : "FALSE"); fflush(dbgFile); }
    
    if( sdl2_available )
    {
-      if(dbgFile) { fprintf(dbgFile, "SetVideoMode: SDL2Graphics available, calling InitializeSDL2Graphics...\n"); fflush(dbgFile); }
       
       BOOL init_result = InitializeSDL2Graphics( mWindow, mXRes, mYRes );
-      if(dbgFile) { fprintf(dbgFile, "SetVideoMode: InitializeSDL2Graphics returned %s, adapter=%p\n", init_result ? "TRUE" : "FALSE", g_SDL2GraphicsAdapter); fflush(dbgFile); }
       
       if( init_result && g_SDL2GraphicsAdapter != NULL )
       {
-         if(dbgFile) { fprintf(dbgFile, "SetVideoMode: SDL2Graphics initialized successfully, using SDL2 mode!\n"); fflush(dbgFile); }
          
          used_sdl2 = TRUE;
          mLineLen = mXRes;  // Linear stride for SDL2 buffer
@@ -725,23 +711,19 @@ BOOL MR_VideoBuffer::SetVideoMode()
          CreatePalette( mGamma, mContrast, mBrightness );
          
          mModeSettingInProgress = FALSE;
-         if(dbgFile) { fprintf(dbgFile, "SetVideoMode complete (SDL2 mode)\n"); fflush(dbgFile); fclose(dbgFile); }
          
          PRINT_LOG( "SetVideoMode: SDL2Graphics active, %dx%d", mXRes, mYRes );
          return TRUE;
       }
       else
       {
-         if(dbgFile) { fprintf(dbgFile, "SetVideoMode: SDL2Graphics init FAILED!\n"); fflush(dbgFile); }
       }
    }
    else
    {
-      if(dbgFile) { fprintf(dbgFile, "SetVideoMode: SDL2Graphics NOT AVAILABLE\n"); fflush(dbgFile); }
    }
    
    // GDI fallback mode
-   if(dbgFile) { fprintf(dbgFile, "Using GDI fallback mode\n"); fflush(dbgFile); }
    PRINT_LOG( "SetVideoMode: Using GDI fallback" );
    
    mLineLen = mXRes;
@@ -780,7 +762,6 @@ BOOL MR_VideoBuffer::SetVideoMode()
    
    mModeSettingInProgress = FALSE;
    
-   if(dbgFile) { fprintf(dbgFile, "SetVideoMode complete (GDI mode)\n"); fflush(dbgFile); fclose(dbgFile); }
    PRINT_LOG( "SetVideoMode: GDI mode, %dx%d", mXRes, mYRes );
    return TRUE;
 }
@@ -1009,42 +990,24 @@ BOOL MR_VideoBuffer::Lock()
    {
       // SDL2Graphics mode - use adapter for buffer access
       PRINT_LOG( "Lock: SDL2Graphics mode - requesting buffer" );
-      FILE *logFile = NULL;
-      if(logFile) { 
-         fprintf(logFile, "[Frame %d] Lock: Before Lock() - mXRes=%d, mYRes=%d, mLineLen=%d, mBuffer=%p\n", frame_count, mXRes, mYRes, mLineLen, mBuffer);
-         fprintf(logFile, "[Frame %d] Lock: About to call g_SDL2GraphicsAdapter->Lock(), adapter=%p\n", frame_count, g_SDL2GraphicsAdapter); 
-         fflush(logFile); fclose(logFile); 
-      }
-      
+
       uint8_t* lBuffer = nullptr;
-      
+
       // Add check to ensure adapter is still valid
       try {
          if( g_SDL2GraphicsAdapter->Lock( lBuffer ) )
          {
-            logFile = NULL;
-            if(logFile) { 
-               fprintf(logFile, "[Frame %d] Lock: Lock() succeeded, buffer=%p (mXRes=%d, mYRes=%d, expected size=%d)\n", 
-                       frame_count, lBuffer, mXRes, mYRes, mXRes * mYRes);
-               fflush(logFile); fclose(logFile); 
-            }
-            
             mBuffer = lBuffer;
             PRINT_LOG( "Lock: SDL2Graphics buffer acquired, returning TRUE" );
             return TRUE;
          }
          else
          {
-            logFile = NULL;
-            if(logFile) { fprintf(logFile, "[Frame %d] Lock: Lock() returned FALSE (already locked)\n", frame_count); fflush(logFile); fclose(logFile); }
-            
             PRINT_LOG( "Lock: SDL2Graphics buffer acquisition failed" );
             return FALSE;
          }
       }
       catch(...) {
-         logFile = NULL;
-         if(logFile) { fprintf(logFile, "[Frame %d] Lock: EXCEPTION caught in Lock()\n", frame_count); fflush(logFile); fclose(logFile); }
          return FALSE;
       }
    }
@@ -1134,8 +1097,6 @@ BOOL MR_VideoBuffer::Lock()
 
 void MR_VideoBuffer::Unlock()
 {
-   FILE *debugLog = NULL;
-   if(debugLog) { fprintf(debugLog, "Unlock() called\n"); fflush(debugLog); fclose(debugLog); }
    
    PRINT_LOG( "Unlock: START" );
 
@@ -1148,61 +1109,25 @@ void MR_VideoBuffer::Unlock()
    }
 
    PRINT_LOG( "Unlock: Buffer OK, checking mode" );
-   
-   FILE *logFile = NULL;
-   if(logFile) {
-      fprintf(logFile, "Unlock called: mBuffer=%p, IsSDL2Available=%d, adapter=%p\n", 
-              mBuffer, IsSDL2GraphicsAvailable(), g_SDL2GraphicsAdapter);
-      fprintf(logFile, "  mBackBuffer=%p, mDirectDraw=%p\n", mBackBuffer, mDirectDraw);
-      fflush(logFile);
-   }
 
    // Check if we're in SDL2Graphics mode (modern graphics backend)
    if( IsSDL2GraphicsAvailable() && g_SDL2GraphicsAdapter != NULL )
    {
-      if(logFile) {
-         fprintf(logFile, "  -> Taking SDL2Graphics path\n");
-         fflush(logFile); fclose(logFile);
-      }
       // SDL2Graphics mode - pass our buffer to adapter for display
       PRINT_LOG( "Unlock: SDL2Graphics mode, calling adapter Unlock with buffer=%p", mBuffer );
-      FILE *logFile2 = NULL;
-      if(logFile2) {
-         fprintf(logFile2, "Unlock: SDL2Graphics mode - buffer=%p, mXRes=%d, mYRes=%d, mLineLen=%d\n", 
-                 mBuffer, mXRes, mYRes, mLineLen);
-         fflush(logFile2); fclose(logFile2);
-      }
       
       // Wrap SDL2 Unlock call to catch potential crashes
       try {
          g_SDL2GraphicsAdapter->Unlock(mBuffer);  // Pass our buffer for display
          
          // Log successful SDL2 unlock
-         FILE *logFile3 = NULL;
-         if(logFile3) {
-            fprintf(logFile3, "SDL2 Unlock succeeded\n");
-            fflush(logFile3);
-            fclose(logFile3);
-         }
          
          // DON'T set mBuffer to NULL - keep it for the next frame
          // Setting it to NULL was causing buffer re-allocation issues
          // The buffer remains valid across Lock/Unlock cycles
-         FILE *logFile4 = NULL;
-         if(logFile4) {
-            fprintf(logFile4, "Keeping mBuffer at %p (NOT setting to NULL)\n", mBuffer);
-            fflush(logFile4);
-            fclose(logFile4);
-         }
       }
       catch(...) {
          // SDL2 Unlock crashed!
-         FILE *crashLog = NULL;
-         if(crashLog) {
-            fprintf(crashLog, "SDL2 Unlock CRASHED! mBuffer was %p\n", mBuffer);
-            fflush(crashLog);
-            fclose(crashLog);
-         }
          // Don't set mBuffer to NULL if the unlock crashed, to preserve state for debugging
       }
       
@@ -1213,20 +1138,11 @@ void MR_VideoBuffer::Unlock()
    // Check if we're in GDI fallback mode (mBackBuffer is NULL but mBuffer is allocated)
    if( mBackBuffer == NULL )
    {
-      if(logFile) {
-         fprintf(logFile, "  -> Taking GDI fallback path\n");
-         fflush(logFile); fclose(logFile);
-      }
       // GDI fallback mode - buffer is in system memory
       PRINT_LOG( "Unlock: Detected GDI mode, calling Flip()" );
       Flip();  // Display the buffer
       PRINT_LOG( "Unlock: END (GDI mode)" );
       return;
-   }
-   
-   if(logFile) {
-      fprintf(logFile, "  -> Taking DirectDraw path\n");
-      fflush(logFile); fclose(logFile);
    }
 
    // DirectDraw mode - follow original path

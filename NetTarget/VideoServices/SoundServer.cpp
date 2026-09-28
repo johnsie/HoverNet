@@ -260,18 +260,6 @@ BOOL MR_SoundBuffer::Init( const char* pData, int pNbCopy )
          alSource3f(mALSources[i], AL_POSITION, 0, 0, 0);
       }
 
-      // DEBUG: Log buffer creation
-      FILE* logFile = NULL;
-      if(logFile) {
-         fprintf(logFile, "Sound Buffer Created: Buffer=%d, Copies=%d, Freq=%d, Channels=%d, Bits=%d, DataLen=%d\n",
-            mALBuffers[0], mNbCopy, mNormalFreq, lWaveFormat->nChannels, lWaveFormat->wBitsPerSample, lBufferLen);
-         fprintf(logFile, "  Sources: ");
-         for(int i = 0; i < mNbCopy; i++) fprintf(logFile, "%d ", mALSources[i]);
-         fprintf(logFile, "\n");
-         fflush(logFile);
-         fclose(logFile);
-      }
-
       return TRUE;
    }
    catch(...)
@@ -351,23 +339,6 @@ void MR_ShortSound::Play( int pDB, double pSpeed, int pPan )
 
       // Set parameters
       SetParams( mCurrentCopy, pDB, pSpeed, pPan );
-
-      // DEBUG: Log each play call
-      static int play_count = 0;
-      if(play_count % 50 == 0) {
-         FILE* logFile = NULL;
-         if(logFile) {
-            float lGain = powf(10.0f, pDB / 20.0f);
-            fprintf(logFile, "Play #%d: Source=%d, DB=%d, Gain=%.3f, Speed=%.2f, Pan=%d, State before play:\n",
-               play_count, mALSources[mCurrentCopy], pDB, lGain, pSpeed, pPan);
-            ALint state;
-            alGetSourcei(mALSources[mCurrentCopy], AL_SOURCE_STATE, &state);
-            fprintf(logFile, "  Source state=%d (1=initial, 2=playing, 3=paused, 4=stopped)\n", state);
-            fflush(logFile);
-            fclose(logFile);
-         }
-      }
-      play_count++;
 
       // Play the sound
       alSourcePlay(mALSources[mCurrentCopy]);
@@ -502,8 +473,6 @@ BOOL MR_SoundServer::Init( HWND pWindow )
 {
    try
    {
-      FILE* debugLog = NULL;
-      
       // Try common audio device names that might work
       const char* commonDevices[] = {
          "Generic Software",
@@ -517,52 +486,20 @@ BOOL MR_SoundServer::Init( HWND pWindow )
       
       // First try the common device names
       for(int i = 0; commonDevices[i] != NULL; i++) {
-         if(debugLog) {
-            fprintf(debugLog, "Attempting to open device: %s\n", commonDevices[i]);
-            fflush(debugLog);
-         }
          gOpenALDevice = alcOpenDevice(commonDevices[i]);
          if(gOpenALDevice != NULL) {
-            const ALCchar* devName = alcGetString(gOpenALDevice, ALC_DEVICE_SPECIFIER);
-            if(debugLog) {
-               fprintf(debugLog, "  SUCCESS! Got: %s\n", devName);
-               fflush(debugLog);
-            }
             break;
          }
       }
-      
+
       // If that didn't work, try default
       if(gOpenALDevice == NULL) {
-         if(debugLog) {
-            fprintf(debugLog, "Trying default device (NULL)\n");
-            fflush(debugLog);
-         }
          gOpenALDevice = alcOpenDevice(NULL);
-         if(gOpenALDevice != NULL && debugLog) {
-            const ALCchar* devName = alcGetString(gOpenALDevice, ALC_DEVICE_SPECIFIER);
-            fprintf(debugLog, "Default device: %s\n", devName);
-            fflush(debugLog);
-         }
       }
-      
+
       // If we still don't have a device, try with empty string
       if(gOpenALDevice == NULL) {
-         if(debugLog) {
-            fprintf(debugLog, "Trying empty string device\n");
-            fflush(debugLog);
-         }
          gOpenALDevice = alcOpenDevice("");
-      }
-      
-      if(debugLog) {
-         if(gOpenALDevice) {
-            fprintf(debugLog, "Final device: %s\n", alcGetString(gOpenALDevice, ALC_DEVICE_SPECIFIER));
-         } else {
-            fprintf(debugLog, "ERROR: Could not open any audio device\n");
-         }
-         fflush(debugLog);
-         fclose(debugLog);
       }
 
       if( gOpenALDevice == NULL )
@@ -593,17 +530,6 @@ BOOL MR_SoundServer::Init( HWND pWindow )
       alListenerf(AL_GAIN, 1.0f);  // Ensure listener gain is at max
       ALfloat lOrient[] = {0, 0, -1, 0, 1, 0};
       alListenerfv(AL_ORIENTATION, lOrient);
-
-      // DEBUG: Log OpenAL initialization
-      FILE* logFile = NULL;
-      if(logFile) {
-         fprintf(logFile, "OpenAL Initialized Successfully\n");
-         fprintf(logFile, "Device: %s\n", alcGetString(gOpenALDevice, ALC_DEVICE_SPECIFIER));
-         fprintf(logFile, "Listener Gain: %.2f\n", 1.0f);
-         fprintf(logFile, "Listener Position: (0, 0, 0)\n");
-         fflush(logFile);
-         fclose(logFile);
-      }
 
       return TRUE;
    }
@@ -716,19 +642,6 @@ void MR_SoundServer::Play( MR_ContinuousSound* pSound, int pCopy, int pDB, doubl
    if( pSound != NULL )
    {
       pSound->CumPlay( pCopy, pDB, pSpeed );
-      
-      // Debug logging
-      static int callCount = 0;
-      if(callCount % 100 == 0) {
-         FILE* logFile = NULL;
-         if(logFile) {
-            fprintf(logFile, "[Play Continuous] Call #%d: pSound=%p, pCopy=%d, pDB=%d, pSpeed=%.2f\n",
-               callCount, pSound, pCopy, pDB, pSpeed);
-            fflush(logFile);
-            fclose(logFile);
-         }
-      }
-      callCount++;
    }
 }
 
@@ -739,17 +652,6 @@ void MR_SoundServer::ApplyContinuousPlay()
    {
       if( gOpenALContext != NULL )
       {
-         static int callCount = 0;
-         if(callCount % 100 == 0) {
-            FILE* logFile = NULL;
-            if(logFile) {
-               fprintf(logFile, "[ApplyContinuousPlay] Call #%d: gOpenALContext=%p\n", callCount, gOpenALContext);
-               fflush(logFile);
-               fclose(logFile);
-            }
-         }
-         callCount++;
-         
          MR_SoundBuffer::ApplyCumCommandForAll();
       }
    }

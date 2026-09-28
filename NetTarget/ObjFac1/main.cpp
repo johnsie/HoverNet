@@ -71,16 +71,9 @@ void MR_InitModule( HMODULE pModule )
    char lResourcePath[MAX_PATH];
    
    // Write log file at working directory
-   FILE* logFile = NULL;
-   if (logFile)
-   {
-      fprintf(logFile, "\n========== MR_InitModule Called ==========\n");
-      fprintf(logFile, "Module handle: 0x%p\n", pModule);
-   }
    
    if (GetModuleFileNameA(pModule, lModulePath, sizeof(lModulePath)) > 0)
    {
-      if (logFile) fprintf(logFile, "Module path: %s\n", lModulePath);
       
       // Get the directory containing this DLL
       char* lLastBackslash = strrchr(lModulePath, '\\');
@@ -96,32 +89,20 @@ void MR_InitModule( HMODULE pModule )
    }
    else
    {
-      if (logFile) fprintf(logFile, "ERROR: GetModuleFileNameA failed\n");
       strcpy_s(lResourcePath, sizeof(lResourcePath), "ObjFac1.dat");
    }
    
-   if (logFile) fprintf(logFile, "Attempting to load resource file: %s\n", lResourcePath);
    
    DWORD resourceLoadStart = GetTickCount();
    try
    {
       gObjectFactoryData = new MR_ObjectFactoryData( pModule, lResourcePath );
       DWORD resourceLoadEnd = GetTickCount();
-      if (logFile)
-      {
-         fprintf(logFile, "SUCCESS: ObjFac1 resources loaded successfully in %u ms\n", resourceLoadEnd - resourceLoadStart);
-         fprintf(logFile, "gObjectFactoryData: 0x%p\n", gObjectFactoryData);
-      }
    }
    catch(CFileException* pEx)
    {
       char lBuffer[512];
       sprintf_s(lBuffer, sizeof(lBuffer), "CRITICAL: Failed to open ObjFac1.dat at: %s\nError: %d", lResourcePath, pEx->m_cause);
-      if (logFile)
-      {
-         fprintf(logFile, "EXCEPTION: CFileException caught\n");
-         fprintf(logFile, "%s\n", lBuffer);
-      }
       pEx->Delete();
       gObjectFactoryData = NULL;
    }
@@ -129,28 +110,14 @@ void MR_InitModule( HMODULE pModule )
    {
       char lBuffer[512];
       sprintf_s(lBuffer, sizeof(lBuffer), "CRITICAL: ObjFac1.dat is corrupted or invalid format at: %s\nError: %d", lResourcePath, pEx->m_cause);
-      if (logFile)
-      {
-         fprintf(logFile, "EXCEPTION: CArchiveException caught\n");
-         fprintf(logFile, "%s\n", lBuffer);
-      }
       pEx->Delete();
       gObjectFactoryData = NULL;
    }
    catch(...)
    {
-      if (logFile)
-      {
-         fprintf(logFile, "EXCEPTION: Unknown exception caught in MR_InitModule\n");
-      }
       gObjectFactoryData = NULL;
    }
    
-   if (logFile)
-   {
-      fprintf(logFile, "========== MR_InitModule Complete ==========\n");
-      fclose(logFile);
-   }
 }
 
 void MR_CleanModule()
@@ -177,12 +144,6 @@ CString MR_GetObjectDescription( MR_UInt16 /*pClassId*/ )
 
 MR_ObjectFromFactory* MR_GetObject( MR_UInt16 pClassId )
 {
-   FILE* logFile = NULL;
-   if (logFile)
-   {
-      fprintf(logFile, "\nMR_GetObject called with pClassId=%d\n", pClassId);
-      fflush(logFile);
-   }
    
    MR_ObjectFromFactory*  lReturnValue = NULL;
    MR_ObjectFromFactoryId lId = { 1, pClassId };
@@ -386,63 +347,27 @@ MR_ObjectFromFactory* MR_GetObject( MR_UInt16 pClassId )
 
       }  // End of try-catch wrapped switch
       
-      if (logFile)
-      {
-         if (lReturnValue)
-         {
-            fprintf(logFile, "  SUCCESS: Object created at 0x%p\n", lReturnValue);
-         }
-         else
-         {
-            fprintf(logFile, "  RESULT: No object created (NULL) - class ID not handled\n");
-         }
-         fflush(logFile);
-      }
    }
    catch(CMemoryException* pEx)
    {
-      if (logFile)
-      {
-         fprintf(logFile, "  EXCEPTION: CMemoryException - Out of memory\n");
-         fflush(logFile);
-      }
       pEx->Delete();
       lReturnValue = NULL;
    }
    catch(CFileException* pEx)
    {
-      if (logFile)
-      {
-         fprintf(logFile, "  EXCEPTION: CFileException - Resource file error (code=%d)\n", pEx->m_cause);
-         fflush(logFile);
-      }
       pEx->Delete();
       lReturnValue = NULL;
    }
    catch(CArchiveException* pEx)
    {
-      if (logFile)
-      {
-         fprintf(logFile, "  EXCEPTION: CArchiveException - Archive format error (code=%d)\n", pEx->m_cause);
-         fflush(logFile);
-      }
       pEx->Delete();
       lReturnValue = NULL;
    }
    catch(...)
    {
-      if (logFile)
-      {
-         fprintf(logFile, "  EXCEPTION: Unknown exception thrown\n");
-         fflush(logFile);
-      }
       lReturnValue = NULL;
    }
 
-   if (logFile)
-   {
-      fclose(logFile);
-   }
 
    return lReturnValue;
 }
