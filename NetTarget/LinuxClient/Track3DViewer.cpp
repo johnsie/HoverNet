@@ -1858,16 +1858,28 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     float volumePercent = static_cast<float>(currentVolume * 100.0);
     bool fullscreen = currentFullscreen;
 
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    io.IniFilename = nullptr;
-    ImFontConfig fontConfig;
-    fontConfig.SizePixels = 19.0f;
-    io.Fonts->AddFontDefault(&fontConfig);
-    ApplyHoverNetLobbyStyle();
-    ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
-    ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
-    SDL_StartTextInput();
+    // Settings can be opened both from the legacy in-race pause menu (where no
+    // ImGui context exists) and from the ImGui lobby.  Creating a second context
+    // in the latter case overwrote the SDL backend's context pointer; destroying
+    // it on return then left the lobby using freed backend state and the process
+    // exited on its next frame.  Borrow the caller's context when there is one,
+    // and only own backend/context lifetime for legacy callers.
+    const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
+    if (ownsImGuiContext) {
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        ImFontConfig fontConfig;
+        fontConfig.SizePixels = 19.0f;
+        io.Fonts->AddFontDefault(&fontConfig);
+        ApplyHoverNetLobbyStyle();
+        ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+        ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+    }
+    const bool textInputWasActive = SDL_IsTextInputActive() == SDL_TRUE;
+    if (!textInputWasActive) {
+        SDL_StartTextInput();
+    }
 
     bool running = true;
     bool cancelled = false;
@@ -2024,10 +2036,14 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         SDL_Delay(16);
     }
 
-    SDL_StopTextInput();
-    ImGui_ImplSDLRenderer2_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
-    ImGui::DestroyContext();
+    if (!textInputWasActive) {
+        SDL_StopTextInput();
+    }
+    if (ownsImGuiContext) {
+        ImGui_ImplSDLRenderer2_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+    }
 
     if (cancelled) {
         // Unlike username/host (never applied until Save), volume and
