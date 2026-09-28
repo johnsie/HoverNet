@@ -181,10 +181,14 @@ persisted alongside the other settings. `MR_SoundServer::SetMasterVolume`/
 (`HeadlessSoundServer.cpp`, which Windows now builds too -- the legacy OpenAL
 `SoundServer.cpp` also got the same API for consistency, but is no longer
 compiled on either platform) -- verified with a clean MSBuild rebuild of
-Game2.vcxproj. The rest of Phase 3 (ImGui menu consolidation, remappable
-controls/controller support, display mode/resolution/fullscreen settings, HUD
-improvements, onboarding, accessibility, Windows/Linux menu parity) is not yet
-started.
+Game2.vcxproj. A fullscreen toggle is also done: `SDL2Graphics.cpp` already
+calls `SDL_RenderSetLogicalSize` to scale the fixed-resolution framebuffer to
+whatever window size results, so `SDL_SetWindowFullscreen` alone (no render-
+path changes) toggles it, applied live from the same Settings screen and
+persisted the same way as volume. The rest of Phase 3 (ImGui menu
+consolidation, remappable controls/controller support, actual
+resolution/scaling options, HUD improvements, onboarding, accessibility,
+Windows/Linux menu parity) is not yet started.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.

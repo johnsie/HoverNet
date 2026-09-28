@@ -676,6 +676,26 @@ void SaveVolume(double volume)
     out << volume << '\n';
 }
 
+std::string FullscreenPath()
+{
+    return ConfigDirPath() + "/fullscreen";
+}
+
+// Defaults to windowed (false) if nothing's been saved yet, matching the
+// pre-existing hardcoded behavior.
+bool LoadFullscreen()
+{
+    std::ifstream in(FullscreenPath());
+    int value = 0;
+    return (in >> value) && value != 0;
+}
+
+void SaveFullscreen(bool fullscreen)
+{
+    std::ofstream out(FullscreenPath());
+    out << (fullscreen ? 1 : 0) << '\n';
+}
+
 struct RemotePlayer
 {
     MR_MainCharacter* mCharacter = nullptr;
@@ -836,12 +856,13 @@ struct SettingsResult
     std::string serverHost;
     unsigned serverPort = 0;
     double volume = 1.0;
+    bool fullscreen = false;
 };
 
 SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                                  const MR_Sprite& font, const std::string& currentUsername,
                                  const std::string& currentServerHost, unsigned currentServerPort,
-                                 double currentVolume, int pFrameLimit);
+                                 double currentVolume, bool currentFullscreen, int pFrameLimit);
 
 // pClient is caller-owned (not constructed here) and deliberately left connected
 // when this returns true: a joined-and-started race needs to keep talking to the
@@ -1041,7 +1062,8 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 }
                 else if (pauseChoice == PauseChoice::eSettings) {
                     const SettingsResult settings = RunSettingsScreen(
-                        graphics, buffer, viewport, font, username, host, port, LoadVolume(), pFrameLimit);
+                        graphics, buffer, viewport, font, username, host, port,
+                        LoadVolume(), LoadFullscreen(), pFrameLimit);
                     if (settings.confirmed) {
                         SaveUsername(settings.username);
                         if (settings.username != username) {
@@ -1058,6 +1080,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                         // lobby is (re)opened.
                         SaveServerUrl(settings.serverHost, settings.serverPort);
                         SaveVolume(settings.volume);
+                        SaveFullscreen(settings.fullscreen);
                     }
                 }
                 // eResume / eOnlineLobby: no-op -- already right here browsing.
@@ -1769,7 +1792,7 @@ bool IsBlank(const char* text)
 SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                                  const MR_Sprite& font, const std::string& currentUsername,
                                  const std::string& currentServerHost, unsigned currentServerPort,
-                                 double currentVolume, int pFrameLimit)
+                                 double currentVolume, bool currentFullscreen, int pFrameLimit)
 {
     (void)buffer;
     (void)viewport;
@@ -1781,6 +1804,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     std::snprintf(hostBuf, sizeof(hostBuf), "%s", currentServerHost.c_str());
     int port = static_cast<int>(currentServerPort);
     float volumePercent = static_cast<float>(currentVolume * 100.0);
+    bool fullscreen = currentFullscreen;
 
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -1892,6 +1916,18 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::PopItemWidth();
 
         ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Applied live, same as Volume above -- SDL_RenderSetLogicalSize (see
+        // SDL2Graphics.cpp) already scales the fixed-resolution framebuffer to
+        // fit the window, so toggling fullscreen here is purely a window-mode
+        // change with nothing else to keep in sync.
+        if (ImGui::Checkbox("Fullscreen", &fullscreen)) {
+            SDL_SetWindowFullscreen(graphics.GetWindow(), fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+        }
+
+        ImGui::Spacing();
         ImGui::Spacing();
 
         const bool canSave = !usernameBlank && !hostBlank && portValid;
@@ -1924,11 +1960,12 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     ImGui::DestroyContext();
 
     if (cancelled) {
-        // Unlike username/host (never applied until Save), volume is applied
-        // live above for audible feedback while dragging the slider -- Cancel
-        // needs to explicitly undo that so it isn't the one setting that
-        // "sticks" despite not being saved.
+        // Unlike username/host (never applied until Save), volume and
+        // fullscreen are applied live above for immediate feedback -- Cancel
+        // needs to explicitly undo both so neither "sticks" despite not
+        // being saved.
         MR_SoundServer::SetMasterVolume(currentVolume);
+        SDL_SetWindowFullscreen(graphics.GetWindow(), currentFullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
     }
 
     SettingsResult result;
@@ -1937,6 +1974,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     result.serverHost = hostBuf;
     result.serverPort = static_cast<unsigned>(port);
     result.volume = volumePercent / 100.0;
+    result.fullscreen = fullscreen;
     return result;
 }
 
@@ -2196,6 +2234,15 @@ int main(int argc, char** argv)
     if (!graphics.Initialize(nullptr, kWidth, kHeight)) {
         return 1;
     }
+#ifdef HOVERNET_GAME2_PLAYER
+    // SDL_RenderSetLogicalSize (see SDL2Graphics.cpp) already has the renderer
+    // scale the fixed kWidth x kHeight framebuffer to fit whatever the actual
+    // window size ends up being, so toggling fullscreen here is just a window
+    // mode change -- nothing about the render loop itself needs to know.
+    if (LoadFullscreen()) {
+        SDL_SetWindowFullscreen(graphics.GetWindow(), SDL_WINDOW_FULLSCREEN_DESKTOP);
+    }
+#endif
     auto applyPalette = [&]() {
         std::array<MR_UInt8, MR_NB_COLORS * 3> palette{};
         PALETTEENTRY* colors = MR_GetColors(0.75, 0.75, 0.05);
@@ -2436,13 +2483,14 @@ int main(int argc, char** argv)
                 // to relaunch or stumble into a race just to get back out of it.
                 const SettingsResult settings = RunSettingsScreen(
                     graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                    LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), frameLimit);
+                    LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), LoadFullscreen(), frameLimit);
                 if (settings.confirmed) {
                     SaveUsername(settings.username);
                     lobbyHost = settings.serverHost;
                     lobbyPort = settings.serverPort;
                     SaveServerUrl(lobbyHost, lobbyPort);
                     SaveVolume(settings.volume);
+                    SaveFullscreen(settings.fullscreen);
                 }
                 pickingMode = !g_QuitConfirmed;
             }
@@ -2572,13 +2620,14 @@ int main(int argc, char** argv)
                     else if (pauseChoice == PauseChoice::eSettings) {
                         const SettingsResult settings = RunSettingsScreen(
                             graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                            LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), frameLimit);
+                            LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), LoadFullscreen(), frameLimit);
                         if (settings.confirmed) {
                             SaveUsername(settings.username);
                             lobbyHost = settings.serverHost;
                             lobbyPort = settings.serverPort;
                             SaveServerUrl(lobbyHost, lobbyPort);
                             SaveVolume(settings.volume);
+                            SaveFullscreen(settings.fullscreen);
                         }
                     }
                     else {
