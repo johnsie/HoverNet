@@ -22,6 +22,7 @@
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
+#include <vector>
 
 namespace
 {
@@ -67,6 +68,53 @@ namespace
         return pShouldAccept
             ? lReplyType == eRSMsgGameListEnd && lReply[2] == 0
             : lReplyType == 59;
+    }
+
+    // Opens a raw TCP connection sourced from pSourceIp instead of whatever the
+    // kernel would pick by default, so ServerSocket's per-IP connection rate
+    // limit (AllowNewConnection, keyed on sin_addr) sees a distinct, non-loopback
+    // source even though this is still all localhost traffic -- 127.0.0.0/8 is
+    // entirely loopback on Linux, so 127.0.0.2 needs no interface configuration
+    // to be reachable, but it isn't the literal INADDR_LOOPBACK (127.0.0.1) the
+    // rate limit exempts. Returns -1 on any failure.
+    int ConnectFromSource(unsigned pPort, const char* pSourceIp)
+    {
+        const int lSocket = socket(AF_INET, SOCK_STREAM, 0);
+        if (lSocket < 0) return -1;
+
+        sockaddr_in lSourceAddress = {};
+        lSourceAddress.sin_family = AF_INET;
+        lSourceAddress.sin_port = 0;  // Let the kernel pick a free source port.
+        inet_pton(AF_INET, pSourceIp, &lSourceAddress.sin_addr);
+        if (bind(lSocket, reinterpret_cast<sockaddr*>(&lSourceAddress), sizeof(lSourceAddress)) != 0) {
+            close(lSocket);
+            return -1;
+        }
+
+        sockaddr_in lServerAddress = {};
+        lServerAddress.sin_family = AF_INET;
+        lServerAddress.sin_port = htons(static_cast<unsigned short>(pPort));
+        inet_pton(AF_INET, "127.0.0.1", &lServerAddress.sin_addr);
+        if (connect(lSocket, reinterpret_cast<sockaddr*>(&lServerAddress), sizeof(lServerAddress)) != 0) {
+            close(lSocket);
+            return -1;
+        }
+        return lSocket;
+    }
+
+    // True if the server closed this connection with no data sent -- exactly
+    // what AllowNewConnection's rejection path does (accept() then an immediate
+    // closesocket(), see AcceptNewConnection): recv() returns 0 almost at once
+    // instead of timing out with nothing available, which is what an accepted-
+    // and-left-open connection looks like from here (nothing is sent to a client
+    // that hasn't spoken first).
+    bool WasClosedImmediately(int pSocket)
+    {
+        timeval lTimeout = {0, 300000};  // 300ms
+        setsockopt(pSocket, SOL_SOCKET, SO_RCVTIMEO, &lTimeout, sizeof(lTimeout));
+        unsigned char lByte = 0;
+        const ssize_t lCount = recv(pSocket, &lByte, sizeof(lByte), 0);
+        return lCount == 0;
     }
 
     bool WaitForServer(const std::string& pHost, unsigned pPort)
@@ -882,6 +930,41 @@ namespace
                 return false;
             }
             std::printf("Chat rate limit correctly caps a flood at %d messages per window\n", kChatLimit);
+        }
+
+        // Per-IP connection rate limit (MR_ServerSocket::AllowNewConnection): opens
+        // kConnLimit + 1 raw connections sourced from 127.0.0.2 (still loopback, so
+        // no interface setup needed, but not the literal 127.0.0.1 the limit
+        // exempts -- see ConnectFromSource) and expects exactly one to be closed
+        // immediately with no data, the same rejection AcceptNewConnection gives
+        // an over-limit non-loopback IP.
+        {
+            const int kConnLimit = 20;
+            std::vector<int> lSockets;
+            for (int lIndex = 0; lIndex < kConnLimit + 1; ++lIndex)
+            {
+                const int lSocket = ConnectFromSource(pPort, "127.0.0.2");
+                if (lSocket < 0)
+                {
+                    std::fprintf(stderr, "Could not open connection-rate-limit-test socket %d\n", lIndex);
+                    for (int lSocketToClose : lSockets) { close(lSocketToClose); }
+                    return false;
+                }
+                lSockets.push_back(lSocket);
+            }
+            int lClosedImmediately = 0;
+            for (int lSocket : lSockets)
+            {
+                if (WasClosedImmediately(lSocket)) { ++lClosedImmediately; }
+                close(lSocket);
+            }
+            if (lClosedImmediately != 1)
+            {
+                std::fprintf(stderr, "Connection rate limit not enforced as expected (closed=%d, wanted 1 of %d)\n",
+                             lClosedImmediately, kConnLimit + 1);
+                return false;
+            }
+            std::printf("Connection rate limit correctly rejects the (limit+1)th connection from one non-loopback IP\n");
         }
 
         // With two same-named races now open, JoinGameById must land on the specific

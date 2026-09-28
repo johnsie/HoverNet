@@ -55,9 +55,14 @@ Phase 2 has also started early: RaceServer now enforces per-connection rate
 limits on both chat (`ClientConnection::AllowChatMessage`) and race creation
 (`AllowRaceCreation`), a fixed-window limiter generous enough to clear
 `RaceServerClientSmoke.cpp`'s existing 25-message TCP-coalescing burst test
-without weakening the limit meaningfully against real flooding. Both limits
-are covered by regression tests confirming the exact accept/reject counts,
-verified to actually fail without the corresponding server-side check.
+without weakening the limit meaningfully against real flooding. A third,
+per-IP connection-attempt rate limit (`MR_ServerSocket::AllowNewConnection`)
+caps how fast one non-loopback address can open new connections, exempting
+127.0.0.1 outright since every real player connects from their own distinct
+public IP and the only traffic that would otherwise throttle is local
+testing. All three limits are covered by regression tests confirming the
+exact accept/reject counts, each verified to actually fail without its
+corresponding server-side check.
 
 ## Phase 0 — Define the 2.0 contract
 

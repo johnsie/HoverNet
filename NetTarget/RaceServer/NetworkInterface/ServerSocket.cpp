@@ -10,6 +10,20 @@
 
 extern MR_ServerLogger g_Logger;
 
+// New-connection rate limit (AcceptNewConnection/AllowNewConnection below): at
+// most this many accepted connections from one non-loopback IP within this
+// many seconds. Deliberately generous -- players sharing a NAT'd home/office
+// connection are legitimate traffic, not an attack -- while still bounding a
+// single remote host's ability to exhaust mMaxConnections or churn the
+// mNextClientId/logging with rapid connect/disconnect cycles.
+static const int kConnectionRateLimitCount = 20;
+static const int kConnectionRateLimitWindowSec = 10;
+// Sweep stale per-IP rate-limit entries once the map holding them has grown
+// past this size, instead of on every single connection attempt -- bounds a
+// long-running server's memory against one entry per distinct IP ever seen
+// (e.g. internet scanners) without paying a full-map scan on the hot path.
+static const std::size_t kConnectionRateLimitPruneThreshold = 2000;
+
 // Simple message structure matching Game2's MR_NetMessageBuffer
 #pragma pack(push, 1)
 struct MessageBuffer {
@@ -313,6 +327,13 @@ void MR_ServerSocket::AcceptNewConnection()
         return;
     }
 
+    if (!AllowNewConnection(clientAddr.sin_addr.s_addr, time(NULL))) {
+        g_Logger.Log(MR_LOG_WARN, "Connection rate limit exceeded from %s, closing (max %d per %ds)",
+                     inet_ntoa(clientAddr.sin_addr), kConnectionRateLimitCount, kConnectionRateLimitWindowSec);
+        closesocket(clientSocket);
+        return;
+    }
+
     // Create new client connection
     ClientConnection* pNewConn = new ClientConnection();
     pNewConn->mClientId = mNextClientId++;
@@ -328,6 +349,39 @@ void MR_ServerSocket::AcceptNewConnection()
                 pNewConn->mClientId,
                 inet_ntoa(clientAddr.sin_addr),
                 ntohs(clientAddr.sin_port));
+}
+
+BOOL MR_ServerSocket::AllowNewConnection(unsigned long pIpNetworkOrder, time_t pNow)
+{
+    if (pIpNetworkOrder == htonl(INADDR_LOOPBACK)) {
+        return TRUE;
+    }
+
+    if (mConnectionAttemptsByIp.size() > kConnectionRateLimitPruneThreshold) {
+        PruneConnectionRateLimitState(pNow);
+    }
+
+    std::pair<time_t, int>& lState = mConnectionAttemptsByIp[pIpNetworkOrder];
+    if (lState.first == 0 || pNow - lState.first >= kConnectionRateLimitWindowSec) {
+        lState.first = pNow;
+        lState.second = 0;
+    }
+    if (lState.second >= kConnectionRateLimitCount) {
+        return FALSE;
+    }
+    ++lState.second;
+    return TRUE;
+}
+
+void MR_ServerSocket::PruneConnectionRateLimitState(time_t pNow)
+{
+    for (auto lIt = mConnectionAttemptsByIp.begin(); lIt != mConnectionAttemptsByIp.end(); ) {
+        if (pNow - lIt->second.first >= kConnectionRateLimitWindowSec) {
+            lIt = mConnectionAttemptsByIp.erase(lIt);
+        } else {
+            ++lIt;
+        }
+    }
 }
 
 void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager* pRaceManager)

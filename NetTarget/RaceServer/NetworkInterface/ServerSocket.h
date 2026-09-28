@@ -47,8 +47,23 @@ private:
     unsigned mPort;
     BOOL mAllowLegacyProtocol;
 
+    // Per-source-IP connection-attempt rate limiting (AllowNewConnection below):
+    // {windowStart, countInWindow} keyed by the raw sin_addr.s_addr. Grows by one
+    // entry per distinct IP ever seen, not per attempt, so PruneConnectionRateLimitState
+    // bounds it against a long-running server slowly accumulating one entry per
+    // distinct attacker/scanner IP over weeks of uptime.
+    std::map<unsigned long, std::pair<time_t, int>> mConnectionAttemptsByIp;
+
     // Helper methods
     void AcceptNewConnection();
+    // True if pIpNetworkOrder (sin_addr.s_addr, already in network byte order) may
+    // open another connection right now -- see MR_CONNECTION_RATE_LIMIT_COUNT in
+    // ServerSocket.cpp. Always true for loopback: every player in a real deployment
+    // connects from their own distinct public IP, so the only traffic this would
+    // otherwise throttle is this process's own smoke tests opening 20+ connections
+    // from 127.0.0.1 in a few seconds.
+    BOOL AllowNewConnection(unsigned long pIpNetworkOrder, time_t pNow);
+    void PruneConnectionRateLimitState(time_t pNow);
     void ReceiveFromClient(ClientConnection* pConn, MR_RaceManager* pRaceManager);
     void ReceiveDatagram();
     BOOL SetSocketOptions(SOCKET sock);
