@@ -17,6 +17,11 @@
 namespace
 {
 SDL_AudioDeviceID audioDevice = 0;
+// Guarded only by the same SDL_Lock/UnlockAudioDevice calls that already
+// protect voice state -- MixAudio (the audio callback) and SetMasterVolume
+// (called from the main thread) both touch it, same as every other piece of
+// mixer state here.
+double gMasterVolume = 1.0;
 
 std::uint16_t ReadUint16(const char* data)
 {
@@ -182,11 +187,11 @@ void SDLCALL MixAudio(void*, Uint8* stream, int length)
 
     for (ContinuousVoice& voice : continuousVoices) {
         MixVoice(voice.sound->samples.data(), voice.sound->samples.size(), voice.position, voice.speed,
-                 voice.gain, voice.gain, output, frameCount, TRUE);
+                 voice.gain * gMasterVolume, voice.gain * gMasterVolume, output, frameCount, TRUE);
     }
     for (OneShotVoice& voice : oneShotVoices) {
         MixVoice(voice.samples.data(), voice.samples.size(), voice.position, 1.0,
-                 voice.leftGain, voice.rightGain, output, frameCount, FALSE);
+                 voice.leftGain * gMasterVolume, voice.rightGain * gMasterVolume, output, frameCount, FALSE);
     }
     oneShotVoices.erase(std::remove_if(oneShotVoices.begin(), oneShotVoices.end(),
                                        [](const OneShotVoice& voice) {
@@ -339,5 +344,25 @@ namespace MR_SoundServer
             }
         }
         SDL_UnlockAudioDevice(audioDevice);
+    }
+
+    void SetMasterVolume( double pVolume )
+    {
+        pVolume = std::min(1.0, std::max(0.0, pVolume));
+        if (audioDevice != 0) {
+            SDL_LockAudioDevice(audioDevice);
+            gMasterVolume = pVolume;
+            SDL_UnlockAudioDevice(audioDevice);
+        } else {
+            // No device open yet (Init() hasn't run, or it failed) -- still
+            // record the value so it takes effect once Init() does succeed,
+            // matching a caller that sets this once at startup before Init().
+            gMasterVolume = pVolume;
+        }
+    }
+
+    double GetMasterVolume()
+    {
+        return gMasterVolume;
     }
 }

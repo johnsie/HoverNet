@@ -73,6 +73,13 @@ namespace MR_SoundServer
 
    MR_DllDeclare void                ApplyContinuousPlay();
 
+   // Global output level applied on top of every sound's own volume/pan, for a
+   // user-facing master volume control (see docs/roadmap-2.0.md's Phase 3
+   // "audio and volume settings" item). pVolume is clamped to [0.0, 1.0];
+   // defaults to 1.0 (unchanged from before this existed) until a caller sets
+   // it, so existing callers that never touch this see no behavior change.
+   MR_DllDeclare void                SetMasterVolume( double pVolume );
+   MR_DllDeclare double              GetMasterVolume();
 
 };
 

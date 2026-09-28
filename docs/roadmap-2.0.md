@@ -174,9 +174,17 @@ the XDG Base Directory convention -- the actual "documented per-user location"
 this item asks for. A one-time migration copies each old dotfile over the
 first time its new path is read, so upgrading players keep their settings.
 `HoverNetGame2Player --print-config-paths` prints the resolved paths for
-diagnosis. The rest of Phase 3 (ImGui menu consolidation, remappable
-controls/controller support, display/audio settings, HUD improvements,
-onboarding, accessibility, Windows/Linux menu parity) is not yet started.
+diagnosis. A first piece of "audio and volume settings" is also done: a master
+volume slider (0-100%) in the Settings screen, applied live while dragging and
+persisted alongside the other settings. `MR_SoundServer::SetMasterVolume`/
+`GetMasterVolume` scale every sound's gain in the shared SDL2 mixer
+(`HeadlessSoundServer.cpp`, which Windows now builds too -- the legacy OpenAL
+`SoundServer.cpp` also got the same API for consistency, but is no longer
+compiled on either platform) -- verified with a clean MSBuild rebuild of
+Game2.vcxproj. The rest of Phase 3 (ImGui menu consolidation, remappable
+controls/controller support, display mode/resolution/fullscreen settings, HUD
+improvements, onboarding, accessibility, Windows/Linux menu parity) is not yet
+started.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.

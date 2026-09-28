@@ -41,6 +41,10 @@ static ALCdevice* gOpenALDevice = NULL;
 static ALCcontext* gOpenALContext = NULL;
 static ALuint gOpenALSources[MR_MAX_SOURCES];
 static int gOpenALSourceCount = 0;
+// See SetMasterVolume/GetMasterVolume below -- persists across Init()/Close()
+// cycles (a user preference, not device state), applied via the OpenAL
+// listener's own gain so every source is scaled without touching each one.
+static double gMasterVolume = 1.0;
 
 class MR_SoundBuffer
 {
@@ -527,7 +531,7 @@ BOOL MR_SoundServer::Init( HWND pWindow )
       // Set listener parameters
       alListener3f(AL_POSITION, 0, 0, 0);
       alListener3f(AL_VELOCITY, 0, 0, 0);
-      alListenerf(AL_GAIN, 1.0f);  // Ensure listener gain is at max
+      alListenerf(AL_GAIN, static_cast<ALfloat>(gMasterVolume));
       ALfloat lOrient[] = {0, 0, -1, 0, 1, 0};
       alListenerfv(AL_ORIENTATION, lOrient);
 
@@ -696,4 +700,24 @@ int MR_SoundServer::GetNbCopy( MR_ContinuousSound* pSound )
    {
       return 1;
    }
+}
+
+void MR_SoundServer::SetMasterVolume( double pVolume )
+{
+   if( pVolume < 0.0 ) pVolume = 0.0;
+   if( pVolume > 1.0 ) pVolume = 1.0;
+   gMasterVolume = pVolume;
+
+   // If a context already exists, apply it immediately rather than waiting
+   // for the next Init() -- a live volume slider needs this to take effect
+   // without reopening the audio device.
+   if( gOpenALContext != NULL )
+   {
+      alListenerf( AL_GAIN, static_cast<ALfloat>(gMasterVolume) );
+   }
+}
+
+double MR_SoundServer::GetMasterVolume()
+{
+   return gMasterVolume;
 }

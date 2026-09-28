@@ -653,6 +653,29 @@ void SaveServerUrl(const std::string& host, unsigned port)
     out << host << ' ' << port << '\n';
 }
 
+std::string VolumePath()
+{
+    return ConfigDirPath() + "/volume";
+}
+
+// Returns 1.0 (full volume, matching the pre-existing hardcoded behavior) if
+// nothing's been saved yet or the saved value is out of range.
+double LoadVolume()
+{
+    std::ifstream in(VolumePath());
+    double volume = 1.0;
+    if (in >> volume && volume >= 0.0 && volume <= 1.0) {
+        return volume;
+    }
+    return 1.0;
+}
+
+void SaveVolume(double volume)
+{
+    std::ofstream out(VolumePath());
+    out << volume << '\n';
+}
+
 struct RemotePlayer
 {
     MR_MainCharacter* mCharacter = nullptr;
@@ -812,12 +835,13 @@ struct SettingsResult
     std::string username;
     std::string serverHost;
     unsigned serverPort = 0;
+    double volume = 1.0;
 };
 
 SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                                  const MR_Sprite& font, const std::string& currentUsername,
                                  const std::string& currentServerHost, unsigned currentServerPort,
-                                 int pFrameLimit);
+                                 double currentVolume, int pFrameLimit);
 
 // pClient is caller-owned (not constructed here) and deliberately left connected
 // when this returns true: a joined-and-started race needs to keep talking to the
@@ -1017,7 +1041,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 }
                 else if (pauseChoice == PauseChoice::eSettings) {
                     const SettingsResult settings = RunSettingsScreen(
-                        graphics, buffer, viewport, font, username, host, port, pFrameLimit);
+                        graphics, buffer, viewport, font, username, host, port, LoadVolume(), pFrameLimit);
                     if (settings.confirmed) {
                         SaveUsername(settings.username);
                         if (settings.username != username) {
@@ -1033,6 +1057,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                         // connection, so just persist it for the next time the
                         // lobby is (re)opened.
                         SaveServerUrl(settings.serverHost, settings.serverPort);
+                        SaveVolume(settings.volume);
                     }
                 }
                 // eResume / eOnlineLobby: no-op -- already right here browsing.
@@ -1744,7 +1769,7 @@ bool IsBlank(const char* text)
 SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                                  const MR_Sprite& font, const std::string& currentUsername,
                                  const std::string& currentServerHost, unsigned currentServerPort,
-                                 int pFrameLimit)
+                                 double currentVolume, int pFrameLimit)
 {
     (void)buffer;
     (void)viewport;
@@ -1755,6 +1780,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     char hostBuf[128] = {0};
     std::snprintf(hostBuf, sizeof(hostBuf), "%s", currentServerHost.c_str());
     int port = static_cast<int>(currentServerPort);
+    float volumePercent = static_cast<float>(currentVolume * 100.0);
 
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -1852,6 +1878,20 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
 
         ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::TextUnformatted("Volume");
+        ImGui::PushItemWidth(-1.0f);
+        // Applied live (not just on Save) so the slider itself gives audible
+        // feedback -- matches how most games let you hear the level you're
+        // picking rather than only finding out after confirming.
+        if (ImGui::SliderFloat("##Volume", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
+            MR_SoundServer::SetMasterVolume(volumePercent / 100.0);
+        }
+        ImGui::PopItemWidth();
+
+        ImGui::Spacing();
         ImGui::Spacing();
 
         const bool canSave = !usernameBlank && !hostBlank && portValid;
@@ -1883,11 +1923,20 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
 
+    if (cancelled) {
+        // Unlike username/host (never applied until Save), volume is applied
+        // live above for audible feedback while dragging the slider -- Cancel
+        // needs to explicitly undo that so it isn't the one setting that
+        // "sticks" despite not being saved.
+        MR_SoundServer::SetMasterVolume(currentVolume);
+    }
+
     SettingsResult result;
     result.confirmed = !cancelled;
     result.username = usernameBuf;
     result.serverHost = hostBuf;
     result.serverPort = static_cast<unsigned>(port);
+    result.volume = volumePercent / 100.0;
     return result;
 }
 
@@ -2032,6 +2081,7 @@ int main(int argc, char** argv)
     } factoryCleanup;
 #ifdef HOVERNET_GAME2_PLAYER
     MR_SoundServer::Init(nullptr);
+    MR_SoundServer::SetMasterVolume(LoadVolume());
     struct SoundServerCleanup
     {
         ~SoundServerCleanup() { MR_SoundServer::Close(); }
@@ -2386,12 +2436,13 @@ int main(int argc, char** argv)
                 // to relaunch or stumble into a race just to get back out of it.
                 const SettingsResult settings = RunSettingsScreen(
                     graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                    LoadUsername(), lobbyHost, lobbyPort, frameLimit);
+                    LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), frameLimit);
                 if (settings.confirmed) {
                     SaveUsername(settings.username);
                     lobbyHost = settings.serverHost;
                     lobbyPort = settings.serverPort;
                     SaveServerUrl(lobbyHost, lobbyPort);
+                    SaveVolume(settings.volume);
                 }
                 pickingMode = !g_QuitConfirmed;
             }
@@ -2521,12 +2572,13 @@ int main(int argc, char** argv)
                     else if (pauseChoice == PauseChoice::eSettings) {
                         const SettingsResult settings = RunSettingsScreen(
                             graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                            LoadUsername(), lobbyHost, lobbyPort, frameLimit);
+                            LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), frameLimit);
                         if (settings.confirmed) {
                             SaveUsername(settings.username);
                             lobbyHost = settings.serverHost;
                             lobbyPort = settings.serverPort;
                             SaveServerUrl(lobbyHost, lobbyPort);
+                            SaveVolume(settings.volume);
                         }
                     }
                     else {
