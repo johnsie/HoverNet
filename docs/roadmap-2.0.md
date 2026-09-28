@@ -69,6 +69,13 @@ clients, covered in both compatibility and strict-protocol integration runs.
 Incomplete TCP frames also expire five seconds after their first byte, even if
 the sender keeps trickling fragments; the stalled peer is removed without
 blocking or desynchronizing other clients.
+Player names, race/track labels, and lobby chat are now bounded canonical UTF-8
+text; malformed sequences, embedded controls/NULs, overlength fields, and
+trailing host-request bytes are rejected before storage, logging, or relay.
+Started-race chat keeps its legacy byte-index alphabet with a strict size bound.
+Message direction and minimum connection state are explicit: clients cannot
+submit server-only replies/announcements, and gameplay traffic is ignored until
+the sender has joined a race.
 
 ## Phase 0 — Define the 2.0 contract
 

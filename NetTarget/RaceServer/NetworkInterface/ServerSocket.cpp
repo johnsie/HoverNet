@@ -23,6 +23,86 @@ static const int kConnectionRateLimitWindowSec = 10;
 // long-running server's memory against one entry per distinct IP ever seen
 // (e.g. internet scanners) without paying a full-map scan on the hot path.
 static const std::size_t kConnectionRateLimitPruneThreshold = 2000;
+static const std::size_t kMaxRaceNameBytes = 63;
+static const std::size_t kMaxTrackNameBytes = 63;
+static const std::size_t kMaxChatBytes = 251; // Four-byte sender id is prepended on relay.
+
+// Strict UTF-8 suitable for player-visible single-line protocol text. Besides
+// rejecting malformed/overlong Unicode, exclude NUL and C0/DEL controls so
+// logs, C strings, and UI labels all see the same complete value.
+static bool IsValidProtocolText(const unsigned char* pText, std::size_t pLength,
+                                std::size_t pMaximum)
+{
+    if (pText == nullptr || pLength == 0 || pLength > pMaximum) return false;
+
+    for (std::size_t i = 0; i < pLength; ) {
+        const unsigned char c = pText[i];
+        if (c < 0x80) {
+            if (c < 0x20 || c == 0x7f) return false;
+            ++i;
+            continue;
+        }
+
+        std::size_t lContinuationCount = 0;
+        unsigned int lCodePoint = 0;
+        if (c >= 0xc2 && c <= 0xdf) {
+            lContinuationCount = 1;
+            lCodePoint = c & 0x1f;
+        } else if (c >= 0xe0 && c <= 0xef) {
+            lContinuationCount = 2;
+            lCodePoint = c & 0x0f;
+        } else if (c >= 0xf0 && c <= 0xf4) {
+            lContinuationCount = 3;
+            lCodePoint = c & 0x07;
+        } else {
+            return false;
+        }
+        if (i + lContinuationCount >= pLength) return false;
+        for (std::size_t j = 1; j <= lContinuationCount; ++j) {
+            const unsigned char lNext = pText[i + j];
+            if ((lNext & 0xc0) != 0x80) return false;
+            lCodePoint = (lCodePoint << 6) | (lNext & 0x3f);
+        }
+        if ((lContinuationCount == 2 && lCodePoint < 0x800) ||
+            (lContinuationCount == 3 && lCodePoint < 0x10000) ||
+            (lCodePoint >= 0xd800 && lCodePoint <= 0xdfff) ||
+            lCodePoint > 0x10ffff) return false;
+        i += lContinuationCount + 1;
+    }
+    return true;
+}
+
+static bool IsServerToClientMessage(int pMessageType)
+{
+    switch (pMessageType) {
+        case 44: // MRNM_CONN_NAME_SET
+        case 48: // MRNM_LOBBY_USER_PRESENT
+        case 49: // MRNM_LOBBY_USER_LEFT
+        case 53: // MRNM_RACE_STARTED
+        case 57: // MRNM_LOBBY_USER_LIST_END
+        case 58: // MRNM_PLAYER_NAME_ASSIGNED
+        case 61: // MRNM_GAME_INFO
+        case 62: // MRNM_GAME_LIST_END
+        case 63: // MRNM_JOINED_RACE
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool RequiresRaceMembership(int pMessageType)
+{
+    switch (pMessageType) {
+        case 2:  // MRNM_CREATE_MAIN_ELEM
+        case 3:  // MRNM_SET_MAIN_ELEM_STATE
+        case 4:  // MRNM_CREATE_AUTO_ELEM
+        case 10: // MRNM_HIT_MESSAGE
+        case 51: // MRNM_READY (sent while the race is still forming)
+            return true;
+        default:
+            return false;
+    }
+}
 
 // Simple message structure matching Game2's MR_NetMessageBuffer
 #pragma pack(push, 1)
@@ -517,6 +597,17 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
         return;
     }
 
+    if (IsServerToClientMessage(messageType)) {
+        g_Logger.Log(MR_LOG_WARN, "Client %d sent server-only message type %d",
+                     pConn->mClientId, messageType);
+        continue;
+    }
+    if (RequiresRaceMembership(messageType) && pConn->mRaceId < 0) {
+        g_Logger.Log(MR_LOG_WARN, "Client %d sent race message type %d before joining a race",
+                     pConn->mClientId, messageType);
+        continue;
+    }
+
     switch (messageType) {
         case 59:  // Protocol negotiation is valid only as the first message.
             g_Logger.Log(MR_LOG_WARN, "Client %d repeated protocol negotiation", pConn->mClientId);
@@ -525,7 +616,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
         {
             // Extract game name from message
             unsigned char dataLen = static_cast<unsigned char>(messageDataLen);
-            if (dataLen > 0 && dataLen < 256) {
+            if (IsValidProtocolText(&buffer[3], dataLen, kMaxRaceNameBytes)) {
                 char gameName[256];
                 memcpy(gameName, &buffer[3], dataLen);
                 gameName[dataLen] = '\0';
@@ -581,9 +672,13 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             const unsigned char trackLen = *p++;
             if (p + trackLen + 2 > pEnd) { g_Logger.Log(MR_LOG_WARN, "Client %d: malformed HOST_RACE message", pConn->mClientId); break; }
             char trackName[64];
-            const unsigned char clampedTrackLen = static_cast<unsigned char>(std::min<size_t>(trackLen, sizeof(trackName) - 1));
-            memcpy(trackName, p, clampedTrackLen);
-            trackName[clampedTrackLen] = '\0';
+            if (!IsValidProtocolText(p, trackLen, kMaxTrackNameBytes)) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE has invalid track text", pConn->mClientId);
+                SendJoinRaceFailure(pConn);
+                break;
+            }
+            memcpy(trackName, p, trackLen);
+            trackName[trackLen] = '\0';
             p += trackLen;
 
             const unsigned char numLaps = *p++;
@@ -591,11 +686,14 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
             if (p >= pEnd) { g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE missing race name", pConn->mClientId); break; }
             const unsigned char nameLen = *p++;
-            if (p + nameLen > pEnd) { g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE race name overruns message", pConn->mClientId); break; }
+            if (p + nameLen != pEnd || !IsValidProtocolText(p, nameLen, kMaxRaceNameBytes)) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE has invalid race name or trailing data", pConn->mClientId);
+                SendJoinRaceFailure(pConn);
+                break;
+            }
             char raceName[64];
-            const unsigned char clampedNameLen = static_cast<unsigned char>(std::min<size_t>(nameLen, sizeof(raceName) - 1));
-            memcpy(raceName, p, clampedNameLen);
-            raceName[clampedNameLen] = '\0';
+            memcpy(raceName, p, nameLen);
+            raceName[nameLen] = '\0';
 
             static const char* const kValidTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River"};
             bool trackOk = false;
@@ -668,12 +766,11 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
         case 46:  // MRNM_SET_PLAYER_NAME - client chose a display name
         {
-            const unsigned char lRequestedLen = static_cast<unsigned char>(
-                std::min<int>(messageDataLen, MR_MAX_PLAYER_NAME));
-            if (lRequestedLen == 0) {
-                g_Logger.Log(MR_LOG_WARN, "Client %d: empty SET_PLAYER_NAME message", pConn->mClientId);
+            if (!IsValidProtocolText(&buffer[3], messageDataLen, MR_MAX_PLAYER_NAME)) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d: invalid SET_PLAYER_NAME text", pConn->mClientId);
                 break;
             }
+            const unsigned char lRequestedLen = static_cast<unsigned char>(messageDataLen);
             std::string lBaseName(reinterpret_cast<const char*>(&buffer[3]), lRequestedLen);
 
             // Two clients with the same display name would be indistinguishable in
@@ -767,6 +864,17 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
         case 6:   // MRNM_CHAT_MESSAGE
         {
+            const BOOL lSenderInStartedRace = pConn->mRaceId >= 0 && pConn->mRaceStarted;
+            // Lobby chat is UTF-8. Started races retain the legacy encoded chat
+            // alphabet (byte indices, not Unicode), so only its envelope length
+            // and non-empty requirement are common to both formats.
+            const bool lValidChat = lSenderInStartedRace
+                ? messageDataLen > 0 && static_cast<std::size_t>(messageDataLen) <= kMaxChatBytes
+                : IsValidProtocolText(&buffer[3], messageDataLen, kMaxChatBytes);
+            if (!lValidChat) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d: invalid chat text", pConn->mClientId);
+                break;
+            }
             if (!pConn->AllowChatMessage(time(NULL))) {
                 // No rejection message: chat is fire-and-forget with no ack a client
                 // is waiting on, unlike the join/host paths above, so there's nothing
@@ -782,7 +890,6 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             // so browsers and every other not-yet-started waiting room all share
             // one chat -- only once a race starts does it narrow to just that
             // race's own players.
-            const BOOL lSenderInStartedRace = pConn->mRaceId >= 0 && pConn->mRaceStarted;
             g_Logger.Log(MR_LOG_INFO, "Client %d (Race %d, started %d): Relaying chat", pConn->mClientId,
                          pConn->mRaceId, (int)lSenderInStartedRace);
 
@@ -794,10 +901,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             // same way case 3 below stamps MRNM_SET_MAIN_ELEM_STATE's sender.
             MessageBuffer relayMsg;
             relayMsg.header = MakeMessageHeader(6);
-            int relayDataLen = messageDataLen + 4;
-            if (relayDataLen > 256) {
-                relayDataLen = 256;
-            }
+            const int relayDataLen = messageDataLen + 4;
             HoverNetProtocol::WriteI32LE(&relayMsg.data[0], pConn->mClientId);
             memcpy(&relayMsg.data[4], &buffer[3], relayDataLen - 4);
             relayMsg.dataLen = static_cast<unsigned char>(relayDataLen);

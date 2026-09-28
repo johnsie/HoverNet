@@ -1241,6 +1241,60 @@ namespace
                 std::fprintf(stderr, "Could not connect the malformed-packet-test client\n");
                 return false;
             }
+
+            // Invalid/overlong UTF-8 and embedded controls must not become a
+            // stored display name. A valid request on the same connection still
+            // succeeds afterward, proving rejection is bounded to that message.
+            const unsigned char lInvalidName[] = {0xc0, 0xaf}; // Overlong UTF-8.
+            if (!lRawNegotiator.SendMessage(eRSMsgSetPlayerName,
+                                            lInvalidName, sizeof(lInvalidName)))
+            {
+                std::fprintf(stderr, "Could not send invalid UTF-8 player name\n");
+                return false;
+            }
+            RaceServerMessage lInvalidNameReply;
+            if (lRawNegotiator.PollMessage(lInvalidNameReply, 250) &&
+                lInvalidNameReply.mType == eRSMsgPlayerNameAssigned)
+            {
+                std::fprintf(stderr, "Server accepted an invalid UTF-8 player name\n");
+                return false;
+            }
+            if (!lRawNegotiator.SetPlayerName("ValidAfterReject"))
+            {
+                std::fprintf(stderr, "Could not send valid player name after rejection\n");
+                return false;
+            }
+            std::string lValidAssignedName;
+            bool lSawValidAssignment = false;
+            for (int lTry = 0; lTry < 10 && !lSawValidAssignment; ++lTry)
+            {
+                RaceServerMessage lReply;
+                if (lRawNegotiator.PollMessage(lReply, 200) &&
+                    RaceServerClient::ParsePlayerNameAssigned(lReply, lValidAssignedName))
+                {
+                    lSawValidAssignment = lValidAssignedName == "ValidAfterReject";
+                }
+            }
+            if (!lSawValidAssignment)
+            {
+                std::fprintf(stderr, "Valid player name did not succeed after invalid UTF-8 rejection\n");
+                return false;
+            }
+
+            // Server-to-client reply types are never valid client commands.
+            // They must be ignored without reflection or state mutation, while
+            // leaving the connection usable for the malformed-frame checks.
+            if (!lRawNegotiator.SendMessage(eRSMsgJoinedRace, nullptr, 0))
+            {
+                std::fprintf(stderr, "Could not send server-only direction test message\n");
+                return false;
+            }
+            RaceServerMessage lReflectedServerMessage;
+            if (lRawNegotiator.PollMessage(lReflectedServerMessage, 250))
+            {
+                std::fprintf(stderr, "Server responded to a client-sent server-only message\n");
+                return false;
+            }
             const int lRawSocket = lRawNegotiator.ReleaseSocket();
 
             // HOST_RACE (54) whose nested track-name length (200) overruns the
@@ -1279,9 +1333,9 @@ namespace
                 return false;
             }
 
-            // An unassigned message type (63, the max the 6-bit field allows)
-            // carrying a full-size garbage payload -- must fall through to the
-            // "not broadcast" default case and be silently ignored.
+            // A server-only message type carrying a full-size garbage payload
+            // must be rejected by direction validation without destabilizing
+            // the process. (Its size is legal for this 255-byte connection.)
             std::vector<unsigned char> lGarbage(255, 0xAA);
             if (!SendRawFrame(lRawSocket, 63, 255, lGarbage.data(), lGarbage.size()))
             {
