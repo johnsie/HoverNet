@@ -334,8 +334,14 @@ gamepad navigation enabled, disconnected controllers are released safely, and
 newly connected controllers are discovered during play. The in-game Controls
 screen and Linux documentation show the active controller mapping.
 
-The rest of Phase 3 (full ImGui menu consolidation, remappable controls and
-controller customization, HUD improvements, guided onboarding, remaining accessibility
+Core Linux gameplay keyboard controls are now remappable from that same Controls
+screen. Selecting a binding captures the next key, Escape cancels capture, a
+single action restores the defaults, and every accepted change is persisted in
+the per-user XDG configuration directory and applied immediately. Invalid or
+truncated binding files fall back atomically to the full default layout.
+
+The rest of Phase 3 (full ImGui menu consolidation, controller customization,
+HUD improvements, guided onboarding, remaining accessibility
 work, and Windows/Linux menu parity) remains.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.

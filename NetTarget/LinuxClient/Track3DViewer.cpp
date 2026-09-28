@@ -762,6 +762,63 @@ void SaveUiScale(float scale)
     out << scale << '\n';
 }
 
+struct KeyboardBindings
+{
+    SDL_Scancode accelerate = SDL_SCANCODE_LSHIFT;
+    SDL_Scancode brake = SDL_SCANCODE_DOWN;
+    SDL_Scancode steerLeft = SDL_SCANCODE_LEFT;
+    SDL_Scancode steerRight = SDL_SCANCODE_RIGHT;
+    SDL_Scancode jump = SDL_SCANCODE_UP;
+    SDL_Scancode fire = SDL_SCANCODE_LCTRL;
+    SDL_Scancode selectWeapon = SDL_SCANCODE_TAB;
+};
+
+KeyboardBindings gKeyboardBindings;
+
+std::string KeyboardBindingsPath()
+{
+    return ConfigDirPath() + "/keyboard_bindings";
+}
+
+bool IsValidBinding(int value)
+{
+    return value > SDL_SCANCODE_UNKNOWN && value < SDL_NUM_SCANCODES &&
+           value != SDL_SCANCODE_ESCAPE;
+}
+
+KeyboardBindings LoadKeyboardBindings()
+{
+    KeyboardBindings bindings;
+    std::ifstream in(KeyboardBindingsPath());
+    int values[7] = {};
+    if (in >> values[0] >> values[1] >> values[2] >> values[3] >>
+              values[4] >> values[5] >> values[6]) {
+        for (int value : values) {
+            if (!IsValidBinding(value)) return KeyboardBindings{};
+        }
+        bindings.accelerate = static_cast<SDL_Scancode>(values[0]);
+        bindings.brake = static_cast<SDL_Scancode>(values[1]);
+        bindings.steerLeft = static_cast<SDL_Scancode>(values[2]);
+        bindings.steerRight = static_cast<SDL_Scancode>(values[3]);
+        bindings.jump = static_cast<SDL_Scancode>(values[4]);
+        bindings.fire = static_cast<SDL_Scancode>(values[5]);
+        bindings.selectWeapon = static_cast<SDL_Scancode>(values[6]);
+    }
+    return bindings;
+}
+
+void SaveKeyboardBindings(const KeyboardBindings& bindings)
+{
+    std::ofstream out(KeyboardBindingsPath());
+    out << static_cast<int>(bindings.accelerate) << ' '
+        << static_cast<int>(bindings.brake) << ' '
+        << static_cast<int>(bindings.steerLeft) << ' '
+        << static_cast<int>(bindings.steerRight) << ' '
+        << static_cast<int>(bindings.jump) << ' '
+        << static_cast<int>(bindings.fire) << ' '
+        << static_cast<int>(bindings.selectWeapon) << '\n';
+}
+
 struct RemotePlayer
 {
     MR_MainCharacter* mCharacter = nullptr;
@@ -2245,6 +2302,13 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
     }
 
+    SDL_Scancode* remappableBindings[] = {
+        &gKeyboardBindings.accelerate, &gKeyboardBindings.brake,
+        &gKeyboardBindings.steerLeft, &gKeyboardBindings.steerRight,
+        &gKeyboardBindings.jump, &gKeyboardBindings.fire,
+        &gKeyboardBindings.selectWeapon,
+    };
+    int listeningForBinding = -1;
     bool running = true;
     int framesShown = 0;
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
@@ -2256,8 +2320,20 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
                 g_QuitConfirmed = true;
                 running = false;
             }
-            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
-                running = false;
+            else if (event.type == SDL_KEYDOWN) {
+                if (listeningForBinding >= 0) {
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        listeningForBinding = -1;
+                    }
+                    else if (IsValidBinding(event.key.keysym.scancode)) {
+                        *remappableBindings[listeningForBinding] = event.key.keysym.scancode;
+                        SaveKeyboardBindings(gKeyboardBindings);
+                        listeningForBinding = -1;
+                    }
+                }
+                else if (event.key.keysym.sym == SDLK_ESCAPE) {
+                    running = false;
+                }
             }
         }
 
@@ -2298,12 +2374,13 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
             ImGui::TableSetupColumn("Controller", ImGuiTableColumnFlags_WidthStretch, 1.1f);
             ImGui::TableHeadersRow();
             const char* bindings[][3] = {
-                {"Accelerate", "Left or Right Shift", "Right trigger"},
-                {"Brake / Reverse", "Down Arrow", "Left trigger"},
-                {"Steer", "Left / Right Arrows", "Left stick"},
-                {"Jump", "Up Arrow", "A"},
-                {"Fire weapon", "Left or Right Ctrl", "X"},
-                {"Select weapon", "Tab", "Y"},
+                {"Accelerate", nullptr, "Right trigger"},
+                {"Brake / Reverse", nullptr, "Left trigger"},
+                {"Steer left", nullptr, "Left stick"},
+                {"Steer right", nullptr, "Left stick"},
+                {"Jump", nullptr, "A"},
+                {"Fire weapon", nullptr, "X"},
+                {"Select weapon", nullptr, "Y"},
                 {"External / Cockpit view", "F3 / F4", "-"},
                 {"Player list / More messages", "F5 / F6", "-"},
                 {"HUD margin", "+ / -", "-"},
@@ -2312,19 +2389,38 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
                 {"Reset HUD", "Home", "-"},
                 {"Pause menu", "Escape", "Start"},
             };
-            for (const auto& binding : bindings) {
+            for (int index = 0; index < static_cast<int>(sizeof(bindings) / sizeof(bindings[0])); ++index) {
+                const auto& binding = bindings[index];
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
                 ImGui::TextUnformatted(binding[0]);
                 ImGui::TableSetColumnIndex(1);
-                ImGui::TextUnformatted(binding[1]);
+                if (index < static_cast<int>(sizeof(remappableBindings) / sizeof(remappableBindings[0]))) {
+                    const char* keyName = listeningForBinding == index
+                        ? "Press a key (Escape cancels)"
+                        : SDL_GetScancodeName(*remappableBindings[index]);
+                    char buttonLabel[96];
+                    std::snprintf(buttonLabel, sizeof(buttonLabel), "%s##Binding%d", keyName, index);
+                    if (HoverNetButton(buttonLabel, ImVec2(-FLT_MIN, 0))) {
+                        listeningForBinding = index;
+                    }
+                }
+                else {
+                    ImGui::TextUnformatted(binding[1]);
+                }
                 ImGui::TableSetColumnIndex(2);
                 ImGui::TextUnformatted(binding[2]);
             }
             ImGui::EndTable();
         }
         ImGui::Spacing();
-        HoverNetHint("Controls can be reviewed here at any time from the pause menu.");
+        if (HoverNetButton("Reset keyboard defaults", ImVec2(-FLT_MIN, 34))) {
+            gKeyboardBindings = KeyboardBindings{};
+            SaveKeyboardBindings(gKeyboardBindings);
+            listeningForBinding = -1;
+        }
+        ImGui::Spacing();
+        HoverNetHint("Select a keyboard binding to change it; changes apply immediately.");
         ImGui::EndChild();
         ImGui::Spacing();
         if (HoverNetButton("Back", ImVec2(-FLT_MIN, 40))) {
@@ -2437,6 +2533,22 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 
     return choice;
 }
+#endif
+
+#ifndef HOVERNET_GAME2_PLAYER
+// The diagnostic viewer shares the input loop but not the player settings UI.
+// Keep its historical fixed keyboard layout without creating per-user config.
+struct KeyboardBindings
+{
+    SDL_Scancode accelerate = SDL_SCANCODE_LSHIFT;
+    SDL_Scancode brake = SDL_SCANCODE_DOWN;
+    SDL_Scancode steerLeft = SDL_SCANCODE_LEFT;
+    SDL_Scancode steerRight = SDL_SCANCODE_RIGHT;
+    SDL_Scancode jump = SDL_SCANCODE_UP;
+    SDL_Scancode fire = SDL_SCANCODE_LCTRL;
+    SDL_Scancode selectWeapon = SDL_SCANCODE_TAB;
+};
+KeyboardBindings gKeyboardBindings;
 #endif
 
 RenderStats RenderScene(const MR_Level& level, int room, const MR_3DCoordinate& camera,
@@ -2552,6 +2664,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "SERVER_URL=%s\n", ServerUrlPath().c_str());
         std::fprintf(stderr, "WINDOW_SIZE=%s\n", WindowSizePath().c_str());
         std::fprintf(stderr, "UI_SCALE=%s\n", UiScalePath().c_str());
+        std::fprintf(stderr, "KEYBOARD_BINDINGS=%s\n", KeyboardBindingsPath().c_str());
         return 0;
     }
 #endif
@@ -2573,6 +2686,9 @@ int main(int argc, char** argv)
     const std::string initialTrackName = ParseTrackArg(argc, argv);
     std::string currentTrackName;
     const bool playerMode = IsPlayerMode(argc, argv);
+#ifdef HOVERNET_GAME2_PLAYER
+    gKeyboardBindings = LoadKeyboardBindings();
+#endif
     MR_VideoBuffer buffer(nullptr, 1.0, 0.5, 0.5);
     if (!buffer.SetVideoMode(kWidth, kHeight) || !buffer.Lock()) {
         std::fprintf(stderr, "Could not create 3D framebuffer\n");
@@ -3161,25 +3277,28 @@ int main(int argc, char** argv)
             gameController.Axis(SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > kControllerDeadzone;
         const bool controllerBrake =
             gameController.Axis(SDL_CONTROLLER_AXIS_TRIGGERLEFT) > kControllerDeadzone;
-        const bool turnLeft = keyboard[SDL_SCANCODE_LEFT] || controllerLeft ||
+        const bool turnLeft = keyboard[gKeyboardBindings.steerLeft] || controllerLeft ||
                               (!playerMode && keyboard[SDL_SCANCODE_A]);
-        const bool turnRight = keyboard[SDL_SCANCODE_RIGHT] || controllerRight ||
+        const bool turnRight = keyboard[gKeyboardBindings.steerRight] || controllerRight ||
                                (!playerMode && keyboard[SDL_SCANCODE_D]);
         const bool moveForward = playerMode ?
-            keyboard[SDL_SCANCODE_LSHIFT] || keyboard[SDL_SCANCODE_RSHIFT] || controllerAccelerate :
+            keyboard[gKeyboardBindings.accelerate] ||
+            (gKeyboardBindings.accelerate == SDL_SCANCODE_LSHIFT && keyboard[SDL_SCANCODE_RSHIFT]) ||
+            controllerAccelerate :
             keyboard[SDL_SCANCODE_UP] || keyboard[SDL_SCANCODE_W];
         const bool moveBackward = playerMode ?
-            keyboard[SDL_SCANCODE_DOWN] || controllerBrake :
+            keyboard[gKeyboardBindings.brake] || controllerBrake :
             keyboard[SDL_SCANCODE_DOWN] || keyboard[SDL_SCANCODE_S];
         const bool moveUp = keyboard[SDL_SCANCODE_Q];
         const bool moveDown = keyboard[SDL_SCANCODE_E];
-        const bool fire = keyboard[SDL_SCANCODE_LCTRL] || keyboard[SDL_SCANCODE_RCTRL] ||
+        const bool fire = keyboard[gKeyboardBindings.fire] ||
+                  (gKeyboardBindings.fire == SDL_SCANCODE_LCTRL && keyboard[SDL_SCANCODE_RCTRL]) ||
                   gameController.Button(SDL_CONTROLLER_BUTTON_X) ||
                   HasArgument(argc, argv, "--fire");
-        const bool jump = keyboard[SDL_SCANCODE_UP] ||
+        const bool jump = keyboard[gKeyboardBindings.jump] ||
                           gameController.Button(SDL_CONTROLLER_BUTTON_A) ||
                           HasArgument(argc, argv, "--jump");
-        const bool selectWeapon = keyboard[SDL_SCANCODE_TAB] ||
+        const bool selectWeapon = keyboard[gKeyboardBindings.selectWeapon] ||
                                   gameController.Button(SDL_CONTROLLER_BUTTON_Y) ||
                                   HasArgument(argc, argv, "--select-weapon");
 

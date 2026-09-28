@@ -42,6 +42,11 @@ Menus support the D-pad, A to confirm, and B to go back where applicable.
 
 The keyboard and controller bindings are available in-game through **Controls**
 on the main menu and the Escape menu, including while browsing the online lobby.
+Select any gameplay keyboard binding on that screen and press a new key to
+change it immediately. Escape cancels capture, and **Reset keyboard defaults**
+restores the original layout. Bindings are stored in
+`$XDG_CONFIG_HOME/hovernet/keyboard_bindings` (or
+`~/.config/hovernet/keyboard_bindings`).
 
 ## Display settings
 
