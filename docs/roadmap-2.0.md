@@ -36,7 +36,20 @@ logs the path that was tried instead of failing silently, `DllObjectFactory`
 no longer returns a dangling pointer when a DLL fails to open, RaceServer's
 still-placeholder `--config` loading no longer falsely reports success, and a
 mid-race RaceServer disconnect is now announced on-screen instead of silently
-degrading to solo play.
+degrading to solo play. A repeatable frame-time and memory baseline now also
+exists: `HoverNetMemoryBaselineSmoke` runs a 600-frame autoplay session and
+fails if steady-state RSS grows meaningfully from the first half of the run
+to the second, catching a leak as a trend instead of relying on someone
+noticing a multi-hour session gradually slowing down.
+
+A real, previously-shipping bug was also found and fixed along the way: a
+Windows player hosting or joining a not-yet-started race was dropped from
+the RaceServer's lobby user list and lobby-wide chat immediately, before the
+race even started, making them invisible to (and unreachable by chat from)
+Linux clients still browsing. Fixing that surfaced that the Windows client's
+"waiting room" was a second, modal dialog layered on top of the lobby one,
+which froze the lobby's own chat behind it for the whole wait; hosting/joining
+now stays in the lobby dialog until the race actually starts.
 
 ## Phase 0 — Define the 2.0 contract
 

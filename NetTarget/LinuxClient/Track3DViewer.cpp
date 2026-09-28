@@ -105,6 +105,38 @@ bool HasArgument(int argc, char** argv, const char* argument)
     return false;
 }
 
+// --memory-report <path>: for the frame-time/memory baseline soak test (see
+// docs/roadmap-2.0.md's Phase 1 "Establish a repeatable frame-time and memory
+// baseline" item) -- writes a CSV of periodic frame/timing/RSS samples over a
+// long --frames run, so a regression that leaks memory or degrades frame time
+// shows up as a trend instead of needing someone to notice a 2-hour session
+// getting slower by hand.
+std::string ParseMemoryReportPath(int argc, char** argv)
+{
+    for (int argument = 1; argument + 1 < argc; ++argument) {
+        if (std::strcmp(argv[argument], "--memory-report") == 0) {
+            return argv[argument + 1];
+        }
+    }
+    return "";
+}
+
+// Linux-only (this file isn't built on Windows today -- see CMakeLists.txt):
+// reads the process's current resident set size out of /proc. Returns -1 if
+// it couldn't be read rather than guessing, since a silently-wrong 0 would
+// look exactly like "no memory growth" in the report this feeds.
+long ReadResidentMemoryKB()
+{
+    std::ifstream lStatus("/proc/self/status");
+    std::string lLine;
+    while (std::getline(lStatus, lLine)) {
+        if (lLine.rfind("VmRSS:", 0) == 0) {
+            return std::atol(lLine.c_str() + 6);
+        }
+    }
+    return -1;
+}
+
 std::string ParseTrackArg(int argc, char** argv)
 {
     for (int argument = 1; argument + 1 < argc; ++argument) {
@@ -2075,6 +2107,24 @@ int main(int argc, char** argv)
 
     const int frameLimit = ParseFrameCount(argc, argv);
 
+    const std::string memoryReportPath = ParseMemoryReportPath(argc, argv);
+    std::ofstream memoryReport;
+    const int kMemoryReportSampleEvery = 50;
+    if (!memoryReportPath.empty()) {
+        memoryReport.open(memoryReportPath, std::ios::out | std::ios::trunc);
+        if (memoryReport.is_open()) {
+            memoryReport << "frame,elapsed_ms,ms_per_frame,rss_kb\n";
+        } else {
+            std::fprintf(stderr, "--memory-report: could not open '%s' for writing\n", memoryReportPath.c_str());
+        }
+    }
+    const Uint32 memoryReportStartTicks = SDL_GetTicks();
+    Uint32 memoryReportLastSampleTicks = memoryReportStartTicks;
+    // Collected regardless of whether the CSV write above succeeded, so the
+    // growth check after the loop (this run's actual pass/fail signal for the
+    // ctest baseline test) doesn't depend on a writable filesystem path.
+    std::vector<long> memoryReportRssSamples;
+
 #ifdef HOVERNET_GAME2_PLAYER
     // When set, onlineClient stays connected for the rest of the run: the main
     // loop below sends this player's position each frame and applies updates from
@@ -2732,7 +2782,62 @@ int main(int argc, char** argv)
         }
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
         ++framesRendered;
+
+        if (!memoryReportPath.empty() && framesRendered % kMemoryReportSampleEvery == 0) {
+            const Uint32 lNowTicks = SDL_GetTicks();
+            const double lMsPerFrame = static_cast<double>(lNowTicks - memoryReportLastSampleTicks) /
+                                       kMemoryReportSampleEvery;
+            memoryReportLastSampleTicks = lNowTicks;
+            const long lRssKb = ReadResidentMemoryKB();
+            memoryReportRssSamples.push_back(lRssKb);
+            if (memoryReport.is_open()) {
+                memoryReport << framesRendered << ',' << (lNowTicks - memoryReportStartTicks) << ','
+                             << lMsPerFrame << ',' << lRssKb << '\n';
+                memoryReport.flush();
+            }
+        }
+
         SDL_Delay(16);
+    }
+
+    if (memoryReport.is_open()) {
+        memoryReport.close();
+    }
+
+    // The actual pass/fail signal for the memory-baseline soak test: compare
+    // steady-state RSS (the back half of samples) against the initial ramp-up
+    // (the front half, which legitimately grows as tracks/actors/sounds get
+    // loaded the first time each is used) -- see docs/roadmap-2.0.md's Phase 1
+    // "repeatable frame-time and memory baseline" item. Needs enough samples for
+    // "front half vs back half" to mean anything; a handful of samples from a
+    // short run is noise, not a trend.
+    if (!memoryReportPath.empty() && memoryReportRssSamples.size() >= 10) {
+        const std::size_t lHalf = memoryReportRssSamples.size() / 2;
+        long lFrontSum = 0, lBackSum = 0;
+        for (std::size_t lIndex = 0; lIndex < lHalf; ++lIndex) {
+            lFrontSum += memoryReportRssSamples[lIndex];
+        }
+        for (std::size_t lIndex = lHalf; lIndex < memoryReportRssSamples.size(); ++lIndex) {
+            lBackSum += memoryReportRssSamples[lIndex];
+        }
+        const double lFrontAvgKb = static_cast<double>(lFrontSum) / lHalf;
+        const double lBackAvgKb = static_cast<double>(lBackSum) / (memoryReportRssSamples.size() - lHalf);
+        const double lGrowthKb = lBackAvgKb - lFrontAvgKb;
+        // Absolute floor (not just a percentage) so a tiny process with normal
+        // allocator noise doesn't fail on, say, "grew from 40KB to 80KB" -- and a
+        // percentage on top of that so a huge process doesn't get a free pass on
+        // genuinely leaking a large absolute amount.
+        const double kGrowthFloorKb = 5000.0;
+        const double kGrowthFraction = 0.20;
+        std::fprintf(stderr, "Memory baseline: front-half avg %.0f KB, back-half avg %.0f KB (growth %.0f KB)\n",
+                     lFrontAvgKb, lBackAvgKb, lGrowthKb);
+        if (lGrowthKb > kGrowthFloorKb && lGrowthKb > lFrontAvgKb * kGrowthFraction) {
+            std::fprintf(stderr, "Memory baseline FAILED: RSS grew %.0f KB (%.1f%%) from front half to back half "
+                                  "of a %zu-frame run -- looks like a leak, not steady-state noise.\n",
+                         lGrowthKb, lFrontAvgKb > 0 ? (lGrowthKb / lFrontAvgKb * 100.0) : 0.0,
+                         memoryReportRssSamples.size() * static_cast<std::size_t>(kMemoryReportSampleEvery));
+            return 1;
+        }
     }
 
     if (autoPlay && mainCharacter != nullptr && mainCharacter->mPosition == startingPlayerPosition) {

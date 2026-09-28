@@ -389,6 +389,16 @@ if(BUILD_TESTING)
     set_tests_properties(HoverNetGame2PlayerDebug PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetTrack3DViewerPowerup COMMAND HoverNetTrack3DViewer --powerup --frames 1)
     set_tests_properties(HoverNetTrack3DViewerPowerup PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-    set_tests_properties(HoverNetLinuxBootstrap HoverNetTrackViewer HoverNetTrack3DViewer HoverNetGame2Player HoverNetGame2PlayerAutoplay HoverNetGame2PlayerSwitchback HoverNetGame2PlayerAudio HoverNetGame2PlayerCombat HoverNetGame2PlayerWeaponCycle HoverNetGame2PlayerJump HoverNetGame2PlayerFire HoverNetGame2PlayerControls HoverNetGame2PlayerDebug HoverNetTrack3DViewerPowerup
+    # Phase 1 of docs/roadmap-2.0.md calls for "a repeatable frame-time and
+    # memory baseline" -- unlike the smoke tests above (a handful of frames,
+    # just checking nothing crashes), this runs long enough for a real leak to
+    # show up as a front-half-vs-back-half RSS trend (see the check at the end
+    # of Track3DViewer.cpp's main()), rather than needing someone to notice a
+    # multi-hour session gradually using more memory by hand.
+    add_test(NAME HoverNetMemoryBaselineSmoke
+        COMMAND HoverNetGame2Player --autoplay --frames 600
+                --memory-report "${CMAKE_BINARY_DIR}/memory-baseline-report.csv")
+    set_tests_properties(HoverNetMemoryBaselineSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(HoverNetLinuxBootstrap HoverNetTrackViewer HoverNetTrack3DViewer HoverNetGame2Player HoverNetGame2PlayerAutoplay HoverNetGame2PlayerSwitchback HoverNetGame2PlayerAudio HoverNetGame2PlayerCombat HoverNetGame2PlayerWeaponCycle HoverNetGame2PlayerJump HoverNetGame2PlayerFire HoverNetGame2PlayerControls HoverNetGame2PlayerDebug HoverNetTrack3DViewerPowerup HoverNetMemoryBaselineSmoke
         PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 endif()
