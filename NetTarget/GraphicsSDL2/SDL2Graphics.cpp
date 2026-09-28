@@ -50,7 +50,7 @@ bool SDL2GraphicsBackend::Initialize(void* windowHandle, int width, int height)
     (void)windowHandle;
     const std::string windowTitle = std::string("HoverNet ") + HOVERNET_VERSION;
     m_window = SDL_CreateWindow(windowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                                width, height, SDL_WINDOW_SHOWN);
+                                width, height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 #endif
     if (!m_window) { SDL_QuitSubSystem(SDL_INIT_VIDEO); return false; }
 

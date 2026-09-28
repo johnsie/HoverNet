@@ -710,6 +710,37 @@ void SaveFullscreen(bool fullscreen)
     out << (fullscreen ? 1 : 0) << '\n';
 }
 
+struct WindowSize
+{
+    int width = 1024;
+    int height = 768;
+};
+
+std::string WindowSizePath()
+{
+    return ConfigDirPath() + "/window_size";
+}
+
+WindowSize LoadWindowSize()
+{
+    WindowSize size;
+    std::ifstream in(WindowSizePath());
+    int width = 0;
+    int height = 0;
+    if (in >> width >> height &&
+        width >= 640 && width <= 7680 && height >= 480 && height <= 4320) {
+        size.width = width;
+        size.height = height;
+    }
+    return size;
+}
+
+void SaveWindowSize(const WindowSize& size)
+{
+    std::ofstream out(WindowSizePath());
+    out << size.width << ' ' << size.height << '\n';
+}
+
 struct RemotePlayer
 {
     MR_MainCharacter* mCharacter = nullptr;
@@ -872,6 +903,8 @@ struct SettingsResult
     unsigned serverPort = 0;
     double volume = 1.0;
     bool fullscreen = false;
+    int windowWidth = 1024;
+    int windowHeight = 768;
 };
 
 SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
@@ -1098,6 +1131,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                         SaveServerUrl(settings.serverHost, settings.serverPort);
                         SaveVolume(settings.volume);
                         SaveFullscreen(settings.fullscreen);
+                        WindowSize savedSize;
+                        savedSize.width = settings.windowWidth;
+                        savedSize.height = settings.windowHeight;
+                        SaveWindowSize(savedSize);
                     }
                 }
                 else if (pauseChoice == PauseChoice::eControls) {
@@ -1866,6 +1903,28 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     int port = static_cast<int>(currentServerPort);
     float volumePercent = static_cast<float>(currentVolume * 100.0);
     bool fullscreen = currentFullscreen;
+    int windowWidth = 0;
+    int windowHeight = 0;
+    if (currentFullscreen) {
+        const WindowSize savedSize = LoadWindowSize();
+        windowWidth = savedSize.width;
+        windowHeight = savedSize.height;
+    }
+    else {
+        SDL_GetWindowSize(graphics.GetWindow(), &windowWidth, &windowHeight);
+    }
+    const int currentWindowWidth = windowWidth;
+    const int currentWindowHeight = windowHeight;
+    struct ResolutionOption { int width; int height; };
+    constexpr ResolutionOption resolutions[] = {
+        {1024, 768}, {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}
+    };
+    int selectedResolution = -1;
+    for (int index = 0; index < static_cast<int>(sizeof(resolutions) / sizeof(resolutions[0])); ++index) {
+        if (resolutions[index].width == windowWidth && resolutions[index].height == windowHeight) {
+            selectedResolution = index;
+        }
+    }
 
     // Settings can be opened both from the legacy in-race pause menu (where no
     // ImGui context exists) and from the ImGui lobby.  Creating a second context
@@ -1956,7 +2015,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         const float centerWidth = std::min(460.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
-        ImGui::BeginChild("SettingsPanel", ImVec2(centerWidth, 480), true);
+        ImGui::BeginChild("SettingsPanel", ImVec2(centerWidth, 540), true);
 
         ImGui::TextUnformatted("Display Name");
         ImGui::PushItemWidth(-1.0f);
@@ -2009,12 +2068,41 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Separator();
         ImGui::Spacing();
 
-        // Applied live, same as Volume above -- SDL_RenderSetLogicalSize (see
-        // SDL2Graphics.cpp) already scales the fixed-resolution framebuffer to
-        // fit the window, so toggling fullscreen here is purely a window-mode
-        // change with nothing else to keep in sync.
+        ImGui::TextUnformatted("Window Resolution");
+        char resolutionLabel[32];
+        std::snprintf(resolutionLabel, sizeof(resolutionLabel), "%d x %d", windowWidth, windowHeight);
+        ImGui::PushItemWidth(-1.0f);
+        if (ImGui::BeginCombo("##WindowResolution", resolutionLabel)) {
+            for (int index = 0; index < static_cast<int>(sizeof(resolutions) / sizeof(resolutions[0])); ++index) {
+                char optionLabel[32];
+                std::snprintf(optionLabel, sizeof(optionLabel), "%d x %d",
+                              resolutions[index].width, resolutions[index].height);
+                const bool selected = selectedResolution == index;
+                if (ImGui::Selectable(optionLabel, selected)) {
+                    selectedResolution = index;
+                    windowWidth = resolutions[index].width;
+                    windowHeight = resolutions[index].height;
+                    if (!fullscreen) {
+                        SDL_SetWindowSize(graphics.GetWindow(), windowWidth, windowHeight);
+                        SDL_SetWindowPosition(graphics.GetWindow(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+                    }
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::PopItemWidth();
+        ImGui::Spacing();
+
+        // Applied live, same as Volume above. The fixed-resolution framebuffer
+        // is scaled by SDL_RenderSetLogicalSize; leaving fullscreen restores the
+        // selected window size without changing gameplay rendering.
         if (ImGui::Checkbox("Fullscreen", &fullscreen)) {
             SDL_SetWindowFullscreen(graphics.GetWindow(), fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+            if (!fullscreen) {
+                SDL_SetWindowSize(graphics.GetWindow(), windowWidth, windowHeight);
+                SDL_SetWindowPosition(graphics.GetWindow(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+            }
         }
 
         ImGui::Spacing();
@@ -2055,12 +2143,14 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     }
 
     if (cancelled) {
-        // Unlike username/host (never applied until Save), volume and
-        // fullscreen are applied live above for immediate feedback -- Cancel
-        // needs to explicitly undo both so neither "sticks" despite not
-        // being saved.
+        // Unlike username/host, display and audio changes preview live. Cancel
+        // restores the exact mode, window size, and volume from entry.
         MR_SoundServer::SetMasterVolume(currentVolume);
         SDL_SetWindowFullscreen(graphics.GetWindow(), currentFullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+        if (!currentFullscreen) {
+            SDL_SetWindowSize(graphics.GetWindow(), currentWindowWidth, currentWindowHeight);
+            SDL_SetWindowPosition(graphics.GetWindow(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+        }
     }
 
     SettingsResult result;
@@ -2070,6 +2160,8 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     result.serverPort = static_cast<unsigned>(port);
     result.volume = volumePercent / 100.0;
     result.fullscreen = fullscreen;
+    result.windowWidth = windowWidth;
+    result.windowHeight = windowHeight;
     return result;
 }
 
@@ -2319,6 +2411,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "LOCAL_RACE_PREFS=%s\n", LocalRacePrefsPath().c_str());
         std::fprintf(stderr, "USERNAME=%s\n", UsernamePath().c_str());
         std::fprintf(stderr, "SERVER_URL=%s\n", ServerUrlPath().c_str());
+        std::fprintf(stderr, "WINDOW_SIZE=%s\n", WindowSizePath().c_str());
         return 0;
     }
 #endif
@@ -2446,11 +2539,16 @@ int main(int argc, char** argv)
         return 1;
     }
 #ifdef HOVERNET_GAME2_PLAYER
-    // SDL_RenderSetLogicalSize (see SDL2Graphics.cpp) already has the renderer
-    // scale the fixed kWidth x kHeight framebuffer to fit whatever the actual
-    // window size ends up being, so toggling fullscreen here is just a window
-    // mode change -- nothing about the render loop itself needs to know.
-    if (LoadFullscreen()) {
+    // The renderer's logical size keeps gameplay at its original resolution;
+    // the SDL window can therefore restore the player's chosen size without
+    // changing any simulation or framebuffer assumptions.
+    const WindowSize savedWindowSize = LoadWindowSize();
+    const bool startFullscreen = LoadFullscreen();
+    if (!startFullscreen) {
+        SDL_SetWindowSize(graphics.GetWindow(), savedWindowSize.width, savedWindowSize.height);
+        SDL_SetWindowPosition(graphics.GetWindow(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    }
+    else {
         SDL_SetWindowFullscreen(graphics.GetWindow(), SDL_WINDOW_FULLSCREEN_DESKTOP);
     }
 #endif
@@ -2706,6 +2804,10 @@ int main(int argc, char** argv)
                     SaveServerUrl(lobbyHost, lobbyPort);
                     SaveVolume(settings.volume);
                     SaveFullscreen(settings.fullscreen);
+                    WindowSize savedSize;
+                    savedSize.width = settings.windowWidth;
+                    savedSize.height = settings.windowHeight;
+                    SaveWindowSize(savedSize);
                 }
                 pickingMode = !g_QuitConfirmed;
             }
@@ -2847,6 +2949,10 @@ int main(int argc, char** argv)
                             SaveServerUrl(lobbyHost, lobbyPort);
                             SaveVolume(settings.volume);
                             SaveFullscreen(settings.fullscreen);
+                            WindowSize savedSize;
+                            savedSize.width = settings.windowWidth;
+                            savedSize.height = settings.windowHeight;
+                            SaveWindowSize(savedSize);
                         }
                     }
                     else if (pauseChoice == PauseChoice::eControls) {

@@ -38,6 +38,14 @@ Run from the repository root so the player can load `NetTarget/ObjFac1.dat` and 
 The same list is available in-game through **Controls** on the main menu and
 the Escape menu, including while browsing the online lobby.
 
+## Display settings
+
+The Settings screen supports windowed/fullscreen mode, master volume, and common
+window resolutions from 1024x768 through 2560x1440. Resolution and fullscreen
+changes preview immediately; Cancel restores the previous display state. Saved
+window dimensions are restored on the next launch, and the window can also be
+resized directly while windowed.
+
 ## Bounded Runs
 
 The player accepts deterministic flags for automated verification:
