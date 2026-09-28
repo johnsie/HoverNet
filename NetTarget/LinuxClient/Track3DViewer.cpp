@@ -1938,15 +1938,8 @@ int main(int argc, char** argv)
     } soundServerCleanup;
 #endif
 
-    MR_RecordFile* track = new MR_RecordFile;
     const std::string initialTrackName = ParseTrackArg(argc, argv);
-    const std::string trackPath = SourcePath(("NetTarget/Tracks/" + initialTrackName + ".trk").c_str());
-    if (!track->OpenForRead(trackPath.c_str())) {
-        std::fprintf(stderr, "Could not open %s.trk\n", initialTrackName.c_str());
-        delete track;
-        return 1;
-    }
-
+    std::string currentTrackName;
     const bool playerMode = IsPlayerMode(argc, argv);
     MR_VideoBuffer buffer(nullptr, 1.0, 0.5, 0.5);
     if (!buffer.SetVideoMode(kWidth, kHeight) || !buffer.Lock()) {
@@ -1955,33 +1948,12 @@ int main(int argc, char** argv)
     }
     MR_ClientSession session;
     const BOOL allowWeapons = playerMode ? TRUE : FALSE;
-    if (!session.LoadNew(initialTrackName.c_str(), track, 1, allowWeapons, &buffer) || session.GetCurrentLevel() == nullptr) {
-        std::fprintf(stderr, "Could not load %s.trk\n", initialTrackName.c_str());
-        return 1;
-    }
-
-    if (playerMode && !session.CreateMainCharacter()) {
-        std::fprintf(stderr, "Could not create the local player\n");
-        return 1;
-    }
-    if (playerMode) {
-        session.SetSimulationTime(-6000);
-    }
-
-    const MR_Level* level = session.GetCurrentLevel();
-    MR_MainCharacter* mainCharacter = session.GetMainCharacter();
+    const MR_Level* level = nullptr;
+    MR_MainCharacter* mainCharacter = nullptr;
     const bool autoPlay = playerMode && HasArgument(argc, argv, "--autoplay");
     MR_3DCoordinate startingPlayerPosition;
-    if (autoPlay) {
-        session.SetSimulationTime(0);
-        startingPlayerPosition = mainCharacter->mPosition;
-    }
     const int player = 0;
-    int room = level->GetStartingRoom(player);
-    if (room < 0 || room >= level->GetRoomCount()) {
-        std::fprintf(stderr, "%s.trk has no valid starting room\n", initialTrackName.c_str());
-        return 1;
-    }
+    int room = 0;
 
     const std::string resourcePath = SourcePath("NetTarget/ObjFac1.dat");
     MR_ResourceLib resources(resourcePath.c_str());
@@ -1996,10 +1968,33 @@ int main(int argc, char** argv)
         return 1;
     }
 #endif
-    MR_3DCoordinate camera = level->GetStartingPos(player);
-    camera.mZ += 700;
-    MR_Angle orientation = level->GetStartingOrientation(player);
-    if (HasArgument(argc, argv, "--powerup")) {
+    MR_3DCoordinate camera;
+    MR_Angle orientation = 0;
+    RenderStats renderStats;
+    int nonZeroPixels = 0;
+
+    // The standalone viewer opens its requested track immediately. The game
+    // client deliberately waits until Local Play or the lobby selects a track.
+    if (!playerMode) {
+        MR_RecordFile* track = new MR_RecordFile;
+        const std::string trackPath = SourcePath(("NetTarget/Tracks/" + initialTrackName + ".trk").c_str());
+        if (!track->OpenForRead(trackPath.c_str()) ||
+            !session.LoadNew(initialTrackName.c_str(), track, 1, allowWeapons, &buffer) ||
+            session.GetCurrentLevel() == nullptr) {
+            std::fprintf(stderr, "Could not load %s.trk\n", initialTrackName.c_str());
+            return 1;
+        }
+        level = session.GetCurrentLevel();
+        room = level->GetStartingRoom(player);
+        if (room < 0 || room >= level->GetRoomCount()) {
+            std::fprintf(stderr, "%s.trk has no valid starting room\n", initialTrackName.c_str());
+            return 1;
+        }
+        camera = level->GetStartingPos(player);
+        camera.mZ += 700;
+        orientation = level->GetStartingOrientation(player);
+    }
+    if (!playerMode && HasArgument(argc, argv, "--powerup")) {
         bool powerUpFound = false;
         for (int candidateRoom = 0; candidateRoom < level->GetRoomCount() && !powerUpFound; ++candidateRoom) {
             MR_FreeElementHandle handle = level->GetFirstFreeElement(candidateRoom);
@@ -2023,11 +2018,13 @@ int main(int argc, char** argv)
             return 1;
         }
     }
-    ClampCameraHeight(*level, room, camera);
-    RenderStats renderStats = RenderScene(*level, room, camera, orientation, viewport, resources,
-                                          SDL_GetTicks(), mainCharacter);
+    if (!playerMode) {
+        ClampCameraHeight(*level, room, camera);
+        renderStats = RenderScene(*level, room, camera, orientation, viewport, resources,
+                                  SDL_GetTicks(), mainCharacter);
+    }
 #ifdef HOVERNET_GAME2_PLAYER
-    if (playerMode) {
+    if (playerMode && level != nullptr) {
         if (debugView) {
             observer->RenderDebugDisplay(&buffer, &session, mainCharacter, session.GetSimulationTime(),
                                          session.GetBackImage());
@@ -2038,9 +2035,9 @@ int main(int argc, char** argv)
         }
     }
 #endif
-    const int nonZeroPixels = static_cast<int>(std::count_if(buffer.GetBuffer(),
+    nonZeroPixels = static_cast<int>(std::count_if(buffer.GetBuffer(),
         buffer.GetBuffer() + kWidth * kHeight, [](MR_UInt8 pixel) { return pixel != 0; }));
-    if (renderStats.surfacesRendered == 0 || nonZeroPixels == 0) {
+    if (!playerMode && (renderStats.surfacesRendered == 0 || nonZeroPixels == 0)) {
         std::fprintf(stderr, "ClassicH starting room did not render visible surfaces\n");
         return 1;
     }
@@ -2049,29 +2046,32 @@ int main(int argc, char** argv)
     if (!graphics.Initialize(nullptr, kWidth, kHeight)) {
         return 1;
     }
-    std::array<MR_UInt8, MR_NB_COLORS * 3> palette{};
-    PALETTEENTRY* colors = MR_GetColors(0.75, 0.75, 0.05);
-    for (int index = 0; index < MR_BASIC_COLORS; ++index) {
-        const int paletteIndex = MR_RESERVED_COLORS_BEGINNING + index;
-        palette[paletteIndex * 3] = colors[index].peRed;
-        palette[paletteIndex * 3 + 1] = colors[index].peGreen;
-        palette[paletteIndex * 3 + 2] = colors[index].peBlue;
-    }
-    delete [] colors;
-    const MR_UInt8* backgroundPalette = buffer.GetBackPalette();
-    if (backgroundPalette != nullptr) {
-        for (int index = 0; index < MR_BACK_COLORS; ++index) {
-            const PALETTEENTRY& color = MR_ConvertColor(backgroundPalette[index * 3],
-                                                         backgroundPalette[index * 3 + 1],
-                                                         backgroundPalette[index * 3 + 2],
-                                                         0.75, 0.75, 0.05);
-            const int paletteIndex = MR_RESERVED_COLORS_BEGINNING + MR_BASIC_COLORS + index;
-            palette[paletteIndex * 3] = color.peRed;
-            palette[paletteIndex * 3 + 1] = color.peGreen;
-            palette[paletteIndex * 3 + 2] = color.peBlue;
+    auto applyPalette = [&]() {
+        std::array<MR_UInt8, MR_NB_COLORS * 3> palette{};
+        PALETTEENTRY* colors = MR_GetColors(0.75, 0.75, 0.05);
+        for (int index = 0; index < MR_BASIC_COLORS; ++index) {
+            const int paletteIndex = MR_RESERVED_COLORS_BEGINNING + index;
+            palette[paletteIndex * 3] = colors[index].peRed;
+            palette[paletteIndex * 3 + 1] = colors[index].peGreen;
+            palette[paletteIndex * 3 + 2] = colors[index].peBlue;
         }
-    }
-    graphics.SetPalette(palette.data(), static_cast<int>(palette.size()));
+        delete [] colors;
+        const MR_UInt8* backgroundPalette = buffer.GetBackPalette();
+        if (backgroundPalette != nullptr) {
+            for (int index = 0; index < MR_BACK_COLORS; ++index) {
+                const PALETTEENTRY& color = MR_ConvertColor(backgroundPalette[index * 3],
+                                                             backgroundPalette[index * 3 + 1],
+                                                             backgroundPalette[index * 3 + 2],
+                                                             0.75, 0.75, 0.05);
+                const int paletteIndex = MR_RESERVED_COLORS_BEGINNING + MR_BASIC_COLORS + index;
+                palette[paletteIndex * 3] = color.peRed;
+                palette[paletteIndex * 3 + 1] = color.peGreen;
+                palette[paletteIndex * 3 + 2] = color.peBlue;
+            }
+        }
+        graphics.SetPalette(palette.data(), static_cast<int>(palette.size()));
+    };
+    applyPalette();
 
     const int frameLimit = ParseFrameCount(argc, argv);
 
@@ -2105,38 +2105,10 @@ int main(int argc, char** argv)
         raceNames.clear();
         localClientId = -1;
 
-        MR_RecordFile* freshTrack = new MR_RecordFile;
-        if (!freshTrack->OpenForRead(trackPath.c_str())) {
-            delete freshTrack;
-            std::fprintf(stderr, "Could not reopen %s.trk while leaving race\n", initialTrackName.c_str());
-            return false;
-        }
-        if (!session.LoadNew(initialTrackName.c_str(), freshTrack, 1, allowWeapons, &buffer) ||
-            !session.CreateMainCharacter()) {
-            std::fprintf(stderr, "Could not reset the gameplay session while leaving race\n");
-            return false;
-        }
-
-        level = session.GetCurrentLevel();
-        mainCharacter = session.GetMainCharacter();
-        if (level == nullptr || mainCharacter == nullptr) {
-            return false;
-        }
-        session.SetSimulationTime(-6000);
-        room = level->GetStartingRoom(0);
-        camera = mainCharacter->mPosition;
-        camera.mZ += 700;
-        orientation = mainCharacter->GetCabinOrientation();
-        renderStats = RenderScene(*level, room, camera, orientation, viewport, resources,
-                                  SDL_GetTicks(), mainCharacter);
         return true;
     };
 
-    // Loads whatever track/laps/weapons the player actually picked in
-    // RunLocalRaceSetup, instead of resetRaceSession's fixed "back to a neutral
-    // ClassicH state" (that one's for bailing out of an online race before
-    // trying to join another, not for starting the local race the player asked
-    // for). Mirrors joinOnlineRace's track-reload shape below.
+    // Create the first gameplay session only after Local Play has selected it.
     auto loadLocalRace = [&](const std::string& newTrackName, int newLaps, bool newWeapons) -> bool {
         session.SetElementCreationBroadcastHook(nullptr, nullptr);
         onlineClient.Disconnect();
@@ -2154,6 +2126,7 @@ int main(int argc, char** argv)
         }
         level = session.GetCurrentLevel();
         mainCharacter = session.GetMainCharacter();
+        currentTrackName = newTrackName;
         session.SetSimulationTime(-6000);
         room = mainCharacter->mRoom;
         camera = mainCharacter->mPosition;
@@ -2161,6 +2134,7 @@ int main(int argc, char** argv)
         orientation = mainCharacter->GetCabinOrientation();
         renderStats = RenderScene(*level, room, camera, orientation, viewport, resources,
                                   SDL_GetTicks(), mainCharacter);
+        applyPalette();
         return true;
     };
 
@@ -2181,9 +2155,7 @@ int main(int argc, char** argv)
         std::printf("Joined race %c%s%c via the lobby (%zu other player(s) already in)\n",
                     39, joinedRace.c_str(), 39, knownPeers.size());
 
-        // The level loaded at startup (or left over from a previous online race) is
-        // whatever track happened to be current before this -- reload with the
-        // track this race actually uses. LoadNew() invalidates the previous
+        // Load only the track selected by the joined race. LoadNew() invalidates the previous
         // MR_MainCharacter (see its own comment: "a newly loaded track owns a
         // completely new element graph"), so the local player has to be recreated
         // too, and every stale remote craft from any earlier race dropped.
@@ -2199,7 +2171,13 @@ int main(int argc, char** argv)
             }
             level = session.GetCurrentLevel();
             mainCharacter = session.GetMainCharacter();
+            currentTrackName = joinedTrack;
             remotePlayers.clear();
+        }
+        else {
+            std::fprintf(stderr, "Joined race did not specify a track\n");
+            onlineClient.Disconnect();
+            return false;
         }
 
         session.SetSimulationTime(-6000);
@@ -2256,10 +2234,17 @@ int main(int argc, char** argv)
         camera = mainCharacter->mPosition;
         camera.mZ += 700;
         orientation = mainCharacter->GetCabinOrientation();
+        renderStats = RenderScene(*level, room, camera, orientation, viewport, resources,
+                                  SDL_GetTicks(), mainCharacter);
+        applyPalette();
         return true;
     };
 
-    if (playerMode && menuFontHandle != nullptr) {
+    if (playerMode && menuFontHandle == nullptr) {
+        std::fprintf(stderr, "Could not load the menu font\n");
+        return 1;
+    }
+    if (playerMode) {
         bool pickingMode = true;
         while (pickingMode) {
             pickingMode = false;
@@ -2272,7 +2257,8 @@ int main(int argc, char** argv)
             }
             else if (choice == MenuChoice::eOnlineLobby) {
                 if (!joinOnlineRace()) {
-                    std::printf("Lobby skipped or unavailable; continuing with local play\n");
+                    std::printf("Lobby skipped or unavailable; returning to the main menu\n");
+                    pickingMode = !g_QuitConfirmed;
                 }
             }
             else if (choice == MenuChoice::eSettings) {
@@ -2292,20 +2278,18 @@ int main(int argc, char** argv)
                 pickingMode = !g_QuitConfirmed;
             }
             else if (autoPlay) {
-                // --autoplay already primed the session (SetSimulationTime(0) on
-                // the ClassicH session loaded at startup, above) before this menu
-                // ever ran -- loadLocalRace's LoadNew/CreateMainCharacter/
-                // SetSimulationTime(-6000) would silently undo that priming, so
-                // skip the setup screen entirely and keep the pre-primed session
-                // exactly as every autoplay-driven ctest expects.
+                if (!loadLocalRace(initialTrackName, 1, true)) return 1;
+                session.SetSimulationTime(0);
+                startingPlayerPosition = mainCharacter->mPosition;
             }
             else {
                 const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
                                                                 *menuFontHandle->GetSprite(), frameLimit);
                 if (setup.confirmed) {
                     if (!loadLocalRace(setup.trackName, setup.laps, setup.weapons)) {
-                        std::printf("Could not load '%s'; continuing with the default track\n",
+                        std::printf("Could not load '%s'; returning to the main menu\n",
                                     setup.trackName.c_str());
+                        pickingMode = !g_QuitConfirmed;
                     }
                 }
                 else {
@@ -2320,8 +2304,15 @@ int main(int argc, char** argv)
     }
 #endif
 
+    if (playerMode && !g_QuitConfirmed && (level == nullptr || mainCharacter == nullptr)) {
+        std::fprintf(stderr, "No race was selected\n");
+        return 1;
+    }
+    nonZeroPixels = static_cast<int>(std::count_if(buffer.GetBuffer(),
+        buffer.GetBuffer() + kWidth * kHeight, [](MR_UInt8 pixel) { return pixel != 0; }));
     std::printf("%s 3D view: room=%d surfaces=%d actors=%d pixels=%d\n",
-                initialTrackName.c_str(), room, renderStats.surfacesRendered,
+                currentTrackName.empty() ? initialTrackName.c_str() : currentTrackName.c_str(),
+                room, renderStats.surfacesRendered,
                 renderStats.actorsRendered, nonZeroPixels);
     int framesRendered = 0;
     // Already confirmed quitting from an earlier menu screen (see g_QuitConfirmed) --
@@ -2468,7 +2459,7 @@ int main(int argc, char** argv)
         const bool selectWeapon = keyboard[SDL_SCANCODE_TAB] || HasArgument(argc, argv, "--select-weapon");
 
 #ifdef HOVERNET_GAME2_PLAYER
-        if (playerMode) {
+        if (playerMode && mainCharacter != nullptr && level != nullptr) {
             if (keyboard[SDL_SCANCODE_F3]) {
                 debugView = false;
                 cockpitView = false;
@@ -2505,7 +2496,7 @@ int main(int argc, char** argv)
         }
 #endif
 
-        if (playerMode) {
+        if (playerMode && mainCharacter != nullptr && level != nullptr) {
             int controlState = 0;
             if (autoPlay || moveForward) controlState |= MR_MainCharacter::eMotorOn;
             if (turnLeft) controlState |= MR_MainCharacter::eLeft;
@@ -2731,15 +2722,15 @@ int main(int argc, char** argv)
         SDL_Delay(16);
     }
 
-    if (autoPlay && mainCharacter->mPosition == startingPlayerPosition) {
+    if (autoPlay && mainCharacter != nullptr && mainCharacter->mPosition == startingPlayerPosition) {
         std::fprintf(stderr, "Autoplay did not move the main character\n");
         return 1;
     }
-    if (autoPlay) {
+    if (autoPlay && mainCharacter != nullptr) {
         std::printf("Autoplay player position=(%d,%d,%d)\n", mainCharacter->mPosition.mX,
                     mainCharacter->mPosition.mY, mainCharacter->mPosition.mZ);
     }
-    if (playerMode && HasArgument(argc, argv, "--fire") &&
+    if (playerMode && mainCharacter != nullptr && HasArgument(argc, argv, "--fire") &&
         mainCharacter->GetCurrentWeapon() == MR_MainCharacter::eMissile && !missileSeen) {
         std::fprintf(stderr, "Firing did not create a missile\n");
         return 1;
