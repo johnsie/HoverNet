@@ -12,17 +12,63 @@
 #include "RaceServerClient.h"
 
 #include <chrono>
+#include <arpa/inet.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <signal.h>
 #include <string>
 #include <sys/wait.h>
+#include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
 
 namespace
 {
+    bool CheckLegacyCompatibility(unsigned pPort, bool pShouldAccept)
+    {
+        const int lSocket = socket(AF_INET, SOCK_STREAM, 0);
+        if (lSocket < 0) return false;
+
+        sockaddr_in lAddress = {};
+        lAddress.sin_family = AF_INET;
+        lAddress.sin_port = htons(static_cast<unsigned short>(pPort));
+        inet_pton(AF_INET, "127.0.0.1", &lAddress.sin_addr);
+        if (connect(lSocket, reinterpret_cast<sockaddr*>(&lAddress), sizeof(lAddress)) != 0) {
+            close(lSocket);
+            return false;
+        }
+
+        // A pre-2.0 client sends LIST_GAMES immediately, without an HNET hello.
+        const unsigned short lHeader = static_cast<unsigned short>(60 << 10);
+        const unsigned char lRequest[3] = {
+            static_cast<unsigned char>(lHeader & 0xff),
+            static_cast<unsigned char>((lHeader >> 8) & 0xff), 0
+        };
+        if (send(lSocket, lRequest, sizeof(lRequest), 0) != sizeof(lRequest)) {
+            close(lSocket);
+            return false;
+        }
+
+        timeval lTimeout = {2, 0};
+        setsockopt(lSocket, SOL_SOCKET, SO_RCVTIMEO, &lTimeout, sizeof(lTimeout));
+        unsigned char lReply[3] = {};
+        size_t lReceived = 0;
+        while (lReceived < sizeof(lReply)) {
+            const ssize_t lCount = recv(lSocket, lReply + lReceived, sizeof(lReply) - lReceived, 0);
+            if (lCount <= 0) break;
+            lReceived += static_cast<size_t>(lCount);
+        }
+        close(lSocket);
+        if (lReceived != sizeof(lReply)) return false;
+        const unsigned short lReplyHeader = static_cast<unsigned short>(lReply[0]) |
+            (static_cast<unsigned short>(lReply[1]) << 8);
+        const int lReplyType = (lReplyHeader >> 10) & 0x3f;
+        return pShouldAccept
+            ? lReplyType == eRSMsgGameListEnd && lReply[2] == 0
+            : lReplyType == 59;
+    }
+
     bool WaitForServer(const std::string& pHost, unsigned pPort)
     {
         for (int lAttempt = 0; lAttempt < 50; ++lAttempt)
@@ -120,8 +166,16 @@ namespace
         return true;
     }
 
-    bool RunChecks(unsigned pPort)
+    bool RunChecks(unsigned pPort, bool pAllowLegacy)
     {
+        if (!CheckLegacyCompatibility(pPort, pAllowLegacy))
+        {
+            std::fprintf(stderr, "RaceServer legacy-client behavior did not match its configured mode\n");
+            return false;
+        }
+        std::printf("Pre-handshake clients are %s as configured\n",
+                    pAllowLegacy ? "accepted" : "rejected");
+
         RaceServerClient lIncompatibleClient;
         if (lIncompatibleClient.ConnectWithProtocolVersion("127.0.0.1", pPort, 99, 0) ||
             lIncompatibleClient.IsConnected() || lIncompatibleClient.GetProtocolError().empty())
@@ -833,7 +887,8 @@ int main(int argc, char* argv[])
     }
 
     const std::string lServerPath = argv[1];
-    const unsigned lPort = 19870;
+    const bool lStrict = argc > 2 && std::strcmp(argv[2], "--strict") == 0;
+    const unsigned lPort = lStrict ? 19871 : 19870;
     const std::string lPortStr = std::to_string(lPort);
     const std::string lLogPath = "RaceServerClientSmoke.raceserver.log";
 
@@ -846,8 +901,14 @@ int main(int argc, char* argv[])
 
     if (lServerPid == 0)
     {
-        execl(lServerPath.c_str(), lServerPath.c_str(), lPortStr.c_str(), lLogPath.c_str(),
-              static_cast<char*>(nullptr));
+        if (lStrict) {
+            execl(lServerPath.c_str(), lServerPath.c_str(), lPortStr.c_str(), lLogPath.c_str(),
+                  "--require-protocol-2", static_cast<char*>(nullptr));
+        }
+        else {
+            execl(lServerPath.c_str(), lServerPath.c_str(), lPortStr.c_str(), lLogPath.c_str(),
+                  static_cast<char*>(nullptr));
+        }
         std::fprintf(stderr, "execl(%s) failed: %s\n", lServerPath.c_str(), std::strerror(errno));
         _exit(127);
     }
@@ -855,7 +916,7 @@ int main(int argc, char* argv[])
     int lResult = 1;
     if (WaitForServer("127.0.0.1", lPort))
     {
-        if (RunChecks(lPort))
+        if (RunChecks(lPort, !lStrict))
         {
             std::printf("RaceServerClient smoke test passed\n");
             lResult = 0;

@@ -21,6 +21,11 @@ cmake --build build/linux --target RaceServer --parallel 2
 
 The production clients use `outiva.com:9600`. A deployment must expose port `9600` and preserve `/etc/hovernet/config.xml` when upgrading the Debian package.
 
+Legacy clients that predate the 2.0 handshake are accepted by default during
+the rolling migration. Their connections are logged as legacy. After supported
+clients have upgraded, start the server with `--require-protocol-2` to reject
+clients that do not negotiate protocol 2.x before sending lobby traffic.
+
 ## Package and service
 
 Build the Debian package with:

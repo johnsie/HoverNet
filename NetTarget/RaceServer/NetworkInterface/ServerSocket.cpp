@@ -53,7 +53,8 @@ MR_ServerSocket::MR_ServerSocket()
       mDatagramSocket(INVALID_SOCKET),
       mNextClientId(1),
       mMaxConnections(40),
-      mPort(9600)
+      mPort(9600),
+      mAllowLegacyProtocol(TRUE)
 {
 }
 
@@ -62,10 +63,11 @@ MR_ServerSocket::~MR_ServerSocket()
     Shutdown();
 }
 
-BOOL MR_ServerSocket::Initialize(unsigned port, int maxConnections)
+BOOL MR_ServerSocket::Initialize(unsigned port, int maxConnections, BOOL allowLegacyProtocol)
 {
     mPort = port;
     mMaxConnections = maxConnections;
+    mAllowLegacyProtocol = allowLegacyProtocol;
 
     // Initialize Winsock
 #ifdef _WIN32
@@ -363,44 +365,53 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
     if (!pConn->mProtocolNegotiated) {
         if (messageType != HoverNetProtocol::MessageType) {
-            g_Logger.Log(MR_LOG_WARN, "Client %d sent message %d before protocol negotiation",
-                         pConn->mClientId, messageType);
-            SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::NegotiationRequired,
-                              HoverNetProtocol::Minor, "Protocol negotiation required");
-            pConn->mConnected = FALSE;
-            return;
+            if (mAllowLegacyProtocol) {
+                pConn->mProtocolNegotiated = TRUE;
+                g_Logger.Log(MR_LOG_WARN,
+                             "Client %d is using temporary legacy protocol compatibility",
+                             pConn->mClientId);
+            }
+            else {
+                g_Logger.Log(MR_LOG_WARN, "Client %d sent message %d before protocol negotiation",
+                             pConn->mClientId, messageType);
+                SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::NegotiationRequired,
+                                  HoverNetProtocol::Minor, "Protocol negotiation required");
+                pConn->mConnected = FALSE;
+                return;
+            }
         }
+        else {
+            const unsigned char* lHello = &buffer[3];
+            if (messageDataLen != static_cast<int>(HoverNetProtocol::HelloSize) ||
+                memcmp(lHello, "HNET", 4) != 0 ||
+                HoverNetProtocol::ReadU16(lHello + 8) < 3) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d sent a malformed protocol hello", pConn->mClientId);
+                SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::MalformedHello,
+                                  HoverNetProtocol::Minor, "Malformed protocol hello");
+                pConn->mConnected = FALSE;
+                return;
+            }
 
-        const unsigned char* lHello = &buffer[3];
-        if (messageDataLen != static_cast<int>(HoverNetProtocol::HelloSize) ||
-            memcmp(lHello, "HNET", 4) != 0 ||
-            HoverNetProtocol::ReadU16(lHello + 8) < 3) {
-            g_Logger.Log(MR_LOG_WARN, "Client %d sent a malformed protocol hello", pConn->mClientId);
-            SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::MalformedHello,
-                              HoverNetProtocol::Minor, "Malformed protocol hello");
-            pConn->mConnected = FALSE;
-            return;
+            const unsigned short lMajor = HoverNetProtocol::ReadU16(lHello + 4);
+            const unsigned short lMinor = HoverNetProtocol::ReadU16(lHello + 6);
+            if (lMajor != HoverNetProtocol::Major) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d requested incompatible protocol %u.%u",
+                             pConn->mClientId, lMajor, lMinor);
+                SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::IncompatibleVersion,
+                                  HoverNetProtocol::Minor, "Incompatible protocol version");
+                pConn->mConnected = FALSE;
+                return;
+            }
+
+            const unsigned short lNegotiatedMinor =
+                std::min<unsigned short>(lMinor, HoverNetProtocol::Minor);
+            pConn->mProtocolNegotiated = TRUE;
+            SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::Accepted,
+                              lNegotiatedMinor, nullptr);
+            g_Logger.Log(MR_LOG_INFO, "Client %d negotiated protocol %u.%u",
+                         pConn->mClientId, HoverNetProtocol::Major, lNegotiatedMinor);
+            continue;
         }
-
-        const unsigned short lMajor = HoverNetProtocol::ReadU16(lHello + 4);
-        const unsigned short lMinor = HoverNetProtocol::ReadU16(lHello + 6);
-        if (lMajor != HoverNetProtocol::Major) {
-            g_Logger.Log(MR_LOG_WARN, "Client %d requested incompatible protocol %u.%u",
-                         pConn->mClientId, lMajor, lMinor);
-            SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::IncompatibleVersion,
-                              HoverNetProtocol::Minor, "Incompatible protocol version");
-            pConn->mConnected = FALSE;
-            return;
-        }
-
-        const unsigned short lNegotiatedMinor =
-            std::min<unsigned short>(lMinor, HoverNetProtocol::Minor);
-        pConn->mProtocolNegotiated = TRUE;
-        SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::Accepted,
-                          lNegotiatedMinor, nullptr);
-        g_Logger.Log(MR_LOG_INFO, "Client %d negotiated protocol %u.%u",
-                     pConn->mClientId, HoverNetProtocol::Major, lNegotiatedMinor);
-        continue;
     }
 
     switch (messageType) {

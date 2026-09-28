@@ -48,11 +48,12 @@ void ConsoleCtrlHandler(int)
 void PrintUsage(const char* programName)
 {
     printf("HoverRace Centralized Race Server\n");
-    printf("Usage: %s <port> <logfile> [--config <config.xml>] [--max-races <n>]\n\n", programName);
+    printf("Usage: %s <port> <logfile> [--config <config.xml>] [--max-races <n>] [--require-protocol-2]\n\n", programName);
     printf("  port          TCP/UDP listening port (e.g., 9600)\n");
     printf("  logfile       Output log file (e.g., raceserver.log)\n");
     printf("  --config      Path to XML configuration file (optional)\n");
     printf("  --max-races   Maximum concurrent races to support (optional)\n\n");
+    printf("  --require-protocol-2  Reject legacy clients without a 2.0 handshake\n\n");
     printf("Example:\n");
     printf("  %s 9600 raceserver.log --config config.xml --max-races 50\n", programName);
 }
@@ -88,14 +89,17 @@ int main(int argc, char* argv[])
     // Parse optional arguments
     int maxRaces = 50;
     const char* configFile = NULL;
+    BOOL allowLegacyProtocol = TRUE;
 
-    for (int i = 3; i < argc - 1; i++) {
-        if (strcmp(argv[i], "--config") == 0) {
+    for (int i = 3; i < argc; i++) {
+        if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) {
             configFile = argv[i + 1];
             i++;
-        } else if (strcmp(argv[i], "--max-races") == 0) {
+        } else if (strcmp(argv[i], "--max-races") == 0 && i + 1 < argc) {
             maxRaces = atoi(argv[i + 1]);
             i++;
+        } else if (strcmp(argv[i], "--require-protocol-2") == 0) {
+            allowLegacyProtocol = FALSE;
         }
     }
 
@@ -123,11 +127,13 @@ int main(int argc, char* argv[])
                  g_Config.GetMaxConcurrentRaces());
 
     // Initialize server socket
-    if (!g_ServerSocket.Initialize(port, g_Config.GetMaxConnections())) {
+    if (!g_ServerSocket.Initialize(port, g_Config.GetMaxConnections(), allowLegacyProtocol)) {
         g_Logger.Log(MR_LOG_ERROR, "Failed to initialize server socket on port %u", port);
         return 1;
     }
     g_Logger.Log(MR_LOG_INFO, "Server socket listening on port %u", port);
+    g_Logger.Log(MR_LOG_INFO, "Legacy protocol compatibility: %s",
+                 allowLegacyProtocol ? "enabled" : "disabled");
 
     // Set console control handler for graceful shutdown
 #ifdef _WIN32

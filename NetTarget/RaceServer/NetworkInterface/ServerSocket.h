@@ -13,7 +13,7 @@ public:
     ~MR_ServerSocket();
 
     // Initialize server on specified port
-    BOOL Initialize(unsigned port, int maxConnections = 40);
+    BOOL Initialize(unsigned port, int maxConnections = 40, BOOL allowLegacyProtocol = TRUE);
 
     // Process incoming connections and messages
     void ProcessEvents(MR_RaceManager* pRaceManager);
@@ -45,6 +45,7 @@ private:
     int mNextClientId;
     int mMaxConnections;
     unsigned mPort;
+    BOOL mAllowLegacyProtocol;
 
     // Helper methods
     void AcceptNewConnection();
