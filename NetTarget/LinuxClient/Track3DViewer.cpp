@@ -741,6 +741,27 @@ void SaveWindowSize(const WindowSize& size)
     out << size.width << ' ' << size.height << '\n';
 }
 
+std::string UiScalePath()
+{
+    return ConfigDirPath() + "/ui_scale";
+}
+
+float LoadUiScale()
+{
+    std::ifstream in(UiScalePath());
+    float scale = 1.0f;
+    if (in >> scale && scale >= 0.75f && scale <= 1.5f) {
+        return scale;
+    }
+    return 1.0f;
+}
+
+void SaveUiScale(float scale)
+{
+    std::ofstream out(UiScalePath());
+    out << scale << '\n';
+}
+
 struct RemotePlayer
 {
     MR_MainCharacter* mCharacter = nullptr;
@@ -776,9 +797,10 @@ constexpr ImVec4 kHoverNetRedActive{0.70f, 0.12f, 0.18f, 1.00f};
 constexpr ImVec4 kHoverNetCoral{0.98f, 0.45f, 0.48f, 1.00f};
 constexpr ImVec4 kHoverNetWhite{1.00f, 1.00f, 1.00f, 1.00f};
 
-void ApplyHoverNetLobbyStyle()
+void ApplyHoverNetLobbyStyle(float scale)
 {
     ImGuiStyle& style = ImGui::GetStyle();
+    style = ImGuiStyle();
     ImGui::StyleColorsDark(&style);
 
     style.WindowPadding = ImVec2(16.0f, 16.0f);
@@ -838,6 +860,8 @@ void ApplyHoverNetLobbyStyle()
     colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.30f, 0.30f, 0.34f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabHovered] = kHoverNetRedHover;
     colors[ImGuiCol_ScrollbarGrabActive] = kHoverNetRedActive;
+    style.ScaleAllSizes(scale);
+    ImGui::GetIO().FontGlobalScale = scale;
 }
 
 // Buttons use a solid red fill (see ApplyHoverNetLobbyStyle), so they need white
@@ -905,6 +929,7 @@ struct SettingsResult
     bool fullscreen = false;
     int windowWidth = 1024;
     int windowHeight = 768;
+    float uiScale = 1.0f;
 };
 
 SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
@@ -1077,7 +1102,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     ImFontConfig fontConfig;
     fontConfig.SizePixels = 19.0f;
     io.Fonts->AddFontDefault(&fontConfig);
-    ApplyHoverNetLobbyStyle();
+    ApplyHoverNetLobbyStyle(LoadUiScale());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
@@ -1135,6 +1160,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                         savedSize.width = settings.windowWidth;
                         savedSize.height = settings.windowHeight;
                         SaveWindowSize(savedSize);
+                        SaveUiScale(settings.uiScale);
                     }
                 }
                 else if (pauseChoice == PauseChoice::eControls) {
@@ -1744,7 +1770,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     ImFontConfig fontConfig;
     fontConfig.SizePixels = 19.0f;
     io.Fonts->AddFontDefault(&fontConfig);
-    ApplyHoverNetLobbyStyle();
+    ApplyHoverNetLobbyStyle(LoadUiScale());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
@@ -1902,6 +1928,9 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     std::snprintf(hostBuf, sizeof(hostBuf), "%s", currentServerHost.c_str());
     int port = static_cast<int>(currentServerPort);
     float volumePercent = static_cast<float>(currentVolume * 100.0);
+    const float currentUiScale = LoadUiScale();
+    float uiScalePercent = currentUiScale * 100.0f;
+    bool applyUiScale = false;
     bool fullscreen = currentFullscreen;
     int windowWidth = 0;
     int windowHeight = 0;
@@ -1940,7 +1969,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImFontConfig fontConfig;
         fontConfig.SizePixels = 19.0f;
         io.Fonts->AddFontDefault(&fontConfig);
-        ApplyHoverNetLobbyStyle();
+        ApplyHoverNetLobbyStyle(LoadUiScale());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
     }
@@ -2065,6 +2094,15 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::PopItemWidth();
 
         ImGui::Spacing();
+        ImGui::TextUnformatted("UI Scale");
+        ImGui::PushItemWidth(-1.0f);
+        if (ImGui::SliderFloat("##UiScale", &uiScalePercent, 75.0f, 150.0f, "%.0f%%",
+                               ImGuiSliderFlags_AlwaysClamp)) {
+            applyUiScale = true;
+        }
+        ImGui::PopItemWidth();
+
+        ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
@@ -2130,6 +2168,10 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
+        if (applyUiScale) {
+            ApplyHoverNetLobbyStyle(uiScalePercent / 100.0f);
+            applyUiScale = false;
+        }
         SDL_Delay(16);
     }
 
@@ -2151,6 +2193,9 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             SDL_SetWindowSize(graphics.GetWindow(), currentWindowWidth, currentWindowHeight);
             SDL_SetWindowPosition(graphics.GetWindow(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
         }
+        if (!ownsImGuiContext) {
+            ApplyHoverNetLobbyStyle(currentUiScale);
+        }
     }
 
     SettingsResult result;
@@ -2162,6 +2207,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     result.fullscreen = fullscreen;
     result.windowWidth = windowWidth;
     result.windowHeight = windowHeight;
+    result.uiScale = uiScalePercent / 100.0f;
     return result;
 }
 
@@ -2175,7 +2221,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         ImFontConfig fontConfig;
         fontConfig.SizePixels = 19.0f;
         io.Fonts->AddFontDefault(&fontConfig);
-        ApplyHoverNetLobbyStyle();
+        ApplyHoverNetLobbyStyle(LoadUiScale());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
     }
@@ -2412,6 +2458,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "USERNAME=%s\n", UsernamePath().c_str());
         std::fprintf(stderr, "SERVER_URL=%s\n", ServerUrlPath().c_str());
         std::fprintf(stderr, "WINDOW_SIZE=%s\n", WindowSizePath().c_str());
+        std::fprintf(stderr, "UI_SCALE=%s\n", UiScalePath().c_str());
         return 0;
     }
 #endif
@@ -2808,6 +2855,7 @@ int main(int argc, char** argv)
                     savedSize.width = settings.windowWidth;
                     savedSize.height = settings.windowHeight;
                     SaveWindowSize(savedSize);
+                    SaveUiScale(settings.uiScale);
                 }
                 pickingMode = !g_QuitConfirmed;
             }
@@ -2953,6 +3001,7 @@ int main(int argc, char** argv)
                             savedSize.width = settings.windowWidth;
                             savedSize.height = settings.windowHeight;
                             SaveWindowSize(savedSize);
+                            SaveUiScale(settings.uiScale);
                         }
                     }
                     else if (pauseChoice == PauseChoice::eControls) {

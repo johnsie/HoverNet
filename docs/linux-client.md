@@ -46,6 +46,9 @@ changes preview immediately; Cancel restores the previous display state. Saved
 window dimensions are restored on the next launch, and the window can also be
 resized directly while windowed.
 
+UI scale is adjustable from 75% to 150% in the same screen and applies to every
+ImGui-based menu. Like resolution and volume, it previews live and rolls back on Cancel.
+
 ## Bounded Runs
 
 The player accepts deterministic flags for automated verification:

@@ -321,9 +321,14 @@ same XDG configuration directory, and startup restores it before entering play.
 Gameplay continues rendering through the fixed logical framebuffer, so changing
 the window dimensions does not alter simulation or legacy rendering assumptions.
 
+Linux UI scaling is now persisted alongside those settings and adjustable from
+75% to 150%. The shared ImGui theme scales fonts, spacing, controls, scrollbars,
+and other interaction targets consistently across Lobby, Local Setup, Settings,
+and Controls; preview changes are rolled back by Cancel.
+
 The rest of Phase 3 (full ImGui menu consolidation, remappable controls and
-controller support, UI scaling options, HUD improvements,
-guided onboarding, accessibility, and Windows/Linux menu parity) remains.
+controller support, HUD improvements, guided onboarding, remaining accessibility
+work, and Windows/Linux menu parity) remains.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.
