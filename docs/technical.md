@@ -48,6 +48,9 @@ The runnable client and its libraries are written to `Release\`. CI creates an I
 
 ## Further documentation
 
+- [HoverNet 2.0 product contract](2.0-product-contract.md)
+- [HoverNet 2.0 platform inventory](2.0-platform-inventory.md)
+- [HoverNet 2.0 network protocol baseline](2.0-network-protocol.md)
 - [Linux client and controls](linux-client.md)
 - [GitHub Actions](github-actions.md)
 - [GitLab CI and deployment](gitlab-ci.md)

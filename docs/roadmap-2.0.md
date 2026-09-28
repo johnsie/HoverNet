@@ -4,6 +4,17 @@ HoverNet 2.0 should be the first polished, cross-platform release rather than a 
 
 Assuming one or two regular contributors, this is a realistic six-to-eight-month roadmap beginning in October 2026.
 
+## Implementation status
+
+Phase 0 is in progress. Its initial repository-backed deliverables are:
+
+- [2.0 product contract](2.0-product-contract.md)
+- [Windows/Linux platform inventory](2.0-platform-inventory.md)
+- [Current network protocol baseline](2.0-network-protocol.md)
+
+The next implementation item is explicit client/server protocol negotiation
+with a bounded incompatible-version rejection.
+
 ## Phase 0 — Define the 2.0 contract
 
 **October 2026 · 1–2 weeks**
