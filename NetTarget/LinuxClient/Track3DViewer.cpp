@@ -2321,6 +2321,13 @@ int main(int argc, char** argv)
     bool cockpitView = false;
     bool missileSeen = false;
     bool finishAnnounced = false;
+#ifdef HOVERNET_GAME2_PLAYER
+    // A mid-race RaceServer drop (crash, network outage) currently just makes
+    // every onlineClient.IsConnected() check below quietly stop sending/polling --
+    // the local player keeps racing solo with no indication multiplayer died.
+    // Track the transition so it can be announced exactly once.
+    bool wasOnlineConnected = onlineClient.IsConnected();
+#endif
     // In-race chat, scoped to whatever race this connection is in (see the
     // eRSMsgChatMessage handling below) -- text input only actually does
     // anything once online, but it's harmless to leave enabled for local play.
@@ -2427,6 +2434,7 @@ int main(int argc, char** argv)
                 running = false;
                 break;
             }
+            wasOnlineConnected = onlineClient.IsConnected();
             continue;
         }
         if (startNewLocalRace) {
@@ -2439,6 +2447,7 @@ int main(int argc, char** argv)
                     running = false;
                     break;
                 }
+                wasOnlineConnected = onlineClient.IsConnected();
             }
             continue;
         }
@@ -2509,6 +2518,10 @@ int main(int argc, char** argv)
             session.Process();
 
 #ifdef HOVERNET_GAME2_PLAYER
+            if (wasOnlineConnected && !onlineClient.IsConnected()) {
+                wasOnlineConnected = false;
+                session.AddMessage("Connection to server lost -- continuing offline");
+            }
             if (!finishAnnounced && mainCharacter->HasFinish()) {
                 finishAnnounced = true;
                 // Windows used to say "press F2 to return to the internet
