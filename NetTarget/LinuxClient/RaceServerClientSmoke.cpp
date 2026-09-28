@@ -1151,6 +1151,80 @@ namespace
         }
         std::printf("Targeted missile impact reaches every other racer\n");
 
+        // If a waiting-room host leaves, ownership must move to a remaining
+        // player and that client must be notified so its UI can start the race.
+        {
+            RaceServerClient lDepartingHost;
+            RaceServerClient lPromotedHost;
+            if (!lDepartingHost.Connect("127.0.0.1", pPort) ||
+                !lPromotedHost.Connect("127.0.0.1", pPort) ||
+                !lDepartingHost.SetPlayerName("DepartingHost") ||
+                !lPromotedHost.SetPlayerName("PromotedHost"))
+            {
+                std::fprintf(stderr, "Could not prepare host-departure clients\n");
+                return false;
+            }
+            if (!lDepartingHost.HostRace("host-departure", "ClassicH", 3, true))
+            {
+                std::fprintf(stderr, "Could not create host-departure race\n");
+                return false;
+            }
+            auto lWaitForJoinedRace = [](RaceServerClient& pClient,
+                                         RaceServerJoinAck& pAck) -> bool {
+                for (int lTry = 0; lTry < 20; ++lTry) {
+                    RaceServerMessage lMessage;
+                    if (pClient.PollMessage(lMessage, 200) &&
+                        RaceServerClient::ParseJoinedRace(lMessage, pAck)) return true;
+                }
+                return false;
+            };
+            RaceServerJoinAck lDepartureAck;
+            if (!lWaitForJoinedRace(lDepartingHost, lDepartureAck) || lDepartureAck.mRaceId < 0 ||
+                !lPromotedHost.JoinGameById(lDepartureAck.mRaceId))
+            {
+                std::fprintf(stderr, "Could not join host-departure race\n");
+                return false;
+            }
+            RaceServerJoinAck lInitialJoinAck;
+            if (!lWaitForJoinedRace(lPromotedHost, lInitialJoinAck) || lInitialJoinAck.mIsHost)
+            {
+                std::fprintf(stderr, "Joiner unexpectedly began as host\n");
+                return false;
+            }
+            lDepartingHost.Disconnect();
+
+            RaceServerJoinAck lPromotionAck;
+            bool lSawPromotion = false;
+            for (int lTry = 0; lTry < 20 && !lSawPromotion; ++lTry)
+            {
+                RaceServerMessage lPromotionMessage;
+                if (lPromotedHost.PollMessage(lPromotionMessage, 200) &&
+                    RaceServerClient::ParseJoinedRace(lPromotionMessage, lPromotionAck))
+                {
+                    lSawPromotion = lPromotionAck.mIsHost &&
+                                    lPromotionAck.mRaceId == lDepartureAck.mRaceId;
+                }
+            }
+            if (!lSawPromotion || !lPromotedHost.StartRace())
+            {
+                std::fprintf(stderr, "Remaining player was not promoted after host departure\n");
+                return false;
+            }
+            bool lPromotedStartWorked = false;
+            for (int lTry = 0; lTry < 20 && !lPromotedStartWorked; ++lTry)
+            {
+                RaceServerMessage lStarted;
+                lPromotedStartWorked = lPromotedHost.PollMessage(lStarted, 200) &&
+                                       lStarted.mType == eRSMsgRaceStarted;
+            }
+            if (!lPromotedStartWorked)
+            {
+                std::fprintf(stderr, "Promoted host could not start the race\n");
+                return false;
+            }
+            std::printf("Waiting-room host departure promotes and notifies a remaining player\n");
+        }
+
         // The hello advertises the largest payload this connection supports.
         // Once negotiated, a larger frame is a protocol violation and must close
         // only that connection rather than being dispatched or desynchronizing

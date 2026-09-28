@@ -53,7 +53,8 @@ public:
     BOOL JoinRace(int raceId, int clientId, const char* playerName);
 
     // Player leaves race
-    void LeaveRace(int raceId, int clientId);
+    // Returns the current creator id after removal, or -1 if the race closed.
+    int LeaveRace(int raceId, int clientId);
 
     // Start a race
     BOOL StartRace(int raceId);

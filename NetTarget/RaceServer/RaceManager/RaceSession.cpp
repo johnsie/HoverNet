@@ -55,8 +55,9 @@ int RaceSession::AddPlayer(int clientId, const char* playerName)
     return playerIndex;
 }
 
-void RaceSession::RemovePlayer(int clientId)
+int RaceSession::RemovePlayer(int clientId)
 {
+    const BOOL lWasCreator = IsCreator(clientId);
     mSimulation.RemovePlayer(clientId);
     auto it = std::find(mPlayerClientIds.begin(), mPlayerClientIds.end(), clientId);
     if (it != mPlayerClientIds.end()) {
@@ -64,6 +65,14 @@ void RaceSession::RemovePlayer(int clientId)
         g_Logger.Log(MR_LOG_INFO, "Player left race %d: clientId=%d",
                     mRaceId, clientId);
     }
+    if (lWasCreator) {
+        mCreatorClientId = mPlayerClientIds.empty() ? -1 : mPlayerClientIds.front();
+        if (mCreatorClientId >= 0) {
+            g_Logger.Log(MR_LOG_INFO, "Race %d host promoted to clientId=%d",
+                         mRaceId, mCreatorClientId);
+        }
+    }
+    return mCreatorClientId;
 }
 
 void RaceSession::Update(float deltaTime)

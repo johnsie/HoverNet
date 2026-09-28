@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(SDL2 REQUIRED)
 include(CTest)
 find_package(Threads REQUIRED)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 # Shown in the Linux client's window title (see SDL2Graphics.cpp). Matches the
 # vX.Y.Z tags CI builds releases from (see .gitlab-ci.yml's PACKAGE_VERSION);
@@ -272,6 +273,12 @@ add_executable(HoverNetServerConfigSmoke
 )
 target_include_directories(HoverNetServerConfigSmoke PRIVATE NetTarget/RaceServer)
 
+add_executable(HoverNetRaceServerLifecycleSmoke
+    NetTarget/LinuxClient/RaceServerLifecycleSmoke.cpp
+)
+add_dependencies(HoverNetRaceServerLifecycleSmoke RaceServer)
+target_link_libraries(HoverNetRaceServerLifecycleSmoke PRIVATE HoverNetRaceServerClient)
+
 add_executable(HoverNetInRaceChatSmoke
     NetTarget/LinuxClient/InRaceChatSmoke.cpp
 )
@@ -361,6 +368,12 @@ if(BUILD_TESTING)
     add_hovernet_root_test(HoverNetServerConfigSmoke
         "${CMAKE_SOURCE_DIR}/NetTarget/RaceServer/config.xml"
         "${CMAKE_BINARY_DIR}/server-config-round-trip.xml")
+    add_hovernet_root_test(HoverNetRaceServerLifecycleSmoke "$<TARGET_FILE:RaceServer>")
+    add_test(NAME HoverNetRaceServerProtocolFuzz
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/raceserver_protocol_fuzz.py"
+        "$<TARGET_FILE:RaceServer>")
+    set_tests_properties(HoverNetRaceServerProtocolFuzz PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetRaceServerProtocolStrictSmoke
         COMMAND HoverNetRaceServerClientSmoke "$<TARGET_FILE:RaceServer>" --strict)
     set_tests_properties(HoverNetRaceServerProtocolStrictSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

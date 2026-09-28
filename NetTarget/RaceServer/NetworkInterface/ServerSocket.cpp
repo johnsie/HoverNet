@@ -757,6 +757,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                                                        pConn->mClientId);
             if (pConn->mRaceId < 0) {
                 g_Logger.Log(MR_LOG_WARN, "Client %d: could not create race '%s'", pConn->mClientId, raceName);
+                SendJoinRaceFailure(pConn);
                 break;
             }
 
@@ -1195,7 +1196,23 @@ void MR_ServerSocket::CloseConnection(int clientId, MR_RaceManager* pRaceManager
         ClientConnection* pConn = it->second;
         g_Logger.Log(MR_LOG_INFO, "Closing connection: ID=%d", clientId);
         if (pRaceManager && pConn->mRaceId >= 0) {
-            pRaceManager->LeaveRace(pConn->mRaceId, clientId);
+            RaceSession* pRace = pRaceManager->GetRace(pConn->mRaceId);
+            const BOOL lWasCreator = pRace != nullptr && pRace->IsCreator(clientId);
+            const int lPromotedClientId = pRaceManager->LeaveRace(pConn->mRaceId, clientId);
+            if (lWasCreator && lPromotedClientId >= 0) {
+                auto lPromotedIt = mConnections.find(lPromotedClientId);
+                if (lPromotedIt != mConnections.end() && lPromotedIt->second &&
+                    lPromotedIt->second->mConnected) {
+                    MessageBuffer lPromotion;
+                    lPromotion.header = MakeMessageHeader(63); // MRNM_JOINED_RACE refresh
+                    HoverNetProtocol::WriteI32LE(&lPromotion.data[0], pConn->mRaceId);
+                    lPromotion.data[4] = 1;
+                    HoverNetProtocol::WriteI32LE(&lPromotion.data[5], lPromotedClientId);
+                    lPromotion.dataLen = 9;
+                    send(lPromotedIt->second->mTcpSocket,
+                         reinterpret_cast<const char*>(&lPromotion), 12, 0);
+                }
+            }
         }
         if (IsInLobby(pConn) && pConn->mPlayerName[0] != '\0') {
             BroadcastLobbyUserLeft(clientId);

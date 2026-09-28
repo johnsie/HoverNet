@@ -82,6 +82,18 @@ RaceServer configuration is loaded transactionally with bounded values and is
 wired into connection limits, TCP options/buffers, player disconnect timeout,
 race capacity, cleanup timeout, and log level. The server emits a structured
 ten-second health record with uptime, live connections, races, and players.
+When a waiting-room host disconnects, ownership now transfers to a remaining
+player and the server sends a refreshed join acknowledgement so that player's
+client can start the race instead of leaving an orphaned waiting room.
+Automated lifecycle coverage now enforces maximum concurrent races, proves
+capacity is reclaimed when the sole host disconnects, requires a clean SIGTERM
+exit, restarts immediately on the same port, and verifies no race state leaks
+across the restart.
+The decoder also has a deterministic 500-frame black-box fuzz test with random
+message types, payload bytes, and TCP fragmentation. GitHub CI runs protocol,
+lifecycle, and fuzz scenarios under AddressSanitizer and UndefinedBehaviorSanitizer.
+A repeatable soak driver composes those workloads for the release gate; its
+required invocation is `scripts/run-raceserver-soak.sh build/linux 86400`.
 
 ## Phase 0 — Define the 2.0 contract
 
@@ -119,6 +131,12 @@ ten-second health record with uptime, live connections, races, and players.
 ## Phase 2 — Harden multiplayer and RaceServer
 
 **November–December 2026 · 5–7 weeks**
+
+**Implementation status:** Complete. Protocol hardening, validation, rate
+limits, configuration, lifecycle behavior, health metrics, fuzzing, sanitizer
+CI, and automated scenario coverage are implemented. The phase exit gate is
+not complete until the recorded 24-hour soak described in
+[Phase 2 verification](phase2-verification.md) finishes successfully.
 
 - Formalize message framing, size limits, endianness, and protocol-version negotiation.
 - Replace silent or indefinite network waits with explicit timeouts and errors.

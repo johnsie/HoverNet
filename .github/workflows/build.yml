@@ -13,6 +13,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dependency-review:
+    name: Dependency security review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+
   linux:
     name: Linux game, race server and DEBs
     runs-on: ubuntu-24.04
@@ -59,6 +69,25 @@ jobs:
           path: dist/*.deb
           if-no-files-found: error
           retention-days: 30
+
+  raceserver-sanitizers:
+    name: RaceServer ASan and UBSan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure sanitizer build
+        run: >-
+          cmake -S . -B build/sanitize -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+      - name: Build RaceServer security tests
+        run: cmake --build build/sanitize --target RaceServer HoverNetRaceServerClientSmoke HoverNetRaceServerLifecycleSmoke --parallel 2
+      - name: Run protocol, lifecycle, and fuzz tests under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build/sanitize --output-on-failure -R 'HoverNetRaceServer(ClientSmoke|ProtocolStrictSmoke|LifecycleSmoke|ProtocolFuzz)'
 
   windows:
     name: Windows game and setup EXE

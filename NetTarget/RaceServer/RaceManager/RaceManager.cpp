@@ -120,13 +120,13 @@ BOOL MR_RaceManager::JoinRace(int raceId, int clientId, const char* playerName)
     return (playerIndex >= 0);
 }
 
-void MR_RaceManager::LeaveRace(int raceId, int clientId)
+int MR_RaceManager::LeaveRace(int raceId, int clientId)
 {
     RaceSession* pRace = GetRace(raceId);
     if (!pRace) {
-        return;
+        return -1;
     }
-    pRace->RemovePlayer(clientId);
+    const int lCreatorClientId = pRace->RemovePlayer(clientId);
 
     // CleanupEmptyRaces (called from UpdateAllRaces) would reap this race for the
     // same reason anyway, but only every 5 seconds -- a host who cancels while
@@ -138,8 +138,10 @@ void MR_RaceManager::LeaveRace(int raceId, int clientId)
             g_Logger.Log(MR_LOG_DEBUG, "Race %d emptied by client %d leaving, removing immediately", raceId, clientId);
             delete it->second;
             mRaces.erase(it);
+            return -1;
         }
     }
+    return lCreatorClientId;
 }
 
 BOOL MR_RaceManager::StartRace(int raceId)

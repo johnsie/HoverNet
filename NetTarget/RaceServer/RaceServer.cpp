@@ -147,6 +147,10 @@ int main(int argc, char* argv[])
 #else
     signal(SIGINT, ConsoleCtrlHandler);
     signal(SIGTERM, ConsoleCtrlHandler);
+    // A peer may disconnect between select() and send(). Treat that as an
+    // ordinary socket error instead of allowing the default SIGPIPE action to
+    // terminate the entire server process.
+    signal(SIGPIPE, SIG_IGN);
 #endif
 
     // Main event loop

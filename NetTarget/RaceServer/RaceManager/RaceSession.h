@@ -29,12 +29,13 @@ public:
         int maxPlayers);
 
     BOOL IsCreator(int clientId) const { return clientId == mCreatorClientId; }
+    int GetCreatorClientId() const { return mCreatorClientId; }
 
     // Player joins this race
     int AddPlayer(int clientId, const char* playerName);
 
     // Player leaves this race
-    void RemovePlayer(int clientId);
+    int RemovePlayer(int clientId);
 
     // Called each frame
     void Update(float deltaTime);
