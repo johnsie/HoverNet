@@ -53,114 +53,89 @@ MR_GameSession::~MR_GameSession()
 
 BOOL MR_GameSession::LoadLevel( int pLevel )
 {
-   FILE* logFile = NULL;
-   if(logFile) fprintf(logFile, "\n--- MR_GameSession::LoadLevel START (pLevel=%d) ---\n", pLevel), fflush(logFile);
    
    ASSERT( mCurrentMazeFile != NULL );
 
    BOOL lReturnValue = TRUE;
 
    // delete the current level
-   if(logFile) fprintf(logFile, "  Deleting old level\n"), fflush(logFile);
    delete mCurrentLevel;
    mCurrentLevel = NULL;
    mCurrentLevelNumber = -1;
 
    // Load the new level
    int nbRecords = mCurrentMazeFile->GetNbRecords();
-   if(logFile) fprintf(logFile, "  File has %d records\n", nbRecords), fflush(logFile);
    
    if( pLevel < nbRecords )
    {
-      if(logFile) fprintf(logFile, "  About to create new MR_Level\n"), fflush(logFile);
       try
       {
          mCurrentLevel = new MR_Level( mAllowRendering );
-         if(logFile) fprintf(logFile, "  MR_Level created successfully at %p\n", mCurrentLevel), fflush(logFile);
       }
       catch(const std::exception& e)
       {
-         if(logFile) fprintf(logFile, "  EXCEPTION creating MR_Level: %s\n", e.what()), fflush(logFile);
          lReturnValue = FALSE;
       }
       catch(...)
       {
-         if(logFile) fprintf(logFile, "  UNKNOWN EXCEPTION creating MR_Level\n"), fflush(logFile);
          lReturnValue = FALSE;
       }
       
       if(lReturnValue)
       {
-         if(logFile) fprintf(logFile, "  Selecting record %d\n", pLevel), fflush(logFile);
          try
          {
             mCurrentMazeFile->SelectRecord( pLevel );
-            if(logFile) fprintf(logFile, "  Record selected\n"), fflush(logFile);
          }
          catch(const std::exception& e)
          {
-            if(logFile) fprintf(logFile, "  EXCEPTION selecting record: %s\n", e.what()), fflush(logFile);
             lReturnValue = FALSE;
          }
          catch(...)
          {
-            if(logFile) fprintf(logFile, "  UNKNOWN EXCEPTION selecting record\n"), fflush(logFile);
             lReturnValue = FALSE;
          }
       }
       
       if(lReturnValue)
       {
-         if(logFile) fprintf(logFile, "  About to create CArchive for deserialization\n"), fflush(logFile);
          try
          {
             CArchive lArchive ( mCurrentMazeFile, CArchive::load );
-            if(logFile) fprintf(logFile, "  CArchive created\n"), fflush(logFile);
             
-            if(logFile) fprintf(logFile, "  About to deserialize level\n"), fflush(logFile);
             mCurrentLevel->Serialize( lArchive );
-            if(logFile) fprintf(logFile, "  Level deserialized successfully\n"), fflush(logFile);
 
             mCurrentLevelNumber = pLevel;
          }
          catch(const std::exception& e)
          {
-            if(logFile) fprintf(logFile, "  EXCEPTION during Serialize: %s\n", e.what()), fflush(logFile);
             // Try to continue anyway with minimal level data
-            if(logFile) fprintf(logFile, "  Attempting to continue with partial level data\n"), fflush(logFile);
             mCurrentLevelNumber = pLevel;
             // DON'T set lReturnValue = FALSE - try to proceed anyway
          }
          catch(const CMemoryException&)
          {
-            if(logFile) fprintf(logFile, "  CMemoryException during Serialize\n"), fflush(logFile);
             lReturnValue = FALSE;
          }
          catch(const CArchiveException&)
          {
-            if(logFile) fprintf(logFile, "  CArchiveException during Serialize\n"), fflush(logFile);
             lReturnValue = FALSE;
          }
          catch(const CFileException&)
          {
-            if(logFile) fprintf(logFile, "  CFileException during Serialize\n"), fflush(logFile);
             lReturnValue = FALSE;
          }
          catch(...)
          {
-            if(logFile) fprintf(logFile, "  UNKNOWN EXCEPTION during Serialize (could not determine type)\n"), fflush(logFile);
             lReturnValue = FALSE;
          }
       }
    }
    else
    {
-      if(logFile) fprintf(logFile, "  ERROR: pLevel (%d) >= nbRecords (%d)\n", pLevel, nbRecords), fflush(logFile);
       lReturnValue = FALSE;
    }
 
-   if(logFile) fprintf(logFile, "--- MR_GameSession::LoadLevel END, returning: %s ---\n", lReturnValue ? "TRUE" : "FALSE"), fflush(logFile);
-   if(logFile) fclose(logFile);
    
    return lReturnValue;
 }
@@ -180,29 +155,19 @@ void MR_GameSession::Clean()
 
 BOOL MR_GameSession::LoadNew( const char* pTitle, MR_RecordFile* pMazeFile )
 {
-   FILE* logFile = NULL;
-   if(logFile) fprintf(logFile, "\n--- MR_GameSession::LoadNew START ---\n"), fflush(logFile);
-   if(logFile) fprintf(logFile, "  pTitle='%s'\n", pTitle), fflush(logFile);
-   if(logFile) fprintf(logFile, "  pMazeFile=%p\n", pMazeFile), fflush(logFile);
    
    BOOL lReturnValue = FALSE;
 
-   if(logFile) fprintf(logFile, "  About to call Clean()\n"), fflush(logFile);
    try
    {
       Clean();
-      if(logFile) fprintf(logFile, "  Clean() succeeded\n"), fflush(logFile);
    }
    catch(const std::exception& e)
    {
-      if(logFile) fprintf(logFile, "  EXCEPTION in Clean(): %s\n", e.what()), fflush(logFile);
-      if(logFile) fclose(logFile);
       return FALSE;
    }
    catch(...)
    {
-      if(logFile) fprintf(logFile, "  UNKNOWN EXCEPTION in Clean()\n"), fflush(logFile);
-      if(logFile) fclose(logFile);
       return FALSE;
    }
 
@@ -211,81 +176,57 @@ BOOL MR_GameSession::LoadNew( const char* pTitle, MR_RecordFile* pMazeFile )
       mTitle = pTitle;
       mCurrentMazeFile = pMazeFile;
       
-      if(logFile) fprintf(logFile, "  About to call LoadLevel(1)\n"), fflush(logFile);
-      if(logFile) fflush(logFile);
       
-      if(logFile) fprintf(logFile, "  [CREATING TRY BLOCK]\n"), fflush(logFile);
-      if(logFile) fflush(logFile);
       
       try
       {
-         if(logFile) fprintf(logFile, "  [INSIDE TRY BLOCK]\n"), fflush(logFile);
-         if(logFile) fflush(logFile);
          
-         if(logFile) fprintf(logFile, "  [ABOUT TO CALL LOADLEVEL]\n"), fflush(logFile);
-         if(logFile) fflush(logFile);
          
          lReturnValue = LoadLevel( 1 );
          
-         if(logFile) fprintf(logFile, "  [LOADLEVEL RETURNED: %s]\n", lReturnValue ? "TRUE" : "FALSE"), fflush(logFile);
-         if(logFile) fflush(logFile);
       }
       catch(CMemoryException& e)
       {
-         if(logFile) fprintf(logFile, "  [CAUGHT CMemoryException&]\n"), fflush(logFile);
          lReturnValue = FALSE;
       }
       catch(CArchiveException& e)
       {
-         if(logFile) fprintf(logFile, "  [CAUGHT CArchiveException&]\n"), fflush(logFile);
          lReturnValue = FALSE;
       }
       catch(CFileException& e)
       {
-         if(logFile) fprintf(logFile, "  [CAUGHT CFileException&]\n"), fflush(logFile);
          lReturnValue = FALSE;
       }
       catch(CException& e)
       {
-         if(logFile) fprintf(logFile, "  [CAUGHT CException&]\n"), fflush(logFile);
          lReturnValue = FALSE;
       }
       catch(const std::exception& e)
       {
-         if(logFile) fprintf(logFile, "  [CAUGHT std::exception: %s]\n", e.what()), fflush(logFile);
          lReturnValue = FALSE;
       }
       catch(...)
       {
-         if(logFile) fprintf(logFile, "  [CAUGHT UNKNOWN]\n"), fflush(logFile);
          lReturnValue = FALSE;
       }
-      if(logFile) fprintf(logFile, "  [AFTER ALL CATCH BLOCKS]\n"), fflush(logFile);
-      if(logFile) fflush(logFile);
 
       if( !lReturnValue )
       {
-         if(logFile) fprintf(logFile, "  LoadLevel failed, calling Clean()\n"), fflush(logFile);
          try
          {
             Clean();
-            if(logFile) fprintf(logFile, "  Clean() after failure succeeded\n"), fflush(logFile);
          }
          catch(...)
          {
-            if(logFile) fprintf(logFile, "  EXCEPTION in Clean() after failure\n"), fflush(logFile);
          }
       }
    }
    else
    {
-      if(logFile) fprintf(logFile, "  ERROR: pMazeFile is NULL\n"), fflush(logFile);
    }
 
    mLastSimulateCallTime = timeGetTime();
 
-   if(logFile) fprintf(logFile, "--- MR_GameSession::LoadNew END, returning: %s ---\n", lReturnValue ? "TRUE" : "FALSE"), fflush(logFile);
-   if(logFile) fclose(logFile);
    
    return lReturnValue;
 }

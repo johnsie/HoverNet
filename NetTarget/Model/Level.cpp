@@ -465,38 +465,26 @@ void MR_Level::MoveElement( MR_FreeElementHandle pHandle, int pNewRoom )
 
 MR_FreeElementHandle MR_Level::InsertElement( MR_FreeElement* pElement, int pRoom, BOOL pBroadcast  )
 {
-   FILE* logFile = NULL;
    
-   if(logFile) fprintf(logFile, "InsertElement START: pElement=%p, pRoom=%d, mAllowRendering=%d\n", pElement, pRoom, mAllowRendering), fflush(logFile);
    
    FreeElement* lReturnValue = new FreeElement;
-   if(logFile) fprintf(logFile, "  Created new FreeElement: %p\n", lReturnValue), fflush(logFile);
 
    if( mAllowRendering )
    {
-      if(logFile) fprintf(logFile, "  About to call AddRenderer()\n"), fflush(logFile);
       try {
          pElement->AddRenderer();
-         if(logFile) fprintf(logFile, "  AddRenderer() succeeded\n"), fflush(logFile);
       }
       catch(...) {
-         if(logFile) fprintf(logFile, "  EXCEPTION in AddRenderer()\n"), fflush(logFile);
-         if(logFile) fclose(logFile);
          throw;
       }
    }
 
    lReturnValue->mElement = pElement;
-   if(logFile) fprintf(logFile, "  Set mElement pointer\n"), fflush(logFile);
 
-   if(logFile) fprintf(logFile, "  About to call MoveElement()\n"), fflush(logFile);
    try {
       MoveElement( (MR_FreeElementHandle)lReturnValue, pRoom );
-      if(logFile) fprintf(logFile, "  MoveElement() succeeded\n"), fflush(logFile);
    }
    catch(...) {
-      if(logFile) fprintf(logFile, "  EXCEPTION in MoveElement()\n"), fflush(logFile);
-      if(logFile) fclose(logFile);
       throw;
    }
 
@@ -506,8 +494,6 @@ MR_FreeElementHandle MR_Level::InsertElement( MR_FreeElement* pElement, int pRoo
       mElementCreationBroadcastHook( pElement, pRoom, mBroadcastHookData );
    }
    
-   if(logFile) fprintf(logFile, "InsertElement END: returning %p\n", lReturnValue), fflush(logFile);
-   if(logFile) fclose(logFile);
    return (MR_FreeElementHandle)lReturnValue;
 }
 

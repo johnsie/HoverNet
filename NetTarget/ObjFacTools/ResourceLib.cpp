@@ -28,8 +28,6 @@
 
 MR_ResourceLib::MR_ResourceLib( const char* pResFile )
 {
-   FILE* logFile = NULL;
-   if(logFile) { fprintf(logFile, "\n===== ResourceLib Loading Started =====\n"); fprintf(logFile, "Resource file: %s\n", pResFile); fflush(logFile); }
    
    DWORD startTime = GetTickCount();
    
@@ -49,31 +47,23 @@ MR_ResourceLib::MR_ResourceLib( const char* pResFile )
          {
             // Load the Bitmaps
             DWORD t1 = GetTickCount();
-            if(logFile) { fprintf(logFile, "Starting LoadBitmaps...\n"); fflush(logFile); }
             LoadBitmaps( lArchive );
             DWORD t2 = GetTickCount();
-            if(logFile) { fprintf(logFile, "LoadBitmaps completed in %u ms\n", t2-t1); fflush(logFile); }
 
             // Load the Actors
             t1 = GetTickCount();
-            if(logFile) { fprintf(logFile, "Starting LoadActors...\n"); fflush(logFile); }
             LoadActors( lArchive );
             t2 = GetTickCount();
-            if(logFile) { fprintf(logFile, "LoadActors completed in %u ms\n", t2-t1); fflush(logFile); }
 
             // Load the sprites
             t1 = GetTickCount();
-            if(logFile) { fprintf(logFile, "Starting LoadSprites...\n"); fflush(logFile); }
             LoadSprites( lArchive );
             t2 = GetTickCount();
-            if(logFile) { fprintf(logFile, "LoadSprites completed in %u ms\n", t2-t1); fflush(logFile); }
 
             // Load the sprites
             t1 = GetTickCount();
-            if(logFile) { fprintf(logFile, "Starting LoadSounds...\n"); fflush(logFile); }
             LoadSounds( lArchive );
             t2 = GetTickCount();
-            if(logFile) { fprintf(logFile, "LoadSounds completed in %u ms\n", t2-t1); fflush(logFile); }
 
          }
          else
@@ -90,18 +80,6 @@ MR_ResourceLib::MR_ResourceLib( const char* pResFile )
    }
    
    DWORD endTime = GetTickCount();
-   if(logFile) {
-      fprintf(logFile, "===== ResourceLib Loading Complete =====\n");
-      fprintf(logFile, "Total loading time: %u ms (%.1f seconds)\n", endTime - startTime, (endTime - startTime) / 1000.0f);
-      fprintf(logFile, "Bitmaps loaded: %d\n", mBitmapList.GetCount());
-      fprintf(logFile, "Actors loaded: %d\n", mActorList.GetCount());
-      fprintf(logFile, "Sprites loaded: %d\n", mSpriteList.GetCount());
-      fprintf(logFile, "Short sounds loaded: %d\n", mShortSoundList.GetCount());
-      fprintf(logFile, "Continuous sounds loaded: %d\n", mContinuousSoundList.GetCount());
-      fprintf(logFile, "\n");
-      fflush(logFile);
-      fclose(logFile);
-   }
 }
 
 MR_ResourceLib::MR_ResourceLib()
@@ -251,10 +229,8 @@ int MR_ResourceLib::GetContinuousSoundCount() const
 void MR_ResourceLib::LoadBitmaps( CArchive& pArchive )
 {
    int lNbBitmap;
-   FILE* logFile = NULL;
 
    pArchive >> lNbBitmap;
-   if(logFile) { fprintf(logFile, "  Loading %d bitmaps...\n", lNbBitmap); fflush(logFile); }
 
    for( int lCounter = 0; lCounter < lNbBitmap; lCounter++ )
    {
@@ -268,24 +244,15 @@ void MR_ResourceLib::LoadBitmaps( CArchive& pArchive )
       lValue->Serialize( pArchive );
 
       mBitmapList.SetAt( lKey, lValue );
-      
-      // Log progress every 10 bitmaps
-      if((lCounter + 1) % 10 == 0 && logFile) {
-         fprintf(logFile, "    Bitmaps: %d/%d\n", lCounter + 1, lNbBitmap);
-         fflush(logFile);
-      }
    }
-   if(logFile) { fclose(logFile); }
 }
 
 
 void MR_ResourceLib::LoadActors( CArchive& pArchive )
 {
    int lNbActor;
-   FILE* logFile = NULL;
 
    pArchive >> lNbActor;
-   if(logFile) { fprintf(logFile, "  Loading %d actors...\n", lNbActor); fflush(logFile); }
 
    for( int lCounter = 0; lCounter < lNbActor; lCounter++ )
    {
@@ -298,24 +265,15 @@ void MR_ResourceLib::LoadActors( CArchive& pArchive )
       lValue->Serialize( pArchive, this );
 
       mActorList.SetAt( lKey, lValue );
-      
-      // Log progress every 10 actors
-      if((lCounter + 1) % 10 == 0 && logFile) {
-         fprintf(logFile, "    Actors: %d/%d\n", lCounter + 1, lNbActor);
-         fflush(logFile);
-      }
    }
-   if(logFile) { fclose(logFile); }
 }
 
 
 void MR_ResourceLib::LoadSprites( CArchive& pArchive )
 {
    int lNbSprite;
-   FILE* logFile = NULL;
 
    pArchive >> lNbSprite;
-   if(logFile) { fprintf(logFile, "  Loading %d sprites...\n", lNbSprite); fflush(logFile); }
 
    for( int lCounter = 0; lCounter < lNbSprite; lCounter++ )
    {
@@ -328,14 +286,7 @@ void MR_ResourceLib::LoadSprites( CArchive& pArchive )
       lValue->Serialize( pArchive );
 
       mSpriteList.SetAt( lKey, lValue );
-      
-      // Log progress every 10 sprites
-      if((lCounter + 1) % 10 == 0 && logFile) {
-         fprintf(logFile, "    Sprites: %d/%d\n", lCounter + 1, lNbSprite);
-         fflush(logFile);
-      }
    }
-   if(logFile) { fclose(logFile); }
 }
 
 
