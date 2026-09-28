@@ -20,7 +20,7 @@
 //
 
 
-#include "stdafx.h"
+#include "StdAfx.h"
 
 #include "TrackMap.h"
 
@@ -77,10 +77,10 @@ void MR_MapSprite::ComputeMinMax( MR_Level* pLevel )
    {
       MR_PolygonShape* lShape = pLevel->GetRoomShape( lRoom );
 
-      mXMin = min( mXMin, lShape->XMin() );
-      mXMax = max( mXMax, lShape->XMax() );
-      mYMin = min( mYMin, lShape->YMin() );
-      mYMax = max( mYMax, lShape->YMax() );
+      mXMin = std::min( mXMin, lShape->XMin() );
+      mXMax = std::max( mXMax, lShape->XMax() );
+      mYMin = std::min( mYMin, lShape->YMin() );
+      mYMax = std::max( mYMax, lShape->YMax() );
       delete lShape;
    }
 
@@ -179,4 +179,3 @@ void MR_MapSprite::DrawMap( MR_Level* pLevel )
       delete lShape;
    }
 }
-

@@ -19,7 +19,7 @@
 // and limitations under the License.
 //
 
-#include "stdafx.h"
+#include "StdAfx.h"
 #include "LevelBuilder.h"
 #include "Parser.h"
 #include "../Util/StrRes.h"
@@ -64,12 +64,19 @@ BOOL MR_LevelBuilder::InitFromFile( FILE* pFile )
 
       if( lReturnValue )
       {
-         printf( "DEBUG: Parse completed successfully, skipping post-processing for stability\n" );
+         printf( "DEBUG: Computing visible and audible zones\n" );
          fflush( stdout );
-         // Skip visibility/audibility computations for now - they have issues
-         // lReturnValue = ComputeVisibleZones();
-         // lReturnValue = ComputeAudibleZones();
-         // OrderVisibleSurfaces();
+         lReturnValue = ComputeVisibleZones();
+      }
+
+      if( lReturnValue )
+      {
+         lReturnValue = ComputeAudibleZones();
+      }
+
+      if( lReturnValue )
+      {
+         OrderVisibleSurfaces();
       }
    }
    catch( ... )
@@ -1127,5 +1134,3 @@ MR_SurfaceElement* sLoadTexture( MR_Parser* pParser )
 
    return lReturnValue;
 }
-
-

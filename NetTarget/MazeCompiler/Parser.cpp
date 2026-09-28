@@ -22,7 +22,7 @@
 // and limitations under the License.
 //
 
-#include "stdafx.h"
+#include "StdAfx.h"
 
 #include "Parser.h"
 
@@ -292,4 +292,3 @@ int MR_Parser::GetErrorLine()const
 {
    return mLineNumber;
 }
-

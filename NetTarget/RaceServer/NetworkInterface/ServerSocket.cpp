@@ -420,7 +420,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             memcpy(raceName, p, clampedNameLen);
             raceName[clampedNameLen] = '\0';
 
-            static const char* const kValidTracks[] = {"ClassicH", "Steeplechase", "The Alley2", "The River"};
+            static const char* const kValidTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River"};
             bool trackOk = false;
             for (const char* t : kValidTracks) { if (strcmp(t, trackName) == 0) { trackOk = true; break; } }
 

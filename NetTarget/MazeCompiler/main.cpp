@@ -19,12 +19,13 @@
 // and limitations under the License.
 //
 
-#include "stdafx.h"
+#include "StdAfx.h"
 #include "../Util/RecordFile.h"
 #include "LevelBuilder.h"
 #include "TrackMap.h"
 #include "Parser.h"
 #include "TrackCommonStuff.h"
+#include "../VideoServices/3DViewport.h"
 #include "../Util/StrRes.h"
 #include "resource.h"
 
@@ -57,6 +58,9 @@ static unsigned char  gKey[50];
 
 BOOL LoadRegistry()
 {
+#ifndef _WIN32
+   return FALSE;
+#else
    BOOL lReturnValue = FALSE;
 
    // Registration info
@@ -131,6 +135,7 @@ BOOL LoadRegistry()
       }
    }
    return lReturnValue;
+#endif
 }
 
 int main( int pArgCount, const char** pArgStrings )
@@ -140,7 +145,9 @@ int main( int pArgCount, const char** pArgStrings )
 
    printf( MR_LoadString( IDS_INTRO ) );
 
+#ifdef _WIN32
    Sleep( 1000 );
+#endif
    printf( "DEBUG: Initializing Object Factory...\n" );
    fflush( stdout );
    
@@ -155,7 +162,9 @@ int main( int pArgCount, const char** pArgStrings )
    {
       lPrintUsage = TRUE;
       printf( MR_LoadString( IDS_BAD_PARAM_COUNT ) );
+#ifdef _WIN32
       Sleep( 4000 );
+#endif
    }
    // DISABLED: Registration check - allow compilation always
    // else if( !LoadRegistry() )
@@ -637,7 +646,9 @@ int main( int pArgCount, const char** pArgStrings )
       
       // Flush any pending data
       fflush( NULL );
+#ifdef _WIN32
       Sleep( 100 );
+#endif
       
       printf( "DEBUG: Compilation complete, exiting successfully\n" );
       fflush( stdout );
@@ -680,10 +691,14 @@ int main( int pArgCount, const char** pArgStrings )
 
    if( lError )
    {
+#ifdef _WIN32
       Sleep( 7000 );
+#endif
    }
 
+#ifdef _WIN32
    Sleep( 2000 );
+#endif
    // printf( "END\n" );
 
    MR_DllObjectFactory::Clean( FALSE );

@@ -105,6 +105,16 @@ bool HasArgument(int argc, char** argv, const char* argument)
     return false;
 }
 
+std::string ParseTrackArg(int argc, char** argv)
+{
+    for (int argument = 1; argument + 1 < argc; ++argument) {
+        if (std::strcmp(argv[argument], "--track") == 0) {
+            return argv[argument + 1];
+        }
+    }
+    return "ClassicH";
+}
+
 #ifdef HOVERNET_GAME2_PLAYER
 bool ParseLobbyArg(int argc, char** argv, std::string& outHost, unsigned& outPort)
 {
@@ -422,8 +432,8 @@ MR_SpriteHandle* LoadUiFont()
 // ever arriving) can't hang here forever.
 // Tracks the server will actually accept (kept in sync with the whitelist in
 // ServerSocket.cpp's eRSMsgHostRace handler).
-const char* const kHostableTracks[] = {"ClassicH", "Steeplechase", "The Alley2", "The River"};
-constexpr int kHostableTrackCount = 4;
+const char* const kHostableTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River"};
+constexpr int kHostableTrackCount = sizeof(kHostableTracks) / sizeof(kHostableTracks[0]);
 
 struct HostPrefs
 {
@@ -1929,9 +1939,10 @@ int main(int argc, char** argv)
 #endif
 
     MR_RecordFile* track = new MR_RecordFile;
-    const std::string trackPath = SourcePath("NetTarget/Tracks/ClassicH.trk");
+    const std::string initialTrackName = ParseTrackArg(argc, argv);
+    const std::string trackPath = SourcePath(("NetTarget/Tracks/" + initialTrackName + ".trk").c_str());
     if (!track->OpenForRead(trackPath.c_str())) {
-        std::fprintf(stderr, "Could not open ClassicH.trk\n");
+        std::fprintf(stderr, "Could not open %s.trk\n", initialTrackName.c_str());
         delete track;
         return 1;
     }
@@ -1944,8 +1955,8 @@ int main(int argc, char** argv)
     }
     MR_ClientSession session;
     const BOOL allowWeapons = playerMode ? TRUE : FALSE;
-    if (!session.LoadNew("ClassicH", track, 1, allowWeapons, &buffer) || session.GetCurrentLevel() == nullptr) {
-        std::fprintf(stderr, "Could not load ClassicH.trk\n");
+    if (!session.LoadNew(initialTrackName.c_str(), track, 1, allowWeapons, &buffer) || session.GetCurrentLevel() == nullptr) {
+        std::fprintf(stderr, "Could not load %s.trk\n", initialTrackName.c_str());
         return 1;
     }
 
@@ -1968,7 +1979,7 @@ int main(int argc, char** argv)
     const int player = 0;
     int room = level->GetStartingRoom(player);
     if (room < 0 || room >= level->GetRoomCount()) {
-        std::fprintf(stderr, "ClassicH.trk has no valid starting room\n");
+        std::fprintf(stderr, "%s.trk has no valid starting room\n", initialTrackName.c_str());
         return 1;
     }
 
@@ -2097,10 +2108,10 @@ int main(int argc, char** argv)
         MR_RecordFile* freshTrack = new MR_RecordFile;
         if (!freshTrack->OpenForRead(trackPath.c_str())) {
             delete freshTrack;
-            std::fprintf(stderr, "Could not reopen ClassicH.trk while leaving race\n");
+            std::fprintf(stderr, "Could not reopen %s.trk while leaving race\n", initialTrackName.c_str());
             return false;
         }
-        if (!session.LoadNew("ClassicH", freshTrack, 1, allowWeapons, &buffer) ||
+        if (!session.LoadNew(initialTrackName.c_str(), freshTrack, 1, allowWeapons, &buffer) ||
             !session.CreateMainCharacter()) {
             std::fprintf(stderr, "Could not reset the gameplay session while leaving race\n");
             return false;
@@ -2309,8 +2320,9 @@ int main(int argc, char** argv)
     }
 #endif
 
-    std::printf("ClassicH 3D view: room=%d surfaces=%d actors=%d pixels=%d\n",
-                room, renderStats.surfacesRendered, renderStats.actorsRendered, nonZeroPixels);
+    std::printf("%s 3D view: room=%d surfaces=%d actors=%d pixels=%d\n",
+                initialTrackName.c_str(), room, renderStats.surfacesRendered,
+                renderStats.actorsRendered, nonZeroPixels);
     int framesRendered = 0;
     // Already confirmed quitting from an earlier menu screen (see g_QuitConfirmed) --
     // skip the race entirely instead of rendering a frame of it first.

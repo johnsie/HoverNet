@@ -548,7 +548,7 @@ namespace
             std::fprintf(stderr, "Could not connect configured-host client\n");
             return false;
         }
-        if (!lConfiguredHost.HostRace("configured-race", "Steeplechase", 7, true))
+        if (!lConfiguredHost.HostRace("configured-race", "Switchback", 7, true))
         {
             std::fprintf(stderr, "Failed to send HostRace request\n");
             return false;
@@ -579,7 +579,7 @@ namespace
         {
             if (lGame.mName == "configured-race") { lConfigured = &lGame; }
         }
-        if (lConfigured == nullptr || lConfigured->mTrack != "Steeplechase" || lConfigured->mNumLaps != 7)
+        if (lConfigured == nullptr || lConfigured->mTrack != "Switchback" || lConfigured->mNumLaps != 7)
         {
             std::fprintf(stderr, "Configured race's track/laps didn't reach the lobby listing\n");
             return false;

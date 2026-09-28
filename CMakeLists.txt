@@ -300,6 +300,19 @@ add_dependencies(HoverNetTrackViewer HoverNetHeadlessObjFac1)
 target_compile_definitions(HoverNetTrackViewer PRIVATE _HAVE_SDL2 HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(HoverNetTrackViewer PRIVATE HoverNetModelCore HoverNetPortableUtil SDL2::SDL2)
 
+add_executable(HoverNetMazeCompiler
+    NetTarget/MazeCompiler/main.cpp
+    NetTarget/MazeCompiler/LevelBuilder.cpp
+    NetTarget/MazeCompiler/LevelBuilderVisiblesZones.cpp
+    NetTarget/MazeCompiler/Parser.cpp
+    NetTarget/MazeCompiler/TrackCommonStuff.cpp
+    NetTarget/MazeCompiler/TrackMap.cpp
+)
+
+add_dependencies(HoverNetMazeCompiler HoverNetHeadlessObjFac1)
+target_include_directories(HoverNetMazeCompiler PRIVATE NetTarget/MazeCompiler)
+target_link_libraries(HoverNetMazeCompiler PRIVATE HoverNetModelCore HoverNetResourceCore HoverNetVideoCore HoverNetPortableUtil)
+
 add_executable(HoverNetTrack3DViewer
     NetTarget/LinuxClient/Track3DViewer.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
@@ -331,6 +344,9 @@ if(BUILD_TESTING)
     add_hovernet_root_test(HoverNetLevelSmoke)
     add_hovernet_root_test(HoverNetGameSessionSmoke)
     add_hovernet_root_test(HoverNetTrackLoadSmoke)
+    add_test(NAME HoverNetSwitchbackTrackLoadSmoke
+        COMMAND HoverNetTrackLoadSmoke "NetTarget/Tracks/Switchback.trk" "Switchback")
+    set_tests_properties(HoverNetSwitchbackTrackLoadSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_hovernet_root_test(HoverNetFactorySmoke)
     add_hovernet_root_test(HoverNetResourceSmoke)
     add_hovernet_root_test(HoverNetViewportSmoke)
@@ -352,6 +368,8 @@ if(BUILD_TESTING)
     add_hovernet_root_test(HoverNetGame2Player --frames 1)
     add_test(NAME HoverNetGame2PlayerAutoplay COMMAND HoverNetGame2Player --autoplay --frames 10)
     set_tests_properties(HoverNetGame2PlayerAutoplay PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    add_test(NAME HoverNetGame2PlayerSwitchback COMMAND HoverNetGame2Player --track Switchback --frames 10)
+    set_tests_properties(HoverNetGame2PlayerSwitchback PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetGame2PlayerAudio COMMAND HoverNetGame2Player --autoplay --frames 60)
     set_tests_properties(HoverNetGame2PlayerAudio PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetGame2PlayerCombat COMMAND HoverNetGame2Player --autoplay --fire --frames 60)
@@ -368,6 +386,6 @@ if(BUILD_TESTING)
     set_tests_properties(HoverNetGame2PlayerDebug PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetTrack3DViewerPowerup COMMAND HoverNetTrack3DViewer --powerup --frames 1)
     set_tests_properties(HoverNetTrack3DViewerPowerup PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-    set_tests_properties(HoverNetLinuxBootstrap HoverNetTrackViewer HoverNetTrack3DViewer HoverNetGame2Player HoverNetGame2PlayerAutoplay HoverNetGame2PlayerAudio HoverNetGame2PlayerCombat HoverNetGame2PlayerWeaponCycle HoverNetGame2PlayerJump HoverNetGame2PlayerFire HoverNetGame2PlayerControls HoverNetGame2PlayerDebug HoverNetTrack3DViewerPowerup
+    set_tests_properties(HoverNetLinuxBootstrap HoverNetTrackViewer HoverNetTrack3DViewer HoverNetGame2Player HoverNetGame2PlayerAutoplay HoverNetGame2PlayerSwitchback HoverNetGame2PlayerAudio HoverNetGame2PlayerCombat HoverNetGame2PlayerWeaponCycle HoverNetGame2PlayerJump HoverNetGame2PlayerFire HoverNetGame2PlayerControls HoverNetGame2PlayerDebug HoverNetTrack3DViewerPowerup
         PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 endif()
