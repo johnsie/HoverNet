@@ -231,7 +231,9 @@ bool RaceServerClient::JoinGame(const std::string& pGameName)
 
 bool RaceServerClient::JoinGameById(int pRaceId)
 {
-    return SendMessage(eRSMsgJoinRaceById, &pRaceId, sizeof(pRaceId));
+    std::uint8_t lRaceId[4];
+    HoverNetProtocol::WriteI32LE(lRaceId, static_cast<std::int32_t>(pRaceId));
+    return SendMessage(eRSMsgJoinRaceById, lRaceId, sizeof(lRaceId));
 }
 
 bool RaceServerClient::SetPlayerName(const std::string& pName)
@@ -347,32 +349,30 @@ bool RaceServerClient::ParsePeer(const RaceServerMessage& pMessage, RaceServerPe
         return false;
     }
 
-    int lClientId = 0;
-    std::memcpy(&lClientId, pMessage.mData.data(), sizeof(lClientId));
-    pOut.mClientId = lClientId;
+    pOut.mClientId = HoverNetProtocol::ReadI32LE(pMessage.mData.data());
     pOut.mName.assign(pMessage.mData.begin() + 4, pMessage.mData.end());
     return true;
 }
 
 bool RaceServerClient::ParseLobbyUserLeft(const RaceServerMessage& pMessage, int& pOutClientId)
 {
-    if (pMessage.mType != eRSMsgLobbyUserLeft || pMessage.mData.size() < sizeof(int))
+    if (pMessage.mType != eRSMsgLobbyUserLeft || pMessage.mData.size() < 4)
     {
         return false;
     }
-    std::memcpy(&pOutClientId, pMessage.mData.data(), sizeof(pOutClientId));
+    pOutClientId = HoverNetProtocol::ReadI32LE(pMessage.mData.data());
     return true;
 }
 
 bool RaceServerClient::ParseChatMessage(const RaceServerMessage& pMessage, int& pOutSenderClientId,
                                         std::string& pOutText)
 {
-    if (pMessage.mType != eRSMsgChatMessage || pMessage.mData.size() < sizeof(int))
+    if (pMessage.mType != eRSMsgChatMessage || pMessage.mData.size() < 4)
     {
         return false;
     }
-    std::memcpy(&pOutSenderClientId, pMessage.mData.data(), sizeof(pOutSenderClientId));
-    pOutText.assign(pMessage.mData.begin() + sizeof(int), pMessage.mData.end());
+    pOutSenderClientId = HoverNetProtocol::ReadI32LE(pMessage.mData.data());
+    pOutText.assign(pMessage.mData.begin() + 4, pMessage.mData.end());
     return true;
 }
 
@@ -445,9 +445,8 @@ bool RaceServerClient::ParseGameInfo(const RaceServerMessage& pMessage, RaceServ
     const std::uint8_t* lData = pMessage.mData.data();
     const std::size_t lLen = pMessage.mData.size();
 
-    int lRaceId = 0;
-    std::memcpy(&lRaceId, lData, sizeof(lRaceId));
-    std::size_t lOffset = sizeof(lRaceId);
+    const std::int32_t lRaceId = HoverNetProtocol::ReadI32LE(lData);
+    std::size_t lOffset = 4;
 
     pOut.mRaceId = lRaceId;
     pOut.mNumPlayers = lData[lOffset++];
@@ -487,14 +486,10 @@ bool RaceServerClient::ParseJoinedRace(const RaceServerMessage& pMessage, RaceSe
         return false;
     }
 
-    int lRaceId = 0;
-    std::memcpy(&lRaceId, pMessage.mData.data(), sizeof(lRaceId));
-    pOut.mRaceId = lRaceId;
+    pOut.mRaceId = HoverNetProtocol::ReadI32LE(pMessage.mData.data());
     pOut.mIsHost = pMessage.mData[4] != 0;
 
-    int lClientId = 0;
-    std::memcpy(&lClientId, pMessage.mData.data() + 5, sizeof(lClientId));
-    pOut.mClientId = lClientId;
+    pOut.mClientId = HoverNetProtocol::ReadI32LE(pMessage.mData.data() + 5);
     return true;
 }
 
@@ -508,7 +503,7 @@ bool RaceServerClient::SendPlayerState(int pLocalClientId, const void* pStateDat
     std::vector<std::uint8_t> lEnvelope;
     lEnvelope.reserve(4 + pStateLen);
     lEnvelope.resize(4);
-    std::memcpy(lEnvelope.data(), &pLocalClientId, sizeof(pLocalClientId));
+    HoverNetProtocol::WriteI32LE(lEnvelope.data(), static_cast<std::int32_t>(pLocalClientId));
     if (pStateData != nullptr && pStateLen > 0)
     {
         const std::uint8_t* lSrc = static_cast<const std::uint8_t*>(pStateData);
@@ -525,9 +520,7 @@ bool RaceServerClient::ParsePlayerState(const RaceServerMessage& pMessage, int& 
         return false;
     }
 
-    int lClientId = 0;
-    std::memcpy(&lClientId, pMessage.mData.data(), sizeof(lClientId));
-    pOutSenderClientId = lClientId;
+    pOutSenderClientId = HoverNetProtocol::ReadI32LE(pMessage.mData.data());
     pOutStateData = pMessage.mData.data() + 4;
     pOutStateLen = pMessage.mData.size() - 4;
     return true;
@@ -535,16 +528,18 @@ bool RaceServerClient::ParsePlayerState(const RaceServerMessage& pMessage, int& 
 
 bool RaceServerClient::SendHit(int pTargetClientId)
 {
-    return SendMessage(eRSMsgHitMessage, &pTargetClientId, sizeof(pTargetClientId));
+    std::uint8_t lTargetClientId[4];
+    HoverNetProtocol::WriteI32LE(lTargetClientId, static_cast<std::int32_t>(pTargetClientId));
+    return SendMessage(eRSMsgHitMessage, lTargetClientId, sizeof(lTargetClientId));
 }
 
 bool RaceServerClient::ParseHit(const RaceServerMessage& pMessage, int& pOutTargetClientId)
 {
-    if (pMessage.mType != eRSMsgHitMessage || pMessage.mData.size() < sizeof(int))
+    if (pMessage.mType != eRSMsgHitMessage || pMessage.mData.size() < 4)
     {
         return false;
     }
-    std::memcpy( &pOutTargetClientId, pMessage.mData.data(), sizeof(pOutTargetClientId) );
+    pOutTargetClientId = HoverNetProtocol::ReadI32LE(pMessage.mData.data());
     return true;
 }
 

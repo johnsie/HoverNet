@@ -460,10 +460,9 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 g_Logger.Log(MR_LOG_WARN, "Invalid GAME_NAME message length from client %d: %d", pConn->mClientId, dataLen);
                 MessageBuffer failMsg;
                 failMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE, raceId=-1 means "failed"
-                const int failId = -1;
-                memcpy(&failMsg.data[0], &failId, sizeof(failId));
+                HoverNetProtocol::WriteI32LE(&failMsg.data[0], -1);
                 failMsg.data[4] = 0;
-                memcpy(&failMsg.data[5], &pConn->mClientId, sizeof(pConn->mClientId));
+                HoverNetProtocol::WriteI32LE(&failMsg.data[5], pConn->mClientId);
                 failMsg.dataLen = 9;
                 send(pConn->mTcpSocket, (const char*)&failMsg, 3 + failMsg.dataLen, 0);
             }
@@ -509,10 +508,9 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                              pConn->mClientId, trackOk, raceName);
                 MessageBuffer failMsg;
                 failMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE, raceId=-1 means "failed"
-                const int failId = -1;
-                memcpy(&failMsg.data[0], &failId, sizeof(failId));
+                HoverNetProtocol::WriteI32LE(&failMsg.data[0], -1);
                 failMsg.data[4] = 0;
-                memcpy(&failMsg.data[5], &pConn->mClientId, sizeof(pConn->mClientId));
+                HoverNetProtocol::WriteI32LE(&failMsg.data[5], pConn->mClientId);
                 failMsg.dataLen = 9;
                 send(pConn->mTcpSocket, (const char*)&failMsg, 3 + failMsg.dataLen, 0);
                 break;
@@ -544,22 +542,20 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             // Unlike eRSMsgGameName, this disambiguates by the race's unique id instead
             // of its (possibly duplicated, now that hosting no longer rejects repeat
             // names) display name.
-            if (messageDataLen < static_cast<int>(sizeof(int))) {
+            if (messageDataLen < 4) {
                 g_Logger.Log(MR_LOG_WARN, "Client %d: undersized JOIN_RACE_BY_ID message", pConn->mClientId);
                 break;
             }
-            int targetRaceId = -1;
-            memcpy(&targetRaceId, &buffer[3], sizeof(targetRaceId));
+            const int targetRaceId = HoverNetProtocol::ReadI32LE(&buffer[3]);
 
             RaceSession* pRace = pRaceManager->GetRace(targetRaceId);
             if (pRace == nullptr) {
                 g_Logger.Log(MR_LOG_WARN, "Client %d: tried to join unknown race %d", pConn->mClientId, targetRaceId);
                 MessageBuffer failMsg;
                 failMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE, raceId=-1 means "failed"
-                const int failId = -1;
-                memcpy(&failMsg.data[0], &failId, sizeof(failId));
+                HoverNetProtocol::WriteI32LE(&failMsg.data[0], -1);
                 failMsg.data[4] = 0;
-                memcpy(&failMsg.data[5], &pConn->mClientId, sizeof(pConn->mClientId));
+                HoverNetProtocol::WriteI32LE(&failMsg.data[5], pConn->mClientId);
                 failMsg.dataLen = 9;
                 send(pConn->mTcpSocket, (const char*)&failMsg, 3 + failMsg.dataLen, 0);
                 break;
@@ -637,7 +633,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             if (pConn->mRaceId == -1) {
                 MessageBuffer msg;
                 msg.header = MakeMessageHeader(48);  // MRNM_LOBBY_USER_PRESENT
-                memcpy(&msg.data[0], &pConn->mClientId, sizeof(pConn->mClientId));
+                HoverNetProtocol::WriteI32LE(&msg.data[0], pConn->mClientId);
                 memcpy(&msg.data[4], pConn->mPlayerName, nameLen);
                 msg.dataLen = static_cast<unsigned char>(4 + nameLen);
                 const int msgSize = 3 + msg.dataLen;
@@ -663,7 +659,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 }
                 MessageBuffer msg;
                 msg.header = MakeMessageHeader(48);  // MRNM_LOBBY_USER_PRESENT
-                memcpy(&msg.data[0], &pTarget->mClientId, sizeof(pTarget->mClientId));
+                HoverNetProtocol::WriteI32LE(&msg.data[0], pTarget->mClientId);
                 const unsigned char nameLen = static_cast<unsigned char>(strlen(pTarget->mPlayerName));
                 memcpy(&msg.data[4], pTarget->mPlayerName, nameLen);
                 msg.dataLen = static_cast<unsigned char>(4 + nameLen);
@@ -697,13 +693,12 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             // same way case 3 below stamps MRNM_SET_MAIN_ELEM_STATE's sender.
             MessageBuffer relayMsg;
             relayMsg.header = MakeMessageHeader(6);
-            int relayDataLen = messageDataLen + static_cast<int>(sizeof(pConn->mClientId));
+            int relayDataLen = messageDataLen + 4;
             if (relayDataLen > 256) {
                 relayDataLen = 256;
             }
-            memcpy(&relayMsg.data[0], &pConn->mClientId, sizeof(pConn->mClientId));
-            memcpy(&relayMsg.data[sizeof(pConn->mClientId)], &buffer[3],
-                   relayDataLen - static_cast<int>(sizeof(pConn->mClientId)));
+            HoverNetProtocol::WriteI32LE(&relayMsg.data[0], pConn->mClientId);
+            memcpy(&relayMsg.data[4], &buffer[3], relayDataLen - 4);
             relayMsg.dataLen = static_cast<unsigned char>(relayDataLen);
             const int relayBytes = 3 + relayDataLen;
 
@@ -729,14 +724,14 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             break;
         }
         case 3:   // MRNM_SET_MAIN_ELEM_STATE
-            if (messageDataLen < static_cast<int>(sizeof(pConn->mClientId))) {
+            if (messageDataLen < 4) {
                 g_Logger.Log(MR_LOG_WARN, "Client %d sent an undersized player state", pConn->mClientId);
                 break;
             }
             // Sender identity is connection metadata, not client-controlled state.
             // Replace the claimed id before relaying so one player cannot update
             // another player's craft by spoofing its envelope prefix.
-            memcpy(&buffer[3], &pConn->mClientId, sizeof(pConn->mClientId));
+            HoverNetProtocol::WriteI32LE(&buffer[3], pConn->mClientId);
             [[fallthrough]];
         case 10:  // MRNM_HIT_MESSAGE (payload: target RaceServer client id)
         case 51:  // MRNM_READY
@@ -786,9 +781,8 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                     std::min<size_t>(race.mTrack.size(), 100));
 
                 unsigned char* p = msg.data;
-                const int raceId = race.mRaceId;
-                memcpy(p, &raceId, sizeof(raceId));
-                p += sizeof(raceId);
+                HoverNetProtocol::WriteI32LE(p, race.mRaceId);
+                p += 4;
                 *p++ = static_cast<unsigned char>(std::min(race.mNumPlayers, 255));
                 *p++ = race.mStarted ? 1 : 0;
                 *p++ = static_cast<unsigned char>(std::min(race.mNumLaps, 255));
@@ -859,9 +853,9 @@ void MR_ServerSocket::FinishJoiningRace(ClientConnection* pConn, MR_RaceManager*
         RaceSession* pRace = pRaceManager->GetRace(pConn->mRaceId);
         MessageBuffer ackMsg;
         ackMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE
-        memcpy(&ackMsg.data[0], &pConn->mRaceId, sizeof(pConn->mRaceId));
+        HoverNetProtocol::WriteI32LE(&ackMsg.data[0], pConn->mRaceId);
         ackMsg.data[4] = (pRace != nullptr && pRace->IsCreator(pConn->mClientId)) ? 1 : 0;
-        memcpy(&ackMsg.data[5], &pConn->mClientId, sizeof(pConn->mClientId));
+        HoverNetProtocol::WriteI32LE(&ackMsg.data[5], pConn->mClientId);
         ackMsg.dataLen = 9;
         send(pConn->mTcpSocket, (const char*)&ackMsg, 3 + ackMsg.dataLen, 0);
     }
@@ -880,7 +874,7 @@ void MR_ServerSocket::FinishJoiningRace(ClientConnection* pConn, MR_RaceManager*
             MessageBuffer msg;
             msg.header = MakeMessageHeader(44);  // MRNM_CONN_NAME_SET = 44
 
-            memcpy(&msg.data[0], &otherId, sizeof(otherId));
+            HoverNetProtocol::WriteI32LE(&msg.data[0], otherId);
 
             int nameLen = strlen(pOther->mPlayerName);
             memcpy(&msg.data[4], pOther->mPlayerName, nameLen);
@@ -900,7 +894,7 @@ void MR_ServerSocket::FinishJoiningRace(ClientConnection* pConn, MR_RaceManager*
             MessageBuffer msg;
             msg.header = MakeMessageHeader(44);  // MRNM_CONN_NAME_SET = 44
 
-            memcpy(&msg.data[0], &pConn->mClientId, sizeof(pConn->mClientId));
+            HoverNetProtocol::WriteI32LE(&msg.data[0], pConn->mClientId);
 
             int nameLen = strlen(pConn->mPlayerName);
             memcpy(&msg.data[4], pConn->mPlayerName, nameLen);
@@ -953,8 +947,8 @@ void MR_ServerSocket::BroadcastLobbyUserLeft(int clientId)
 {
     MessageBuffer msg;
     msg.header = MakeMessageHeader(49);  // MRNM_LOBBY_USER_LEFT
-    memcpy(msg.data, &clientId, sizeof(clientId));
-    msg.dataLen = sizeof(clientId);
+    HoverNetProtocol::WriteI32LE(msg.data, clientId);
+    msg.dataLen = 4;
     const int msgSize = 3 + msg.dataLen;
 
     for (auto& pair : mConnections) {

@@ -15,7 +15,9 @@ Phase 0 is in progress. Its initial repository-backed deliverables are:
 Protocol 2.0 negotiation is implemented: lobby traffic is gated behind a
 versioned handshake, compatible 2.x minors negotiate down, and incompatible
 majors receive a bounded rejection. The next implementation item is replacing
-remaining host-native payload integers with explicit fixed-width encoding.
+remaining native-layout simulation payloads with versioned fixed-width fields;
+RaceServer race and client identifiers are now explicit four-byte little-endian
+values on both serialization and parsing paths.
 
 ## Phase 0 — Define the 2.0 contract
 
