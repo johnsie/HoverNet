@@ -21,7 +21,10 @@ class MR_BitPack
 {
 
    protected:
-      MR_UInt8 mData[1];
+      // MR_MainCharacterState's deployed wire representation is 20 bytes.
+      // Keeping the storage here avoids the former one-byte base array being
+      // accessed past its bounds into a derived-class member.
+      MR_UInt8 mData[20];
 
    public:
       void Clear( int pSize );
@@ -34,37 +37,27 @@ class MR_BitPack
 // Inlined because good performances are needed
 inline MR_Int32 MR_BitPack::Get( int pOffset, int pLen, int pPrecision )const
 {
-   union{ MR_Int32 s; MR_UInt32 u; } lReturnValue;
-   
-   lReturnValue.u = (*(MR_UInt32*)(mData+pOffset/8))>>(pOffset%8);
-
-   if( (pLen+(pOffset%8))>32 )
+   MR_UInt32 lValue = Getu( pOffset, pLen, 0 );
+   if( pLen < 32 && (lValue & (MR_UInt32(1) << (pLen-1))) != 0 )
    {
-      lReturnValue.u |= (*(MR_UInt32*)(mData+(pOffset/8)+4))<<(32-(pOffset%8));
+      lValue |= ~((MR_UInt32(1) << pLen)-1);
    }
-
-   // Clear overhead bits and preserve sign
-   lReturnValue.s = lReturnValue.s<<(32-pLen)>>(32-pLen);
-
-   return lReturnValue.s<<pPrecision;
+   return static_cast<MR_Int32>(lValue) * (MR_Int32(1) << pPrecision);
 }
    
 
 inline MR_UInt32 MR_BitPack::Getu( int pOffset, int pLen, int pPrecision )const
 {
-   MR_UInt32 lReturnValue;
-   
-   lReturnValue = (*(MR_UInt32*)(mData+pOffset/8))>>(pOffset%8);
-
-   if( pLen+(pOffset%8)>32 )
+   MR_UInt32 lReturnValue = 0;
+   for( int lBit = 0; lBit < pLen; ++lBit )
    {
-      lReturnValue |= (*(MR_UInt32*)(mData+(pOffset/8)+4))<<(32-(pOffset%8));
+      const int lSourceBit = pOffset + lBit;
+      if( (mData[lSourceBit/8] & (MR_UInt8(1) << (lSourceBit%8))) != 0 )
+      {
+         lReturnValue |= MR_UInt32(1) << lBit;
+      }
    }
-
-   // Clear overhead bits
-   lReturnValue = lReturnValue<<(32-pLen)>>(32-pLen);
-
-   return lReturnValue<<pPrecision;
+   return lReturnValue << pPrecision;
 }
 
 inline void MR_BitPack::Clear( int pSize )
@@ -75,15 +68,14 @@ inline void MR_BitPack::Clear( int pSize )
 inline void MR_BitPack::Set( int pOffset, int pLen, int pPrecision, MR_Int32 pValue )
 {
 
-   MR_UInt32 lValue = pValue>>pPrecision;
-
-   lValue = lValue<<(32-pLen)>>(32-pLen);
-
-   (*(MR_UInt32*)(mData+pOffset/8)) |= lValue<<(pOffset%8);
-
-   if( (pLen+(pOffset%8))>32 )
+   const MR_UInt32 lValue = static_cast<MR_UInt32>(pValue >> pPrecision);
+   for( int lBit = 0; lBit < pLen; ++lBit )
    {
-      (*(MR_UInt32*)(mData+(pOffset/8)+4)) |= lValue>>(32-(pOffset%8));
+      if( (lValue & (MR_UInt32(1) << lBit)) != 0 )
+      {
+         const int lDestinationBit = pOffset + lBit;
+         mData[lDestinationBit/8] |= MR_UInt8(1) << (lDestinationBit%8);
+      }
    }
 }
 
@@ -92,4 +84,3 @@ inline void MR_BitPack::Set( int pOffset, int pLen, int pPrecision, MR_Int32 pVa
 #undef MR_DllDeclare
 
 #endif
-

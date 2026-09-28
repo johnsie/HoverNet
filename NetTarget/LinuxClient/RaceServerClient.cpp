@@ -553,12 +553,9 @@ bool RaceServerClient::SendAutoElement(int pDllId, int pClassId, int pRoom,
     }
 
     std::vector<std::uint8_t> lPayload(6);
-    const std::int16_t lDllId = static_cast<std::int16_t>(pDllId);
-    const std::int16_t lClassId = static_cast<std::int16_t>(pClassId);
-    const std::int16_t lRoom = static_cast<std::int16_t>(pRoom);
-    std::memcpy(lPayload.data(), &lDllId, sizeof(lDllId));
-    std::memcpy(lPayload.data() + 2, &lClassId, sizeof(lClassId));
-    std::memcpy(lPayload.data() + 4, &lRoom, sizeof(lRoom));
+    HoverNetProtocol::WriteI16LE(lPayload.data(), static_cast<std::int16_t>(pDllId));
+    HoverNetProtocol::WriteI16LE(lPayload.data() + 2, static_cast<std::int16_t>(pClassId));
+    HoverNetProtocol::WriteI16LE(lPayload.data() + 4, static_cast<std::int16_t>(pRoom));
     if (pStateData != nullptr && pStateLen > 0)
     {
         const std::uint8_t* lSrc = static_cast<const std::uint8_t*>(pStateData);
@@ -577,15 +574,9 @@ bool RaceServerClient::ParseAutoElement(const RaceServerMessage& pMessage, int& 
         return false;
     }
 
-    std::int16_t lDllId = 0;
-    std::int16_t lClassId = 0;
-    std::int16_t lRoom = 0;
-    std::memcpy(&lDllId, pMessage.mData.data(), sizeof(lDllId));
-    std::memcpy(&lClassId, pMessage.mData.data() + 2, sizeof(lClassId));
-    std::memcpy(&lRoom, pMessage.mData.data() + 4, sizeof(lRoom));
-    pOutDllId = lDllId;
-    pOutClassId = lClassId;
-    pOutRoom = lRoom;
+    pOutDllId = HoverNetProtocol::ReadI16LE(pMessage.mData.data());
+    pOutClassId = HoverNetProtocol::ReadI16LE(pMessage.mData.data() + 2);
+    pOutRoom = HoverNetProtocol::ReadI16LE(pMessage.mData.data() + 4);
     pOutStateData = pMessage.mData.data() + 6;
     pOutStateLen = pMessage.mData.size() - 6;
     return true;

@@ -160,12 +160,14 @@ class MR_MainCharacterState: private MR_BitPack
    #define  MC_PADDING      141,   11,     0 
    //   #define  MC_SOUNDFX      141,    5,     0 
 
-   // Total                 146  = 19 bytes (146 bits / 8 = 18.25 bytes, rounds up to 19)
-   MR_UInt8  mFieldList[19];
+   // Total state storage is the deployed 20-byte MR_BitPack representation.
 
    public:
 
 };
+
+static_assert( sizeof( MR_MainCharacterState ) == 20,
+               "Main character network state must remain wire-compatible" );
 
 
 
@@ -1638,4 +1640,3 @@ void MR_MainCharacter::PlayExternalSounds( int pDB, int pPan )
       }
    }
 }
-
