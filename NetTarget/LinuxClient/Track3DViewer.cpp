@@ -1252,6 +1252,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         // and can arrive interleaved.
         RaceServerMessage message;
         while (client.PollMessage(message, 0)) {
+            if (client.HandlePingReply(message)) continue;
             RaceServerGameInfo info;
             if (message.mType == eRSMsgGameInfo && RaceServerClient::ParseGameInfo(message, info)) {
                 gamesBeingListed.push_back(info);
@@ -2868,6 +2869,7 @@ int main(int argc, char** argv)
     RaceServerClient onlineClient;
     OnlineElementBroadcastContext elementBroadcastContext{&onlineClient};
     int localClientId = -1;
+    bool raceWasOnline = false;
     std::map<int, RemotePlayer> remotePlayers;
     // Resolves a race-scoped chat message's stamped sender id (see
     // RaceServerClient::ParseChatMessage) to a display name -- populated from the
@@ -2888,6 +2890,7 @@ int main(int argc, char** argv)
         remotePlayers.clear();
         raceNames.clear();
         localClientId = -1;
+        raceWasOnline = false;
 
         return true;
     };
@@ -2899,6 +2902,7 @@ int main(int argc, char** argv)
         remotePlayers.clear();
         raceNames.clear();
         localClientId = -1;
+        raceWasOnline = false;
 
         MR_RecordFile* newTrackFile = new MR_RecordFile;
         const std::string newTrackPath = SourcePath(("NetTarget/Tracks/" + newTrackName + ".trk").c_str());
@@ -2938,6 +2942,7 @@ int main(int argc, char** argv)
 
         std::printf("Joined race %c%s%c via the lobby (%zu other player(s) already in)\n",
                     39, joinedRace.c_str(), 39, knownPeers.size());
+        raceWasOnline = true;
 
         // Load only the track selected by the joined race. LoadNew() invalidates the previous
         // MR_MainCharacter (see its own comment: "a newly loaded track owns a
@@ -3126,6 +3131,7 @@ int main(int argc, char** argv)
     // the local player keeps racing solo with no indication multiplayer died.
     // Track the transition so it can be announced exactly once.
     bool wasOnlineConnected = onlineClient.IsConnected();
+    Uint32 lastRacePing = SDL_GetTicks();
 #endif
     // In-race chat, scoped to whatever race this connection is in (see the
     // eRSMsgChatMessage handling below) -- text input only actually does
@@ -3394,11 +3400,19 @@ int main(int argc, char** argv)
 
 #ifdef HOVERNET_GAME2_PLAYER
             if (onlineClient.IsConnected() && localClientId >= 0) {
+                const Uint32 now = SDL_GetTicks();
+                if (now - lastRacePing >= 2000) {
+                    onlineClient.Ping();
+                    lastRacePing = now;
+                }
                 const MR_ElementNetState localState = mainCharacter->GetNetState();
                 onlineClient.SendPlayerState(localClientId, localState.mData, localState.mDataLen);
 
                 RaceServerMessage netMessage;
                 while (onlineClient.PollMessage(netMessage, 0)) {
+                    if (onlineClient.HandlePingReply(netMessage)) {
+                        continue;
+                    }
                     if (netMessage.mType == eRSMsgConnNameSet) {
                         RaceServerPeer peer;
                         if (RaceServerClient::ParsePeer(netMessage, peer)) {
@@ -3547,6 +3561,13 @@ int main(int argc, char** argv)
                                                  session.GetBackImage());
                 }
                 else {
+                    if (raceWasOnline) {
+                        observer->SetNetworkLatency(onlineClient.IsConnected()
+                            ? onlineClient.GetLastPingMs() : -3);
+                    }
+                    else {
+                        observer->SetNetworkLatency(-2);
+                    }
                     observer->RenderNormalDisplay(&buffer, &session, mainCharacter, session.GetSimulationTime(),
                                                   session.GetBackImage());
                 }

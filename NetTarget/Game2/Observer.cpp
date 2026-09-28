@@ -82,6 +82,7 @@ MR_Observer::MR_Observer()
    mSplitMode = eNotSplit;
 
    mCockpitView = FALSE;
+   mNetworkLatencyMs = -2;
 
    // Try to create sprite resources, but don't fail if they don't load
    try {
@@ -143,6 +144,11 @@ void MR_Observer::Delete()
 void MR_Observer::SetCockpitView( BOOL pOn )
 {
    mCockpitView = pOn;
+}
+
+void MR_Observer::SetNetworkLatency( int pLatencyMs )
+{
+   mNetworkLatencyMs = pLatencyMs;
 }
 
 
@@ -1719,9 +1725,19 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
             break;
       }
 
-      char lStatusLine[120];
-      snprintf( lStatusLine, sizeof(lStatusLine), "Speed %d%%   Fuel %d%%   %s",
-                lSpeedPercent, lFuelPercent, lWeaponStatus );
+      char lNetworkStatus[40];
+      if( mNetworkLatencyMs >= 0 )
+         snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Online %d ms", mNetworkLatencyMs );
+      else if( mNetworkLatencyMs == -1 )
+         snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Online (measuring)" );
+      else if( mNetworkLatencyMs == -3 )
+         snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Connection lost" );
+      else
+         snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Local" );
+
+      char lStatusLine[160];
+      snprintf( lStatusLine, sizeof(lStatusLine), "Speed %d%%   Fuel %d%%   %s   %s",
+                lSpeedPercent, lFuelPercent, lWeaponStatus, lNetworkStatus );
       int lStatusY = lYRes/16 + lHudFont->GetItemHeight() + 4;
       lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lStatusLine ), &m3DView,
                         MR_Sprite::eCenter, MR_Sprite::eTop, 0 );

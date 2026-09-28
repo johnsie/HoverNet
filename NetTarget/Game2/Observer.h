@@ -45,6 +45,9 @@ class MR_Observer
       MR_3DCoordinate mLastCameraPos;
       BOOL            mLastCameraPosValid;
       BOOL            mCockpitView;
+      // -2 local race, -1 online but awaiting a sample, -3 connection lost,
+      // otherwise the most recent server TCP round-trip in milliseconds.
+      int             mNetworkLatencyMs;
 
       MR_2DViewPort m2DDebugView;
       MR_3DViewPort mWireFrameView;
@@ -101,6 +104,7 @@ class MR_Observer
       void PlayersListPageDn();
 
       void SetCockpitView( BOOL pOn );
+      void SetNetworkLatency( int pLatencyMs );
 
 
       void SetSplitMode( eSplitMode pMode );

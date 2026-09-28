@@ -57,7 +57,8 @@ namespace
     }
 }
 
-RaceServerClient::RaceServerClient() : mSocket(-1)
+RaceServerClient::RaceServerClient()
+    : mSocket(-1), mPingToken(0), mPendingPingToken(0), mLastPingMs(-1)
 {
 #ifdef _WIN32
     WSADATA lWsaData;
@@ -163,6 +164,8 @@ void RaceServerClient::Disconnect()
         mSocket = -1;
     }
     mReceiveBuffer.clear();
+    mPendingPingToken = 0;
+    mLastPingMs = -1;
 }
 
 bool RaceServerClient::IsConnected() const
@@ -253,10 +256,36 @@ bool RaceServerClient::ListLobbyUsers()
 
 bool RaceServerClient::Ping()
 {
-    // Any message resets the server's idle timeout for this connection (see
-    // ClientConnection::IsAlive), so an empty eRSMsgLagTest works as a no-op
-    // keep-alive -- harmless even mid-race, where it's just relayed to peers.
-    return SendMessage(eRSMsgLagTest, nullptr, 0);
+    // The server echoes this opaque token to the sender. It still relays the
+    // legacy lag message to race peers, which preserves older client behavior;
+    // only the matching sender treats the echo as its RTT response.
+    ++mPingToken;
+    if (mPingToken == 0) ++mPingToken;
+    std::uint8_t lPayload[4];
+    HoverNetProtocol::WriteU32(lPayload, mPingToken);
+    if (!SendMessage(eRSMsgLagTest, lPayload, sizeof(lPayload))) return false;
+    mPendingPingToken = mPingToken;
+    mPingSentAt = std::chrono::steady_clock::now();
+    return true;
+}
+
+bool RaceServerClient::HandlePingReply(const RaceServerMessage& pMessage)
+{
+    if (pMessage.mType != eRSMsgLagTest || pMessage.mData.size() != 4 ||
+        mPendingPingToken == 0 ||
+        HoverNetProtocol::ReadU32(pMessage.mData.data()) != mPendingPingToken) {
+        return false;
+    }
+    const auto lElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - mPingSentAt).count();
+    mLastPingMs = static_cast<int>(lElapsed < 0 ? 0 : lElapsed);
+    mPendingPingToken = 0;
+    return true;
+}
+
+int RaceServerClient::GetLastPingMs() const
+{
+    return mLastPingMs;
 }
 
 bool RaceServerClient::StartRace()

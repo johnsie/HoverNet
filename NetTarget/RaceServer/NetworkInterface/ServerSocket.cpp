@@ -999,6 +999,16 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
         case 4:   // MRNM_CREATE_AUTO_ELEM (missiles and other transient elements)
         case 47:  // MRNM_LAG_TEST
         {
+            // Echo the opaque probe to its sender so modern clients can measure
+            // actual TCP round-trip time. Continue with the legacy peer relay
+            // below for compatibility with the original protocol behavior.
+            if (messageType == 47) {
+                const int lEchoResult = send(pConn->mTcpSocket, (const char*)buffer, bytesReceived, 0);
+                if (lEchoResult == SOCKET_ERROR) {
+                    g_Logger.Log(MR_LOG_WARN, "Failed to echo lag probe to client %d: %ld",
+                                 pConn->mClientId, WSAGetLastError());
+                }
+            }
             g_Logger.Log(messageType == 3 ? MR_LOG_DEBUG : MR_LOG_INFO,
                          "Client %d (Race %d): Relaying message type %d to race members",
                          pConn->mClientId, pConn->mRaceId, messageType);

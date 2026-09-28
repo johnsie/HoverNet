@@ -651,6 +651,24 @@ namespace
         }
         std::printf("Host-controlled race start works and reaches all players together\n");
 
+        // A lag probe must be echoed to its sender so the client can report a
+        // real server round-trip instead of presenting a cosmetic signal icon.
+        if (!lHost.Ping()) {
+            std::fprintf(stderr, "Failed to send lag probe\n");
+            return false;
+        }
+        bool lMeasuredServerRtt = false;
+        for (int lTries = 0; lTries < 20 && !lMeasuredServerRtt; ++lTries) {
+            if (lHost.PollMessage(lMessage, 100) && lHost.HandlePingReply(lMessage)) {
+                lMeasuredServerRtt = lHost.GetLastPingMs() >= 0;
+            }
+        }
+        if (!lMeasuredServerRtt) {
+            std::fprintf(stderr, "RaceServer did not echo a measurable lag probe\n");
+            return false;
+        }
+        std::printf("RaceServer lag probe reports %d ms TCP round-trip\n", lHost.GetLastPingMs());
+
         // Once the race actually starts, the lobby watcher must be told both
         // players left the lobby (eRSMsgLobbyUserLeft), and a fresh ListLobbyUsers
         // must no longer list either of them.

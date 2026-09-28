@@ -346,6 +346,11 @@ percentages plus missile charge/readiness, mine count, or power-up count. This
 keeps the original compact artwork while removing the need to infer critical
 state from unlabeled bars and animation frames.
 
+Online races now add a real RaceServer TCP round-trip measurement to that status
+line, refreshed every two seconds, with explicit measuring and connection-lost
+states; local races say Local. The lag probe remains compatible with legacy peer
+relay behavior, while the server also echoes the opaque token to its sender.
+
 The rest of Phase 3 (full ImGui menu consolidation, controller customization,
 HUD improvements, guided onboarding, remaining accessibility
 work, and Windows/Linux menu parity) remains.

@@ -12,6 +12,7 @@
 
 #include "../RaceServer/NetworkInterface/Protocol.h"
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -161,6 +162,10 @@ public:
     // waiting room. Callers should call this periodically (every few seconds,
     // well under MR_CONNECTION_TIMEOUT) whenever nothing else was just sent.
     bool Ping();
+    // Consumes this client's echoed lag probe and updates the measured TCP
+    // round-trip time. Returns false for another racer's legacy lag message.
+    bool HandlePingReply(const RaceServerMessage& pMessage);
+    int GetLastPingMs() const;
 
     // Parses an eRSMsgLobbyUserLeft payload ([4-byte little-endian clientId]).
     static bool ParseLobbyUserLeft(const RaceServerMessage& pMessage, int& pOutClientId);
@@ -231,6 +236,10 @@ private:
     int mSocket;
     std::vector<std::uint8_t> mReceiveBuffer;
     std::string mProtocolError;
+    std::uint32_t mPingToken;
+    std::uint32_t mPendingPingToken;
+    std::chrono::steady_clock::time_point mPingSentAt;
+    int mLastPingMs;
 };
 
 #endif
