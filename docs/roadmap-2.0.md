@@ -196,14 +196,24 @@ pause menu, quit confirmation) lays out and hit-tests against the fixed
 `io.DisplaySize`/`io.MousePos` and raw `SDL_MOUSEBUTTONDOWN`/`SDL_MOUSEMOTION`
 events still report real window pixels -- causing exactly what was reported:
 ImGui screens overflowing their visible letterboxed area, and every screen's
-clicks landing in the wrong place. Added a shared `WindowToLogicalPoint`
-helper (`Track3DViewer.cpp`) that converts real window-pixel coordinates back
-to the 1024x768 logical space using the same scale/offset math
-`SDL_RenderSetLogicalSize` uses internally, applied to: `io.MousePos`/
-`io.DisplaySize` right after each of the 3 `ImGui_ImplSDL2_NewFrame()` calls
-(via a `SyncImGuiToLogicalSize` wrapper), and directly to the mouse
-coordinates read in `ConfirmQuit`/`RunPauseMenu`'s raw event loops. This could
-only be diagnosed by reasoning through the rendering pipeline, not by
+clicks landing in the wrong place.
+
+The first attempt at this fix corrected `io.MousePos` directly after
+`ImGui_ImplSDL2_NewFrame()`, which turned out not to work: ImGui's SDL2
+backend queues mouse-position updates via `io.AddMousePosEvent()`, and
+`ImGui::NewFrame()` drains that queue and overwrites `io.MousePos` from it,
+silently clobbering any correction applied between the two calls -- so the
+Lobby and Settings screens stayed unclickable in fullscreen even after that
+change shipped (v0.1.73). The working fix rewrites each `SDL_Event`'s own
+x/y in place, via a new `RewriteMouseEventToLogical` helper called
+immediately after `SDL_PollEvent` and before the event reaches
+`ImGui_ImplSDL2_ProcessEvent` (for the 3 ImGui screens) or the raw
+`SDL_MOUSEBUTTONDOWN`/`SDL_MOUSEMOTION` handling (`ConfirmQuit`,
+`RunPauseMenu`) -- so every consumer downstream, including ImGui's own input
+queue, only ever sees already-corrected logical coordinates.
+`io.DisplaySize` is unaffected by the input-queue issue and is still
+corrected directly, once per frame, via `SyncImGuiToLogicalSize`. This could
+only be diagnosed by reasoning through the ImGui/SDL event pipeline, not by
 interactive testing (unavailable in this environment) -- please re-verify by
 toggling fullscreen and confirming the Lobby, Settings, and pause menu are
 all fully visible and clickable at both window sizes.
