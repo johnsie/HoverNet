@@ -26,6 +26,7 @@
 #include "../ObjFacTools/ObjectFactoryData.h"
 #include "../Model/ConcreteShape.h"
 #include "../Model/FreeElementMovingHelper.h"
+#include "../Util/WireFormat.h"
 
 
 
@@ -336,35 +337,30 @@ void MR_Missile::ApplyEffect( const MR_ContactEffect* pEffect,  MR_SimulationTim
 
 // State broadcast
 
-class MR_MissileState
+namespace
 {
-   public:
-      MR_Int32                  mPosX;          // 4    4
-      MR_Int32                  mPosY;          // 4    8
-      MR_Int16                  mPosZ;          // 2   10 
-
-      MR_Angle                  mOrientation;   // 2   12  
-      MR_Int8                   mHoverId;       // 1   14
-};
+   const int cMissileStateSize = 16; // Preserve the deployed padded payload.
+}
 
 
 MR_ElementNetState MR_Missile::GetNetState()const
 {
-   static MR_MissileState lsState; // Static is ok because the variable will be used immediatly
+   static MR_UInt8 lsState[cMissileStateSize];
 
    MR_ElementNetState lReturnValue;
 
-   lReturnValue.mDataLen = sizeof( lsState );
-   lReturnValue.mData    = (MR_UInt8*)&lsState;
+   lReturnValue.mDataLen = cMissileStateSize;
+   lReturnValue.mData    = lsState;
 
 
-   lsState.mPosX          = mPosition.mX;
-   lsState.mPosY          = mPosition.mY;
-   lsState.mPosZ          = mPosition.mZ;
-
-   lsState.mOrientation   = mOrientation;
-
-   lsState.mHoverId       = mHoverId;
+   HoverNetWire::WriteI32LE(lsState, mPosition.mX);
+   HoverNetWire::WriteI32LE(lsState + 4, mPosition.mY);
+   HoverNetWire::WriteI16LE(lsState + 8, mPosition.mZ);
+   HoverNetWire::WriteI16LE(lsState + 10, mOrientation);
+   lsState[12] = static_cast<MR_UInt8>(mHoverId);
+   lsState[13] = 0;
+   lsState[14] = 0;
+   lsState[15] = 0;
 
    return lReturnValue;
 
@@ -373,17 +369,17 @@ MR_ElementNetState MR_Missile::GetNetState()const
 void MR_Missile::SetNetState( int pDataLen, const MR_UInt8* pData )
 {
 
-   const MR_MissileState* lState = (const MR_MissileState*)pData;
+   if( pData == NULL || pDataLen < 12 ) return;
 
-   mPosition.mX = lState->mPosX;
-   mPosition.mY = lState->mPosY;         
-   mPosition.mZ = lState->mPosZ;         
+   mPosition.mX = HoverNetWire::ReadI32LE(pData);
+   mPosition.mY = HoverNetWire::ReadI32LE(pData + 4);
+   mPosition.mZ = HoverNetWire::ReadI16LE(pData + 8);
 
-   mOrientation = lState->mOrientation;  
+   mOrientation = HoverNetWire::ReadI16LE(pData + 10);
 
-   if( pDataLen >= sizeof( MR_MissileState ) )
+   if( pDataLen >= cMissileStateSize )
    {
-      mHoverId = lState->mHoverId;
+      mHoverId = static_cast<MR_Int8>(pData[12]);
       mLostOfControlEffect.mHoverId   = mHoverId;
    }
 
@@ -402,4 +398,3 @@ void MR_Missile::PlayExternalSounds( int pDB, int pPan )
 
    MR_SoundServer::Play( mMotorSound, 1, pDB, 1.0, pPan );
 }
-

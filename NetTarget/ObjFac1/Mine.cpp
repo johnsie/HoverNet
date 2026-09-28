@@ -27,6 +27,7 @@
 #include "../ObjFacTools/ObjectFactoryData.h"
 #include "../Model/ConcreteShape.h"
 #include "../Model/FreeElementMovingHelper.h"
+#include "../Util/WireFormat.h"
 
 
 const MR_Int32 cMineRay        =  400;
@@ -154,43 +155,39 @@ void MR_Mine::Render( MR_3DViewPort* pDest, MR_SimulationTime pTime )
 
 // State broadcast
 
-class MR_MineState
+namespace
 {
-   public:
-      MR_Int32                  mPosX;          // 4    4
-      MR_Int32                  mPosY;          // 4    8
-      MR_Int16                  mPosZ;          // 2   10 
-
-};
+   const int cMineStateSize = 12; // Preserve the deployed padded payload.
+}
 
 MR_ElementNetState MR_Mine::GetNetState()const
 {
-   static MR_MineState lsState; // Static is ok because the variable will be used immediatly
+   static MR_UInt8 lsState[cMineStateSize];
 
    MR_ElementNetState lReturnValue;
 
-   lReturnValue.mDataLen = sizeof( lsState );
-   lReturnValue.mData    = (MR_UInt8*)&lsState;
+   lReturnValue.mDataLen = cMineStateSize;
+   lReturnValue.mData    = lsState;
 
-   lsState.mPosX          = mPosition.mX;
-   lsState.mPosY          = mPosition.mY;
-   lsState.mPosZ          = mPosition.mZ;
+   HoverNetWire::WriteI32LE(lsState, mPosition.mX);
+   HoverNetWire::WriteI32LE(lsState + 4, mPosition.mY);
+   HoverNetWire::WriteI16LE(lsState + 8, mPosition.mZ);
+   lsState[10] = 0;
+   lsState[11] = 0;
 
    return lReturnValue;
 }
 
-void MR_Mine::SetNetState( int /*pDataLen*/, const MR_UInt8* pData )
+void MR_Mine::SetNetState( int pDataLen, const MR_UInt8* pData )
 {
+   if( pData == NULL || pDataLen < 10 ) return;
 
-   const MR_MineState* lState = (const MR_MineState*)pData;
-
-   mPosition.mX = lState->mPosX;
-   mPosition.mY = lState->mPosY;         
-   mPosition.mZ = lState->mPosZ;         
+   mPosition.mX = HoverNetWire::ReadI32LE(pData);
+   mPosition.mY = HoverNetWire::ReadI32LE(pData + 4);
+   mPosition.mZ = HoverNetWire::ReadI16LE(pData + 8);
 
    mOrientation = 0;
 
 }
-
 
 

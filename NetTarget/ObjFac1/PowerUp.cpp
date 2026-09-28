@@ -26,6 +26,7 @@
 #include "../ObjFacTools/ObjectFactoryData.h"
 #include "../Model/ConcreteShape.h"
 #include "../Model/FreeElementMovingHelper.h"
+#include "../Util/WireFormat.h"
 
 
 const MR_Int32 cPowerUpRay        =  550;
@@ -143,43 +144,39 @@ void MR_PowerUp::ApplyEffect( const MR_ContactEffect* pEffect,  MR_SimulationTim
 
 // State broadcast
 
-class MR_PowerUpState
+namespace
 {
-   public:
-      MR_Int32                  mPosX;          // 4    4
-      MR_Int32                  mPosY;          // 4    8
-      MR_Int16                  mPosZ;          // 2   10 
-
-};
+   const int cPowerUpStateSize = 12; // Preserve the deployed padded payload.
+}
 
 MR_ElementNetState MR_PowerUp::GetNetState()const
 {
-   static MR_PowerUpState lsState; // Static is ok because the variable will be used immediatly
+   static MR_UInt8 lsState[cPowerUpStateSize];
 
    MR_ElementNetState lReturnValue;
 
-   lReturnValue.mDataLen = sizeof( lsState );
-   lReturnValue.mData    = (MR_UInt8*)&lsState;
+   lReturnValue.mDataLen = cPowerUpStateSize;
+   lReturnValue.mData    = lsState;
 
-   lsState.mPosX          = mPosition.mX;
-   lsState.mPosY          = mPosition.mY;
-   lsState.mPosZ          = mPosition.mZ;
+   HoverNetWire::WriteI32LE(lsState, mPosition.mX);
+   HoverNetWire::WriteI32LE(lsState + 4, mPosition.mY);
+   HoverNetWire::WriteI16LE(lsState + 8, mPosition.mZ);
+   lsState[10] = 0;
+   lsState[11] = 0;
 
    return lReturnValue;
 }
 
-void MR_PowerUp::SetNetState( int /*pDataLen*/, const MR_UInt8* pData )
+void MR_PowerUp::SetNetState( int pDataLen, const MR_UInt8* pData )
 {
+   if( pData == NULL || pDataLen < 10 ) return;
 
-   const MR_PowerUpState* lState = (const MR_PowerUpState*)pData;
-
-   mPosition.mX = lState->mPosX;
-   mPosition.mY = lState->mPosY;         
-   mPosition.mZ = lState->mPosZ;         
+   mPosition.mX = HoverNetWire::ReadI32LE(pData);
+   mPosition.mY = HoverNetWire::ReadI32LE(pData + 4);
+   mPosition.mZ = HoverNetWire::ReadI16LE(pData + 8);
 
    mOrientation = 0;
 
 }
-
 
 
