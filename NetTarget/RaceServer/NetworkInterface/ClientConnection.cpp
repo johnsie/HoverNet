@@ -16,7 +16,11 @@ ClientConnection::ClientConnection()
       mLastMessageTime(0),
       mConnected(FALSE),
       mAuthenticated(FALSE),
-      mProtocolNegotiated(FALSE)
+      mProtocolNegotiated(FALSE),
+      mChatWindowStart(0),
+      mChatCountInWindow(0),
+      mRaceCreateWindowStart(0),
+      mRaceCreateCountInWindow(0)
 {
     mPlayerName[0] = '\0';
     memset(&mUdpAddr, 0, sizeof(mUdpAddr));

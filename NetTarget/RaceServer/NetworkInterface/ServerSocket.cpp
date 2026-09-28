@@ -38,6 +38,22 @@ static inline bool IsInLobby(const ClientConnection* pConn) {
     return pConn->mRaceId == -1 || !pConn->mRaceStarted;
 }
 
+// A silently-dropped GAME_NAME/HOST_RACE/JOIN_RACE_BY_ID request leaves the
+// client's "Retrieving game info..." dialog waiting on its own client-side
+// timeout with no indication of what went wrong -- every rejection of one of
+// those (bad message, unknown track, unknown race id, or now a rate limit)
+// sends this same explicit failure instead.
+static void SendJoinRaceFailure(ClientConnection* pConn)
+{
+    MessageBuffer failMsg;
+    failMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE, raceId=-1 means "failed"
+    HoverNetProtocol::WriteI32LE(&failMsg.data[0], -1);
+    failMsg.data[4] = 0;
+    HoverNetProtocol::WriteI32LE(&failMsg.data[5], pConn->mClientId);
+    failMsg.dataLen = 9;
+    send(pConn->mTcpSocket, (const char*)&failMsg, 3 + failMsg.dataLen, 0);
+}
+
 static void SendProtocolReply(SOCKET pSocket, unsigned char pStatus,
                               unsigned short pMinor, const char* pMessage)
 {
@@ -464,23 +480,21 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
                 FinishJoiningRace(pConn, pRaceManager);
             } else {
-                // A silently-dropped message here leaves the client's "Retrieving game
-                // info..." dialog waiting on its own 10s client-side timeout with no
-                // indication of what went wrong -- send an explicit rejection instead.
                 g_Logger.Log(MR_LOG_WARN, "Invalid GAME_NAME message length from client %d: %d", pConn->mClientId, dataLen);
-                MessageBuffer failMsg;
-                failMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE, raceId=-1 means "failed"
-                HoverNetProtocol::WriteI32LE(&failMsg.data[0], -1);
-                failMsg.data[4] = 0;
-                HoverNetProtocol::WriteI32LE(&failMsg.data[5], pConn->mClientId);
-                failMsg.dataLen = 9;
-                send(pConn->mTcpSocket, (const char*)&failMsg, 3 + failMsg.dataLen, 0);
+                SendJoinRaceFailure(pConn);
             }
             break;
         }
 
         case 54:  // MRNM_HOST_RACE - create a race with explicit track/laps/weapons
         {
+            if (!pConn->AllowRaceCreation(time(NULL))) {
+                g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE rate limit exceeded (max %d per %ds)",
+                             pConn->mClientId, MR_RACE_CREATE_RATE_LIMIT_COUNT, MR_RACE_CREATE_RATE_LIMIT_WINDOW_SEC);
+                SendJoinRaceFailure(pConn);
+                break;
+            }
+
             // Payload: [1B trackLen][track][1B laps][1B weapons(0/1)][1B nameLen][name]
             const unsigned char* p = &buffer[3];
             const unsigned char* pEnd = &buffer[3] + messageDataLen;
@@ -516,13 +530,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             if (!trackOk) {
                 g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE rejected (track_ok=%d, name='%s')",
                              pConn->mClientId, trackOk, raceName);
-                MessageBuffer failMsg;
-                failMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE, raceId=-1 means "failed"
-                HoverNetProtocol::WriteI32LE(&failMsg.data[0], -1);
-                failMsg.data[4] = 0;
-                HoverNetProtocol::WriteI32LE(&failMsg.data[5], pConn->mClientId);
-                failMsg.dataLen = 9;
-                send(pConn->mTcpSocket, (const char*)&failMsg, 3 + failMsg.dataLen, 0);
+                SendJoinRaceFailure(pConn);
                 break;
             }
 
@@ -562,13 +570,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             RaceSession* pRace = pRaceManager->GetRace(targetRaceId);
             if (pRace == nullptr) {
                 g_Logger.Log(MR_LOG_WARN, "Client %d: tried to join unknown race %d", pConn->mClientId, targetRaceId);
-                MessageBuffer failMsg;
-                failMsg.header = MakeMessageHeader(63);  // MRNM_JOINED_RACE, raceId=-1 means "failed"
-                HoverNetProtocol::WriteI32LE(&failMsg.data[0], -1);
-                failMsg.data[4] = 0;
-                HoverNetProtocol::WriteI32LE(&failMsg.data[5], pConn->mClientId);
-                failMsg.dataLen = 9;
-                send(pConn->mTcpSocket, (const char*)&failMsg, 3 + failMsg.dataLen, 0);
+                SendJoinRaceFailure(pConn);
                 break;
             }
 
@@ -687,6 +689,15 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
         case 6:   // MRNM_CHAT_MESSAGE
         {
+            if (!pConn->AllowChatMessage(time(NULL))) {
+                // No rejection message: chat is fire-and-forget with no ack a client
+                // is waiting on, unlike the join/host paths above, so there's nothing
+                // for a response to unblock -- just drop it and log the attempt.
+                g_Logger.Log(MR_LOG_WARN, "Client %d: chat rate limit exceeded (max %d per %ds)",
+                             pConn->mClientId, MR_CHAT_RATE_LIMIT_COUNT, MR_CHAT_RATE_LIMIT_WINDOW_SEC);
+                break;
+            }
+
             // Chat is scoped by whether the race has actually *started*
             // (mRaceStarted), not by mRaceId alone: a waiting room (hosted/joined
             // but not yet started) is still part of the wider lobby conversation,

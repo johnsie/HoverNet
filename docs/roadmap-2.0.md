@@ -51,6 +51,14 @@ Linux clients still browsing. Fixing that surfaced that the Windows client's
 which froze the lobby's own chat behind it for the whole wait; hosting/joining
 now stays in the lobby dialog until the race actually starts.
 
+Phase 2 has also started early: RaceServer now enforces per-connection rate
+limits on both chat (`ClientConnection::AllowChatMessage`) and race creation
+(`AllowRaceCreation`), a fixed-window limiter generous enough to clear
+`RaceServerClientSmoke.cpp`'s existing 25-message TCP-coalescing burst test
+without weakening the limit meaningfully against real flooding. Both limits
+are covered by regression tests confirming the exact accept/reject counts,
+verified to actually fail without the corresponding server-side check.
+
 ## Phase 0 — Define the 2.0 contract
 
 **October 2026 · 1–2 weeks**

@@ -792,6 +792,98 @@ namespace
         }
         std::printf("HostRace correctly rejects an unknown track and accepts a duplicate race name as a distinct race\n");
 
+        // Race-creation rate limit (ClientConnection::AllowRaceCreation): a single
+        // connection gets kRaceCreateLimit HostRace successes within its window,
+        // then further attempts in that same window are rejected the same way an
+        // unknown track is (raceId == -1). Must match
+        // MR_RACE_CREATE_RATE_LIMIT_COUNT in ClientConnection.h -- not #included
+        // here directly, to keep this client-side test independent of RaceServer's
+        // internal headers.
+        {
+            const int kRaceCreateLimit = 3;
+            RaceServerClient lFlooder;
+            if (!lFlooder.Connect("127.0.0.1", pPort))
+            {
+                std::fprintf(stderr, "Could not connect the rate-limit-test client\n");
+                return false;
+            }
+            int lAccepted = 0;
+            int lRejected = 0;
+            // One more than the limit, so this proves the limit is actually being
+            // enforced (not just "coincidentally never hit in normal use").
+            for (int lAttempt = 0; lAttempt < kRaceCreateLimit + 1; ++lAttempt)
+            {
+                const std::string lName = "flood-race-" + std::to_string(lAttempt);
+                if (!lFlooder.HostRace(lName, "ClassicH", 3, false))
+                {
+                    std::fprintf(stderr, "Could not send HostRace attempt %d\n", lAttempt);
+                    return false;
+                }
+                RaceServerJoinAck lAck;
+                bool lGotAck = false;
+                for (int lTries = 0; lTries < 20 && !lGotAck; ++lTries)
+                {
+                    if (lFlooder.PollMessage(lMessage, 200) && RaceServerClient::ParseJoinedRace(lMessage, lAck))
+                    {
+                        lGotAck = true;
+                    }
+                }
+                if (!lGotAck)
+                {
+                    std::fprintf(stderr, "No ack for HostRace attempt %d\n", lAttempt);
+                    return false;
+                }
+                if (lAck.mRaceId >= 0) { ++lAccepted; } else { ++lRejected; }
+            }
+            if (lAccepted != kRaceCreateLimit || lRejected != 1)
+            {
+                std::fprintf(stderr, "Race-creation rate limit not enforced as expected (accepted=%d rejected=%d, "
+                                      "wanted accepted=%d rejected=1)\n",
+                             lAccepted, lRejected, kRaceCreateLimit);
+                return false;
+            }
+            std::printf("Race-creation rate limit correctly rejects the (limit+1)th HostRace attempt in one window\n");
+        }
+
+        // Chat rate limit (ClientConnection::AllowChatMessage): a single connection
+        // gets kChatLimit messages within its window; anything past that in the same
+        // window is dropped server-side with no relay and no error reply (chat is
+        // fire-and-forget, unlike HostRace above). Must match
+        // MR_CHAT_RATE_LIMIT_COUNT in ClientConnection.h.
+        {
+            const int kChatLimit = 30;
+            RaceServerClient lChatFlooderA;
+            RaceServerClient lChatFlooderB;
+            if (!lChatFlooderA.Connect("127.0.0.1", pPort) || !lChatFlooderB.Connect("127.0.0.1", pPort))
+            {
+                std::fprintf(stderr, "Could not connect chat-rate-limit-test clients\n");
+                return false;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+            for (int lIndex = 0; lIndex < kChatLimit + 5; ++lIndex)
+            {
+                const std::string lText = "flood-" + std::to_string(lIndex);
+                if (!lChatFlooderA.SendMessage(eRSMsgChatMessage, lText.data(), lText.size()))
+                {
+                    std::fprintf(stderr, "Failed to send chat-flood message %d\n", lIndex);
+                    return false;
+                }
+            }
+            int lReceivedCount = 0;
+            while (lChatFlooderB.PollMessage(lMessage, 300) && lMessage.mType == eRSMsgChatMessage)
+            {
+                ++lReceivedCount;
+            }
+            if (lReceivedCount != kChatLimit)
+            {
+                std::fprintf(stderr, "Chat rate limit not enforced as expected (received=%d, wanted=%d)\n",
+                             lReceivedCount, kChatLimit);
+                return false;
+            }
+            std::printf("Chat rate limit correctly caps a flood at %d messages per window\n", kChatLimit);
+        }
+
         // With two same-named races now open, JoinGameById must land on the specific
         // one asked for, not whichever one a name lookup happens to match first.
         RaceServerClient lByIdJoiner;
