@@ -160,6 +160,13 @@ corresponding server-side check.
 - Remove generated binaries and build artefacts from source control; enforce this through `.gitignore` and CI.
 - Add compiler warnings and sanitizers on Linux.
 - Add Windows smoke tests beyond compilation.
+- Make x64 the supported Windows client, RaceServer, compiler, and packaging
+  target. Audit pointer/integer casts, structure-size assumptions, third-party
+  libraries, installers, plug-ins, and saved/network formats before retiring
+  Win32 builds; keep wire and content compatibility independent of pointer size.
+- Run x64 Windows-to-x86-64 Linux multiplayer and clean-install tests in CI,
+  with a temporary Win32 compatibility job until the x64 release candidate is
+  proven.
 - Produce reproducible versioned packages from a clean checkout.
 - Add checksums, dependency and licence inventory, changelog, migration notes, and rollback instructions.
 - Run:
@@ -176,6 +183,7 @@ corresponding server-side check.
 Ship 2.0 only when:
 
 - Windows and Linux can host and join each other reliably.
+- Supported Windows binaries are native x64 and do not depend on 32-bit DLLs.
 - All supported race flows have automated coverage or a documented manual test.
 - There are no known crash, hang, data-loss, or remotely exploitable defects.
 - The server survives the 24-hour soak test.

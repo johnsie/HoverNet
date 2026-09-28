@@ -117,6 +117,27 @@ namespace
         return lCount == 0;
     }
 
+    // Writes a frame with an attacker-controlled declared length that need not
+    // match pDataLen (the actual bytes appended) -- RaceServerClient::SendMessage
+    // can't do this (it always derives the declared length from the real byte
+    // count), so the malformed/oversized-packet regression test below builds
+    // frames by hand via this instead.
+    bool SendRawFrame(int pSocket, int pMessageType, unsigned char pDeclaredLen,
+                      const unsigned char* pData, std::size_t pDataLen)
+    {
+        const unsigned short lHeader = static_cast<unsigned short>((pMessageType & 0x3F) << 10);
+        std::vector<unsigned char> lFrame;
+        lFrame.push_back(static_cast<unsigned char>(lHeader & 0xff));
+        lFrame.push_back(static_cast<unsigned char>((lHeader >> 8) & 0xff));
+        lFrame.push_back(pDeclaredLen);
+        if (pDataLen > 0)
+        {
+            if (pData == nullptr) return false;
+            lFrame.insert(lFrame.end(), pData, pData + pDataLen);
+        }
+        return send(pSocket, lFrame.data(), lFrame.size(), 0) == static_cast<ssize_t>(lFrame.size());
+    }
+
     bool WaitForServer(const std::string& pHost, unsigned pPort)
     {
         for (int lAttempt = 0; lAttempt < 50; ++lAttempt)
@@ -1128,6 +1149,94 @@ namespace
             return false;
         }
         std::printf("Targeted missile impact reaches every other racer\n");
+
+        // Malformed and oversized packets: a negotiated connection sends a battery
+        // of intentionally-broken frames (nested length fields that overrun the
+        // outer declared length, undersized payloads for messages with a minimum
+        // size, an out-of-range/unassigned message type carrying a full 255-byte
+        // garbage payload) and the server must survive all of it -- reject or
+        // ignore each one without crashing, hanging, or corrupting state for
+        // anyone else. A fresh, ordinary client connecting afterward and getting
+        // a normal response is the actual proof the process is still healthy;
+        // "the malformed sender's socket didn't get a reply" alone wouldn't rule
+        // out the server having already crashed on an earlier one in the batch.
+        {
+            RaceServerClient lRawNegotiator;
+            if (!lRawNegotiator.Connect("127.0.0.1", pPort))
+            {
+                std::fprintf(stderr, "Could not connect the malformed-packet-test client\n");
+                return false;
+            }
+            const int lRawSocket = lRawNegotiator.ReleaseSocket();
+
+            // HOST_RACE (54) whose nested track-name length (200) overruns the
+            // 4 bytes actually present after it in the outer 5-byte payload --
+            // exercises the "p + trackLen + 2 > pEnd" guard in ServerSocket.cpp.
+            const unsigned char lOverflowHostRace[] = {200, 0, 0, 0, 0};
+            if (!SendRawFrame(lRawSocket, 54, sizeof(lOverflowHostRace), lOverflowHostRace, sizeof(lOverflowHostRace)))
+            {
+                std::fprintf(stderr, "Could not send overflow HOST_RACE frame\n");
+                close(lRawSocket);
+                return false;
+            }
+
+            // JOIN_RACE_BY_ID (55) needs a 4-byte race id; send only 1.
+            const unsigned char lUndersizedJoin[] = {0};
+            if (!SendRawFrame(lRawSocket, 55, sizeof(lUndersizedJoin), lUndersizedJoin, sizeof(lUndersizedJoin)))
+            {
+                std::fprintf(stderr, "Could not send undersized JOIN_RACE_BY_ID frame\n");
+                close(lRawSocket);
+                return false;
+            }
+
+            // SET_MAIN_ELEM_STATE (3) needs a 4-byte sender-id prefix; send zero.
+            if (!SendRawFrame(lRawSocket, 3, 0, nullptr, 0))
+            {
+                std::fprintf(stderr, "Could not send empty SET_MAIN_ELEM_STATE frame\n");
+                close(lRawSocket);
+                return false;
+            }
+
+            // SET_PLAYER_NAME (46) with an empty name.
+            if (!SendRawFrame(lRawSocket, 46, 0, nullptr, 0))
+            {
+                std::fprintf(stderr, "Could not send empty SET_PLAYER_NAME frame\n");
+                close(lRawSocket);
+                return false;
+            }
+
+            // An unassigned message type (63, the max the 6-bit field allows)
+            // carrying a full-size garbage payload -- must fall through to the
+            // "not broadcast" default case and be silently ignored.
+            std::vector<unsigned char> lGarbage(255, 0xAA);
+            if (!SendRawFrame(lRawSocket, 63, 255, lGarbage.data(), lGarbage.size()))
+            {
+                std::fprintf(stderr, "Could not send unassigned-type garbage frame\n");
+                close(lRawSocket);
+                return false;
+            }
+
+            // Give the server a moment to process the whole batch before checking
+            // it's still alive.
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            close(lRawSocket);
+
+            RaceServerClient lSurvivorCheck;
+            if (!lSurvivorCheck.Connect("127.0.0.1", pPort))
+            {
+                std::fprintf(stderr, "Server did not survive the malformed-packet batch "
+                                      "(fresh connection after it failed)\n");
+                return false;
+            }
+            std::vector<RaceServerGameInfo> lGamesAfterGarbage;
+            if (!lSurvivorCheck.ListGames(lGamesAfterGarbage))
+            {
+                std::fprintf(stderr, "Server did not respond normally after the malformed-packet batch\n");
+                return false;
+            }
+            std::printf("Server survives a batch of malformed/oversized packets and keeps serving "
+                        "ordinary clients normally\n");
+        }
 
         return true;
     }
