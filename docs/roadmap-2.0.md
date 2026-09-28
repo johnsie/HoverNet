@@ -22,6 +22,22 @@ helper (`NetTarget/Util/WireFormat.h`) instead of native-layout structs, with
 `SetNetState` bounds-checked against the wire size before reading. This closes
 out the remaining native-layout simulation payload conversion from Phase 0.
 
+Phase 1 is in progress. Disabled diagnostic logging and machine-specific paths
+have been removed repository-wide (MazeCompiler, Model/Game2 cross-platform
+code, and the Windows-only rendering/audio/lobby code, the last of which also
+had dead debug `MessageBox` dialogs that would have interrupted a real player
+hosting or joining a race). A cross-platform lobby bug is fixed: hosting or
+joining a not-yet-started race no longer drops a player from the RaceServer's
+lobby user list or lobby-wide chat, which had made a Windows host invisible
+(and unreachable by chat) to Linux clients still browsing -- covered by a new
+regression test in `RaceServerClientSmoke.cpp`. Resource-loading and config
+failure handling has also been cleaned up: a missing/corrupt `ObjFac1.dat` now
+logs the path that was tried instead of failing silently, `DllObjectFactory`
+no longer returns a dangling pointer when a DLL fails to open, RaceServer's
+still-placeholder `--config` loading no longer falsely reports success, and a
+mid-race RaceServer disconnect is now announced on-screen instead of silently
+degrading to solo play.
+
 ## Phase 0 — Define the 2.0 contract
 
 **October 2026 · 1–2 weeks**
