@@ -45,6 +45,7 @@ public:
     // State
     BOOL mConnected;
     BOOL mAuthenticated;
+    BOOL mProtocolNegotiated;
 
     // Helper methods
     BOOL IsAlive() const 

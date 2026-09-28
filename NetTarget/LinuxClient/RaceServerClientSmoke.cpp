@@ -122,6 +122,25 @@ namespace
 
     bool RunChecks(unsigned pPort)
     {
+        RaceServerClient lIncompatibleClient;
+        if (lIncompatibleClient.ConnectWithProtocolVersion("127.0.0.1", pPort, 99, 0) ||
+            lIncompatibleClient.IsConnected() || lIncompatibleClient.GetProtocolError().empty())
+        {
+            std::fprintf(stderr, "RaceServer did not cleanly reject an incompatible protocol version\n");
+            return false;
+        }
+
+        // A newer minor version remains compatible with the same major. The
+        // server selects the newest minor it supports (currently 2.0).
+        RaceServerClient lForwardMinorClient;
+        if (!lForwardMinorClient.ConnectWithProtocolVersion("127.0.0.1", pPort, 2, 99))
+        {
+            std::fprintf(stderr, "RaceServer rejected a compatible protocol minor version: %s\n",
+                         lForwardMinorClient.GetProtocolError().c_str());
+            return false;
+        }
+        std::printf("Protocol negotiation accepts 2.x and cleanly rejects incompatible majors\n");
+
         RaceServerClient lLister;
         if (!lLister.Connect("127.0.0.1", pPort))
         {

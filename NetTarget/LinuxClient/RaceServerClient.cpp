@@ -12,6 +12,7 @@
 #endif
 
 #include "RaceServerClient.h"
+#include "../RaceServer/NetworkInterface/Protocol.h"
 
 #include <cassert>
 #include <cstring>
@@ -74,7 +75,15 @@ RaceServerClient::~RaceServerClient()
 
 bool RaceServerClient::Connect(const std::string& pHost, unsigned pPort)
 {
+    return ConnectWithProtocolVersion(
+        pHost, pPort, HoverNetProtocol::Major, HoverNetProtocol::Minor);
+}
+
+bool RaceServerClient::ConnectWithProtocolVersion(
+    const std::string& pHost, unsigned pPort, std::uint16_t pMajor, std::uint16_t pMinor)
+{
     Disconnect();
+    mProtocolError.clear();
 #ifdef _WIN32
     SOCKADDR_IN lAddr;
     std::memset(&lAddr, 0, sizeof(lAddr));
@@ -108,6 +117,36 @@ bool RaceServerClient::Connect(const std::string& pHost, unsigned pPort)
     freeaddrinfo(lResult);
     if (!lConnected) { Disconnect(); return false; }
 #endif
+    std::uint8_t lHello[HoverNetProtocol::HelloSize] = {'H', 'N', 'E', 'T'};
+    HoverNetProtocol::WriteU16(lHello + 4, pMajor);
+    HoverNetProtocol::WriteU16(lHello + 6, pMinor);
+    HoverNetProtocol::WriteU16(lHello + 8, HoverNetProtocol::MaxPayload);
+    HoverNetProtocol::WriteU32(lHello + 10, 0);
+    if (!SendMessage(HoverNetProtocol::MessageType, lHello, sizeof(lHello)))
+    {
+        mProtocolError = "Could not send protocol hello";
+        Disconnect();
+        return false;
+    }
+
+    RaceServerMessage lReply;
+    if (!PollMessage(lReply, 2000) || lReply.mType != HoverNetProtocol::MessageType ||
+        lReply.mData.size() < HoverNetProtocol::ReplyPrefixSize)
+    {
+        mProtocolError = "RaceServer did not return a valid protocol response";
+        Disconnect();
+        return false;
+    }
+
+    const std::uint8_t lStatus = lReply.mData[0];
+    if (lStatus != HoverNetProtocol::Accepted)
+    {
+        mProtocolError.assign(lReply.mData.begin() + HoverNetProtocol::ReplyPrefixSize,
+                              lReply.mData.end());
+        if (mProtocolError.empty()) mProtocolError = "RaceServer rejected this protocol version";
+        Disconnect();
+        return false;
+    }
     return true;
 }
 
@@ -128,6 +167,11 @@ void RaceServerClient::Disconnect()
 bool RaceServerClient::IsConnected() const
 {
     return mSocket >= 0;
+}
+
+const std::string& RaceServerClient::GetProtocolError() const
+{
+    return mProtocolError;
 }
 
 int RaceServerClient::ReleaseSocket()

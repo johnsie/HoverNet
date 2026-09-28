@@ -15,7 +15,8 @@ ClientConnection::ClientConnection()
       mConnectTime(0),
       mLastMessageTime(0),
       mConnected(FALSE),
-      mAuthenticated(FALSE)
+      mAuthenticated(FALSE),
+      mProtocolNegotiated(FALSE)
 {
     mPlayerName[0] = '\0';
     memset(&mUdpAddr, 0, sizeof(mUdpAddr));

@@ -97,8 +97,13 @@ public:
     RaceServerClient& operator=(const RaceServerClient&) = delete;
 
     bool Connect(const std::string& host, unsigned port);
+    // Exposed for compatibility tests and future minor-version negotiation.
+    // Normal callers should use Connect(), which requests the current version.
+    bool ConnectWithProtocolVersion(const std::string& host, unsigned port,
+                                    std::uint16_t major, std::uint16_t minor);
     void Disconnect();
     bool IsConnected() const;
+    const std::string& GetProtocolError() const;
 
     // Hands ownership of the underlying, already-connected socket to the caller:
     // this object forgets about it (Disconnect()/the destructor will no longer
@@ -222,6 +227,7 @@ public:
 private:
     int mSocket;
     std::vector<std::uint8_t> mReceiveBuffer;
+    std::string mProtocolError;
 };
 
 #endif

@@ -12,8 +12,10 @@ Phase 0 is in progress. Its initial repository-backed deliverables are:
 - [Windows/Linux platform inventory](2.0-platform-inventory.md)
 - [Current network protocol baseline](2.0-network-protocol.md)
 
-The next implementation item is explicit client/server protocol negotiation
-with a bounded incompatible-version rejection.
+Protocol 2.0 negotiation is implemented: lobby traffic is gated behind a
+versioned handshake, compatible 2.x minors negotiate down, and incompatible
+majors receive a bounded rejection. The next implementation item is replacing
+remaining host-native payload integers with explicit fixed-width encoding.
 
 ## Phase 0 — Define the 2.0 contract
 

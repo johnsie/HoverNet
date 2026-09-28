@@ -3,6 +3,7 @@
 #include "stdafx.h"
 #include "ServerSocket.h"
 #include "MessageDispatcher.h"
+#include "Protocol.h"
 #include "RaceManager.h"
 #include "ServerLogger.h"
 #include <string>
@@ -26,6 +27,25 @@ inline unsigned short MakeMessageHeader(int messageType) {
     // of failing loudly, so assert here rather than let that happen again.
     assert(messageType >= 0 && messageType <= 0x3F);
     return static_cast<unsigned short>((messageType & 0x3F) << 10);
+}
+
+static void SendProtocolReply(SOCKET pSocket, unsigned char pStatus,
+                              unsigned short pMinor, const char* pMessage)
+{
+    MessageBuffer lReply = {};
+    lReply.header = MakeMessageHeader(HoverNetProtocol::MessageType);
+    lReply.data[0] = pStatus;
+    HoverNetProtocol::WriteU16(&lReply.data[1], HoverNetProtocol::Major);
+    HoverNetProtocol::WriteU16(&lReply.data[3], pMinor);
+    HoverNetProtocol::WriteU16(&lReply.data[5], HoverNetProtocol::MaxPayload);
+    HoverNetProtocol::WriteU32(&lReply.data[7], 0);
+    const size_t lPrefix = HoverNetProtocol::ReplyPrefixSize;
+    const size_t lMessageLen = pMessage != nullptr
+        ? std::min(strlen(pMessage), sizeof(lReply.data) - lPrefix)
+        : 0;
+    if (lMessageLen > 0) memcpy(&lReply.data[lPrefix], pMessage, lMessageLen);
+    lReply.dataLen = static_cast<unsigned char>(lPrefix + lMessageLen);
+    send(pSocket, reinterpret_cast<const char*>(&lReply), 3 + lReply.dataLen, 0);
 }
 
 MR_ServerSocket::MR_ServerSocket()
@@ -341,7 +361,52 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                                    (static_cast<unsigned short>(buffer[1]) << 8);
     int messageType = (messageHeader >> 10) & 0x3F;
 
+    if (!pConn->mProtocolNegotiated) {
+        if (messageType != HoverNetProtocol::MessageType) {
+            g_Logger.Log(MR_LOG_WARN, "Client %d sent message %d before protocol negotiation",
+                         pConn->mClientId, messageType);
+            SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::NegotiationRequired,
+                              HoverNetProtocol::Minor, "Protocol negotiation required");
+            pConn->mConnected = FALSE;
+            return;
+        }
+
+        const unsigned char* lHello = &buffer[3];
+        if (messageDataLen != static_cast<int>(HoverNetProtocol::HelloSize) ||
+            memcmp(lHello, "HNET", 4) != 0 ||
+            HoverNetProtocol::ReadU16(lHello + 8) < 3) {
+            g_Logger.Log(MR_LOG_WARN, "Client %d sent a malformed protocol hello", pConn->mClientId);
+            SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::MalformedHello,
+                              HoverNetProtocol::Minor, "Malformed protocol hello");
+            pConn->mConnected = FALSE;
+            return;
+        }
+
+        const unsigned short lMajor = HoverNetProtocol::ReadU16(lHello + 4);
+        const unsigned short lMinor = HoverNetProtocol::ReadU16(lHello + 6);
+        if (lMajor != HoverNetProtocol::Major) {
+            g_Logger.Log(MR_LOG_WARN, "Client %d requested incompatible protocol %u.%u",
+                         pConn->mClientId, lMajor, lMinor);
+            SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::IncompatibleVersion,
+                              HoverNetProtocol::Minor, "Incompatible protocol version");
+            pConn->mConnected = FALSE;
+            return;
+        }
+
+        const unsigned short lNegotiatedMinor =
+            std::min<unsigned short>(lMinor, HoverNetProtocol::Minor);
+        pConn->mProtocolNegotiated = TRUE;
+        SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::Accepted,
+                          lNegotiatedMinor, nullptr);
+        g_Logger.Log(MR_LOG_INFO, "Client %d negotiated protocol %u.%u",
+                     pConn->mClientId, HoverNetProtocol::Major, lNegotiatedMinor);
+        continue;
+    }
+
     switch (messageType) {
+        case 59:  // Protocol negotiation is valid only as the first message.
+            g_Logger.Log(MR_LOG_WARN, "Client %d repeated protocol negotiation", pConn->mClientId);
+            break;
         case 42:  // MRNM_GAME_NAME - Client is joining a race with this game name
         {
             // Extract game name from message
