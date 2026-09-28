@@ -7,6 +7,7 @@
 #include "../ThirdParty/imgui/imgui.h"
 #include "../ThirdParty/imgui/backends/imgui_impl_sdl2.h"
 #include "../ThirdParty/imgui/backends/imgui_impl_sdlrenderer2.h"
+#include "ImGuiLogicalCoords.h"
 #endif
 #include "../Model/GameSession.h"
 #include "../ObjFac1/ObjFac1Res.h"
@@ -39,92 +40,18 @@ namespace
 constexpr int kWidth = 1024;
 constexpr int kHeight = 768;
 
-// SDL_RenderSetLogicalSize (set up once in SDL2Graphics) always letterboxes
-// the fixed kWidth x kHeight framebuffer to fit whatever the real window
-// size is -- which stops matching kWidth x kHeight the moment the window is
-// resized or toggled into fullscreen. Every menu screen still lays out and
-// hit-tests against the fixed logical size (ImGui's DisplaySize is forced to
-// it below; the raw bitmap-font screens like the pause menu already size
-// their panels from MR_3DViewPort::GetXRes()/GetYRes(), which report the
-// logical size too) -- but mouse coordinates from SDL are always reported in
-// real window pixels. Without translating them back to logical space here,
-// every click lands wherever it would have if the window were exactly
-// kWidth x kHeight, which is only ever true by coincidence.
-// Delegates to SDL's own SDL_RenderWindowToLogical (SDL 2.0.18+) rather than
-// reimplementing the letterbox scale/offset math by hand -- a from-scratch
-// version based on SDL_GetWindowSize alone was tried first and didn't hold
-// up, most likely because it can't account for cases where the renderer's
-// actual output size (what SDL_RenderSetLogicalSize's viewport math is
-// really based on) differs from window size, e.g. HiDPI/fractional display
-// scaling. SDL already tracks whatever mapping it set up internally, so ask
-// it directly instead of guessing.
-void WindowToLogicalPoint(SDL_Renderer* pRenderer, float pWindowX, float pWindowY, float& pOutLogicalX,
-                          float& pOutLogicalY)
-{
-    if (pRenderer == nullptr) {
-        pOutLogicalX = pWindowX;
-        pOutLogicalY = pWindowY;
-        return;
-    }
-    SDL_RenderWindowToLogical(pRenderer, static_cast<int>(pWindowX), static_cast<int>(pWindowY),
-                             &pOutLogicalX, &pOutLogicalY);
-}
-
-// Call on every SDL_Event right after SDL_PollEvent, before any raw (i.e.
-// non-ImGui) SDL_MOUSEBUTTONDOWN/SDL_MOUSEMOTION handling -- ConfirmQuit and
-// RunPauseMenu. NOT used for the ImGui-driven screens: see CorrectImGuiMousePos
-// for why rewriting the SDL_Event isn't enough there.
-void RewriteMouseEventToLogical(SDL_Event& pEvent, SDL_Renderer* pRenderer)
-{
-    float lLogicalX = 0.0f, lLogicalY = 0.0f;
-    if (pEvent.type == SDL_MOUSEMOTION) {
-        WindowToLogicalPoint(pRenderer, static_cast<float>(pEvent.motion.x),
-                             static_cast<float>(pEvent.motion.y), lLogicalX, lLogicalY);
-        pEvent.motion.x = static_cast<Sint32>(lLogicalX);
-        pEvent.motion.y = static_cast<Sint32>(lLogicalY);
-    }
-    else if (pEvent.type == SDL_MOUSEBUTTONDOWN || pEvent.type == SDL_MOUSEBUTTONUP) {
-        WindowToLogicalPoint(pRenderer, static_cast<float>(pEvent.button.x),
-                             static_cast<float>(pEvent.button.y), lLogicalX, lLogicalY);
-        pEvent.button.x = static_cast<Sint32>(lLogicalX);
-        pEvent.button.y = static_cast<Sint32>(lLogicalY);
-    }
-}
-
-#ifdef HOVERNET_GAME2_PLAYER
-// Call right before ImGui::NewFrame() on every ImGui-driven screen.
-// ImGui_ImplSDL2_NewFrame() sets io.DisplaySize from the real window size, so
-// it needs correcting before NewFrame() uses it to size the main viewport.
-void SyncImGuiToLogicalSize()
-{
-    ImGuiIO& lIo = ImGui::GetIO();
-    lIo.DisplaySize = ImVec2(static_cast<float>(kWidth), static_cast<float>(kHeight));
-}
-
-// Call right after ImGui::NewFrame() on every ImGui-driven screen (mouse
-// position only -- DisplaySize is handled by SyncImGuiToLogicalSize before
-// NewFrame(), since NewFrame() needs it early to size the main viewport).
-//
-// Rewriting the SDL_Event before ImGui_ImplSDL2_ProcessEvent (as
-// RewriteMouseEventToLogical does for the raw, non-ImGui screens) isn't
-// enough here: ImGui_ImplSDL2_NewFrame() has its own "global mouse state"
-// fallback (ImGui_ImplSDL2_UpdateMouseData) that re-queries the real,
-// uncorrected window-pixel mouse position via SDL_GetGlobalMouseState every
-// single frame the mouse isn't held down, and queues it *after* any event
-// we already fixed -- so it always wins for plain hovering, which is most
-// of the time between clicks. ImGui::NewFrame() then drains that queue into
-// io.MousePos. The only point nothing overwrites it again before widgets
-// hit-test against it is right here, after NewFrame() has returned.
-void CorrectImGuiMousePos(SDL_Renderer* pRenderer)
-{
-    ImGuiIO& lIo = ImGui::GetIO();
-    if (lIo.MousePos.x > -FLT_MAX / 2.0f && lIo.MousePos.y > -FLT_MAX / 2.0f) {
-        float lLogicalX, lLogicalY;
-        WindowToLogicalPoint(pRenderer, lIo.MousePos.x, lIo.MousePos.y, lLogicalX, lLogicalY);
-        lIo.MousePos = ImVec2(lLogicalX, lLogicalY);
-    }
-}
-#endif
+// WindowToLogicalPoint/RewriteMouseEventToLogical (used by ConfirmQuit and
+// RunPauseMenu below, for translating real mouse coordinates into the fixed
+// kWidth x kHeight space those raw bitmap-font screens draw at) now live in
+// ImGuiLogicalCoords.h -- pulled out of this file so
+// HoverNetImGuiLogicalMouseSmoke can exercise the exact same code the client
+// runs. The ImGui-driven screens (Lobby, Local Race Setup, Settings) don't
+// need any mouse-coordinate translation at all: they disable the renderer's
+// logical size for their own frame instead (see the "SDL_RenderSetLogicalSize
+// (...0, 0)" comment further down) so ImGui draws 1:1 against the real
+// window. Three straight attempts at correcting ImGui's mouse position for
+// the letterbox mismatch instead (v0.1.73 through v0.1.76) each looked right
+// and wasn't -- see git log for what didn't work and why.
 
 // Set once the player has actually confirmed "yes, quit HoverNet" (see
 // ConfirmQuit, defined further down) from whichever screen they were on when
@@ -1302,11 +1229,26 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             }
         }
 
+        // Disabling the renderer's logical size for the duration of this ImGui
+        // frame (rather than forcing ImGui to draw at the fixed kWidth x
+        // kHeight logical size main.cpp's legacy framebuffer needs, and then
+        // reverse-mapping mouse coordinates back through that letterbox) is
+        // the fix that actually holds up: with logical size disabled, ImGui
+        // draws 1:1 against the real window and every mouse coordinate SDL
+        // reports -- real events and ImGui_ImplSDL2_NewFrame()'s own
+        // "global mouse state" fallback alike -- is already in that same
+        // space, so no coordinate translation is needed anywhere, in any
+        // frame, regardless of window size or aspect ratio. Three earlier
+        // attempts (v0.1.73 through v0.1.76) instead tried to keep ImGui
+        // drawing at the fixed logical size and correct for the mismatch
+        // after the fact; each shipped looking right and wasn't. Restored
+        // to kWidth x kHeight below, before this loop's *next* iteration's
+        // event polling can reach a raw-framebuffer screen like ConfirmQuit
+        // that still needs it (see HoverNetImGuiLogicalMouseSmoke).
+        SDL_RenderSetLogicalSize(graphics.GetRenderer(), 0, 0);
         ImGui_ImplSDLRenderer2_NewFrame();
         ImGui_ImplSDL2_NewFrame();
-        SyncImGuiToLogicalSize();
         ImGui::NewFrame();
-        CorrectImGuiMousePos(graphics.GetRenderer());
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
@@ -1558,6 +1500,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         SDL_Delay(16);
     }
     SDL_StopTextInput();
@@ -1781,11 +1724,26 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             }
         }
 
+        // Disabling the renderer's logical size for the duration of this ImGui
+        // frame (rather than forcing ImGui to draw at the fixed kWidth x
+        // kHeight logical size main.cpp's legacy framebuffer needs, and then
+        // reverse-mapping mouse coordinates back through that letterbox) is
+        // the fix that actually holds up: with logical size disabled, ImGui
+        // draws 1:1 against the real window and every mouse coordinate SDL
+        // reports -- real events and ImGui_ImplSDL2_NewFrame()'s own
+        // "global mouse state" fallback alike -- is already in that same
+        // space, so no coordinate translation is needed anywhere, in any
+        // frame, regardless of window size or aspect ratio. Three earlier
+        // attempts (v0.1.73 through v0.1.76) instead tried to keep ImGui
+        // drawing at the fixed logical size and correct for the mismatch
+        // after the fact; each shipped looking right and wasn't. Restored
+        // to kWidth x kHeight below, before this loop's *next* iteration's
+        // event polling can reach a raw-framebuffer screen like ConfirmQuit
+        // that still needs it (see HoverNetImGuiLogicalMouseSmoke).
+        SDL_RenderSetLogicalSize(graphics.GetRenderer(), 0, 0);
         ImGui_ImplSDLRenderer2_NewFrame();
         ImGui_ImplSDL2_NewFrame();
-        SyncImGuiToLogicalSize();
         ImGui::NewFrame();
-        CorrectImGuiMousePos(graphics.GetRenderer());
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
@@ -1842,6 +1800,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         SDL_Delay(16);
     }
 
@@ -1932,11 +1891,26 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             }
         }
 
+        // Disabling the renderer's logical size for the duration of this ImGui
+        // frame (rather than forcing ImGui to draw at the fixed kWidth x
+        // kHeight logical size main.cpp's legacy framebuffer needs, and then
+        // reverse-mapping mouse coordinates back through that letterbox) is
+        // the fix that actually holds up: with logical size disabled, ImGui
+        // draws 1:1 against the real window and every mouse coordinate SDL
+        // reports -- real events and ImGui_ImplSDL2_NewFrame()'s own
+        // "global mouse state" fallback alike -- is already in that same
+        // space, so no coordinate translation is needed anywhere, in any
+        // frame, regardless of window size or aspect ratio. Three earlier
+        // attempts (v0.1.73 through v0.1.76) instead tried to keep ImGui
+        // drawing at the fixed logical size and correct for the mismatch
+        // after the fact; each shipped looking right and wasn't. Restored
+        // to kWidth x kHeight below, before this loop's *next* iteration's
+        // event polling can reach a raw-framebuffer screen like ConfirmQuit
+        // that still needs it (see HoverNetImGuiLogicalMouseSmoke).
+        SDL_RenderSetLogicalSize(graphics.GetRenderer(), 0, 0);
         ImGui_ImplSDLRenderer2_NewFrame();
         ImGui_ImplSDL2_NewFrame();
-        SyncImGuiToLogicalSize();
         ImGui::NewFrame();
-        CorrectImGuiMousePos(graphics.GetRenderer());
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
@@ -2046,6 +2020,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         SDL_Delay(16);
     }
 

@@ -256,6 +256,11 @@ add_executable(HoverNetActorRenderSmoke
 
 target_link_libraries(HoverNetActorRenderSmoke PRIVATE HoverNetVideoCore HoverNetResourceCore)
 
+add_executable(HoverNetImGuiLogicalMouseSmoke
+    NetTarget/LinuxClient/ImGuiLogicalMouseSmoke.cpp
+)
+target_link_libraries(HoverNetImGuiLogicalMouseSmoke PRIVATE HoverNetImGui SDL2::SDL2)
+
 add_library(HoverNetRaceServerClient STATIC
     NetTarget/LinuxClient/RaceServerClient.cpp
 )
@@ -364,6 +369,7 @@ if(BUILD_TESTING)
     add_hovernet_root_test(HoverNetResourceSmoke)
     add_hovernet_root_test(HoverNetViewportSmoke)
     add_hovernet_root_test(HoverNetActorRenderSmoke)
+    add_hovernet_root_test(HoverNetImGuiLogicalMouseSmoke)
     add_hovernet_root_test(HoverNetRaceServerClientSmoke "$<TARGET_FILE:RaceServer>")
     add_hovernet_root_test(HoverNetServerConfigSmoke
         "${CMAKE_SOURCE_DIR}/NetTarget/RaceServer/config.xml"

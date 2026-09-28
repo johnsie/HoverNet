@@ -257,6 +257,55 @@ toggling fullscreen and confirming the Lobby, Settings, and pause menu are
 all fully visible and clickable, with the cursor landing where it visually
 appears, at both window sizes.
 
+Still not fixed after that (v0.1.76): the report came back "I still cant
+click anything and its stuck in fullscreen mode" -- and instrumenting the
+actual click path (a new headless regression test, `HoverNetImGuiLogicalMouseSmoke`,
+built specifically because four straight shipped guesses without one wasn't
+working) showed why: `ImGui::NewFrame()` doesn't just copy the queued mouse
+position into `io.MousePos`, it also runs `UpdateHoveredWindowAndCaptureFlags()`
+*using that position* to decide which window is hovered, and that happens
+*inside* `NewFrame()` -- so v0.1.75/76's fix (correcting `io.MousePos` *after*
+`NewFrame()` returns) was already too late for hover detection on every
+frame, even though the field itself looked correct afterwards. Moving the
+correction to push a freshly-computed logical position via `io.AddMousePosEvent()`
+between `ImGui_ImplSDL2_NewFrame()` and `ImGui::NewFrame()` (so it's queued
+after the SDL backend's own competing "global mouse state" fallback, and
+consumed by `NewFrame()` before hover detection runs) fixed the synthetic
+test -- but by that point, four attempts at reverse-engineering the letterbox
+mapping in a row justified stepping back from "fix the coordinate math" to
+"stop needing coordinate math at all."
+
+**The design that actually shipped**, after all of the above: don't correct
+ImGui's mouse coordinates for the letterbox at all. Instead, disable the
+renderer's logical size (`SDL_RenderSetLogicalSize(renderer, 0, 0)`) for the
+duration of each ImGui screen's frame, so ImGui draws 1:1 against the real
+window -- `io.DisplaySize` (from `SDL_GetWindowSize`) and every mouse
+coordinate SDL reports (real events and the backend's own fallback alike)
+are already in the same space with zero scaling involved, so there is
+nothing left to get wrong regardless of window size, aspect ratio, or frame
+timing. Logical size is restored to the fixed `kWidth`/`kHeight` immediately
+after presenting each ImGui frame, before that loop's next iteration can
+reach a raw bitmap-font screen (`ConfirmQuit`, `RunPauseMenu`) that still
+needs it for its own letterboxed `Present()` calls -- those two keep using
+`WindowToLogicalPoint`/`RewriteMouseEventToLogical` (now in the shared
+`ImGuiLogicalCoords.h`) exactly as before, since they're unaffected by any of
+this. `HoverNetImGuiLogicalMouseSmoke` pins the fix down for real: it forces
+a 16:9 window against the 4:3 legacy resolution (the exact mismatch every
+prior attempt broke on), warps the mouse to a real window position, and
+checks both that ImGui reports the button there as hovered *and* -- via
+`SDL_RenderReadPixels` -- that the button is actually drawn at that pixel,
+catching both the click-misalignment and the original "screen overflowed,
+can't see any buttons" symptom in one test. Verified against both known-bad
+states before finalizing (hover-only check passes even with the wrong
+DisplaySize-forcing approach, since ImGui's hover math never touches the
+renderer's logical size; the pixel-readback check fails, as expected, with
+logical size left enabled) -- the strongest confidence this bug has had
+behind it yet, though still not the same as a human clicking it. Please
+re-verify by toggling fullscreen and confirming the Lobby, Settings
+(including actually unchecking Fullscreen), and pause menu are all fully
+visible and clickable, with the cursor landing exactly where it visually
+appears, at both window sizes.
+
 The rest of Phase 3 (ImGui menu
 consolidation, remappable controls/controller support, actual
 resolution/scaling options, HUD improvements, onboarding, accessibility,

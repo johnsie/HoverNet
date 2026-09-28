@@ -15,3 +15,8 @@ build/
 
 # Windows build output (regenerated fresh by CI; never commit build artifacts)
 /Release/
+
+# ImGui window-layout state, written to the working directory by any
+# ImGui-based binary (Track3DViewer, Game2Player, the new
+# ImGuiLogicalMouseSmoke test) run from the repo root
+/imgui.ini
