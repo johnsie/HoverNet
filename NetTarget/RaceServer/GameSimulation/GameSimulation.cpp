@@ -30,7 +30,13 @@ BOOL GameSimulation::Initialize(
     snprintf(mState.mTrackName, sizeof(mState.mTrackName), "%s", trackName);
     mState.mNumLaps = numLaps;
     mState.mWeaponsAllowed = allowWeapons;
-    mMaxPlayers = maxPlayers;
+    // mState.mPlayers is a fixed MR_MAX_PLAYERS_PER_RACE-slot array (GameState.h) --
+    // ServerConfig::LoadFromFile is the only caller today and already clamps to
+    // [1, 8], but that's enforcement at a completely different layer with nothing
+    // stopping a future caller (a new CLI flag, a test harness) from passing
+    // something larger and writing past mPlayers[7] in AddPlayer below. Clamp here,
+    // where the array actually lives, so that's structurally impossible.
+    mMaxPlayers = std::max(1, std::min(maxPlayers, MR_MAX_PLAYERS_PER_RACE));
     mState.mStartTime = time(NULL);
     mState.mRaceStarted = FALSE;
     mState.mRaceComplete = FALSE;
