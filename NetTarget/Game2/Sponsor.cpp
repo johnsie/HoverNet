@@ -36,28 +36,20 @@ void DisplaySponsorWindow( HWND pWindow )
    // Verify if the sponsor file exist
    FILE* lFile = fopen( "source.dat", "rb" );
    
-   fprintf(logFile, "DisplaySponsorWindow: source.dat fopen returned: %p\n", lFile);
-   fflush(logFile);
 
    if( lFile != NULL )
    {
-      fprintf(logFile, "DisplaySponsorWindow: source.dat found, reading...\n");
-      fflush(logFile);
       
       unsigned char lBuffer[50*1024];
       int lSize;
       // Read the file
       
       lSize = fread( lBuffer, 1, sizeof( lBuffer ), lFile );
-      fprintf(logFile, "DisplaySponsorWindow: fread returned %d bytes\n", lSize);
-      fflush(logFile);
 
       fclose( lFile );
 
       if( lSize > 280 )
       {
-         fprintf(logFile, "DisplaySponsorWindow: File size OK, decrypting...\n");
-         fflush(logFile);
          
          // Decript file
          for( int lCounter = 0; lCounter < 280; lCounter++ )
@@ -85,60 +77,37 @@ void DisplaySponsorWindow( HWND pWindow )
             }
          }
 
-         fprintf(logFile, "DisplaySponsorWindow: GIF header found at index %d, decoding...\n", lIndex);
-         fflush(logFile);
          
          // now decode that zip zile
 
          try {
              MR_GifDecoder lImage;
-             fprintf(logFile, "DisplaySponsorWindow: MR_GifDecoder created\n");
-             fflush(logFile);
 
              if( lImage.Decode( lBuffer+lIndex, lSize-lIndex ) )
              {
-                fprintf(logFile, "DisplaySponsorWindow: GIF decoded successfully\n");
-                fflush(logFile);
                 
                 gBitmap  = lImage.GetImage(0);
                 gPalette = lImage.GetGlobalPalette();
 
-                fprintf(logFile, "DisplaySponsorWindow: About to show dialog\n");
-                fflush(logFile);
                 
                 // Open the Window
                 DialogBox( GetModuleHandle( NULL ), MAKEINTRESOURCE( IDD_SPONSOR ), pWindow, WinFunc );
                 
-                fprintf(logFile, "DisplaySponsorWindow: Dialog closed\n");
-                fflush(logFile);
              }
              else {
-                fprintf(logFile, "DisplaySponsorWindow: GIF decode failed\n");
-                fflush(logFile);
              }
          }
          catch (const std::exception& e) {
-             fprintf(logFile, "DisplaySponsorWindow: Exception during GIF decode: %s\n", e.what());
-             fflush(logFile);
          }
          catch (...) {
-             fprintf(logFile, "DisplaySponsorWindow: Unknown exception during GIF decode\n");
-             fflush(logFile);
          }
       }
       else {
-         fprintf(logFile, "DisplaySponsorWindow: File size too small (%d < 280)\n", lSize);
-         fflush(logFile);
       }
    }
    else {
-      fprintf(logFile, "DisplaySponsorWindow: source.dat not found (expected)\n");
-      fflush(logFile);
    }
    
-   fprintf(logFile, "DisplaySponsorWindow: Completed\n");
-   fflush(logFile);
-   fclose(logFile);
 }
 
 

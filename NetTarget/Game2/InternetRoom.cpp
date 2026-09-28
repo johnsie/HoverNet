@@ -209,6 +209,7 @@ namespace
    // timeline when diagnosing the "Retrieving game info..." hang.
    void LogNetJoin( const char* pFormat, ... )
    {
+      FILE* lLog = NULL;
       if( lLog != NULL )
       {
          va_list lArgs;
