@@ -244,7 +244,7 @@ class MR_NetworkInterface
       // stranded the lobby's chat connection the moment you hosted or joined).
       BOOL ConnectAdopted( HWND pWindow, SOCKET pSocket, BOOL pIsCreator, int pLocalClientId,
                            const char* pServerIP, unsigned pPort, const char* pGameName,
-                           HWND* pModalessDlg = NULL, int pReturnMessage = 0 );
+                           HWND* pModalessDlg = NULL, int pReturnMessage = 0, BOOL pAlreadyStarted = FALSE );
 
       void Disconnect();
 

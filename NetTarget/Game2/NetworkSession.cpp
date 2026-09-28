@@ -850,12 +850,12 @@ BOOL MR_NetworkSession::ConnectToServer( HWND pWindow, const char* pServerIP, un
 
 BOOL MR_NetworkSession::ConnectAdopted( HWND pWindow, SOCKET pSocket, BOOL pIsCreator, int pLocalClientId,
                                         const char* pServerIP, unsigned pPort, const char* pGameName,
-                                        HWND* pModalessDlg, int pReturnMessage )
+                                        HWND* pModalessDlg, int pReturnMessage, BOOL pAlreadyStarted )
 {
    mMasterMode = FALSE;
 
    return mNetInterface.ConnectAdopted( pWindow, pSocket, pIsCreator, pLocalClientId, pServerIP, pPort, pGameName,
-                                        pModalessDlg, pReturnMessage );
+                                        pModalessDlg, pReturnMessage, pAlreadyStarted );
 }
 
 void MR_NetworkSession::SetSimulationTime( MR_SimulationTime pTime )

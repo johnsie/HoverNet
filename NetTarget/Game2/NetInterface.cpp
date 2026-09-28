@@ -872,7 +872,7 @@ BOOL MR_NetworkInterface::SlaveConnect( HWND pWindow, const char* pServerIP, uns
 
 BOOL MR_NetworkInterface::ConnectAdopted( HWND pWindow, SOCKET pSocket, BOOL pIsCreator, int pLocalClientId,
                                           const char* pServerIP, unsigned pPort, const char* pGameName,
-                                          HWND* pModalessDlg, int pReturnMessage )
+                                          HWND* pModalessDlg, int pReturnMessage, BOOL pAlreadyStarted )
 {
    ASSERT( !mServerMode );
    ASSERT( pSocket != INVALID_SOCKET );
@@ -881,6 +881,15 @@ BOOL MR_NetworkInterface::ConnectAdopted( HWND pWindow, SOCKET pSocket, BOOL pIs
    mServerAddr  = pServerIP;
    mServerPort  = pPort;
    mActiveInterface = this;
+
+   // Set before the dialog below is created: when the caller already knows the
+   // race started (it received eRSMsgRaceStarted itself, on this same connection,
+   // before handing the socket over here -- see InternetRoom.cpp's
+   // eRSMsgRaceStarted handling), ListCallBack's WM_INITDIALOG checks this and
+   // proceeds immediately instead of waiting for a fresh copy of that broadcast
+   // that will never arrive: the server only sends it once, and it's already been
+   // consumed.
+   mGameReady = pAlreadyStarted;
 
    // The connection is already open, authenticated and joined/hosting -- just
    // wrap the socket instead of repeating any of that over a second one.
@@ -1515,6 +1524,37 @@ BOOL CALLBACK MR_NetworkInterface::ListCallBack( HWND pWindow, UINT  pMsgId, WPA
                mActiveInterface->mClient[ 0 ].Send( &lAnswer, MR_NET_REQUIRED );
             }
 
+            // See ConnectAdopted's pAlreadyStarted parameter: when the race
+            // started before this dialog even existed, there's no fresh
+            // eRSMsgRaceStarted left to receive here (the server only sends it
+            // once, and whoever owned this connection before us already got it) --
+            // without this the dialog would just sit showing the player list
+            // forever instead of proceeding into the race. Same teardown as the
+            // MRNM_RACE_STARTED case below, since from here on nothing should be
+            // driven by this dialog's own message pump.
+            if( mActiveInterface->mGameReady )
+            {
+               for( int lCounter = 0; lCounter < eMaxClient; lCounter++ )
+               {
+                  if( mActiveInterface->mClient[ lCounter ].IsConnected() )
+                  {
+                     WSAAsyncSelect( mActiveInterface->mClient[ lCounter ].GetSocket(), pWindow, MRM_CLIENT+lCounter, 0 );
+                     WSAAsyncSelect( mActiveInterface->mClient[ lCounter ].GetUDPSocket(), pWindow, MRM_CLIENT+lCounter, 0 );
+                  }
+               }
+               WSAAsyncSelect( mActiveInterface->mRegistrySocket, pWindow, MRM_CLIENT, 0 );
+
+               if( mActiveInterface->mReturnMessage == 0 )
+               {
+                  EndDialog( pWindow, IDOK );
+               }
+               else
+               {
+                  SendMessage( GetParent( pWindow ), mActiveInterface->mReturnMessage, IDOK, 0 );
+                  DestroyWindow( pWindow );
+               }
+               return TRUE;
+            }
          }
 
          break;

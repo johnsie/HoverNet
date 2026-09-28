@@ -123,6 +123,18 @@ namespace
    CString gRaceServerHost = kDefaultRaceServerHost;
    unsigned gRaceServerPort = kDefaultRaceServerPort;
 
+   // Set once we've successfully hosted or joined a not-yet-started race and are
+   // staying right here in this "HoverNet Lobby" dialog to wait for it to start,
+   // instead of immediately handing the connection off to the old TCP Connections
+   // waiting-room dialog (NetInterface.cpp's ListCallBack): that dialog is modal,
+   // which froze this one -- including its chat input -- for the whole wait, and
+   // never rendered incoming chat at all. See eRSMsgRaceStarted below for the
+   // actual handoff, deferred until the race actually starts.
+   bool     gWaitingForRaceStart = false;
+   BOOL     gWaitingIsCreator = FALSE;
+   int      gWaitingClientId = -1;
+   CString  gWaitingGameName;
+
    // Forward declarations: DrainRaceServerMessages (below) calls both of these,
    // but they're defined further down the file.
    void RefreshRaceServerSelection(HWND pWindow);
@@ -362,6 +374,52 @@ void MR_InternetRoom::HandleRaceServerMessage(HWND pWindow, const RaceServerMess
                {
                   ListView_SetItemText(lUserList, lSelfRow, 0, (char*)(const char*)mThis->mUser);
                }
+            }
+         }
+      }
+      else if( lMessage.mType == eRSMsgRaceStarted )
+      {
+         // Broadcast once, to every member of the race, the moment its creator
+         // starts it (see ServerSocket.cpp's MRNM_START_RACE) -- this is the
+         // deferred handoff from gWaitingForRaceStart above: only now, with the
+         // race actually starting, do we stop using this connection for lobby
+         // browsing/chat and wrap it for gameplay instead.
+         if( gWaitingForRaceStart )
+         {
+            gWaitingForRaceStart = false;
+            KillTimer( pWindow, kRaceServerRefreshTimer );
+
+            mThis->mSession->SetConnectionMode( MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort );
+            const SOCKET lSocket = static_cast<SOCKET>(gRaceServerLobby.ReleaseSocket());
+            // We've already consumed the one and only eRSMsgRaceStarted the
+            // server ever sends for this race (the message being handled right
+            // now) -- pAlreadyStarted=TRUE tells ConnectAdopted's own
+            // waiting-room dialog not to wait for a second copy that will never
+            // arrive.
+            const BOOL lEntered = mThis->mSession->ConnectAdopted(
+               pWindow, lSocket, gWaitingIsCreator, gWaitingClientId,
+               gRaceServerHost, gRaceServerPort, (const char*)gWaitingGameName,
+               NULL, 0, TRUE );
+
+            if( lEntered )
+            {
+               EndDialog( pWindow, IDOK );
+            }
+            else
+            {
+               MessageBoxA( pWindow, "The race started, but this client could not enter it.",
+                            "HoverNet Lobby", MB_OK | MB_ICONERROR );
+               if( !gRaceServerLobby.IsConnected() )
+               {
+                  gRaceServerLobby.Connect( (const char*)gRaceServerHost, gRaceServerPort );
+                  gRaceServerLobby.SetPlayerName( (const char*)mThis->mUser );
+                  gRaceServerLobby.ListLobbyUsers();
+               }
+               EnableWindow( GetDlgItem( pWindow, IDC_JOIN ), TRUE );
+               SetDlgItemTextA( pWindow, IDC_ADD_SERVER, "Host Race..." );
+               EnableWindow( GetDlgItem( pWindow, IDC_ADD_SERVER ), TRUE );
+               SetTimer( pWindow, kRaceServerRefreshTimer, 2000, NULL );
+               RequestGameListRefresh( pWindow );
             }
          }
       }
@@ -2210,6 +2268,13 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
          gLobbyUserNames.clear();
 
          ShowWindow(GetDlgItem(pWindow, IDC_ADD), SW_HIDE);
+         // In case a previous visit to this dialog left it mid-wait for a race
+         // that never started (e.g. the connection dropped) -- start fresh.
+         gWaitingForRaceStart = false;
+         gWaitingIsCreator = FALSE;
+         gWaitingClientId = -1;
+         EnableWindow(GetDlgItem(pWindow, IDC_JOIN), TRUE);
+         EnableWindow(GetDlgItem(pWindow, IDC_ADD_SERVER), TRUE);
          SetDlgItemTextA(pWindow, IDC_ADD_SERVER, "Host Race...");
          CString lStatus;
          lStatus.Format("Connecting to %s:%u...", (const char*)gRaceServerHost, gRaceServerPort);
@@ -2256,6 +2321,10 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
          {
             KillTimer(pWindow, kRaceServerRefreshTimer);
             gRaceServerLobby.Disconnect();
+            // Disconnecting takes the (possibly still-waiting) race down with it
+            // server-side -- see CleanupEmptyRaces -- so there's nothing left to
+            // resume next time this dialog opens.
+            gWaitingForRaceStart = false;
             EndDialog(pWindow, IDCANCEL);
             return TRUE;
          }
@@ -2280,6 +2349,14 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
          }
          if( LOWORD(pWParam) == IDC_JOIN )
          {
+            if( gWaitingForRaceStart )
+            {
+               // The button should already be disabled in this state; ignore a
+               // click that slips through some other way (e.g. Enter while it
+               // still has focus).
+               return TRUE;
+            }
+
             const int lIndex = SelectedRaceIndex(pWindow);
             LogNetJoin( "=== IDC_JOIN: selectedIndex=%d ===", lIndex );
             if( lIndex < 0 || lIndex >= static_cast<int>(gRaceServerGames.size()) ) return TRUE;
@@ -2301,8 +2378,6 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
                return TRUE;
             }
 
-            KillTimer(pWindow, kRaceServerRefreshTimer);
-
             // Join on the SAME connection that's been browsing/chatting all
             // along, instead of opening a second one just for the game session:
             // keeps one server-side identity (and its lobby-wide chat) all the
@@ -2310,6 +2385,13 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
             // by the race's unique id, not its (possibly duplicated) display
             // name -- hosting no longer rejects a repeat name, so two races can
             // legitimately share a label.
+            //
+            // Deliberately NOT handed off to ConnectAdopted yet -- this dialog's
+            // own timer keeps running (see gWaitingForRaceStart above), so the
+            // Users list, chat, and the ability to type into it all keep working
+            // exactly as they did while just browsing, right through the wait.
+            // The actual handoff happens once eRSMsgRaceStarted arrives (see
+            // HandleRaceServerMessage).
             BOOL lJoined = FALSE;
             if( gRaceServerLobby.JoinGameById(lGame.mRaceId) )
             {
@@ -2317,16 +2399,23 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
                BOOL lIsCreator = FALSE;
                if( MR_InternetRoom::WaitForJoinedRaceAck(pWindow, lRaceId, lIsCreator, lClientId) )
                {
-                  mThis->mSession->SetConnectionMode(MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort);
-                  const SOCKET lSocket = static_cast<SOCKET>(gRaceServerLobby.ReleaseSocket());
-                  lJoined = mThis->mSession->ConnectAdopted(pWindow, lSocket, lIsCreator, lClientId,
-                                                             gRaceServerHost, gRaceServerPort, lGame.mName.c_str());
+                  gWaitingForRaceStart = true;
+                  gWaitingIsCreator = lIsCreator;
+                  gWaitingClientId = lClientId;
+                  gWaitingGameName = lGame.mName.c_str();
+                  lJoined = TRUE;
                }
             }
-            LogNetJoin( "IDC_JOIN: join+adopt result %d", (int)lJoined );
+            LogNetJoin( "IDC_JOIN: join result %d", (int)lJoined );
             if( lJoined )
             {
-               EndDialog(pWindow, IDOK);
+               EnableWindow( GetDlgItem( pWindow, IDC_JOIN ), FALSE );
+               // Only the creator may start a server-hosted race (see
+               // ServerSocket.cpp's MRNM_START_RACE); a joiner just waits for
+               // eRSMsgRaceStarted, so their "Host on Server..." button becomes
+               // an inert "Waiting..." label instead of a live Start Game one.
+               SetDlgItemTextA( pWindow, IDC_ADD_SERVER, gWaitingIsCreator ? "Start Game" : "Waiting..." );
+               EnableWindow( GetDlgItem( pWindow, IDC_ADD_SERVER ), gWaitingIsCreator );
             }
             else
             {
@@ -2337,13 +2426,25 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
                   gRaceServerLobby.SetPlayerName((const char*)mThis->mUser);
                   gRaceServerLobby.ListLobbyUsers();
                }
-               SetTimer(pWindow, kRaceServerRefreshTimer, 2000, NULL);
                RequestGameListRefresh(pWindow);
             }
             return TRUE;
          }
          if( LOWORD(pWParam) == IDC_ADD_SERVER )
          {
+            if( gWaitingForRaceStart )
+            {
+               // Repurposed while waiting on a not-yet-started race (see below):
+               // this click means "start the race", not "host a new one". Only
+               // enabled for the creator to begin with, but guard against a
+               // stray click anyway.
+               if( gWaitingIsCreator )
+               {
+                  gRaceServerLobby.StartRace();
+               }
+               return TRUE;
+            }
+
             CString lTrack;
             int lLaps = 3;
             BOOL lWeapons = TRUE;
@@ -2351,12 +2452,15 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
             MR_RecordFile* lTrackFile = MR_TrackOpen(pWindow, lTrack, mThis->mAllowRegistred);
             if( lTrackFile == NULL || !mThis->mSession->LoadNew(lTrack, lTrackFile, lLaps, lWeapons, mThis->mVideoBuffer) ) return TRUE;
 
-            KillTimer(pWindow, kRaceServerRefreshTimer);
-
             // Hosted on the same connection that's been browsing/chatting all
             // along -- see the IDC_JOIN comment above. The race name is just the
             // track name, matching the Linux client -- no reason to make the
             // host type one.
+            //
+            // Deliberately NOT handed off to ConnectAdopted yet -- see the
+            // IDC_JOIN comment above; the handoff happens once eRSMsgRaceStarted
+            // arrives (HandleRaceServerMessage), triggered by this same button
+            // once relabelled "Start Game" below.
             BOOL lHosted = FALSE;
             if( gRaceServerLobby.HostRace((const char*)lTrack, (const char*)lTrack, lLaps, lWeapons != FALSE) )
             {
@@ -2364,15 +2468,18 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
                BOOL lIsCreator = FALSE;
                if( MR_InternetRoom::WaitForJoinedRaceAck(pWindow, lRaceId, lIsCreator, lClientId) )
                {
-                  mThis->mSession->SetConnectionMode(MR_CONNECTION_SERVER_HOSTED, gRaceServerHost, gRaceServerPort);
-                  const SOCKET lSocket = static_cast<SOCKET>(gRaceServerLobby.ReleaseSocket());
-                  lHosted = mThis->mSession->ConnectAdopted(pWindow, lSocket, lIsCreator, lClientId,
-                                                             gRaceServerHost, gRaceServerPort, lTrack);
+                  gWaitingForRaceStart = true;
+                  gWaitingIsCreator = lIsCreator;
+                  gWaitingClientId = lClientId;
+                  gWaitingGameName = lTrack;
+                  lHosted = TRUE;
                }
             }
             if( lHosted )
             {
-               EndDialog(pWindow, IDOK);
+               EnableWindow( GetDlgItem( pWindow, IDC_JOIN ), FALSE );
+               SetDlgItemTextA( pWindow, IDC_ADD_SERVER, "Start Game" );
+               EnableWindow( GetDlgItem( pWindow, IDC_ADD_SERVER ), gWaitingIsCreator );
             }
             else
             {
@@ -2383,7 +2490,6 @@ BOOL CALLBACK MR_InternetRoom::RaceServerRoomCallBack( HWND pWindow, UINT pMsgId
                   gRaceServerLobby.SetPlayerName((const char*)mThis->mUser);
                   gRaceServerLobby.ListLobbyUsers();
                }
-               SetTimer(pWindow, kRaceServerRefreshTimer, 2000, NULL);
                RequestGameListRefresh(pWindow);
             }
             return TRUE;
