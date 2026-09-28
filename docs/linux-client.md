@@ -35,6 +35,9 @@ Run from the repository root so the player can load `NetTarget/ObjFac1.dat` and 
 | Home | Reset camera |
 | Escape | Open the in-race menu; leave an online race or quit |
 
+The same list is available in-game through **Controls** on the main menu and
+the Escape menu, including while browsing the online lobby.
+
 ## Bounded Runs
 
 The player accepts deterministic flags for automated verification:
@@ -45,3 +48,5 @@ SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
 ```
 
 `--frames N` exits after `N` frames. The flags `--autoplay`, `--fire`, `--jump`, and `--select-weapon` hold their matching controls during the bounded run.
+`--controls-reference` opens the Controls screen directly for bounded UI
+verification.

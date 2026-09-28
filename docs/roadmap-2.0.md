@@ -306,10 +306,17 @@ re-verify by toggling fullscreen and confirming the Lobby, Settings
 visible and clickable, with the cursor landing exactly where it visually
 appears, at both window sizes.
 
-The rest of Phase 3 (ImGui menu
-consolidation, remappable controls/controller support, actual
-resolution/scaling options, HUD improvements, onboarding, accessibility,
-Windows/Linux menu parity) is not yet started.
+The in-game control-reference portion of onboarding is now implemented on
+Linux. A consistent ImGui Controls screen lists the currently active driving,
+weapon, camera, and HUD bindings and is reachable from the main menu, the
+in-race pause menu, and the lobby's Escape menu. It safely reuses an existing
+ImGui context when opened from the lobby and owns one when opened from a legacy
+menu; `HoverNetControlsReferenceSmoke` exercises the standalone render and
+teardown path headlessly.
+
+The rest of Phase 3 (full ImGui menu consolidation, remappable controls and
+controller support, actual resolution/scaling options, HUD improvements,
+guided onboarding, accessibility, and Windows/Linux menu parity) remains.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.

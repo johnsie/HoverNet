@@ -857,6 +857,7 @@ enum class PauseChoice
     eLeaveRace,
     eOnlineLobby,
     eSettings,
+    eControls,
     eQuit,
 };
 
@@ -877,6 +878,8 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                                  const MR_Sprite& font, const std::string& currentUsername,
                                  const std::string& currentServerHost, unsigned currentServerPort,
                                  double currentVolume, bool currentFullscreen, int pFrameLimit);
+
+void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit);
 
 // pClient is caller-owned (not constructed here) and deliberately left connected
 // when this returns true: a joined-and-started race needs to keep talking to the
@@ -1095,6 +1098,12 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                         SaveServerUrl(settings.serverHost, settings.serverPort);
                         SaveVolume(settings.volume);
                         SaveFullscreen(settings.fullscreen);
+                    }
+                }
+                else if (pauseChoice == PauseChoice::eControls) {
+                    RunControlsScreen(graphics, pFrameLimit);
+                    if (g_QuitConfirmed) {
+                        running = false;
                     }
                 }
                 // eResume / eOnlineLobby: no-op -- already right here browsing.
@@ -1597,11 +1606,11 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                          MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline)
 {
     const char* options[] = {"Resume", pIsOnline ? "Leave Race" : "New Local Race",
-                             "Online Multiplayer Lobby", "Settings", "Quit HoverNet"};
-    constexpr int optionCount = 5;
+                             "Online Multiplayer Lobby", "Settings", "Controls", "Quit HoverNet"};
+    constexpr int optionCount = 6;
     int selected = 0;
     const int panelWidth = std::min(520, viewport.GetXRes() - 48);
-    const int panelHeight = 444;
+    const int panelHeight = 504;
     const UiRect panel{(viewport.GetXRes() - panelWidth) / 2,
                        (viewport.GetYRes() - panelHeight) / 2, panelWidth, panelHeight};
     const int buttonWidth = panelWidth - 80;
@@ -2064,11 +2073,127 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     return result;
 }
 
+void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
+{
+    const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
+    if (ownsImGuiContext) {
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        ImFontConfig fontConfig;
+        fontConfig.SizePixels = 19.0f;
+        io.Fonts->AddFontDefault(&fontConfig);
+        ApplyHoverNetLobbyStyle();
+        ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+        ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+    }
+
+    bool running = true;
+    int framesShown = 0;
+    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_QUIT) {
+                g_QuitConfirmed = true;
+                running = false;
+            }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+                running = false;
+            }
+        }
+
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_RenderSetLogicalSize(renderer, 0, 0);
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::Begin("HoverNet Controls", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
+        ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
+        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+        ImGui::SetWindowFontScale(1.35f);
+        ImGui::TextUnformatted("CONTROLS");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+
+        const float centerWidth = std::min(700.0f, ImGui::GetContentRegionAvail().x);
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
+        ImGui::BeginChild("ControlsPanel", ImVec2(centerWidth, -52.0f), true);
+        if (ImGui::BeginTable("ControlBindings", 2,
+                              ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
+                              ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+            ImGui::TableSetupColumn("Keyboard", ImGuiTableColumnFlags_WidthStretch, 1.3f);
+            ImGui::TableHeadersRow();
+            const char* bindings[][2] = {
+                {"Accelerate", "Left or Right Shift"},
+                {"Brake / Reverse", "Down Arrow"},
+                {"Steer", "Left / Right Arrows"},
+                {"Jump", "Up Arrow"},
+                {"Fire weapon", "Left or Right Ctrl"},
+                {"Select weapon", "Tab"},
+                {"External / Cockpit view", "F3 / F4"},
+                {"Player list / More messages", "F5 / F6"},
+                {"HUD margin", "+ / -"},
+                {"Scroll HUD", "Page Up / Page Down"},
+                {"HUD zoom", "Insert / Delete"},
+                {"Reset HUD", "Home"},
+                {"Pause menu", "Escape"},
+            };
+            for (const auto& binding : bindings) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(binding[0]);
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextUnformatted(binding[1]);
+            }
+            ImGui::EndTable();
+        }
+        ImGui::Spacing();
+        HoverNetHint("Controls can be reviewed here at any time from the pause menu.");
+        ImGui::EndChild();
+        ImGui::Spacing();
+        if (HoverNetButton("Back", ImVec2(-FLT_MIN, 40))) {
+            running = false;
+        }
+        ImGui::End();
+
+        ImGui::Render();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
+        SDL_Delay(16);
+    }
+
+    if (ownsImGuiContext) {
+        ImGui_ImplSDLRenderer2_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+    }
+}
+
 enum class MenuChoice
 {
     eLocalPlay,
     eOnlineLobby,
     eSettings,
+    eControls,
 };
 
 // The very first screen in player mode: pick local play or the online lobby. Bounded
@@ -2081,8 +2206,8 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 {
     const int lineHeight = std::max(1, font.GetItemHeight());
     int selected = 0;
-    const char* options[] = {"Local Play", "Online Lobby", "Settings"};
-    const int optionCount = 3;
+    const char* options[] = {"Local Play", "Online Lobby", "Settings", "Controls"};
+    const int optionCount = 4;
 
     bool running = true;
     MenuChoice choice = MenuChoice::eLocalPlay;
@@ -2546,7 +2671,11 @@ int main(int argc, char** argv)
         return 1;
     }
     if (playerMode) {
-        bool pickingMode = true;
+        if (HasArgument(argc, argv, "--controls-reference")) {
+            RunControlsScreen(graphics, frameLimit);
+            g_QuitConfirmed = true;
+        }
+        bool pickingMode = !g_QuitConfirmed;
         while (pickingMode) {
             pickingMode = false;
             const MenuChoice choice = RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
@@ -2578,6 +2707,10 @@ int main(int argc, char** argv)
                     SaveVolume(settings.volume);
                     SaveFullscreen(settings.fullscreen);
                 }
+                pickingMode = !g_QuitConfirmed;
+            }
+            else if (choice == MenuChoice::eControls) {
+                RunControlsScreen(graphics, frameLimit);
                 pickingMode = !g_QuitConfirmed;
             }
             else if (autoPlay) {
@@ -2714,6 +2847,12 @@ int main(int argc, char** argv)
                             SaveServerUrl(lobbyHost, lobbyPort);
                             SaveVolume(settings.volume);
                             SaveFullscreen(settings.fullscreen);
+                        }
+                    }
+                    else if (pauseChoice == PauseChoice::eControls) {
+                        RunControlsScreen(graphics, frameLimit);
+                        if (g_QuitConfirmed) {
+                            running = false;
                         }
                     }
                     else {
