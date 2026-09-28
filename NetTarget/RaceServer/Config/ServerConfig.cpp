@@ -22,15 +22,20 @@ MR_ServerConfig::MR_ServerConfig()
 
 BOOL MR_ServerConfig::LoadFromFile(const char* filename)
 {
-    // Placeholder for XML parsing
-    // TODO: Implement XML config file loading (use existing HoverRace XML libraries)
-    // For now, return success (use hardcoded defaults)
-    return TRUE;
+    // XML parsing isn't implemented yet (see Phase 2 of docs/roadmap-2.0.md:
+    // "Complete configuration loading rather than shipping placeholder XML
+    // handling"). Returning TRUE unconditionally here used to make the caller
+    // (RaceServer.cpp's --config handling) log a false "Loaded configuration
+    // from: X" for a file whose contents were never actually read -- silently
+    // misleading an operator into believing their settings took effect.
+    // Returning FALSE instead makes that caller correctly log "Failed to load
+    // config file: X (using defaults)", which is the truth: every setting
+    // still comes from the hardcoded defaults in the constructor above.
+    return FALSE;
 }
 
 BOOL MR_ServerConfig::SaveToFile(const char* filename)
 {
-    // Placeholder for XML generation
-    // TODO: Implement XML config file saving
-    return TRUE;
+    // See LoadFromFile: not implemented yet, so don't claim success.
+    return FALSE;
 }

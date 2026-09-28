@@ -16,6 +16,7 @@
 #include "FuelSource.h"
 #include "ObjFac1Res.h"
 
+#include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -669,25 +670,36 @@ extern "C"
 {
 void MR_InitModule(HMODULE)
 {
-    try {
     MR_InitTrigoTables();
     const char* dataDirectory = std::getenv("HOVERNET_DATA_DIR");
+    std::string lDatPath;
     if (dataDirectory != nullptr && dataDirectory[0] != '\0') {
-        resourceLib.reset(new MR_ResourceLib(
-            (std::string(dataDirectory) + "/NetTarget/ObjFac1.dat").c_str()));
+        lDatPath = std::string(dataDirectory) + "/NetTarget/ObjFac1.dat";
     }
 #ifdef HOVERNET_SOURCE_DIR
     else {
-        resourceLib.reset(new MR_ResourceLib(HOVERNET_SOURCE_DIR "/NetTarget/ObjFac1.dat"));
+        lDatPath = HOVERNET_SOURCE_DIR "/NetTarget/ObjFac1.dat";
     }
 #else
     else {
-        resourceLib.reset(new MR_ResourceLib("../../NetTarget/ObjFac1.dat"));
+        lDatPath = "../../NetTarget/ObjFac1.dat";
     }
 #endif
+
+    try {
+        resourceLib.reset(new MR_ResourceLib(lDatPath.c_str()));
     }
     catch (...) {
         resourceLib.reset();
+        // Without this, a missing/corrupt ObjFac1.dat leaves every track, car and
+        // effect silently absent (each call site here null-checks resourceLib and
+        // renders nothing) with no indication anywhere of why -- set HOVERNET_DATA_DIR
+        // if the game isn't being run from its own source/install tree.
+        std::fprintf(stderr,
+            "MR_InitModule: failed to load object resources from '%s' -- "
+            "tracks, hovercraft and effects will not render. Set HOVERNET_DATA_DIR "
+            "to the HoverRace install/source directory if this path is wrong.\n",
+            lDatPath.c_str());
     }
 }
 

@@ -232,6 +232,10 @@ MR_FactoryDll* GetDll( MR_UInt16 pDllId, BOOL pTrowOnError )
       if( !lDllPtr->Open( pDllId ) )
       {
          delete lDllPtr;
+         // Without this, callers on the pTrowOnError==FALSE path (e.g. OpenDll)
+         // get back a dangling pointer to what was just freed above, and their
+         // != NULL check reports the DLL as loaded when it isn't.
+         lDllPtr = NULL;
 
          if( pTrowOnError )
          {
