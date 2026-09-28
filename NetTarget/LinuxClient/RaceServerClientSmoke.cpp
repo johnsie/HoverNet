@@ -500,6 +500,44 @@ namespace
         }
         std::printf("Host/non-host join acknowledgement is correct\n");
 
+        // Hosting (or joining) a race that hasn't started yet must NOT remove a
+        // client from the lobby user list -- ServerSocket.cpp used to key that
+        // purely off mRaceId, so a host/joiner vanished from everyone else's lobby
+        // view the instant they picked a race, long before there was an actual
+        // race in progress to explain their absence. A fresh browsing client must
+        // still see both lHost and lJoiner here, in their still-unstarted waiting room.
+        RaceServerClient lLobbyWatcher;
+        if (!lLobbyWatcher.Connect("127.0.0.1", pPort))
+        {
+            std::fprintf(stderr, "Could not connect the lobby-watcher client\n");
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (!lLobbyWatcher.ListLobbyUsers())
+        {
+            std::fprintf(stderr, "Failed to send ListLobbyUsers (pre-start)\n");
+            return false;
+        }
+        bool lSawHostPreStart = false;
+        bool lSawJoinerPreStart = false;
+        for (int lTries = 0; lTries < 30; ++lTries)
+        {
+            if (!lLobbyWatcher.PollMessage(lMessage, 200)) continue;
+            if (lMessage.mType == eRSMsgLobbyUserListEnd) break;
+            if (lMessage.mType != eRSMsgLobbyUserPresent) continue;
+            RaceServerPeer lPeer;
+            if (!RaceServerClient::ParsePeer(lMessage, lPeer)) continue;
+            if (lPeer.mClientId == lHostAck.mClientId) lSawHostPreStart = true;
+            if (lPeer.mClientId == lJoinerAck.mClientId) lSawJoinerPreStart = true;
+        }
+        if (!lSawHostPreStart || !lSawJoinerPreStart)
+        {
+            std::fprintf(stderr, "Host/joiner of an unstarted race missing from ListLobbyUsers "
+                                  "(host=%d joiner=%d)\n", (int)lSawHostPreStart, (int)lSawJoinerPreStart);
+            return false;
+        }
+        std::printf("Hosting/joining an unstarted race keeps both players visible in the lobby list\n");
+
         // A non-host's start request must be ignored. Drain whatever arrives for a
         // beat (there may be an unrelated queued eRSMsgConnNameSet from the join
         // above) and confirm none of it is eRSMsgRaceStarted.
@@ -542,6 +580,50 @@ namespace
             return false;
         }
         std::printf("Host-controlled race start works and reaches all players together\n");
+
+        // Once the race actually starts, the lobby watcher must be told both
+        // players left the lobby (eRSMsgLobbyUserLeft), and a fresh ListLobbyUsers
+        // must no longer list either of them.
+        bool lWatcherSawHostLeft = false;
+        bool lWatcherSawJoinerLeft = false;
+        for (int lTries = 0; lTries < 30 && !(lWatcherSawHostLeft && lWatcherSawJoinerLeft); ++lTries)
+        {
+            if (!lLobbyWatcher.PollMessage(lMessage, 100)) continue;
+            if (lMessage.mType != eRSMsgLobbyUserLeft) continue;
+            int lLeftId = -1;
+            if (!RaceServerClient::ParseLobbyUserLeft(lMessage, lLeftId)) continue;
+            if (lLeftId == lHostAck.mClientId) lWatcherSawHostLeft = true;
+            if (lLeftId == lJoinerAck.mClientId) lWatcherSawJoinerLeft = true;
+        }
+        if (!lWatcherSawHostLeft || !lWatcherSawJoinerLeft)
+        {
+            std::fprintf(stderr, "Lobby watcher was not told host/joiner left once the race started "
+                                  "(host=%d joiner=%d)\n", (int)lWatcherSawHostLeft, (int)lWatcherSawJoinerLeft);
+            return false;
+        }
+        if (!lLobbyWatcher.ListLobbyUsers())
+        {
+            std::fprintf(stderr, "Failed to send ListLobbyUsers (post-start)\n");
+            return false;
+        }
+        bool lSawHostPostStart = false;
+        bool lSawJoinerPostStart = false;
+        for (int lTries = 0; lTries < 30; ++lTries)
+        {
+            if (!lLobbyWatcher.PollMessage(lMessage, 200)) continue;
+            if (lMessage.mType == eRSMsgLobbyUserListEnd) break;
+            if (lMessage.mType != eRSMsgLobbyUserPresent) continue;
+            RaceServerPeer lPeer;
+            if (!RaceServerClient::ParsePeer(lMessage, lPeer)) continue;
+            if (lPeer.mClientId == lHostAck.mClientId) lSawHostPostStart = true;
+            if (lPeer.mClientId == lJoinerAck.mClientId) lSawJoinerPostStart = true;
+        }
+        if (lSawHostPostStart || lSawJoinerPostStart)
+        {
+            std::fprintf(stderr, "Host/joiner still listed by ListLobbyUsers after their race started\n");
+            return false;
+        }
+        std::printf("Starting a race correctly drops its players out of the lobby user list\n");
 
         // Chat must keep working once the race is actually in progress, not just
         // while it was still a waiting room, and -- unlike the waiting room -- it

@@ -29,6 +29,15 @@ inline unsigned short MakeMessageHeader(int messageType) {
     return static_cast<unsigned short>((messageType & 0x3F) << 10);
 }
 
+// A connection is still part of the lobby (visible in the user list, and in
+// scope for lobby-wide chat) until the race it hosted/joined actually starts,
+// not merely from the moment it picks a race -- otherwise hosting or joining
+// a still-forming race would make a player invisible to everyone still
+// browsing, well before there's anything to actually join.
+static inline bool IsInLobby(const ClientConnection* pConn) {
+    return pConn->mRaceId == -1 || !pConn->mRaceStarted;
+}
+
 static void SendProtocolReply(SOCKET pSocket, unsigned char pStatus,
                               unsigned short pMinor, const char* pMessage)
 {
@@ -434,7 +443,9 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 // same name join it. The wire message only carries a name today, so a
                 // freshly-created race uses fixed defaults; picking a track/lap count
                 // when hosting would need a richer message than eRSMsgGameName.
-                const bool lWasBrowsing = (pConn->mRaceId == -1);
+                // Hosting/joining a race that hasn't started yet does NOT remove the
+                // client from the lobby -- see IsInLobby() -- so no BroadcastLobbyUserLeft
+                // here; that fires once when the race actually starts (case 52).
                 pConn->mRaceId = pRaceManager->FindOrCreateRace(
                     gameName, "ClassicH", 3, TRUE, pConn->mClientId);
 
@@ -448,7 +459,6 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                     snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
                 }
                 pRaceManager->JoinRace(pConn->mRaceId, pConn->mClientId, pConn->mPlayerName);
-                if (lWasBrowsing) { BroadcastLobbyUserLeft(pConn->mClientId); }
 
                 g_Logger.Log(MR_LOG_INFO, "Client %d assigned to race %d", pConn->mClientId, pConn->mRaceId);
 
@@ -516,7 +526,9 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 break;
             }
 
-            const bool lWasBrowsing = (pConn->mRaceId == -1);
+            // Hosting a race that hasn't started yet does NOT remove the client from
+            // the lobby -- see IsInLobby() -- so no BroadcastLobbyUserLeft here; that
+            // fires once when the race actually starts (case 52).
             pConn->mRaceId = pRaceManager->CreateRace(raceName, trackName, numLaps, weaponsAllowed ? TRUE : FALSE,
                                                        pConn->mClientId);
             if (pConn->mRaceId < 0) {
@@ -528,7 +540,6 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
             }
             pRaceManager->JoinRace(pConn->mRaceId, pConn->mClientId, pConn->mPlayerName);
-            if (lWasBrowsing) { BroadcastLobbyUserLeft(pConn->mClientId); }
             g_Logger.Log(MR_LOG_INFO, "Client %d hosted race %d '%s': track=%s laps=%d weapons=%s",
                          pConn->mClientId, pConn->mRaceId, raceName, trackName, numLaps,
                          weaponsAllowed ? "yes" : "no");
@@ -561,13 +572,14 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 break;
             }
 
-            const bool lWasBrowsing = (pConn->mRaceId == -1);
+            // Joining a race that hasn't started yet does NOT remove the client from
+            // the lobby -- see IsInLobby() -- so no BroadcastLobbyUserLeft here; that
+            // fires once when the race actually starts (case 52).
             pConn->mRaceId = targetRaceId;
             if (pConn->mPlayerName[0] == '\0') {
                 snprintf(pConn->mPlayerName, sizeof(pConn->mPlayerName), "Player_%d", pConn->mClientId);
             }
             pRaceManager->JoinRace(pConn->mRaceId, pConn->mClientId, pConn->mPlayerName);
-            if (lWasBrowsing) { BroadcastLobbyUserLeft(pConn->mClientId); }
             g_Logger.Log(MR_LOG_INFO, "Client %d joined race %d by id", pConn->mClientId, pConn->mRaceId);
 
             FinishJoiningRace(pConn, pRaceManager);
@@ -630,7 +642,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             // Announce to whoever's already browsing the lobby; ListLobbyUsers (56)
             // is how a client learns about everyone who was already there before it
             // connected.
-            if (pConn->mRaceId == -1) {
+            if (IsInLobby(pConn)) {
                 MessageBuffer msg;
                 msg.header = MakeMessageHeader(48);  // MRNM_LOBBY_USER_PRESENT
                 HoverNetProtocol::WriteI32LE(&msg.data[0], pConn->mClientId);
@@ -641,7 +653,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 for (auto& pair : mConnections) {
                     ClientConnection* pTarget = pair.second;
                     if (pTarget && pTarget->mConnected && pTarget->mClientId != pConn->mClientId &&
-                        pTarget->mRaceId == -1) {
+                        IsInLobby(pTarget)) {
                         send(pTarget->mTcpSocket, (const char*)&msg, msgSize, 0);
                     }
                 }
@@ -654,7 +666,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             for (auto& pair : mConnections) {
                 ClientConnection* pTarget = pair.second;
                 if (!pTarget || !pTarget->mConnected || pTarget->mClientId == pConn->mClientId ||
-                    pTarget->mRaceId != -1 || pTarget->mPlayerName[0] == '\0') {
+                    !IsInLobby(pTarget) || pTarget->mPlayerName[0] == '\0') {
                     continue;
                 }
                 MessageBuffer msg;
@@ -820,15 +832,29 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             // everyone transitions from the lobby into the race on the same signal.
             // Also flips mRaceStarted for each of them -- see ClientConnection.h --
             // which is what narrows their chat scope from the wider lobby down to
-            // just each other, starting now.
+            // just each other, starting now, and is also what IsInLobby() uses to
+            // drop them out of the lobby user list (BroadcastLobbyUserLeft below),
+            // since hosting/joining alone no longer does that -- see IsInLobby().
+            //
+            // Flip mRaceStarted for every member in one pass before sending anything,
+            // so BroadcastLobbyUserLeft's own IsInLobby() check (in the second pass)
+            // sees the race's members as already started and doesn't loop back and
+            // announce them to each other as having left.
+            for (auto& pair : mConnections) {
+                ClientConnection* pTarget = pair.second;
+                if (pTarget && pTarget->mConnected && pTarget->mRaceId == pConn->mRaceId) {
+                    pTarget->mRaceStarted = TRUE;
+                }
+            }
+
             MessageBuffer startedMsg;
             startedMsg.header = MakeMessageHeader(53);  // MRNM_RACE_STARTED
             startedMsg.dataLen = 0;
             for (auto& pair : mConnections) {
                 ClientConnection* pTarget = pair.second;
                 if (pTarget && pTarget->mConnected && pTarget->mRaceId == pConn->mRaceId) {
-                    pTarget->mRaceStarted = TRUE;
                     send(pTarget->mTcpSocket, (const char*)&startedMsg, 3, 0);
+                    BroadcastLobbyUserLeft(pTarget->mClientId);
                 }
             }
             break;
@@ -932,7 +958,7 @@ void MR_ServerSocket::CloseConnection(int clientId, MR_RaceManager* pRaceManager
         if (pRaceManager && pConn->mRaceId >= 0) {
             pRaceManager->LeaveRace(pConn->mRaceId, clientId);
         }
-        if (pConn->mRaceId == -1 && pConn->mPlayerName[0] != '\0') {
+        if (IsInLobby(pConn) && pConn->mPlayerName[0] != '\0') {
             BroadcastLobbyUserLeft(clientId);
         }
         if (pConn->mTcpSocket != INVALID_SOCKET) {
@@ -953,7 +979,7 @@ void MR_ServerSocket::BroadcastLobbyUserLeft(int clientId)
 
     for (auto& pair : mConnections) {
         ClientConnection* pTarget = pair.second;
-        if (pTarget && pTarget->mConnected && pTarget->mClientId != clientId && pTarget->mRaceId == -1) {
+        if (pTarget && pTarget->mConnected && pTarget->mClientId != clientId && IsInLobby(pTarget)) {
             send(pTarget->mTcpSocket, (const char*)&msg, msgSize, 0);
         }
     }
