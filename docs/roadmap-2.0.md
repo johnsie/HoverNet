@@ -66,6 +66,9 @@ corresponding server-side check.
 The protocol's advertised maximum payload is now enforced per connection as
 well: a peer that sends a larger frame is disconnected without affecting other
 clients, covered in both compatibility and strict-protocol integration runs.
+Incomplete TCP frames also expire five seconds after their first byte, even if
+the sender keeps trickling fragments; the stalled peer is removed without
+blocking or desynchronizing other clients.
 
 ## Phase 0 — Define the 2.0 contract
 

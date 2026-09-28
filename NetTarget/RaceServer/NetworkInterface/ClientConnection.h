@@ -4,6 +4,7 @@
 
 #define MR_MAX_PLAYER_NAME 20
 #define MR_CONNECTION_TIMEOUT 30000  // 30 seconds in milliseconds
+#define MR_PARTIAL_FRAME_TIMEOUT_SEC 5
 
 // Fixed-window rate limits: each client gets at most N attempts of a given
 // kind in any window-seconds span, then has to wait for the next window.
@@ -39,6 +40,10 @@ public:
     // (TCP is a byte stream: one recv() can contain multiple messages, part
     // of a message, or a mix of both).
     std::vector<unsigned char> mRecvBuffer;
+    // Time the current incomplete frame first entered an empty receive buffer.
+    // It is deliberately not refreshed by later fragments, preventing a peer
+    // from retaining memory and a connection forever by slowly trickling bytes.
+    time_t mPartialFrameStart;
     
     // Race participation
     int mRaceId;
@@ -77,6 +82,12 @@ public:
     BOOL IsAlive() const 
     { 
         return mConnected && (time(NULL) - mLastMessageTime < MR_CONNECTION_TIMEOUT / 1000); 
+    }
+
+    BOOL HasExpiredPartialFrame(time_t pNow) const
+    {
+        return !mRecvBuffer.empty() && mPartialFrameStart != 0 &&
+            pNow - mPartialFrameStart >= MR_PARTIAL_FRAME_TIMEOUT_SEC;
     }
 
     void UpdateLagStats(int pingMs)

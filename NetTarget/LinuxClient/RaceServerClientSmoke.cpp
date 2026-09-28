@@ -1188,6 +1188,42 @@ namespace
             std::printf("Negotiated maximum payload is enforced per connection\n");
         }
 
+        // A frame that advertises more bytes than it ever sends must not occupy
+        // a connection indefinitely. The timeout starts with the first fragment
+        // and is not extended by the ordinary 30-second idle timeout.
+        {
+            RaceServerClient lPartialFrameClient;
+            if (!lPartialFrameClient.Connect("127.0.0.1", pPort))
+            {
+                std::fprintf(stderr, "Could not connect the partial-frame-test client\n");
+                return false;
+            }
+            const int lPartialSocket = lPartialFrameClient.ReleaseSocket();
+            const unsigned char lOneByte[] = {'x'};
+            if (!SendRawFrame(lPartialSocket, eRSMsgChatMessage, 10,
+                              lOneByte, sizeof(lOneByte)))
+            {
+                std::fprintf(stderr, "Could not send incomplete frame\n");
+                close(lPartialSocket);
+                return false;
+            }
+
+            // Server policy is five seconds; allow three seconds of scheduling
+            // margin without importing its platform-dependent connection header.
+            timeval lCloseTimeout = {8, 0};
+            setsockopt(lPartialSocket, SOL_SOCKET, SO_RCVTIMEO,
+                       &lCloseTimeout, sizeof(lCloseTimeout));
+            unsigned char lUnexpectedByte = 0;
+            if (recv(lPartialSocket, &lUnexpectedByte, 1, 0) != 0)
+            {
+                std::fprintf(stderr, "Server did not close a stalled incomplete frame\n");
+                close(lPartialSocket);
+                return false;
+            }
+            close(lPartialSocket);
+            std::printf("Stalled incomplete frame is closed after its bounded timeout\n");
+        }
+
         // Malformed and oversized packets: a negotiated connection sends a battery
         // of intentionally-broken frames (nested length fields that overrun the
         // outer declared length, undersized payloads for messages with a minimum

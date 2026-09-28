@@ -276,13 +276,20 @@ void MR_ServerSocket::ProcessEvents(MR_RaceManager* pRaceManager)
     // connection each tick so a truly silent one still gets timed out and
     // cleaned up even though it never triggers select().
     std::vector<int> idleClients;
+    const time_t lNow = time(NULL);
     for (auto& pair : mConnections) {
-        if (pair.second && pair.second->mConnected && !pair.second->IsAlive()) {
+        if (pair.second && pair.second->mConnected &&
+            (!pair.second->IsAlive() || pair.second->HasExpiredPartialFrame(lNow))) {
             idleClients.push_back(pair.first);
         }
     }
     for (int clientId : idleClients) {
-        g_Logger.Log(MR_LOG_WARN, "Client %d: Idle timeout, closing connection", clientId);
+        ClientConnection* pConn = mConnections[clientId];
+        if (pConn && pConn->HasExpiredPartialFrame(lNow)) {
+            g_Logger.Log(MR_LOG_WARN, "Client %d: Incomplete frame timeout, closing connection", clientId);
+        } else {
+            g_Logger.Log(MR_LOG_WARN, "Client %d: Idle timeout, closing connection", clientId);
+        }
         CloseConnection(clientId, pRaceManager);
     }
 }
@@ -412,6 +419,9 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
     g_Logger.Log(MR_LOG_DEBUG, "Client %d: Received %d bytes", pConn->mClientId, bytesRead);
 
+    if (pConn->mRecvBuffer.empty()) {
+        pConn->mPartialFrameStart = time(NULL);
+    }
     pConn->mRecvBuffer.insert(pConn->mRecvBuffer.end(), recvChunk, recvChunk + bytesRead);
 
     // The message is: [uint16 header: datagramNum(8), datagramQueue(2), messageType(6)]
@@ -938,9 +948,13 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             }
             break;
         }
-        default:
+    default:
             g_Logger.Log(MR_LOG_DEBUG, "Client %d: Message type %d (not broadcast)", pConn->mClientId, messageType);
     }
+    }
+
+    if (pConn->mRecvBuffer.empty()) {
+        pConn->mPartialFrameStart = 0;
     }
 }
 

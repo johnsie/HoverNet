@@ -6,6 +6,7 @@
 ClientConnection::ClientConnection()
     : mClientId(-1),
       mTcpSocket(INVALID_SOCKET),
+      mPartialFrameStart(0),
       mRaceId(-1),
       mRaceStarted(FALSE),
       mAvgLag(0),
