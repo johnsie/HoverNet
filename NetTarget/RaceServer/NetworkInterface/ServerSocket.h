@@ -13,7 +13,9 @@ public:
     ~MR_ServerSocket();
 
     // Initialize server on specified port
-    BOOL Initialize(unsigned port, int maxConnections = 40, BOOL allowLegacyProtocol = TRUE);
+    BOOL Initialize(unsigned port, int maxConnections = 40, BOOL allowLegacyProtocol = TRUE,
+                    BOOL tcpNoDelay = TRUE, int sendBufferSize = 8192,
+                    int recvBufferSize = 8192, int disconnectTimeoutSec = 30);
 
     // Process incoming connections and messages
     void ProcessEvents(MR_RaceManager* pRaceManager);
@@ -38,6 +40,8 @@ public:
     // Shutdown server
     void Shutdown();
 
+    int GetActiveConnectionCount() const;
+
 private:
     SOCKET mListenSocket;
     SOCKET mDatagramSocket;
@@ -46,6 +50,10 @@ private:
     int mMaxConnections;
     unsigned mPort;
     BOOL mAllowLegacyProtocol;
+    BOOL mTcpNoDelay;
+    int mSendBufferSize;
+    int mRecvBufferSize;
+    int mDisconnectTimeoutSec;
 
     // Per-source-IP connection-attempt rate limiting (AllowNewConnection below):
     // {windowStart, countInWindow} keyed by the raw sin_addr.s_addr. Grows by one

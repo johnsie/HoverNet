@@ -21,6 +21,8 @@
 #define MR_CHAT_RATE_LIMIT_WINDOW_SEC 3
 #define MR_RACE_CREATE_RATE_LIMIT_COUNT 3
 #define MR_RACE_CREATE_RATE_LIMIT_WINDOW_SEC 10
+#define MR_INVALID_MESSAGE_RATE_LIMIT_COUNT 10
+#define MR_INVALID_MESSAGE_RATE_LIMIT_WINDOW_SEC 10
 
 class ClientConnection
 {
@@ -62,6 +64,7 @@ public:
     // Connection timestamps
     time_t mConnectTime;
     time_t mLastMessageTime;
+    int mDisconnectTimeoutSec;
 
     // State
     BOOL mConnected;
@@ -77,11 +80,13 @@ public:
     int mChatCountInWindow;
     time_t mRaceCreateWindowStart;
     int mRaceCreateCountInWindow;
+    time_t mInvalidMessageWindowStart;
+    int mInvalidMessageCountInWindow;
 
     // Helper methods
     BOOL IsAlive() const 
     { 
-        return mConnected && (time(NULL) - mLastMessageTime < MR_CONNECTION_TIMEOUT / 1000); 
+        return mConnected && (time(NULL) - mLastMessageTime < mDisconnectTimeoutSec);
     }
 
     BOOL HasExpiredPartialFrame(time_t pNow) const
@@ -138,5 +143,12 @@ public:
     {
         return CheckRateLimit(mRaceCreateWindowStart, mRaceCreateCountInWindow, pNow,
                               MR_RACE_CREATE_RATE_LIMIT_COUNT, MR_RACE_CREATE_RATE_LIMIT_WINDOW_SEC);
+    }
+
+    BOOL AllowInvalidMessage(time_t pNow)
+    {
+        return CheckRateLimit(mInvalidMessageWindowStart, mInvalidMessageCountInWindow, pNow,
+                              MR_INVALID_MESSAGE_RATE_LIMIT_COUNT,
+                              MR_INVALID_MESSAGE_RATE_LIMIT_WINDOW_SEC);
     }
 };

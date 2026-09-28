@@ -8,7 +8,9 @@ extern MR_ServerLogger g_Logger;
 
 MR_RaceManager::MR_RaceManager()
     : mNextRaceId(1),
-      mMaxConcurrentRaces(50)
+      mMaxConcurrentRaces(50),
+      mMaxPlayersPerRace(8),
+      mIdleRaceTimeoutSec(300)
 {
 }
 
@@ -17,9 +19,12 @@ MR_RaceManager::~MR_RaceManager()
     Shutdown();
 }
 
-BOOL MR_RaceManager::Initialize(int maxConcurrentRaces)
+BOOL MR_RaceManager::Initialize(int maxConcurrentRaces, int maxPlayersPerRace,
+                                int idleRaceTimeoutSec)
 {
     mMaxConcurrentRaces = maxConcurrentRaces;
+    mMaxPlayersPerRace = maxPlayersPerRace;
+    mIdleRaceTimeoutSec = idleRaceTimeoutSec;
     g_Logger.Log(MR_LOG_INFO, "Race manager initialized for %d max concurrent races", maxConcurrentRaces);
     return TRUE;
 }
@@ -40,7 +45,8 @@ int MR_RaceManager::CreateRace(
     int raceId = mNextRaceId++;
     RaceSession* pRace = new RaceSession();
 
-    if (!pRace->Initialize(raceId, raceName, trackName, numLaps, allowWeapons, creatorClientId)) {
+    if (!pRace->Initialize(raceId, raceName, trackName, numLaps, allowWeapons,
+                           creatorClientId, mMaxPlayersPerRace)) {
         delete pRace;
         return -1;
     }
@@ -105,7 +111,7 @@ BOOL MR_RaceManager::JoinRace(int raceId, int clientId, const char* playerName)
         return FALSE;
     }
 
-    if (pRace->GetActivePlayerCount() >= 8) {
+    if (pRace->GetActivePlayerCount() >= mMaxPlayersPerRace) {
         g_Logger.Log(MR_LOG_WARN, "Cannot join race %d: race full", raceId);
         return FALSE;
     }
@@ -200,7 +206,7 @@ void MR_RaceManager::CleanupEmptyRaces()
     for (auto& pair : mRaces) {
         int raceId = pair.first;
         RaceSession* pRace = pair.second;
-        if (pRace && pRace->ShouldCleanup(currentTime, 300)) {
+        if (pRace && pRace->ShouldCleanup(currentTime, mIdleRaceTimeoutSec)) {
             racesToDelete.push_back(raceId);
         }
     }

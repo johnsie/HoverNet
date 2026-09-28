@@ -10,6 +10,7 @@
 //      isolated from the first race's chat traffic (proves races aren't all just
 //      dumped into a single shared room, which used to be the case).
 #include "RaceServerClient.h"
+#define MR_INVALID_MESSAGE_RATE_LIMIT_COUNT 10
 
 #include <chrono>
 #include <arpa/inet.h>
@@ -1235,6 +1236,35 @@ namespace
         // "the malformed sender's socket didn't get a reply" alone wouldn't rule
         // out the server having already crashed on an earlier one in the batch.
         {
+            RaceServerClient lInvalidFlooder;
+            if (!lInvalidFlooder.Connect("127.0.0.1", pPort))
+            {
+                std::fprintf(stderr, "Could not connect invalid-message flood client\n");
+                return false;
+            }
+            const int lInvalidSocket = lInvalidFlooder.ReleaseSocket();
+            for (int lAttempt = 0; lAttempt <= MR_INVALID_MESSAGE_RATE_LIMIT_COUNT; ++lAttempt)
+            {
+                if (!SendRawFrame(lInvalidSocket, eRSMsgJoinedRace, 0, nullptr, 0))
+                {
+                    std::fprintf(stderr, "Could not send invalid direction attempt %d\n", lAttempt);
+                    close(lInvalidSocket);
+                    return false;
+                }
+            }
+            timeval lInvalidCloseTimeout = {2, 0};
+            setsockopt(lInvalidSocket, SOL_SOCKET, SO_RCVTIMEO,
+                       &lInvalidCloseTimeout, sizeof(lInvalidCloseTimeout));
+            unsigned char lUnexpectedInvalidReply = 0;
+            if (recv(lInvalidSocket, &lUnexpectedInvalidReply, 1, 0) != 0)
+            {
+                std::fprintf(stderr, "Invalid-message flooder was not disconnected\n");
+                close(lInvalidSocket);
+                return false;
+            }
+            close(lInvalidSocket);
+            std::printf("Repeated invalid messages are rate-limited by disconnecting the abusive peer\n");
+
             RaceServerClient lRawNegotiator;
             if (!lRawNegotiator.Connect("127.0.0.1", pPort))
             {

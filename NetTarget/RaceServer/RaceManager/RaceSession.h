@@ -25,7 +25,8 @@ public:
         const char* trackName,
         int numLaps,
         BOOL allowWeapons,
-        int creatorClientId);
+        int creatorClientId,
+        int maxPlayers);
 
     BOOL IsCreator(int clientId) const { return clientId == mCreatorClientId; }
 

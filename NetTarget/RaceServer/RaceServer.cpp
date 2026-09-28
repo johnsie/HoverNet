@@ -87,7 +87,7 @@ int main(int argc, char* argv[])
     g_Logger.Log(MR_LOG_INFO, "Port: %u, Logfile: %s", port, logfile);
 
     // Parse optional arguments
-    int maxRaces = 50;
+    int maxRaces = -1;
     const char* configFile = NULL;
     BOOL allowLegacyProtocol = TRUE;
 
@@ -108,6 +108,7 @@ int main(int argc, char* argv[])
         if (!g_Config.LoadFromFile(configFile)) {
             g_Logger.Log(MR_LOG_WARN, "Failed to load config file: %s (using defaults)", configFile);
         } else {
+            g_Logger.SetMinLevel(g_Config.GetLogLevel());
             g_Logger.Log(MR_LOG_INFO, "Loaded configuration from: %s", configFile);
         }
     }
@@ -119,7 +120,9 @@ int main(int argc, char* argv[])
     }
 
     // Initialize race manager
-    if (!g_RaceManager.Initialize(g_Config.GetMaxConcurrentRaces())) {
+    if (!g_RaceManager.Initialize(g_Config.GetMaxConcurrentRaces(),
+                                  g_Config.GetMaxPlayersPerRace(),
+                                  g_Config.GetIdleRaceTimeoutSec())) {
         g_Logger.Log(MR_LOG_ERROR, "Failed to initialize race manager");
         return 1;
     }
@@ -127,7 +130,10 @@ int main(int argc, char* argv[])
                  g_Config.GetMaxConcurrentRaces());
 
     // Initialize server socket
-    if (!g_ServerSocket.Initialize(port, g_Config.GetMaxConnections(), allowLegacyProtocol)) {
+    if (!g_ServerSocket.Initialize(port, g_Config.GetMaxConnections(), allowLegacyProtocol,
+                                   g_Config.GetTcpNoDelay(), g_Config.GetSendBufferSize(),
+                                   g_Config.GetRecvBufferSize(),
+                                   g_Config.GetPlayerDisconnectTimeoutSec())) {
         g_Logger.Log(MR_LOG_ERROR, "Failed to initialize server socket on port %u", port);
         return 1;
     }
@@ -151,6 +157,7 @@ int main(int argc, char* argv[])
     const float FRAME_TIME = 0.016f;  // ~60 Hz
     std::chrono::steady_clock::time_point lastUpdateTime = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point lastStatsTime = lastUpdateTime;
+    const std::chrono::steady_clock::time_point serverStartTime = lastUpdateTime;
 
     while (!g_bShutdownRequested) {
         std::chrono::steady_clock::time_point currentTime = std::chrono::steady_clock::now();
@@ -168,8 +175,11 @@ int main(int argc, char* argv[])
             lastStatsTime = currentTime;
             int activeRaces = g_RaceManager.GetActiveRaceCount();
             int totalPlayers = g_RaceManager.GetTotalPlayerCount();
-            g_Logger.Log(MR_LOG_DEBUG, "Server stats - Active races: %d, Total players: %d",
-                        activeRaces, totalPlayers);
+            const long long uptimeSec = std::chrono::duration_cast<std::chrono::seconds>(
+                currentTime - serverStartTime).count();
+            g_Logger.Log(MR_LOG_INFO,
+                        "event=health status=ready uptime_sec=%lld connections=%d races=%d players=%d",
+                        uptimeSec, g_ServerSocket.GetActiveConnectionCount(), activeRaces, totalPlayers);
         }
 
         // Limit frame rate

@@ -100,6 +100,12 @@ void MR_ServerLogger::Flush()
     }
 }
 
+void MR_ServerLogger::SetMinLevel(int minLevel)
+{
+    std::lock_guard<std::mutex> lock(mLock);
+    mMinLevel = minLevel;
+}
+
 void MR_ServerLogger::Close()
 {
     std::lock_guard<std::mutex> lock(mLock);

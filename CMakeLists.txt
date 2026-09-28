@@ -266,6 +266,12 @@ add_executable(HoverNetRaceServerClientSmoke
 add_dependencies(HoverNetRaceServerClientSmoke RaceServer)
 target_link_libraries(HoverNetRaceServerClientSmoke PRIVATE HoverNetRaceServerClient)
 
+add_executable(HoverNetServerConfigSmoke
+    NetTarget/LinuxClient/ServerConfigSmoke.cpp
+    NetTarget/RaceServer/Config/ServerConfig.cpp
+)
+target_include_directories(HoverNetServerConfigSmoke PRIVATE NetTarget/RaceServer)
+
 add_executable(HoverNetInRaceChatSmoke
     NetTarget/LinuxClient/InRaceChatSmoke.cpp
 )
@@ -352,6 +358,9 @@ if(BUILD_TESTING)
     add_hovernet_root_test(HoverNetViewportSmoke)
     add_hovernet_root_test(HoverNetActorRenderSmoke)
     add_hovernet_root_test(HoverNetRaceServerClientSmoke "$<TARGET_FILE:RaceServer>")
+    add_hovernet_root_test(HoverNetServerConfigSmoke
+        "${CMAKE_SOURCE_DIR}/NetTarget/RaceServer/config.xml"
+        "${CMAKE_BINARY_DIR}/server-config-round-trip.xml")
     add_test(NAME HoverNetRaceServerProtocolStrictSmoke
         COMMAND HoverNetRaceServerClientSmoke "$<TARGET_FILE:RaceServer>" --strict)
     set_tests_properties(HoverNetRaceServerProtocolStrictSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

@@ -22,7 +22,8 @@ public:
     ~MR_RaceManager();
 
     // Initialize with max concurrent races
-    BOOL Initialize(int maxConcurrentRaces = 50);
+    BOOL Initialize(int maxConcurrentRaces = 50, int maxPlayersPerRace = 8,
+                    int idleRaceTimeoutSec = 300);
 
     // Create new race
     int CreateRace(
@@ -74,6 +75,8 @@ private:
     std::map<int, RaceSession*> mRaces;
     int mNextRaceId;
     int mMaxConcurrentRaces;
+    int mMaxPlayersPerRace;
+    int mIdleRaceTimeoutSec;
 
     // Helper
     void CleanupEmptyRaces();

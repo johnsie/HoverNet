@@ -25,7 +25,8 @@ BOOL RaceSession::Initialize(
     const char* trackName,
     int numLaps,
     BOOL allowWeapons,
-    int creatorClientId)
+    int creatorClientId,
+    int maxPlayers)
 {
     mRaceId = raceId;
     snprintf(mRaceName, sizeof(mRaceName), "%s", raceName);
@@ -33,7 +34,7 @@ BOOL RaceSession::Initialize(
     mRaceStarted = FALSE;
     mCreatorClientId = creatorClientId;
 
-    if (!mSimulation.Initialize(trackName, numLaps, allowWeapons, 8)) {
+    if (!mSimulation.Initialize(trackName, numLaps, allowWeapons, maxPlayers)) {
         g_Logger.Log(MR_LOG_ERROR, "Failed to initialize game simulation for race %d", raceId);
         return FALSE;
     }

@@ -27,6 +27,9 @@ public:
     int GetMaxPlayersPerRace() const { return mMaxPlayersPerRace; }
     int GetIdleRaceTimeoutSec() const { return mIdleRaceTimeoutSec; }
     int GetPlayerDisconnectTimeoutSec() const { return mPlayerDisconnectTimeoutSec; }
+    BOOL GetTcpNoDelay() const { return mTcpNoDelay; }
+    int GetSendBufferSize() const { return mSendBufferSize; }
+    int GetRecvBufferSize() const { return mRecvBufferSize; }
     const char* GetLogFile() const { return mLogFile; }
     int GetLogLevel() const { return mLogLevel; }
 

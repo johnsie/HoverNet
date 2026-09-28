@@ -267,7 +267,8 @@ bool RaceServerClient::StartRace()
 bool RaceServerClient::HostRace(const std::string& pRaceName, const std::string& pTrackName, int pNumLaps,
                                 bool pWeaponsAllowed)
 {
-    if (pTrackName.size() > 63 || pRaceName.size() > 63 || pNumLaps < 1 || pNumLaps > 255)
+    if (pTrackName.empty() || pTrackName.size() > 63 ||
+        pRaceName.empty() || pRaceName.size() > 32 || pNumLaps < 1 || pNumLaps > 255)
     {
         return false;
     }

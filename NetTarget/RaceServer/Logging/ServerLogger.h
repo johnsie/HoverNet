@@ -26,6 +26,7 @@ public:
 
     // Flush log to disk
     void Flush();
+    void SetMinLevel(int minLevel);
 
     // Close log file
     void Close();

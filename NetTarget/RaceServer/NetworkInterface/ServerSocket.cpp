@@ -23,7 +23,7 @@ static const int kConnectionRateLimitWindowSec = 10;
 // long-running server's memory against one entry per distinct IP ever seen
 // (e.g. internet scanners) without paying a full-map scan on the hot path.
 static const std::size_t kConnectionRateLimitPruneThreshold = 2000;
-static const std::size_t kMaxRaceNameBytes = 63;
+static const std::size_t kMaxRaceNameBytes = 32; // RaceSession::mRaceName[33]
 static const std::size_t kMaxTrackNameBytes = 63;
 static const std::size_t kMaxChatBytes = 251; // Four-byte sender id is prepended on relay.
 
@@ -104,6 +104,20 @@ static bool RequiresRaceMembership(int pMessageType)
     }
 }
 
+static void RejectInvalidMessage(ClientConnection* pConn, int pMessageType,
+                                 const char* pReason)
+{
+    if (!pConn->AllowInvalidMessage(time(NULL))) {
+        g_Logger.Log(MR_LOG_WARN,
+                     "Client %d exceeded invalid-message limit after type %d (%s), closing",
+                     pConn->mClientId, pMessageType, pReason);
+        pConn->mConnected = FALSE;
+        return;
+    }
+    g_Logger.Log(MR_LOG_WARN, "Client %d rejected message type %d (%s)",
+                 pConn->mClientId, pMessageType, pReason);
+}
+
 // Simple message structure matching Game2's MR_NetMessageBuffer
 #pragma pack(push, 1)
 struct MessageBuffer {
@@ -174,7 +188,11 @@ MR_ServerSocket::MR_ServerSocket()
       mNextClientId(1),
       mMaxConnections(40),
       mPort(9600),
-      mAllowLegacyProtocol(TRUE)
+      mAllowLegacyProtocol(TRUE),
+      mTcpNoDelay(TRUE),
+      mSendBufferSize(8192),
+      mRecvBufferSize(8192),
+      mDisconnectTimeoutSec(30)
 {
 }
 
@@ -183,11 +201,26 @@ MR_ServerSocket::~MR_ServerSocket()
     Shutdown();
 }
 
-BOOL MR_ServerSocket::Initialize(unsigned port, int maxConnections, BOOL allowLegacyProtocol)
+int MR_ServerSocket::GetActiveConnectionCount() const
+{
+    int lCount = 0;
+    for (const auto& lPair : mConnections) {
+        if (lPair.second && lPair.second->mConnected) ++lCount;
+    }
+    return lCount;
+}
+
+BOOL MR_ServerSocket::Initialize(unsigned port, int maxConnections, BOOL allowLegacyProtocol,
+                                 BOOL tcpNoDelay, int sendBufferSize,
+                                 int recvBufferSize, int disconnectTimeoutSec)
 {
     mPort = port;
     mMaxConnections = maxConnections;
     mAllowLegacyProtocol = allowLegacyProtocol;
+    mTcpNoDelay = tcpNoDelay;
+    mSendBufferSize = sendBufferSize;
+    mRecvBufferSize = recvBufferSize;
+    mDisconnectTimeoutSec = disconnectTimeoutSec;
 
     // Initialize Winsock
 #ifdef _WIN32
@@ -273,20 +306,20 @@ BOOL MR_ServerSocket::SetSocketOptions(SOCKET sock)
 
     // Disable Nagle's algorithm for TCP (low-latency requirement)
     if (sock != mDatagramSocket) {
-        int tcpNoDelay = 1;
+        int tcpNoDelay = mTcpNoDelay ? 1 : 0;
         if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char*)&tcpNoDelay, sizeof(tcpNoDelay)) == SOCKET_ERROR) {
             g_Logger.Log(MR_LOG_WARN, "TCP_NODELAY failed: %ld", WSAGetLastError());
         }
     }
 
     // Set send buffer size
-    int sendBufSize = 8192;
+    int sendBufSize = mSendBufferSize;
     if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char*)&sendBufSize, sizeof(sendBufSize)) == SOCKET_ERROR) {
         g_Logger.Log(MR_LOG_WARN, "SO_SNDBUF failed: %ld", WSAGetLastError());
     }
 
     // Set receive buffer size
-    int recvBufSize = 8192;
+    int recvBufSize = mRecvBufferSize;
     if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char*)&recvBufSize, sizeof(recvBufSize)) == SOCKET_ERROR) {
         g_Logger.Log(MR_LOG_WARN, "SO_RCVBUF failed: %ld", WSAGetLastError());
     }
@@ -429,6 +462,7 @@ void MR_ServerSocket::AcceptNewConnection()
     pNewConn->mConnected = TRUE;
     pNewConn->mConnectTime = time(NULL);
     pNewConn->mLastMessageTime = pNewConn->mConnectTime;
+    pNewConn->mDisconnectTimeoutSec = mDisconnectTimeoutSec;
     pNewConn->mUdpAddr = clientAddr;
 
     mConnections[pNewConn->mClientId] = pNewConn;
@@ -598,13 +632,13 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
     }
 
     if (IsServerToClientMessage(messageType)) {
-        g_Logger.Log(MR_LOG_WARN, "Client %d sent server-only message type %d",
-                     pConn->mClientId, messageType);
+        RejectInvalidMessage(pConn, messageType, "server-only direction");
+        if (!pConn->mConnected) return;
         continue;
     }
     if (RequiresRaceMembership(messageType) && pConn->mRaceId < 0) {
-        g_Logger.Log(MR_LOG_WARN, "Client %d sent race message type %d before joining a race",
-                     pConn->mClientId, messageType);
+        RejectInvalidMessage(pConn, messageType, "race membership required");
+        if (!pConn->mConnected) return;
         continue;
     }
 
@@ -683,6 +717,12 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
             const unsigned char numLaps = *p++;
             const unsigned char weaponsAllowed = *p++;
+            if (numLaps == 0 || weaponsAllowed > 1) {
+                RejectInvalidMessage(pConn, messageType, "invalid race settings");
+                if (!pConn->mConnected) return;
+                SendJoinRaceFailure(pConn);
+                break;
+            }
 
             if (p >= pEnd) { g_Logger.Log(MR_LOG_WARN, "Client %d: HOST_RACE missing race name", pConn->mClientId); break; }
             const unsigned char nameLen = *p++;
@@ -767,7 +807,8 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
         case 46:  // MRNM_SET_PLAYER_NAME - client chose a display name
         {
             if (!IsValidProtocolText(&buffer[3], messageDataLen, MR_MAX_PLAYER_NAME)) {
-                g_Logger.Log(MR_LOG_WARN, "Client %d: invalid SET_PLAYER_NAME text", pConn->mClientId);
+                RejectInvalidMessage(pConn, messageType, "invalid player name");
+                if (!pConn->mConnected) return;
                 break;
             }
             const unsigned char lRequestedLen = static_cast<unsigned char>(messageDataLen);
@@ -872,7 +913,8 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 ? messageDataLen > 0 && static_cast<std::size_t>(messageDataLen) <= kMaxChatBytes
                 : IsValidProtocolText(&buffer[3], messageDataLen, kMaxChatBytes);
             if (!lValidChat) {
-                g_Logger.Log(MR_LOG_WARN, "Client %d: invalid chat text", pConn->mClientId);
+                RejectInvalidMessage(pConn, messageType, "invalid chat payload");
+                if (!pConn->mConnected) return;
                 break;
             }
             if (!pConn->AllowChatMessage(time(NULL))) {

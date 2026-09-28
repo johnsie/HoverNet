@@ -76,6 +76,12 @@ Started-race chat keeps its legacy byte-index alphabet with a strict size bound.
 Message direction and minimum connection state are explicit: clients cannot
 submit server-only replies/announcements, and gameplay traffic is ignored until
 the sender has joined a race.
+Repeated invalid direction, state, player-name, or chat commands are capped per
+connection and the abusive peer is disconnected after the ten-message window.
+RaceServer configuration is loaded transactionally with bounded values and is
+wired into connection limits, TCP options/buffers, player disconnect timeout,
+race capacity, cleanup timeout, and log level. The server emits a structured
+ten-second health record with uptime, live connections, races, and players.
 
 ## Phase 0 — Define the 2.0 contract
 
