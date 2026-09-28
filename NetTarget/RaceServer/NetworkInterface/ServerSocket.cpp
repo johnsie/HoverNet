@@ -538,6 +538,8 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
     }
     pConn->mRecvBuffer.insert(pConn->mRecvBuffer.end(), recvChunk, recvChunk + bytesRead);
 
+    bool lCompletedAMessage = false;
+
     // The message is: [uint16 header: datagramNum(8), datagramQueue(2), messageType(6)]
     //                [uint8 dataLen]
     //                [data...]
@@ -552,6 +554,15 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
     memcpy(buffer, pConn->mRecvBuffer.data(), bytesReceived);
     pConn->mRecvBuffer.erase(pConn->mRecvBuffer.begin(), pConn->mRecvBuffer.begin() + bytesReceived);
+    // A message that was sitting at the front of the buffer just completed and
+    // was erased -- whatever bytes are left now (if any) belong to a message
+    // that hasn't been timed yet. Without this, completing one message would
+    // leave mPartialFrameStart pinned to the OLD message's arrival time (it's
+    // only otherwise touched when the buffer goes empty<->non-empty at the very
+    // start/end of ReceiveFromClient), so a brand-new partial message that
+    // happened to arrive appended to that old one's final bytes could be timed
+    // out almost immediately, measured from an arrival time that isn't its own.
+    lCompletedAMessage = true;
 
     // For now, relay ALL messages to other players in the race
     // In production, you'd want to filter certain messages
@@ -683,7 +694,8 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
                 FinishJoiningRace(pConn, pRaceManager);
             } else {
-                g_Logger.Log(MR_LOG_WARN, "Invalid GAME_NAME message length from client %d: %d", pConn->mClientId, dataLen);
+                RejectInvalidMessage(pConn, messageType, "invalid game name");
+                if (!pConn->mConnected) return;
                 SendJoinRaceFailure(pConn);
             }
             break;
@@ -1102,6 +1114,11 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
     if (pConn->mRecvBuffer.empty()) {
         pConn->mPartialFrameStart = 0;
+    } else if (lCompletedAMessage) {
+        // Whatever's left arrived after the message(s) we just finished, so it
+        // hasn't been waiting since mPartialFrameStart -- see the comment at the
+        // erase() call above.
+        pConn->mPartialFrameStart = time(NULL);
     }
 }
 

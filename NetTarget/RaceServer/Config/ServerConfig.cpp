@@ -100,13 +100,22 @@ BOOL MR_ServerConfig::LoadFromFile(const char* filename)
     std::string lNetwork, lRaces, lLogging, lInternet;
     if (!ExtractSection(lXml, "network", lNetwork) ||
         !ExtractSection(lXml, "races", lRaces) ||
-        !ExtractSection(lXml, "logging", lLogging) ||
-        !ExtractSection(lXml, "internetroom", lInternet)) return FALSE;
+        !ExtractSection(lXml, "logging", lLogging)) return FALSE;
+
+    // <internetroom> is documented as "for future integration" (see config.xml)
+    // and nothing in RaceServer.cpp reads GetInternetRoomHost/Port yet -- treating
+    // it as mandatory meant a config missing (or with a typo'd) this vestigial,
+    // currently-inert section fell back to 100% hardcoded defaults, silently
+    // discarding every other setting (max_connections, buffer sizes, timeouts...)
+    // the operator actually cared about. Only require it, and only overwrite the
+    // constructor's localhost:80 default, when it's actually present.
+    const bool lHasInternetRoomSection = lXml.find("<internetroom>") != std::string::npos;
+    if (lHasInternetRoomSection && !ExtractSection(lXml, "internetroom", lInternet)) return FALSE;
 
     MR_ServerConfig lParsed;
     int lPort = 0;
-    int lInternetPort = 0;
-    std::string lLogLevel, lLogFile, lInternetHost;
+    int lInternetPort = static_cast<int>(lParsed.mInternetRoomPort);
+    std::string lLogLevel, lLogFile, lInternetHost = lParsed.mInternetRoomHost;
     if (!ParseInt(lNetwork, "port", 1025, 65535, lPort) ||
         !ParseInt(lNetwork, "max_connections", 1, 10000, lParsed.mMaxConnections) ||
         !ParseBool(lNetwork, "tcp_nodelay", lParsed.mTcpNoDelay) ||
@@ -118,8 +127,9 @@ BOOL MR_ServerConfig::LoadFromFile(const char* filename)
         !ParseInt(lRaces, "player_disconnect_timeout_sec", 1, 3600, lParsed.mPlayerDisconnectTimeoutSec) ||
         !ExtractValue(lLogging, "level", lLogLevel) ||
         !ExtractValue(lLogging, "file", lLogFile) || lLogFile.size() >= sizeof(lParsed.mLogFile) ||
-        !ExtractValue(lInternet, "host", lInternetHost) || lInternetHost.size() >= sizeof(lParsed.mInternetRoomHost) ||
-        !ParseInt(lInternet, "port", 1, 65535, lInternetPort)) return FALSE;
+        (lHasInternetRoomSection &&
+         (!ExtractValue(lInternet, "host", lInternetHost) || lInternetHost.size() >= sizeof(lParsed.mInternetRoomHost) ||
+          !ParseInt(lInternet, "port", 1, 65535, lInternetPort)))) return FALSE;
 
     lParsed.mLogLevel = ParseLogLevel(lLogLevel);
     if (lParsed.mLogLevel < 0) return FALSE;

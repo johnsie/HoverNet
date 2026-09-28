@@ -10,6 +10,8 @@
 #ifndef HOVERNET_RACE_SERVER_CLIENT_H
 #define HOVERNET_RACE_SERVER_CLIENT_H
 
+#include "../RaceServer/NetworkInterface/Protocol.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -101,7 +103,7 @@ public:
     // Normal callers should use Connect(), which requests the current version.
     bool ConnectWithProtocolVersion(const std::string& host, unsigned port,
                                     std::uint16_t major, std::uint16_t minor,
-                                    std::uint16_t maxPayload = 255);
+                                    std::uint16_t maxPayload = HoverNetProtocol::MaxPayload);
     void Disconnect();
     bool IsConnected() const;
     const std::string& GetProtocolError() const;

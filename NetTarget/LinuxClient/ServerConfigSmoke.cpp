@@ -43,6 +43,41 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    // <internetroom> is documented as "for future integration" and nothing reads
+    // it yet -- a config missing that section entirely (an operator trimmed it,
+    // or upgraded from a template that never had it) must still load every other
+    // setting instead of falling back to 100% hardcoded defaults.
+    {
+        const std::string lNoInternetRoomPath = "no-internetroom-config.xml";
+        FILE* lFile = std::fopen(lNoInternetRoomPath.c_str(), "w");
+        if (lFile == nullptr) {
+            std::fprintf(stderr, "Could not write the no-<internetroom> test config\n");
+            return 1;
+        }
+        std::fputs(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            "<raceserver>\n"
+            "  <network><port>9601</port><max_connections>42</max_connections>"
+            "<tcp_nodelay>true</tcp_nodelay><send_buffer_size>8192</send_buffer_size>"
+            "<receive_buffer_size>8192</receive_buffer_size></network>\n"
+            "  <races><max_concurrent>7</max_concurrent><max_players_per_race>4</max_players_per_race>"
+            "<idle_race_timeout_sec>60</idle_race_timeout_sec>"
+            "<player_disconnect_timeout_sec>15</player_disconnect_timeout_sec></races>\n"
+            "  <logging><level>WARN</level><file>x.log</file></logging>\n"
+            "</raceserver>\n",
+            lFile);
+        std::fclose(lFile);
+
+        MR_ServerConfig lNoInternetRoom;
+        if (!lNoInternetRoom.LoadFromFile(lNoInternetRoomPath.c_str()) ||
+            lNoInternetRoom.GetPort() != 9601 || lNoInternetRoom.GetMaxConnections() != 42 ||
+            lNoInternetRoom.GetMaxConcurrentRaces() != 7 || lNoInternetRoom.GetMaxPlayersPerRace() != 4)
+        {
+            std::fprintf(stderr, "A config missing <internetroom> entirely was not parsed correctly\n");
+            return 1;
+        }
+    }
+
     std::puts("RaceServer XML configuration load/save validation passed");
     return 0;
 }
