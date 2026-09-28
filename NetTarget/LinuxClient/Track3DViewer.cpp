@@ -71,15 +71,10 @@ void WindowToLogicalPoint(SDL_Window* pWindow, float pWindowX, float pWindowY, f
     pOutLogicalY = (pWindowY - lOffsetY) / lScale;
 }
 
-// Call on every SDL_Event right after SDL_PollEvent, before it reaches
-// ImGui_ImplSDL2_ProcessEvent or any raw SDL_MOUSEBUTTONDOWN/SDL_MOUSEMOTION
-// handling. Rewriting the event's own x/y in place (rather than correcting
-// io.MousePos afterwards) matters for the ImGui path specifically: ImGui's
-// SDL2 backend queues mouse-position events via io.AddMousePosEvent(), and
-// ImGui::NewFrame() drains that queue and overwrites io.MousePos from it --
-// so any correction applied after ImGui_ImplSDL2_NewFrame() but before
-// ImGui::NewFrame() gets silently clobbered. Fixing the event before it's
-// ever queued avoids that.
+// Call on every SDL_Event right after SDL_PollEvent, before any raw (i.e.
+// non-ImGui) SDL_MOUSEBUTTONDOWN/SDL_MOUSEMOTION handling -- ConfirmQuit and
+// RunPauseMenu. NOT used for the ImGui-driven screens: see CorrectImGuiMousePos
+// for why rewriting the SDL_Event isn't enough there.
 void RewriteMouseEventToLogical(SDL_Event& pEvent, SDL_Window* pWindow)
 {
     float lLogicalX = 0.0f, lLogicalY = 0.0f;
@@ -98,14 +93,37 @@ void RewriteMouseEventToLogical(SDL_Event& pEvent, SDL_Window* pWindow)
 }
 
 #ifdef HOVERNET_GAME2_PLAYER
-// Call right after ImGui_ImplSDL2_NewFrame() (and before ImGui::NewFrame())
-// on every ImGui-driven screen. ImGui_ImplSDL2_NewFrame() sets io.DisplaySize
-// from the real window size, which RewriteMouseEventToLogical doesn't touch
-// (that only fixes mouse coordinates), so it still needs correcting here.
+// Call right before ImGui::NewFrame() on every ImGui-driven screen.
+// ImGui_ImplSDL2_NewFrame() sets io.DisplaySize from the real window size, so
+// it needs correcting before NewFrame() uses it to size the main viewport.
 void SyncImGuiToLogicalSize()
 {
     ImGuiIO& lIo = ImGui::GetIO();
     lIo.DisplaySize = ImVec2(static_cast<float>(kWidth), static_cast<float>(kHeight));
+}
+
+// Call right after ImGui::NewFrame() on every ImGui-driven screen (mouse
+// position only -- DisplaySize is handled by SyncImGuiToLogicalSize before
+// NewFrame(), since NewFrame() needs it early to size the main viewport).
+//
+// Rewriting the SDL_Event before ImGui_ImplSDL2_ProcessEvent (as
+// RewriteMouseEventToLogical does for the raw, non-ImGui screens) isn't
+// enough here: ImGui_ImplSDL2_NewFrame() has its own "global mouse state"
+// fallback (ImGui_ImplSDL2_UpdateMouseData) that re-queries the real,
+// uncorrected window-pixel mouse position via SDL_GetGlobalMouseState every
+// single frame the mouse isn't held down, and queues it *after* any event
+// we already fixed -- so it always wins for plain hovering, which is most
+// of the time between clicks. ImGui::NewFrame() then drains that queue into
+// io.MousePos. The only point nothing overwrites it again before widgets
+// hit-test against it is right here, after NewFrame() has returned.
+void CorrectImGuiMousePos(SDL_Window* pWindow)
+{
+    ImGuiIO& lIo = ImGui::GetIO();
+    if (lIo.MousePos.x > -FLT_MAX / 2.0f && lIo.MousePos.y > -FLT_MAX / 2.0f) {
+        float lLogicalX, lLogicalY;
+        WindowToLogicalPoint(pWindow, lIo.MousePos.x, lIo.MousePos.y, lLogicalX, lLogicalY);
+        lIo.MousePos = ImVec2(lLogicalX, lLogicalY);
+    }
 }
 #endif
 
@@ -1106,7 +1124,6 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            RewriteMouseEventToLogical(event, graphics.GetWindow());
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
                 if (ConfirmQuit(graphics, buffer, viewport, font)) {
@@ -1290,6 +1307,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         ImGui_ImplSDL2_NewFrame();
         SyncImGuiToLogicalSize();
         ImGui::NewFrame();
+        CorrectImGuiMousePos(graphics.GetWindow());
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
@@ -1750,7 +1768,6 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            RewriteMouseEventToLogical(event, graphics.GetWindow());
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
                 cancelled = true;
@@ -1769,6 +1786,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui_ImplSDL2_NewFrame();
         SyncImGuiToLogicalSize();
         ImGui::NewFrame();
+        CorrectImGuiMousePos(graphics.GetWindow());
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
@@ -1901,7 +1919,6 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            RewriteMouseEventToLogical(event, graphics.GetWindow());
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
                 cancelled = true;
@@ -1920,6 +1937,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui_ImplSDL2_NewFrame();
         SyncImGuiToLogicalSize();
         ImGui::NewFrame();
+        CorrectImGuiMousePos(graphics.GetWindow());
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);

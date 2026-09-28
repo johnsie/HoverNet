@@ -209,14 +209,35 @@ x/y in place, via a new `RewriteMouseEventToLogical` helper called
 immediately after `SDL_PollEvent` and before the event reaches
 `ImGui_ImplSDL2_ProcessEvent` (for the 3 ImGui screens) or the raw
 `SDL_MOUSEBUTTONDOWN`/`SDL_MOUSEMOTION` handling (`ConfirmQuit`,
-`RunPauseMenu`) -- so every consumer downstream, including ImGui's own input
-queue, only ever sees already-corrected logical coordinates.
-`io.DisplaySize` is unaffected by the input-queue issue and is still
-corrected directly, once per frame, via `SyncImGuiToLogicalSize`. This could
-only be diagnosed by reasoning through the ImGui/SDL event pipeline, not by
+`RunPauseMenu`).
+
+That second attempt (v0.1.74) fixed the raw bitmap-font screens but not the
+ImGui ones: clicking still needed an offset move toward the letterbox bars.
+Root cause: `ImGui_ImplSDL2_NewFrame()` has its own "global mouse state"
+fallback (`ImGui_ImplSDL2_UpdateMouseData`) that re-queries the real,
+uncorrected window-pixel mouse position via `SDL_GetGlobalMouseState` every
+single frame the mouse isn't held down, and queues it *after* whatever
+`RewriteMouseEventToLogical` already fixed on the `SDL_Event` -- so it always
+won for plain hovering (most of the time between clicks), even though the
+click frame itself (mouse button down, fallback skipped) was correct. The
+mismatch between where hovering said the cursor was and where a click
+actually landed is exactly "move left and up to click." Fix: for the 3 ImGui
+screens, stop rewriting the `SDL_Event` (that only ever fixes one of the two
+competing sources) and instead correct `io.MousePos` directly in a new
+`CorrectImGuiMousePos`, called right after `ImGui::NewFrame()` -- the one
+point in the frame after all queued position updates (real or fallback) have
+already been drained into `io.MousePos`, so nothing overwrites the
+correction again before widgets hit-test against it.
+`RewriteMouseEventToLogical` still handles `ConfirmQuit`/`RunPauseMenu`,
+which don't go through ImGui and aren't subject to this fallback.
+`io.DisplaySize` is unaffected by either issue and is still corrected
+directly before `ImGui::NewFrame()` via `SyncImGuiToLogicalSize`, since
+`NewFrame()` needs it immediately to size the main viewport. This could only
+be diagnosed by reasoning through the ImGui/SDL event pipeline, not by
 interactive testing (unavailable in this environment) -- please re-verify by
 toggling fullscreen and confirming the Lobby, Settings, and pause menu are
-all fully visible and clickable at both window sizes.
+all fully visible and clickable, with the cursor landing where it visually
+appears, at both window sizes.
 
 The rest of Phase 3 (ImGui menu
 consolidation, remappable controls/controller support, actual
