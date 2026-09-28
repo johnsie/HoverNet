@@ -1150,6 +1150,44 @@ namespace
         }
         std::printf("Targeted missile impact reaches every other racer\n");
 
+        // The hello advertises the largest payload this connection supports.
+        // Once negotiated, a larger frame is a protocol violation and must close
+        // only that connection rather than being dispatched or desynchronizing
+        // the stream for other clients.
+        {
+            RaceServerClient lSmallPayloadClient;
+            const std::uint16_t lNegotiatedMaximum = 16;
+            if (!lSmallPayloadClient.ConnectWithProtocolVersion(
+                    "127.0.0.1", pPort, 2, 0, lNegotiatedMaximum))
+            {
+                std::fprintf(stderr, "Could not negotiate a reduced payload maximum\n");
+                return false;
+            }
+            const int lLimitedSocket = lSmallPayloadClient.ReleaseSocket();
+            std::vector<unsigned char> lTooLarge(lNegotiatedMaximum + 1, 'x');
+            if (!SendRawFrame(lLimitedSocket, eRSMsgChatMessage,
+                              static_cast<unsigned char>(lTooLarge.size()),
+                              lTooLarge.data(), lTooLarge.size()))
+            {
+                std::fprintf(stderr, "Could not send above-negotiated-limit frame\n");
+                close(lLimitedSocket);
+                return false;
+            }
+
+            timeval lCloseTimeout = {2, 0};
+            setsockopt(lLimitedSocket, SOL_SOCKET, SO_RCVTIMEO,
+                       &lCloseTimeout, sizeof(lCloseTimeout));
+            unsigned char lUnexpectedByte = 0;
+            if (recv(lLimitedSocket, &lUnexpectedByte, 1, 0) != 0)
+            {
+                std::fprintf(stderr, "Server did not close a client that exceeded its negotiated payload maximum\n");
+                close(lLimitedSocket);
+                return false;
+            }
+            close(lLimitedSocket);
+            std::printf("Negotiated maximum payload is enforced per connection\n");
+        }
+
         // Malformed and oversized packets: a negotiated connection sends a battery
         // of intentionally-broken frames (nested length fields that overrun the
         // outer declared length, undersized payloads for messages with a minimum

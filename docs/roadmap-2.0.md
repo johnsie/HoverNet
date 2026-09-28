@@ -63,6 +63,9 @@ public IP and the only traffic that would otherwise throttle is local
 testing. All three limits are covered by regression tests confirming the
 exact accept/reject counts, each verified to actually fail without its
 corresponding server-side check.
+The protocol's advertised maximum payload is now enforced per connection as
+well: a peer that sends a larger frame is disconnected without affecting other
+clients, covered in both compatibility and strict-protocol integration runs.
 
 ## Phase 0 — Define the 2.0 contract
 

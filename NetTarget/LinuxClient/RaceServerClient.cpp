@@ -80,7 +80,8 @@ bool RaceServerClient::Connect(const std::string& pHost, unsigned pPort)
 }
 
 bool RaceServerClient::ConnectWithProtocolVersion(
-    const std::string& pHost, unsigned pPort, std::uint16_t pMajor, std::uint16_t pMinor)
+    const std::string& pHost, unsigned pPort, std::uint16_t pMajor, std::uint16_t pMinor,
+    std::uint16_t pMaxPayload)
 {
     Disconnect();
     mProtocolError.clear();
@@ -120,7 +121,7 @@ bool RaceServerClient::ConnectWithProtocolVersion(
     std::uint8_t lHello[HoverNetProtocol::HelloSize] = {'H', 'N', 'E', 'T'};
     HoverNetProtocol::WriteU16(lHello + 4, pMajor);
     HoverNetProtocol::WriteU16(lHello + 6, pMinor);
-    HoverNetProtocol::WriteU16(lHello + 8, HoverNetProtocol::MaxPayload);
+    HoverNetProtocol::WriteU16(lHello + 8, pMaxPayload);
     HoverNetProtocol::WriteU32(lHello + 10, 0);
     if (!SendMessage(HoverNetProtocol::MessageType, lHello, sizeof(lHello)))
     {

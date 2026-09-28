@@ -62,6 +62,9 @@ public:
     BOOL mConnected;
     BOOL mAuthenticated;
     BOOL mProtocolNegotiated;
+    // Maximum payload this peer advertised in its protocol hello. Legacy
+    // clients receive the deployed one-byte-frame maximum.
+    unsigned short mMaxPayload;
 
     // Rate-limit window state -- see CheckRateLimit below. Zero-initialized by
     // the constructor; the first call to either Allow* method starts its window.

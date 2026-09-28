@@ -17,6 +17,7 @@ ClientConnection::ClientConnection()
       mConnected(FALSE),
       mAuthenticated(FALSE),
       mProtocolNegotiated(FALSE),
+      mMaxPayload(255),
       mChatWindowStart(0),
       mChatCountInWindow(0),
       mRaceCreateWindowStart(0),

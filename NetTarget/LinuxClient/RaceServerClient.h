@@ -100,7 +100,8 @@ public:
     // Exposed for compatibility tests and future minor-version negotiation.
     // Normal callers should use Connect(), which requests the current version.
     bool ConnectWithProtocolVersion(const std::string& host, unsigned port,
-                                    std::uint16_t major, std::uint16_t minor);
+                                    std::uint16_t major, std::uint16_t minor,
+                                    std::uint16_t maxPayload = 255);
     void Disconnect();
     bool IsConnected() const;
     const std::string& GetProtocolError() const;

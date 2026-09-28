@@ -69,14 +69,15 @@ static void SendJoinRaceFailure(ClientConnection* pConn)
 }
 
 static void SendProtocolReply(SOCKET pSocket, unsigned char pStatus,
-                              unsigned short pMinor, const char* pMessage)
+                              unsigned short pMinor, const char* pMessage,
+                              unsigned short pMaxPayload = HoverNetProtocol::MaxPayload)
 {
     MessageBuffer lReply = {};
     lReply.header = MakeMessageHeader(HoverNetProtocol::MessageType);
     lReply.data[0] = pStatus;
     HoverNetProtocol::WriteU16(&lReply.data[1], HoverNetProtocol::Major);
     HoverNetProtocol::WriteU16(&lReply.data[3], pMinor);
-    HoverNetProtocol::WriteU16(&lReply.data[5], HoverNetProtocol::MaxPayload);
+    HoverNetProtocol::WriteU16(&lReply.data[5], pMaxPayload);
     HoverNetProtocol::WriteU32(&lReply.data[7], 0);
     const size_t lPrefix = HoverNetProtocol::ReplyPrefixSize;
     const size_t lMessageLen = pMessage != nullptr
@@ -446,6 +447,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
         if (messageType != HoverNetProtocol::MessageType) {
             if (mAllowLegacyProtocol) {
                 pConn->mProtocolNegotiated = TRUE;
+                pConn->mMaxPayload = HoverNetProtocol::MaxPayload;
                 g_Logger.Log(MR_LOG_WARN,
                              "Client %d is using temporary legacy protocol compatibility",
                              pConn->mClientId);
@@ -473,6 +475,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
             const unsigned short lMajor = HoverNetProtocol::ReadU16(lHello + 4);
             const unsigned short lMinor = HoverNetProtocol::ReadU16(lHello + 6);
+            const unsigned short lClientMaxPayload = HoverNetProtocol::ReadU16(lHello + 8);
             if (lMajor != HoverNetProtocol::Major) {
                 g_Logger.Log(MR_LOG_WARN, "Client %d requested incompatible protocol %u.%u",
                              pConn->mClientId, lMajor, lMinor);
@@ -484,13 +487,24 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
 
             const unsigned short lNegotiatedMinor =
                 std::min<unsigned short>(lMinor, HoverNetProtocol::Minor);
+            pConn->mMaxPayload = std::min<unsigned short>(
+                lClientMaxPayload, HoverNetProtocol::MaxPayload);
             pConn->mProtocolNegotiated = TRUE;
             SendProtocolReply(pConn->mTcpSocket, HoverNetProtocol::Accepted,
-                              lNegotiatedMinor, nullptr);
-            g_Logger.Log(MR_LOG_INFO, "Client %d negotiated protocol %u.%u",
-                         pConn->mClientId, HoverNetProtocol::Major, lNegotiatedMinor);
+                              lNegotiatedMinor, nullptr, pConn->mMaxPayload);
+            g_Logger.Log(MR_LOG_INFO, "Client %d negotiated protocol %u.%u with max payload %u",
+                         pConn->mClientId, HoverNetProtocol::Major, lNegotiatedMinor,
+                         pConn->mMaxPayload);
             continue;
         }
+    }
+
+    if (messageDataLen > pConn->mMaxPayload) {
+        g_Logger.Log(MR_LOG_WARN,
+                     "Client %d exceeded negotiated payload limit (%d > %u), closing",
+                     pConn->mClientId, messageDataLen, pConn->mMaxPayload);
+        pConn->mConnected = FALSE;
+        return;
     }
 
     switch (messageType) {
