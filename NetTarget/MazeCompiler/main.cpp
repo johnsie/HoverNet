@@ -148,13 +148,9 @@ int main( int pArgCount, const char** pArgStrings )
 #ifdef _WIN32
    Sleep( 1000 );
 #endif
-   printf( "DEBUG: Initializing Object Factory...\n" );
-   fflush( stdout );
    
    MR_DllObjectFactory::Init();
    
-   printf( "DEBUG: Object Factory initialized\n" );
-   fflush( stdout );
  
 
    // Analyse the input parameters
@@ -246,18 +242,12 @@ int main( int pArgCount, const char** pArgStrings )
          }
 
          // Compile the level
-         printf( "DEBUG: Creating MR_LevelBuilder object\n" );
-         fflush( stdout );
          
          MR_LevelBuilder* lNewLevel = new MR_LevelBuilder;
       
-      printf( "DEBUG: MR_LevelBuilder object created\n" );
-      fflush( stdout );
 
       if( !lError )
       {
-         printf( "DEBUG: Creating header record\n" );
-         fflush( stdout );
          
          BOOL lHeaderSuccess = FALSE;
          try
@@ -270,24 +260,14 @@ int main( int pArgCount, const char** pArgStrings )
             }
             else
             {
-               printf( "DEBUG: Header BeginANewRecord succeeded\n" );
-               fflush( stdout );
                
                {
                   CArchive lArchive( &lOutputFile, CArchive::store );
                   lHeaderSuccess = CreateHeader( lFile, lArchive );
-                  printf( "DEBUG: CreateHeader returned: %s\n", lHeaderSuccess ? "TRUE" : "FALSE" );
-                  fflush( stdout );
-                  printf( "DEBUG: About to close archive\n" );
-                  fflush( stdout );
                   lArchive.Close();
-                  printf( "DEBUG: Archive closed\n" );
-                  fflush( stdout );
                   // Archive goes out of scope here - destructor called
                }
                
-               printf( "DEBUG: Header archive destroyed, about to rewind\n" );
-               fflush( stdout );
                
                if( !lHeaderSuccess )
                {
@@ -312,26 +292,17 @@ int main( int pArgCount, const char** pArgStrings )
          }
          else
          {
-            printf( "DEBUG: File rewound successfully after header\n" );
-            fflush( stdout );
          } 
       }
 
       if( !lError )
       {
-         printf( "DEBUG: Initializing level from file\n" );
-         printf( "DEBUG: File pointer position before init: %ld\n", ftell( lFile ) );
-         fflush( stdout );
          
          // Parse the input file
          // and amze the preprocessing
-         printf( "DEBUG: About to call InitFromFile\n" );
-         fflush( stdout );
          
          // Reset file and try parsing
          rewind( lFile );
-         printf( "DEBUG: File rewound for parsing\n" );
-         fflush( stdout );
          
          if( lNewLevel == NULL )
          {
@@ -340,8 +311,6 @@ int main( int pArgCount, const char** pArgStrings )
          }
          else
          {
-            printf( "DEBUG: Calling InitFromFile now...\n" );
-            fflush( stdout );
             
             if( !lNewLevel->InitFromFile( lFile ) )
             {
@@ -350,8 +319,6 @@ int main( int pArgCount, const char** pArgStrings )
             }
             else
             {
-               printf( "DEBUG: InitFromFile succeeded\n" );
-               fflush( stdout );
                
                // Validate lNewLevel is still valid after parsing
                if( lNewLevel == NULL )
@@ -362,10 +329,6 @@ int main( int pArgCount, const char** pArgStrings )
                }
                else
                {
-                  printf( "DEBUG: lNewLevel validation passed\n" );
-                  printf( "DEBUG: Track successfully parsed and loaded, about to serialize\n" );
-                  printf( "DEBUG: Rewinding file for next phase\n" );
-                  fflush( stdout );
                }
             }
          }
@@ -376,28 +339,20 @@ int main( int pArgCount, const char** pArgStrings )
             printf( "WARNING: File rewind failed\n" );
             fflush( stdout );
          }
-         printf( "DEBUG: File rewound successfully\n" );
-         fflush( stdout );
       }
 
       // Add the level to the file
       if( !lError )
       {
-         printf( "DEBUG: About to add track record to output file\n" );
-         fflush( stdout );
          
          try
          {
-            printf( "DEBUG: BeginANewRecord about to be called for track record\n" );
-            fflush( stdout );
             
             // Try to add the track record
             BOOL lTrackRecordSuccess = FALSE;
             try
             {
                lTrackRecordSuccess = lOutputFile.BeginANewRecord();
-               printf( "DEBUG: BeginANewRecord returned: %s\n", lTrackRecordSuccess ? "TRUE" : "FALSE" );
-               fflush( stdout );
             }
             catch( ... )
             {
@@ -414,25 +369,17 @@ int main( int pArgCount, const char** pArgStrings )
             }
             else
             {
-               printf( "DEBUG: BeginANewRecord succeeded, about to create archive\n" );
-               fflush( stdout );
                
                try
                {
                   CArchive lArchive( &lOutputFile, CArchive::store );
                   
-                  printf( "DEBUG: Archive created, about to serialize level\n" );
-                  fflush( stdout );
                   
                   if( lNewLevel != NULL )
                   {
-                     printf( "DEBUG: lNewLevel is valid, calling Serialize...\n" );
-                     fflush( stdout );
                      
                      lNewLevel->Serialize( lArchive );
                      
-                     printf( "DEBUG: Level serialization completed successfully\n" );
-                     fflush( stdout );
                   }
                   else
                   {
@@ -441,8 +388,6 @@ int main( int pArgCount, const char** pArgStrings )
                   }
                   
                   lArchive.Close();
-                  printf( "DEBUG: Archive closed explicitly\n" );
-                  fflush( stdout );
                }
                catch( const std::exception& e )
                {
@@ -467,8 +412,6 @@ int main( int pArgCount, const char** pArgStrings )
 
       if( !lError )
       {
-         printf( "DEBUG: Adding background image\n" );
-         fflush( stdout );
          
          // Add the background file
          try
@@ -488,16 +431,12 @@ int main( int pArgCount, const char** pArgStrings )
          }
          catch( ... )
          {
-            printf( "DEBUG: Exception during background image processing\n" );
-            fflush( stdout );
             lError = TRUE;
          }
       }
 
       if( !lError )
       {
-         printf( "DEBUG: Adding map\n" );
-         fflush( stdout );
          
          try
          {
@@ -509,8 +448,6 @@ int main( int pArgCount, const char** pArgStrings )
             }
             else
             {
-               printf( "DEBUG: BeginANewRecord succeeded\n" );
-               fflush( stdout );
 
                CArchive lArchive( &lOutputFile, CArchive::store );
 
@@ -520,21 +457,13 @@ int main( int pArgCount, const char** pArgStrings )
                int          lY0 = 0;
                int          lY1 = 256;
 
-               printf( "DEBUG: About to create MR_MapSprite\n" );
-               fflush( stdout );
                
                MR_MapSprite lMapSprite;
                
-               printf( "DEBUG: MR_MapSprite created, about to call CreateMap\n" );
-               fflush( stdout );
 
                // Direct call - no exception handling (crashes will hard fail)
                lMapSprite.CreateMap( lNewLevel, lX0, lY0, lX1, lY1 );
-               printf( "DEBUG: CreateMap completed successfully with coords (%d,%d) to (%d,%d)\n", lX0, lY0, lX1, lY1 );
-               fflush( stdout );
 
-               printf( "DEBUG: About to write coordinates to archive: (%d,%d) to (%d,%d)\n", lX0, lY0, lX1, lY1 );
-               fflush( stdout );
 
                try
                {
@@ -542,8 +471,6 @@ int main( int pArgCount, const char** pArgStrings )
                   lArchive << lX1;
                   lArchive << lY0;
                   lArchive << lY1;
-                  printf( "DEBUG: Archive coordinates written successfully\n" );
-                  fflush( stdout );
                }
                catch( ... )
                {
@@ -551,14 +478,10 @@ int main( int pArgCount, const char** pArgStrings )
                   fflush( stdout );
                }
                
-               printf( "DEBUG: About to serialize MapSprite\n" );
-               fflush( stdout );
 
                try
                {
                   lMapSprite.Serialize( lArchive );
-                  printf( "DEBUG: MapSprite Serialize completed successfully\n" );
-                  fflush( stdout );
                }
                catch( ... )
                {
@@ -568,8 +491,6 @@ int main( int pArgCount, const char** pArgStrings )
                
                // Don't explicitly close archive - let destructor handle it
                // lArchive.Close() causes a crash
-               printf( "DEBUG: Archive processing completed, about to leave map block\n" );
-               fflush( stdout );
             }
          }
          catch( ... )
@@ -581,15 +502,11 @@ int main( int pArgCount, const char** pArgStrings )
 
       // Skip deleting lNewLevel to avoid destructor crash
       // Just set to null and let OS cleanup (this is a workaround for a crash bug)
-      printf( "DEBUG: Skipping lNewLevel delete to avoid destructor crash\n" );
-      fflush( stdout );
       lNewLevel = NULL;
 
       // Add the MIDI stream record (Record 4)
       if( !lError )
       {
-         printf( "DEBUG: Adding MIDI stream record\n" );
-         fflush( stdout );
          
          try
          {
@@ -607,23 +524,17 @@ int main( int pArgCount, const char** pArgStrings )
                int lEmptyMidiLength = 0;
                lArchive << lEmptyMidiLength;
                
-               printf( "DEBUG: MIDI stream record created (empty)\n" );
-               fflush( stdout );
                
                // Archive destructor handles close
             }
          }
          catch( ... )
          {
-            printf( "DEBUG: Exception during MIDI stream creation (continuing anyway)\n" );
-            fflush( stdout );
          }
       }
 
       if( !lError )
       {
-         printf( "DEBUG: Compilation successful\n" );
-         fflush( stdout );
          
          // Skip record count printing to avoid crashes
          // printf( MR_LoadString( IDS_REC_COUNT ), lOutputFile.GetNbRecords() );
@@ -636,13 +547,9 @@ int main( int pArgCount, const char** pArgStrings )
 
       // Close the output file cleanly BEFORE exit()
       // This ensures the record table is updated with correct offsets
-      printf( "DEBUG: About to close output file\n" );
-      fflush( stdout );
       
       lOutputFile.Close();
       
-      printf( "DEBUG: Output file closed successfully\n" );
-      fflush( stdout );
       
       // Flush any pending data
       fflush( NULL );
@@ -650,16 +557,12 @@ int main( int pArgCount, const char** pArgStrings )
       Sleep( 100 );
 #endif
       
-      printf( "DEBUG: Compilation complete, exiting successfully\n" );
-      fflush( stdout );
       
       // Exit immediately with success code to avoid destructor crash
       exit( 0 );
       }
       catch( ... )
       {
-         printf( "DEBUG: CRITICAL EXCEPTION CAUGHT during compilation - attempting graceful exit\n" );
-         fflush( stdout );
          exit( 1 );
       }
    }
@@ -670,8 +573,6 @@ int main( int pArgCount, const char** pArgStrings )
       if( !lError )
       {
          // Skip checksum application due to stability issues
-         printf( "DEBUG: Skipping checksum application\n" );
-         fflush( stdout );
       }
    }
    catch( ... )
@@ -737,8 +638,6 @@ BOOL CreateHeader( FILE* pInputFile, CArchive& pArchive )
    {
       // No header found - use defaults and continue
       printf( "WARNING: [HEADER] section not found, using defaults\n" );
-      printf( "DEBUG: Using default description: '%s'\n", (const char*)lDescription );
-      fflush( stdout );
    }
    else
    {
@@ -757,12 +656,6 @@ BOOL CreateHeader( FILE* pInputFile, CArchive& pArchive )
 
    if( lReturnValue )
    {
-      printf( "DEBUG: CreateHeader writing magic number: %d\n", MR_MAGIC_TRACK_NUMBER );
-      printf( "DEBUG: CreateHeader writing version: 1\n" );
-      printf( "DEBUG: CreateHeader writing description: '%s'\n", (const char*)lDescription );
-      printf( "DEBUG: CreateHeader writing IDs: Minor=%d, Major=%d\n", gMinorID, gMajorID );
-      printf( "DEBUG: CreateHeader writing registration: %d\n", lRegistration );
-      fflush( stdout );
       
       pArchive << (int)MR_MAGIC_TRACK_NUMBER;
       pArchive << (int)1;                    // version
@@ -772,18 +665,12 @@ BOOL CreateHeader( FILE* pInputFile, CArchive& pArchive )
       pArchive << lSortingOrder;
       pArchive << lRegistration;
       
-      printf( "DEBUG: CreateHeader wrote registration mode, checking if FREE_TRACK\n" );
-      fflush( stdout );
       
       if( lRegistration == MR_FREE_TRACK )
       {
-         printf( "DEBUG: Writing final magic number for FREE_TRACK\n" );
-         fflush( stdout );
          pArchive << (int)MR_MAGIC_TRACK_NUMBER; // Hehe dont try to modify the file or it will crash :-)
       }
       
-      printf( "DEBUG: CreateHeader completed successfully\n" );
-      fflush( stdout );
    }
 
    return lReturnValue;
@@ -864,8 +751,6 @@ BOOL AddBackgroundImage( FILE* pInputFile, CArchive& pDestination )
    if( lReturnValue )
    {
       FILE* lBackFile = fopen( lBackFileName, "rb" );
-      printf( "DEBUG: Looking for background file: %s\n", (const char*)lBackFileName );
-      fflush( stdout );
 
       // If file not found at specified path, try searching in common locations with extensions
       if( lBackFile == NULL )
@@ -874,7 +759,6 @@ BOOL AddBackgroundImage( FILE* pInputFile, CArchive& pDestination )
             "",                                               // Current directory
             "../bitmaps/",                                    // Relative to current dir
             "../../NetTarget/bitmaps/",                       // From Release folder
-            "c:\\originalhr\\HoverRace\\NetTarget\\bitmaps\\",  // Absolute path
             NULL
          };
 
@@ -888,10 +772,7 @@ BOOL AddBackgroundImage( FILE* pInputFile, CArchive& pDestination )
 
          int lPathIndex = 0;
          int lExtIndex = 0;
-         
-         printf( "DEBUG: Background file not found directly, searching in alternate locations...\n" );
-         fflush( stdout );
-         
+
          while( lSearchPaths[lPathIndex] != NULL && lBackFile == NULL )
          {
             lExtIndex = 0;
@@ -900,16 +781,11 @@ BOOL AddBackgroundImage( FILE* pInputFile, CArchive& pDestination )
                CString lFullPath = lSearchPaths[lPathIndex];
                lFullPath += lBackFileName;
                lFullPath += lExtensions[lExtIndex];
-               
-               printf( "DEBUG:   Trying: %s\n", (const char*)lFullPath );
-               fflush( stdout );
-               
+
                FILE* lTestFile = fopen( lFullPath, "rb" );
                if( lTestFile != NULL )
                {
                   lBackFile = lTestFile;
-                  printf( "DEBUG: Found background image at: %s\n", (const char*)lFullPath );
-                  fflush( stdout );
                   break;
                }
                lExtIndex++;

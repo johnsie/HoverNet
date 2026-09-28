@@ -55,17 +55,11 @@ BOOL MR_LevelBuilder::InitFromFile( FILE* pFile )
    {
       if( lReturnValue )
       {
-         printf( "DEBUG: About to call Parse\n" );
-         fflush( stdout );
          lReturnValue = Parse( pFile );
-         printf( "DEBUG: Parse completed\n" );
-         fflush( stdout );
       }
 
       if( lReturnValue )
       {
-         printf( "DEBUG: Computing visible and audible zones\n" );
-         fflush( stdout );
          lReturnValue = ComputeVisibleZones();
       }
 
@@ -253,17 +247,11 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
                   // Load floor attributes
                   mRoomList[ lRoomIndex ].mFloorLevel = (MR_Int32)(lParser.GetNextNumParam()*1000.0);
 
-                  printf( "DEBUG Parse: Got floor level: %d\n", mRoomList[ lRoomIndex ].mFloorLevel );
-                  fflush( stdout );
                   
                   // Create the associated texture               
-                  printf( "DEBUG Parse: About to load floor texture\n" );
-                  fflush( stdout );
                   
                   mRoomList[ lRoomIndex ].mFloorTexture = sLoadTexture( &lParser );
 
-                  printf( "DEBUG Parse: Floor texture loaded: %p\n", (void*)mRoomList[ lRoomIndex ].mFloorTexture );
-                  fflush( stdout );
                   
                   if( mRoomList[ lRoomIndex ].mFloorTexture == NULL )
                   {
@@ -289,8 +277,6 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
       
       // Get the next room for second pass
       lRoomClass2 = lParser.GetNextClass( "Room" );
-      printf( "DEBUG Parse: Second pass GetNextClass(Room) loop returned: %p\n", (void*)lRoomClass2 );
-      fflush( stdout );
    }
 
    
@@ -504,8 +490,6 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
 
 
 
-   printf( "DEBUG Parse: About to load connections\n" );
-   fflush( stdout );
 
    // Load the connections
    CList< MR_Connection, MR_Connection& > lConnectionList;
@@ -516,13 +500,9 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
    {
       lReturnValue = FALSE;
       printf( MR_LoadString( IDS_MISS_CONNECT_LIST ) );
-      printf( "DEBUG: Connection_List section - setting lReturnValue=FALSE due to NULL\n" );
-      fflush( stdout );
    }
    else
    {
-      printf( "DEBUG: Connection_List found, parsing...\n" );
-      fflush( stdout );
       try
       {
          while( lParser.GetNextLine() )
@@ -536,20 +516,14 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
 
             lConnectionList.AddTail( lNewConnection );
          }
-         printf( "DEBUG: Connection parsing completed\n" );
-         fflush( stdout );
       }
       catch( ... )
       {
-         printf( "DEBUG: Exception while parsing connections\n" );
-         fflush( stdout );
          lReturnValue = FALSE;
       }
    
 
       // Assign the connections to the MR_Level
-      printf( "DEBUG: About to assign connections to level\n" );
-      fflush( stdout );
       
       try
       {
@@ -641,14 +615,10 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
                mRoomList[ lRoom1 ].mNeighborList[ lConnection.mWall1 ] = lRoom0;
             }
          }
-         printf( "DEBUG: Connection assignment completed successfully\n" );
-         fflush( stdout );
       }
       catch( ... )
       {
          // Silently continue - don't crash on connection assignment failures
-         printf( "DEBUG: Exception caught during connection assignment - continuing\n" );
-         fflush( stdout );
          // DON'T set lReturnValue = FALSE - allow compilation to continue anyway
          // lReturnValue = FALSE;
       }
@@ -709,8 +679,6 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
 
 
    // Load the player's starting positions
-   printf( "DEBUG Parse: About to load starting positions, lReturnValue=%d\n", lReturnValue );
-   fflush( stdout );
    
    if( lReturnValue )
    {
@@ -758,12 +726,8 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
 
       if( lReturnValue )
       {
-         printf( "DEBUG: Checking starting positions, lNbStartingPosition=%d\n", lNbStartingPosition );
-         fflush( stdout );
          if( lNbStartingPosition == 0 )
          {
-            printf( "DEBUG: No starting positions found, using default\n" );
-            fflush( stdout );
             // Use a default starting position
             mStartingPosition[0].mX = 0;
             mStartingPosition[0].mY = 0;
@@ -775,19 +739,13 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
          }
       }
       mNbPlayer = lNbStartingPosition;
-      printf( "DEBUG: Final mNbPlayer=%d\n", mNbPlayer );
-      fflush( stdout );
    }
 
-   printf( "DEBUG Parse: Starting Position section processed\n" );
-   fflush( stdout );
 
    // Load the mobile elements
    lParser.Reset();
    int lFreeElementCount = 0;
 
-   printf( "DEBUG Parse: About to process Free_Element sections\n" );
-   fflush( stdout );
 
    while( lReturnValue && (lParser.GetNextClass( "Free_Element" ) != NULL) )
    {
@@ -871,13 +829,6 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
       );
    }
 
-   printf( "DEBUG Parse: About to return, lReturnValue=%d\n", lReturnValue );
-   printf( "DEBUG Parse: Room count: %d\n", lRoomList.GetCount() );
-   printf( "DEBUG Parse: Feature count: %d\n", lFeatureList.GetCount() );
-   printf( "DEBUG Parse: Connection count: %d\n", lConnectionList.GetCount() );
-   printf( "DEBUG Parse: Free element count: %d\n", lFreeElementCount );
-   printf( "DEBUG Parse: Starting positions: %d\n", mNbPlayer );
-   fflush( stdout );
 
    // Force success for testing
    lReturnValue = TRUE;
