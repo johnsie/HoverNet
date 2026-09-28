@@ -165,6 +165,19 @@ change substantially. `scripts/run-raceserver-soak.sh` is ready to run
 
 **January–February 2027 · 6–8 weeks**
 
+**Implementation status:** In progress. "Persist all settings in a documented
+per-user location" is done on Linux: the four previously-scattered dotfiles
+(`.hovernet_host_prefs`, `.hovernet_local_race_prefs`, `.hovernet_username`,
+`.hovernet_server_url`, all dumped directly in `$HOME`) now live under
+`$XDG_CONFIG_HOME/hovernet/` (falling back to `~/.config/hovernet/`), following
+the XDG Base Directory convention -- the actual "documented per-user location"
+this item asks for. A one-time migration copies each old dotfile over the
+first time its new path is read, so upgrading players keep their settings.
+`HoverNetGame2Player --print-config-paths` prints the resolved paths for
+diagnosis. The rest of Phase 3 (ImGui menu consolidation, remappable
+controls/controller support, display/audio settings, HUD improvements,
+onboarding, accessibility, Windows/Linux menu parity) is not yet started.
+
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.
 - Add display mode, resolution, scaling, fullscreen, audio, and volume settings.

@@ -21,6 +21,7 @@
 #include "../VideoServices/VideoBuffer.h"
 
 #include <SDL.h>
+#include <sys/stat.h>
 
 #include <algorithm>
 #include <array>
@@ -467,6 +468,55 @@ MR_SpriteHandle* LoadUiFont()
 const char* const kHostableTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River"};
 constexpr int kHostableTrackCount = sizeof(kHostableTracks) / sizeof(kHostableTracks[0]);
 
+// Per-user settings directory, following the XDG Base Directory spec (the
+// documented, conventional location on Linux) instead of the four separate
+// dotfiles (.hovernet_host_prefs, .hovernet_local_race_prefs,
+// .hovernet_username, .hovernet_server_url) this used to scatter directly in
+// $HOME -- see docs/roadmap-2.0.md's Phase 3 "persist all settings in a
+// documented per-user location" item. Falls back to "." (today's effective
+// behavior when $HOME is unset) rather than failing outright.
+std::string ConfigDirPath()
+{
+    const char* xdgConfigHome = std::getenv("XDG_CONFIG_HOME");
+    std::string base;
+    if (xdgConfigHome != nullptr && xdgConfigHome[0] != '\0') {
+        base = xdgConfigHome;
+    } else {
+        const char* home = std::getenv("HOME");
+        base = std::string(home != nullptr ? home : ".") + "/.config";
+    }
+    const std::string dir = base + "/hovernet";
+    // mkdir -p in two steps: base ($XDG_CONFIG_HOME or ~/.config) may not exist
+    // either on a fresh account. EEXIST is the expected/common case, not a
+    // failure; anything else just means the later fopen calls will fail too,
+    // which they already handle (LoadX returns defaults, SaveX silently no-ops).
+    mkdir(base.c_str(), 0755);
+    mkdir(dir.c_str(), 0755);
+    return dir;
+}
+
+// One-time upgrade path: if oldDotfilePath (this setting's old location directly
+// in $HOME) exists but newPath (under ConfigDirPath()) doesn't yet, copy it over
+// so upgrading players don't silently lose settings the first time they run a
+// build with this change. Safe to call unconditionally on every load -- a no-op
+// once the new file exists or the old one never did.
+void MigrateLegacyDotfile(const std::string& oldDotfilePath, const std::string& newPath)
+{
+    std::ifstream newCheck(newPath);
+    if (newCheck.good()) {
+        return;
+    }
+    std::ifstream oldFile(oldDotfilePath, std::ios::binary);
+    if (!oldFile.good()) {
+        return;
+    }
+    std::ofstream newFile(newPath, std::ios::binary);
+    if (!newFile.good()) {
+        return;
+    }
+    newFile << oldFile.rdbuf();
+}
+
 struct HostPrefs
 {
     int mTrackIndex = 0;
@@ -477,7 +527,9 @@ struct HostPrefs
 std::string HostPrefsPath()
 {
     const char* home = std::getenv("HOME");
-    return std::string(home != nullptr ? home : ".") + "/.hovernet_host_prefs";
+    const std::string newPath = ConfigDirPath() + "/host_prefs";
+    MigrateLegacyDotfile(std::string(home != nullptr ? home : ".") + "/.hovernet_host_prefs", newPath);
+    return newPath;
 }
 
 // "Remember last choice" for hosting settings, across process runs, per the user's
@@ -505,7 +557,9 @@ void SaveHostPrefs(const HostPrefs& prefs)
 std::string LocalRacePrefsPath()
 {
     const char* home = std::getenv("HOME");
-    return std::string(home != nullptr ? home : ".") + "/.hovernet_local_race_prefs";
+    const std::string newPath = ConfigDirPath() + "/local_race_prefs";
+    MigrateLegacyDotfile(std::string(home != nullptr ? home : ".") + "/.hovernet_local_race_prefs", newPath);
+    return newPath;
 }
 
 // Local play's own remembered track/laps/weapons choice, deliberately kept
@@ -550,7 +604,9 @@ enum class LobbyPhase
 std::string UsernamePath()
 {
     const char* home = std::getenv("HOME");
-    return std::string(home != nullptr ? home : ".") + "/.hovernet_username";
+    const std::string newPath = ConfigDirPath() + "/username";
+    MigrateLegacyDotfile(std::string(home != nullptr ? home : ".") + "/.hovernet_username", newPath);
+    return newPath;
 }
 
 // Empty return means no username has been chosen yet (RunLobbyScreen prompts for one).
@@ -571,7 +627,9 @@ void SaveUsername(const std::string& name)
 std::string ServerUrlPath()
 {
     const char* home = std::getenv("HOME");
-    return std::string(home != nullptr ? home : ".") + "/.hovernet_server_url";
+    const std::string newPath = ConfigDirPath() + "/server_url";
+    MigrateLegacyDotfile(std::string(home != nullptr ? home : ".") + "/.hovernet_server_url", newPath);
+    return newPath;
 }
 
 // Returns false (leaving outHost/outPort untouched) if nothing's been saved
@@ -1956,6 +2014,16 @@ bool IsPlayerMode(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
+#ifdef HOVERNET_GAME2_PLAYER
+    if (HasArgument(argc, argv, "--print-config-paths")) {
+        std::fprintf(stderr, "CONFIG_DIR=%s\n", ConfigDirPath().c_str());
+        std::fprintf(stderr, "HOST_PREFS=%s\n", HostPrefsPath().c_str());
+        std::fprintf(stderr, "LOCAL_RACE_PREFS=%s\n", LocalRacePrefsPath().c_str());
+        std::fprintf(stderr, "USERNAME=%s\n", UsernamePath().c_str());
+        std::fprintf(stderr, "SERVER_URL=%s\n", ServerUrlPath().c_str());
+        return 0;
+    }
+#endif
     MR_InitTrigoTables();
     MR_MainCharacter::RegisterFactory();
     struct FactoryCleanup
