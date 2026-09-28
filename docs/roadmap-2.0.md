@@ -340,6 +340,12 @@ single action restores the defaults, and every accepted change is persisted in
 the per-user XDG configuration directory and applied immediately. Invalid or
 truncated binding files fall back atomically to the full default layout.
 
+The shared Windows/Linux race HUD now supplements its existing graphical meters
+and weapon sprites with a readable status line: explicit speed and fuel
+percentages plus missile charge/readiness, mine count, or power-up count. This
+keeps the original compact artwork while removing the need to infer critical
+state from unlabeled bars and animation frames.
+
 The rest of Phase 3 (full ImGui menu consolidation, controller customization,
 HUD improvements, guided onboarding, remaining accessibility
 work, and Windows/Linux menu parity) remains.

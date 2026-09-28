@@ -1680,9 +1680,51 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
 
       }
       
-      // Render timer text at top and bottom center of screen
-      mBaseFont->GetSprite()->StrBlt( lXRes/2, lYRes/16, Ascii2Simple( lMainLineBuffer ), &m3DView, MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
-      mBaseFont->GetSprite()->StrBlt( lXRes/2, lYRes-1,  Ascii2Simple( lLapLineBuffer ), &m3DView, MR_Sprite::eCenter, MR_Sprite::eBottom, 0 );
+      // Render timer text at top and bottom center of screen.
+      const MR_Sprite* lHudFont = mBaseFont->GetSprite();
+      lHudFont->StrBlt( lXRes/2, lYRes/16, Ascii2Simple( lMainLineBuffer ), &m3DView, MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
+      lHudFont->StrBlt( lXRes/2, lYRes-1, Ascii2Simple( lLapLineBuffer ), &m3DView, MR_Sprite::eCenter, MR_Sprite::eBottom, 0 );
+
+      // The original HUD rendered speed/fuel as unlabeled bars and weapons as
+      // icon frames.  Keep those compact visuals, but add a readable status line
+      // so players can tell what each meter means and whether the selected weapon
+      // is actually usable without memorising sprite artwork.
+      int lSpeedPercent = static_cast<int>( pViewingCharacter->GetAbsoluteSpeed()*100.0 + 0.5 );
+      int lFuelPercent = static_cast<int>( pViewingCharacter->GetFuelLevel()*100.0 + 0.5 );
+      if( lSpeedPercent < 0 ) lSpeedPercent = 0;
+      if( lSpeedPercent > 999 ) lSpeedPercent = 999;
+      if( lFuelPercent < 0 ) lFuelPercent = 0;
+      if( lFuelPercent > 100 ) lFuelPercent = 100;
+
+      char lWeaponStatus[48];
+      switch( pViewingCharacter->GetCurrentWeapon() )
+      {
+         case MR_MainCharacter::eMissile:
+         {
+            const int lCharge = pViewingCharacter->GetMissileRefillLevel( 101 );
+            if( lCharge >= 100 )
+               snprintf( lWeaponStatus, sizeof(lWeaponStatus), "Missile ready" );
+            else
+               snprintf( lWeaponStatus, sizeof(lWeaponStatus), "Missile charging %d%%", lCharge );
+            break;
+         }
+         case MR_MainCharacter::eMine:
+            snprintf( lWeaponStatus, sizeof(lWeaponStatus), "Mines %d", pViewingCharacter->GetMineCount() );
+            break;
+         case MR_MainCharacter::ePowerUp:
+            snprintf( lWeaponStatus, sizeof(lWeaponStatus), "Power-ups %d", pViewingCharacter->GetPowerUpCount() );
+            break;
+         default:
+            snprintf( lWeaponStatus, sizeof(lWeaponStatus), "Weapon unavailable" );
+            break;
+      }
+
+      char lStatusLine[120];
+      snprintf( lStatusLine, sizeof(lStatusLine), "Speed %d%%   Fuel %d%%   %s",
+                lSpeedPercent, lFuelPercent, lWeaponStatus );
+      int lStatusY = lYRes/16 + lHudFont->GetItemHeight() + 4;
+      lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lStatusLine ), &m3DView,
+                        MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
 
       // In-race chat: the line currently being typed (AddMessageKey/GetCurrentMessage,
       // real on Windows via MR_NetworkSession's override, a no-op stub on Linux) plus
