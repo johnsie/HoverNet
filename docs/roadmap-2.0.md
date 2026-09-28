@@ -326,8 +326,16 @@ Linux UI scaling is now persisted alongside those settings and adjustable from
 and other interaction targets consistently across Lobby, Local Setup, Settings,
 and Controls; preview changes are rolled back by Cancel.
 
+Linux now supports standard SDL game controllers throughout the core player
+flow. The left stick and triggers drive the craft, face buttons cover jumping,
+weapons, and selection, Start opens the pause menu, and D-pad/A/B navigation is
+available in the raw main and pause menus. ImGui screens have keyboard and
+gamepad navigation enabled, disconnected controllers are released safely, and
+newly connected controllers are discovered during play. The in-game Controls
+screen and Linux documentation show the active controller mapping.
+
 The rest of Phase 3 (full ImGui menu consolidation, remappable controls and
-controller support, HUD improvements, guided onboarding, remaining accessibility
+controller customization, HUD improvements, guided onboarding, remaining accessibility
 work, and Windows/Linux menu parity) remains.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.

@@ -35,8 +35,13 @@ Run from the repository root so the player can load `NetTarget/ObjFac1.dat` and 
 | Home | Reset camera |
 | Escape | Open the in-race menu; leave an online race or quit |
 
-The same list is available in-game through **Controls** on the main menu and
-the Escape menu, including while browsing the online lobby.
+Standard SDL-compatible controllers are supported during races: use the left
+stick to steer, right trigger to accelerate, left trigger to brake or reverse,
+A to jump, X to fire, Y to select a weapon, and Start to open the pause menu.
+Menus support the D-pad, A to confirm, and B to go back where applicable.
+
+The keyboard and controller bindings are available in-game through **Controls**
+on the main menu and the Escape menu, including while browsing the online lobby.
 
 ## Display settings
 

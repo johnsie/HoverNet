@@ -1096,6 +1096,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     // This is a fixed-purpose screen, not a user-arranged workspace -- don't leave
     // an imgui.ini behind in whatever directory the game happens to run from.
     io.IniFilename = nullptr;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
     // ImGui's default font renders at 13px, which looks cramped blown up across a
     // 1024x768 screen -- build the atlas at a larger fixed size instead of scaling
     // the default bitmap font (which just blurs it).
@@ -1701,6 +1702,21 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                     return static_cast<PauseChoice>(selected);
                 }
             }
+            else if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+                const Uint8 button = event.cbutton.button;
+                if (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_START) {
+                    return PauseChoice::eResume;
+                }
+                if (button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
+                    selected = (selected + optionCount - 1) % optionCount;
+                }
+                else if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
+                    selected = (selected + 1) % optionCount;
+                }
+                else if (button == SDL_CONTROLLER_BUTTON_A) {
+                    return static_cast<PauseChoice>(selected);
+                }
+            }
             else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
                 for (int index = 0; index < optionCount; ++index) {
                     const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
@@ -1767,6 +1783,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
     ImFontConfig fontConfig;
     fontConfig.SizePixels = 19.0f;
     io.Fonts->AddFontDefault(&fontConfig);
@@ -1966,6 +1983,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
         ImFontConfig fontConfig;
         fontConfig.SizePixels = 19.0f;
         io.Fonts->AddFontDefault(&fontConfig);
@@ -2218,6 +2236,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
         ImFontConfig fontConfig;
         fontConfig.SizePixels = 19.0f;
         io.Fonts->AddFontDefault(&fontConfig);
@@ -2271,26 +2290,27 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         const float centerWidth = std::min(700.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
         ImGui::BeginChild("ControlsPanel", ImVec2(centerWidth, -52.0f), true);
-        if (ImGui::BeginTable("ControlBindings", 2,
+        if (ImGui::BeginTable("ControlBindings", 3,
                               ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
                               ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 1.0f);
             ImGui::TableSetupColumn("Keyboard", ImGuiTableColumnFlags_WidthStretch, 1.3f);
+            ImGui::TableSetupColumn("Controller", ImGuiTableColumnFlags_WidthStretch, 1.1f);
             ImGui::TableHeadersRow();
-            const char* bindings[][2] = {
-                {"Accelerate", "Left or Right Shift"},
-                {"Brake / Reverse", "Down Arrow"},
-                {"Steer", "Left / Right Arrows"},
-                {"Jump", "Up Arrow"},
-                {"Fire weapon", "Left or Right Ctrl"},
-                {"Select weapon", "Tab"},
-                {"External / Cockpit view", "F3 / F4"},
-                {"Player list / More messages", "F5 / F6"},
-                {"HUD margin", "+ / -"},
-                {"Scroll HUD", "Page Up / Page Down"},
-                {"HUD zoom", "Insert / Delete"},
-                {"Reset HUD", "Home"},
-                {"Pause menu", "Escape"},
+            const char* bindings[][3] = {
+                {"Accelerate", "Left or Right Shift", "Right trigger"},
+                {"Brake / Reverse", "Down Arrow", "Left trigger"},
+                {"Steer", "Left / Right Arrows", "Left stick"},
+                {"Jump", "Up Arrow", "A"},
+                {"Fire weapon", "Left or Right Ctrl", "X"},
+                {"Select weapon", "Tab", "Y"},
+                {"External / Cockpit view", "F3 / F4", "-"},
+                {"Player list / More messages", "F5 / F6", "-"},
+                {"HUD margin", "+ / -", "-"},
+                {"Scroll HUD", "Page Up / Page Down", "-"},
+                {"HUD zoom", "Insert / Delete", "-"},
+                {"Reset HUD", "Home", "-"},
+                {"Pause menu", "Escape", "Start"},
             };
             for (const auto& binding : bindings) {
                 ImGui::TableNextRow();
@@ -2298,6 +2318,8 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
                 ImGui::TextUnformatted(binding[0]);
                 ImGui::TableSetColumnIndex(1);
                 ImGui::TextUnformatted(binding[1]);
+                ImGui::TableSetColumnIndex(2);
+                ImGui::TextUnformatted(binding[2]);
             }
             ImGui::EndTable();
         }
@@ -2377,6 +2399,22 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                     running = false;
                 }
             }
+            else if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+                const Uint8 button = event.cbutton.button;
+                if (button == SDL_CONTROLLER_BUTTON_B) {
+                    running = false;
+                }
+                else if (button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
+                    selected = (selected + optionCount - 1) % optionCount;
+                }
+                else if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
+                    selected = (selected + 1) % optionCount;
+                }
+                else if (button == SDL_CONTROLLER_BUTTON_A) {
+                    choice = static_cast<MenuChoice>(selected);
+                    running = false;
+                }
+            }
         }
 
         viewport.Clear(0);
@@ -2390,7 +2428,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             y += lineHeight;
         }
         y += lineHeight;
-        DrawUiText(font, viewport.GetXRes() / 2, y, "Up/Down   Enter: confirm", &viewport,
+        DrawUiText(font, viewport.GetXRes() / 2, y, "Up/Down or D-pad   Enter/A: confirm", &viewport,
                    MR_Sprite::eCenter, MR_Sprite::eTop);
 
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
@@ -2437,6 +2475,61 @@ RenderStats RenderScene(const MR_Level& level, int room, const MR_3DCoordinate& 
 
     return stats;
 }
+
+class GameControllerManager
+{
+public:
+    GameControllerManager() : mController(nullptr), mInitialized(false) {}
+
+    ~GameControllerManager()
+    {
+        if (mController != nullptr) {
+            SDL_GameControllerClose(mController);
+        }
+        if (mInitialized) {
+            SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER);
+        }
+    }
+
+    void Initialize()
+    {
+        if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) == 0) {
+            mInitialized = true;
+            SDL_GameControllerEventState(SDL_ENABLE);
+            Refresh();
+        }
+    }
+
+    void Refresh()
+    {
+        if (!mInitialized) return;
+        if (mController != nullptr && !SDL_GameControllerGetAttached(mController)) {
+            SDL_GameControllerClose(mController);
+            mController = nullptr;
+        }
+        if (mController != nullptr) return;
+        for (int index = 0; index < SDL_NumJoysticks(); ++index) {
+            if (SDL_IsGameController(index)) {
+                mController = SDL_GameControllerOpen(index);
+                if (mController != nullptr) return;
+            }
+        }
+    }
+
+    bool Button(SDL_GameControllerButton button) const
+    {
+        return mController != nullptr && SDL_GameControllerGetButton(mController, button) != 0;
+    }
+
+    Sint16 Axis(SDL_GameControllerAxis axis) const
+    {
+        return mController != nullptr ? SDL_GameControllerGetAxis(mController, axis) : 0;
+    }
+
+private:
+    SDL_GameController* mController;
+    bool mInitialized;
+};
 
 bool IsPlayerMode(int argc, char** argv)
 {
@@ -2561,6 +2654,10 @@ int main(int argc, char** argv)
         ClampCameraHeight(*level, room, camera);
         renderStats = RenderScene(*level, room, camera, orientation, viewport, resources,
                                   SDL_GetTicks(), mainCharacter);
+    }
+    GameControllerManager gameController;
+    if (playerMode) {
+        gameController.Initialize();
     }
 #ifdef HOVERNET_GAME2_PLAYER
     if (playerMode && level != nullptr) {
@@ -2920,6 +3017,7 @@ int main(int argc, char** argv)
     std::string chatBuffer;
     SDL_StartTextInput();
     while (running && (frameLimit < 0 || framesRendered < frameLimit)) {
+        gameController.Refresh();
         bool sceneChanged = renderStats.actorsRendered > 0;
         bool horizontalMovement = false;
         const MR_3DCoordinate previousCamera = camera;
@@ -2958,7 +3056,9 @@ int main(int argc, char** argv)
                 chatBuffer.clear();
             }
 #endif
-            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+            else if ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) ||
+                     (event.type == SDL_CONTROLLERBUTTONDOWN &&
+                      event.cbutton.button == SDL_CONTROLLER_BUTTON_START)) {
 #ifdef HOVERNET_GAME2_PLAYER
                 // Used to only show this menu online -- offline play just quit
                 // immediately on Escape, with no way back to it short of
@@ -3053,18 +3153,35 @@ int main(int argc, char** argv)
 #endif
 
         const Uint8* keyboard = SDL_GetKeyboardState(nullptr);
-        const bool turnLeft = keyboard[SDL_SCANCODE_LEFT] || (!playerMode && keyboard[SDL_SCANCODE_A]);
-        const bool turnRight = keyboard[SDL_SCANCODE_RIGHT] || (!playerMode && keyboard[SDL_SCANCODE_D]);
-        const bool moveForward = playerMode ? keyboard[SDL_SCANCODE_LSHIFT] || keyboard[SDL_SCANCODE_RSHIFT]
-                            : keyboard[SDL_SCANCODE_UP] || keyboard[SDL_SCANCODE_W];
-        const bool moveBackward = playerMode ? keyboard[SDL_SCANCODE_DOWN]
-                             : keyboard[SDL_SCANCODE_DOWN] || keyboard[SDL_SCANCODE_S];
+        constexpr Sint16 kControllerDeadzone = 8000;
+        const Sint16 controllerSteer = gameController.Axis(SDL_CONTROLLER_AXIS_LEFTX);
+        const bool controllerLeft = controllerSteer < -kControllerDeadzone;
+        const bool controllerRight = controllerSteer > kControllerDeadzone;
+        const bool controllerAccelerate =
+            gameController.Axis(SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > kControllerDeadzone;
+        const bool controllerBrake =
+            gameController.Axis(SDL_CONTROLLER_AXIS_TRIGGERLEFT) > kControllerDeadzone;
+        const bool turnLeft = keyboard[SDL_SCANCODE_LEFT] || controllerLeft ||
+                              (!playerMode && keyboard[SDL_SCANCODE_A]);
+        const bool turnRight = keyboard[SDL_SCANCODE_RIGHT] || controllerRight ||
+                               (!playerMode && keyboard[SDL_SCANCODE_D]);
+        const bool moveForward = playerMode ?
+            keyboard[SDL_SCANCODE_LSHIFT] || keyboard[SDL_SCANCODE_RSHIFT] || controllerAccelerate :
+            keyboard[SDL_SCANCODE_UP] || keyboard[SDL_SCANCODE_W];
+        const bool moveBackward = playerMode ?
+            keyboard[SDL_SCANCODE_DOWN] || controllerBrake :
+            keyboard[SDL_SCANCODE_DOWN] || keyboard[SDL_SCANCODE_S];
         const bool moveUp = keyboard[SDL_SCANCODE_Q];
         const bool moveDown = keyboard[SDL_SCANCODE_E];
         const bool fire = keyboard[SDL_SCANCODE_LCTRL] || keyboard[SDL_SCANCODE_RCTRL] ||
+                  gameController.Button(SDL_CONTROLLER_BUTTON_X) ||
                   HasArgument(argc, argv, "--fire");
-        const bool jump = keyboard[SDL_SCANCODE_UP] || HasArgument(argc, argv, "--jump");
-        const bool selectWeapon = keyboard[SDL_SCANCODE_TAB] || HasArgument(argc, argv, "--select-weapon");
+        const bool jump = keyboard[SDL_SCANCODE_UP] ||
+                          gameController.Button(SDL_CONTROLLER_BUTTON_A) ||
+                          HasArgument(argc, argv, "--jump");
+        const bool selectWeapon = keyboard[SDL_SCANCODE_TAB] ||
+                                  gameController.Button(SDL_CONTROLLER_BUTTON_Y) ||
+                                  HasArgument(argc, argv, "--select-weapon");
 
 #ifdef HOVERNET_GAME2_PLAYER
         if (playerMode && mainCharacter != nullptr && level != nullptr) {
