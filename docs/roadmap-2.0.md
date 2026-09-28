@@ -185,7 +185,30 @@ Game2.vcxproj. A fullscreen toggle is also done: `SDL2Graphics.cpp` already
 calls `SDL_RenderSetLogicalSize` to scale the fixed-resolution framebuffer to
 whatever window size results, so `SDL_SetWindowFullscreen` alone (no render-
 path changes) toggles it, applied live from the same Settings screen and
-persisted the same way as volume. The rest of Phase 3 (ImGui menu
+persisted the same way as volume.
+
+Fixed a regression the fullscreen toggle exposed: every menu screen (ImGui
+ones -- Lobby, Local Race Setup, Settings -- and the raw bitmap-font ones --
+pause menu, quit confirmation) lays out and hit-tests against the fixed
+1024x768 logical size, but once the window size no longer equals that exactly
+(any resize, and especially fullscreen at a different aspect ratio), SDL's
+`SDL_RenderSetLogicalSize` letterboxes the rendered output while ImGui's
+`io.DisplaySize`/`io.MousePos` and raw `SDL_MOUSEBUTTONDOWN`/`SDL_MOUSEMOTION`
+events still report real window pixels -- causing exactly what was reported:
+ImGui screens overflowing their visible letterboxed area, and every screen's
+clicks landing in the wrong place. Added a shared `WindowToLogicalPoint`
+helper (`Track3DViewer.cpp`) that converts real window-pixel coordinates back
+to the 1024x768 logical space using the same scale/offset math
+`SDL_RenderSetLogicalSize` uses internally, applied to: `io.MousePos`/
+`io.DisplaySize` right after each of the 3 `ImGui_ImplSDL2_NewFrame()` calls
+(via a `SyncImGuiToLogicalSize` wrapper), and directly to the mouse
+coordinates read in `ConfirmQuit`/`RunPauseMenu`'s raw event loops. This could
+only be diagnosed by reasoning through the rendering pipeline, not by
+interactive testing (unavailable in this environment) -- please re-verify by
+toggling fullscreen and confirming the Lobby, Settings, and pause menu are
+all fully visible and clickable at both window sizes.
+
+The rest of Phase 3 (ImGui menu
 consolidation, remappable controls/controller support, actual
 resolution/scaling options, HUD improvements, onboarding, accessibility,
 Windows/Linux menu parity) is not yet started.

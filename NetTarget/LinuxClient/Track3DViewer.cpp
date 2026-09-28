@@ -39,6 +39,57 @@ namespace
 constexpr int kWidth = 1024;
 constexpr int kHeight = 768;
 
+// SDL_RenderSetLogicalSize (set up once in SDL2Graphics) always letterboxes
+// the fixed kWidth x kHeight framebuffer to fit whatever the real window
+// size is -- which stops matching kWidth x kHeight the moment the window is
+// resized or toggled into fullscreen. Every menu screen still lays out and
+// hit-tests against the fixed logical size (ImGui's DisplaySize is forced to
+// it below; the raw bitmap-font screens like the pause menu already size
+// their panels from MR_3DViewPort::GetXRes()/GetYRes(), which report the
+// logical size too) -- but mouse coordinates from SDL are always reported in
+// real window pixels. Without translating them back to logical space here,
+// every click lands wherever it would have if the window were exactly
+// kWidth x kHeight, which is only ever true by coincidence.
+void WindowToLogicalPoint(SDL_Window* pWindow, float pWindowX, float pWindowY, float& pOutLogicalX,
+                          float& pOutLogicalY)
+{
+    int lWindowWidth = kWidth;
+    int lWindowHeight = kHeight;
+    if (pWindow != nullptr) {
+        SDL_GetWindowSize(pWindow, &lWindowWidth, &lWindowHeight);
+    }
+    if (lWindowWidth <= 0 || lWindowHeight <= 0) {
+        pOutLogicalX = pWindowX;
+        pOutLogicalY = pWindowY;
+        return;
+    }
+    const float lScale = std::min(static_cast<float>(lWindowWidth) / kWidth,
+                                  static_cast<float>(lWindowHeight) / kHeight);
+    const float lOffsetX = (lWindowWidth - kWidth * lScale) * 0.5f;
+    const float lOffsetY = (lWindowHeight - kHeight * lScale) * 0.5f;
+    pOutLogicalX = (pWindowX - lOffsetX) / lScale;
+    pOutLogicalY = (pWindowY - lOffsetY) / lScale;
+}
+
+#ifdef HOVERNET_GAME2_PLAYER
+// Call right after ImGui_ImplSDL2_NewFrame() (and before ImGui::NewFrame())
+// on every ImGui-driven screen. ImGui_ImplSDL2_NewFrame() sets io.DisplaySize
+// from the real window size and io.MousePos from real window-pixel mouse
+// coordinates; both need correcting for the same logical-size mismatch
+// WindowToLogicalPoint handles for the raw bitmap-font screens.
+void SyncImGuiToLogicalSize(SDL_Window* pWindow)
+{
+    ImGuiIO& lIo = ImGui::GetIO();
+    lIo.DisplaySize = ImVec2(static_cast<float>(kWidth), static_cast<float>(kHeight));
+    if (lIo.MousePos.x > -FLT_MAX / 2.0f && lIo.MousePos.y > -FLT_MAX / 2.0f) {
+        float lLogicalX = lIo.MousePos.x;
+        float lLogicalY = lIo.MousePos.y;
+        WindowToLogicalPoint(pWindow, lIo.MousePos.x, lIo.MousePos.y, lLogicalX, lLogicalY);
+        lIo.MousePos = ImVec2(lLogicalX, lLogicalY);
+    }
+}
+#endif
+
 // Set once the player has actually confirmed "yes, quit HoverNet" (see
 // ConfirmQuit, defined further down) from whichever screen they were on when
 // they clicked the window's close button. Every screen's own loop already
@@ -1217,6 +1268,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
 
         ImGui_ImplSDLRenderer2_NewFrame();
         ImGui_ImplSDL2_NewFrame();
+        SyncImGuiToLogicalSize(graphics.GetWindow());
         ImGui::NewFrame();
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
@@ -1521,19 +1573,25 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
                 }
             }
             else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
+                float lLogicalX, lLogicalY;
+                WindowToLogicalPoint(graphics.GetWindow(), static_cast<float>(event.button.x),
+                                     static_cast<float>(event.button.y), lLogicalX, lLogicalY);
                 for (int index = 0; index < optionCount; ++index) {
                     const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
                                         buttonWidth, buttonHeight};
-                    if (button.Contains(event.button.x, event.button.y)) {
+                    if (button.Contains(static_cast<int>(lLogicalX), static_cast<int>(lLogicalY))) {
                         return index == 0;
                     }
                 }
             }
             else if (event.type == SDL_MOUSEMOTION) {
+                float lLogicalX, lLogicalY;
+                WindowToLogicalPoint(graphics.GetWindow(), static_cast<float>(event.motion.x),
+                                     static_cast<float>(event.motion.y), lLogicalX, lLogicalY);
                 for (int index = 0; index < optionCount; ++index) {
                     const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
                                         buttonWidth, buttonHeight};
-                    if (button.Contains(event.motion.x, event.motion.y)) {
+                    if (button.Contains(static_cast<int>(lLogicalX), static_cast<int>(lLogicalY))) {
                         selected = index;
                     }
                 }
@@ -1596,19 +1654,25 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                 }
             }
             else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
+                float lLogicalX, lLogicalY;
+                WindowToLogicalPoint(graphics.GetWindow(), static_cast<float>(event.button.x),
+                                     static_cast<float>(event.button.y), lLogicalX, lLogicalY);
                 for (int index = 0; index < optionCount; ++index) {
                     const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
                                         buttonWidth, buttonHeight};
-                    if (button.Contains(event.button.x, event.button.y)) {
+                    if (button.Contains(static_cast<int>(lLogicalX), static_cast<int>(lLogicalY))) {
                         return static_cast<PauseChoice>(index);
                     }
                 }
             }
             else if (event.type == SDL_MOUSEMOTION) {
+                float lLogicalX, lLogicalY;
+                WindowToLogicalPoint(graphics.GetWindow(), static_cast<float>(event.motion.x),
+                                     static_cast<float>(event.motion.y), lLogicalX, lLogicalY);
                 for (int index = 0; index < optionCount; ++index) {
                     const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
                                         buttonWidth, buttonHeight};
-                    if (button.Contains(event.motion.x, event.motion.y)) {
+                    if (button.Contains(static_cast<int>(lLogicalX), static_cast<int>(lLogicalY))) {
                         selected = index;
                     }
                 }
@@ -1692,6 +1756,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         ImGui_ImplSDLRenderer2_NewFrame();
         ImGui_ImplSDL2_NewFrame();
+        SyncImGuiToLogicalSize(graphics.GetWindow());
         ImGui::NewFrame();
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
@@ -1841,6 +1906,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         ImGui_ImplSDLRenderer2_NewFrame();
         ImGui_ImplSDL2_NewFrame();
+        SyncImGuiToLogicalSize(graphics.GetWindow());
         ImGui::NewFrame();
 
         const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
