@@ -27,7 +27,6 @@
 #include "VideoBufferSDL2Integration.h"
 
 #include "../Util/Profiler.h"
-#include <fstream>
 
 
 // Debug flag
@@ -512,7 +511,7 @@ void MR_VideoBuffer::CreatePalette( double pGamma, double pContrast, double pBri
          rgbPalette[i*3 + 2] = lPalette[i].peBlue;
       }
       
-      FILE* paletteLog = fopen("C:\\originalhr\\HoverRace\\Release\\Debug_CreatePalette.log", "a");
+      FILE* paletteLog = NULL;
       if(paletteLog) {
          fprintf(paletteLog, "CreatePalette: Setting palette via adapter, adapter=%p\n", g_SDL2GraphicsAdapter);
          fprintf(paletteLog, "  Palette[0] = RGB(%d,%d,%d)\n", rgbPalette[0], rgbPalette[1], rgbPalette[2]);
@@ -667,9 +666,6 @@ BOOL MR_VideoBuffer::SetVideoMode()
 {
    // Log to file to track when SetVideoMode is called
    {
-      std::ofstream logfile("C:\\originalhr\\HoverRace\\Release\\videobuffer_setvideo_mode.log", std::ios::app);
-      logfile << "=== SetVideoMode() called ===" << std::endl;
-      logfile.flush();
    }
    
    PRINT_LOG( "SetVideoMode(Window)" );
@@ -695,7 +691,7 @@ BOOL MR_VideoBuffer::SetVideoMode()
       mYRes = lRect.bottom;
    }
    
-   FILE* dbgFile = fopen("c:\\originalhr\\HoverRace\\Release\\Debug_SetVideoMode_Flow.log", "a");
+   FILE* dbgFile = NULL;
    if(dbgFile) { fprintf(dbgFile, "SetVideoMode: Window dimensions: %dx%d\n", mXRes, mYRes); fflush(dbgFile); }
    
    // Always try SDL2Graphics when available for consistent rendering
@@ -1013,7 +1009,7 @@ BOOL MR_VideoBuffer::Lock()
    {
       // SDL2Graphics mode - use adapter for buffer access
       PRINT_LOG( "Lock: SDL2Graphics mode - requesting buffer" );
-      FILE *logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_VideoBuffer_Lock.log", "a");
+      FILE *logFile = NULL;
       if(logFile) { 
          fprintf(logFile, "[Frame %d] Lock: Before Lock() - mXRes=%d, mYRes=%d, mLineLen=%d, mBuffer=%p\n", frame_count, mXRes, mYRes, mLineLen, mBuffer);
          fprintf(logFile, "[Frame %d] Lock: About to call g_SDL2GraphicsAdapter->Lock(), adapter=%p\n", frame_count, g_SDL2GraphicsAdapter); 
@@ -1026,7 +1022,7 @@ BOOL MR_VideoBuffer::Lock()
       try {
          if( g_SDL2GraphicsAdapter->Lock( lBuffer ) )
          {
-            logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_VideoBuffer_Lock.log", "a");
+            logFile = NULL;
             if(logFile) { 
                fprintf(logFile, "[Frame %d] Lock: Lock() succeeded, buffer=%p (mXRes=%d, mYRes=%d, expected size=%d)\n", 
                        frame_count, lBuffer, mXRes, mYRes, mXRes * mYRes);
@@ -1039,7 +1035,7 @@ BOOL MR_VideoBuffer::Lock()
          }
          else
          {
-            logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_VideoBuffer_Lock.log", "a");
+            logFile = NULL;
             if(logFile) { fprintf(logFile, "[Frame %d] Lock: Lock() returned FALSE (already locked)\n", frame_count); fflush(logFile); fclose(logFile); }
             
             PRINT_LOG( "Lock: SDL2Graphics buffer acquisition failed" );
@@ -1047,7 +1043,7 @@ BOOL MR_VideoBuffer::Lock()
          }
       }
       catch(...) {
-         logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_VideoBuffer_Lock.log", "a");
+         logFile = NULL;
          if(logFile) { fprintf(logFile, "[Frame %d] Lock: EXCEPTION caught in Lock()\n", frame_count); fflush(logFile); fclose(logFile); }
          return FALSE;
       }
@@ -1138,7 +1134,7 @@ BOOL MR_VideoBuffer::Lock()
 
 void MR_VideoBuffer::Unlock()
 {
-   FILE *debugLog = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_Unlock_Called.log", "a");
+   FILE *debugLog = NULL;
    if(debugLog) { fprintf(debugLog, "Unlock() called\n"); fflush(debugLog); fclose(debugLog); }
    
    PRINT_LOG( "Unlock: START" );
@@ -1153,7 +1149,7 @@ void MR_VideoBuffer::Unlock()
 
    PRINT_LOG( "Unlock: Buffer OK, checking mode" );
    
-   FILE *logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_Unlock_Path.log", "a");
+   FILE *logFile = NULL;
    if(logFile) {
       fprintf(logFile, "Unlock called: mBuffer=%p, IsSDL2Available=%d, adapter=%p\n", 
               mBuffer, IsSDL2GraphicsAvailable(), g_SDL2GraphicsAdapter);
@@ -1170,7 +1166,7 @@ void MR_VideoBuffer::Unlock()
       }
       // SDL2Graphics mode - pass our buffer to adapter for display
       PRINT_LOG( "Unlock: SDL2Graphics mode, calling adapter Unlock with buffer=%p", mBuffer );
-      FILE *logFile2 = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_VideoBuffer_Unlock.log", "a");
+      FILE *logFile2 = NULL;
       if(logFile2) {
          fprintf(logFile2, "Unlock: SDL2Graphics mode - buffer=%p, mXRes=%d, mYRes=%d, mLineLen=%d\n", 
                  mBuffer, mXRes, mYRes, mLineLen);
@@ -1182,7 +1178,7 @@ void MR_VideoBuffer::Unlock()
          g_SDL2GraphicsAdapter->Unlock(mBuffer);  // Pass our buffer for display
          
          // Log successful SDL2 unlock
-         FILE *logFile3 = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_SDL2_Unlock_Success.log", "a");
+         FILE *logFile3 = NULL;
          if(logFile3) {
             fprintf(logFile3, "SDL2 Unlock succeeded\n");
             fflush(logFile3);
@@ -1192,7 +1188,7 @@ void MR_VideoBuffer::Unlock()
          // DON'T set mBuffer to NULL - keep it for the next frame
          // Setting it to NULL was causing buffer re-allocation issues
          // The buffer remains valid across Lock/Unlock cycles
-         FILE *logFile4 = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_Unlock_Lifecycle.log", "a");
+         FILE *logFile4 = NULL;
          if(logFile4) {
             fprintf(logFile4, "Keeping mBuffer at %p (NOT setting to NULL)\n", mBuffer);
             fflush(logFile4);
@@ -1201,7 +1197,7 @@ void MR_VideoBuffer::Unlock()
       }
       catch(...) {
          // SDL2 Unlock crashed!
-         FILE *crashLog = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_SDL2_Unlock_CRASHED.log", "a");
+         FILE *crashLog = NULL;
          if(crashLog) {
             fprintf(crashLog, "SDL2 Unlock CRASHED! mBuffer was %p\n", mBuffer);
             fflush(crashLog);

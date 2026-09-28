@@ -71,7 +71,7 @@ void MR_InitModule( HMODULE pModule )
    char lResourcePath[MAX_PATH];
    
    // Write log file at working directory
-   FILE* logFile = fopen("Game2_ObjFac1Init.log", "a");
+   FILE* logFile = NULL;
    if (logFile)
    {
       fprintf(logFile, "\n========== MR_InitModule Called ==========\n");
@@ -177,7 +177,7 @@ CString MR_GetObjectDescription( MR_UInt16 /*pClassId*/ )
 
 MR_ObjectFromFactory* MR_GetObject( MR_UInt16 pClassId )
 {
-   FILE* logFile = fopen("Game2_ObjFac1GetObject.log", "a");
+   FILE* logFile = NULL;
    if (logFile)
    {
       fprintf(logFile, "\nMR_GetObject called with pClassId=%d\n", pClassId);

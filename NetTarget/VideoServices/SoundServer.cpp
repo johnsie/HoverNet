@@ -261,7 +261,7 @@ BOOL MR_SoundBuffer::Init( const char* pData, int pNbCopy )
       }
 
       // DEBUG: Log buffer creation
-      FILE* logFile = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_SoundBufferInit.log", "a");
+      FILE* logFile = NULL;
       if(logFile) {
          fprintf(logFile, "Sound Buffer Created: Buffer=%d, Copies=%d, Freq=%d, Channels=%d, Bits=%d, DataLen=%d\n",
             mALBuffers[0], mNbCopy, mNormalFreq, lWaveFormat->nChannels, lWaveFormat->wBitsPerSample, lBufferLen);
@@ -355,7 +355,7 @@ void MR_ShortSound::Play( int pDB, double pSpeed, int pPan )
       // DEBUG: Log each play call
       static int play_count = 0;
       if(play_count % 50 == 0) {
-         FILE* logFile = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_SoundPlay.log", "a");
+         FILE* logFile = NULL;
          if(logFile) {
             float lGain = powf(10.0f, pDB / 20.0f);
             fprintf(logFile, "Play #%d: Source=%d, DB=%d, Gain=%.3f, Speed=%.2f, Pan=%d, State before play:\n",
@@ -502,7 +502,7 @@ BOOL MR_SoundServer::Init( HWND pWindow )
 {
    try
    {
-      FILE* debugLog = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_OpenAL_DeviceDebug.log", "w");
+      FILE* debugLog = NULL;
       
       // Try common audio device names that might work
       const char* commonDevices[] = {
@@ -595,7 +595,7 @@ BOOL MR_SoundServer::Init( HWND pWindow )
       alListenerfv(AL_ORIENTATION, lOrient);
 
       // DEBUG: Log OpenAL initialization
-      FILE* logFile = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_OpenAL_Init.log", "w");
+      FILE* logFile = NULL;
       if(logFile) {
          fprintf(logFile, "OpenAL Initialized Successfully\n");
          fprintf(logFile, "Device: %s\n", alcGetString(gOpenALDevice, ALC_DEVICE_SPECIFIER));
@@ -720,7 +720,7 @@ void MR_SoundServer::Play( MR_ContinuousSound* pSound, int pCopy, int pDB, doubl
       // Debug logging
       static int callCount = 0;
       if(callCount % 100 == 0) {
-         FILE* logFile = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_PlayContinuousSound.log", "a");
+         FILE* logFile = NULL;
          if(logFile) {
             fprintf(logFile, "[Play Continuous] Call #%d: pSound=%p, pCopy=%d, pDB=%d, pSpeed=%.2f\n",
                callCount, pSound, pCopy, pDB, pSpeed);
@@ -741,7 +741,7 @@ void MR_SoundServer::ApplyContinuousPlay()
       {
          static int callCount = 0;
          if(callCount % 100 == 0) {
-            FILE* logFile = fopen("C:\\originalhr\\HoverRace\\Release\\Game2_ApplyContinuousPlay.log", "a");
+            FILE* logFile = NULL;
             if(logFile) {
                fprintf(logFile, "[ApplyContinuousPlay] Call #%d: gOpenALContext=%p\n", callCount, gOpenALContext);
                fflush(logFile);

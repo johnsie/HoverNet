@@ -33,10 +33,6 @@ static BOOL CALLBACK WinFunc( HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARA
 
 void DisplaySponsorWindow( HWND pWindow )
 {
-   FILE* logFile = fopen("Game2_TrackLoad.log", "a");
-   fprintf(logFile, "DisplaySponsorWindow: Starting\n");
-   fflush(logFile);
-   
    // Verify if the sponsor file exist
    FILE* lFile = fopen( "source.dat", "rb" );
    

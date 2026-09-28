@@ -195,7 +195,7 @@ BOOL CheckKeyState( int pKeyIndex )
          static int focusLogCount = 0;
          if( debugCount % 30 == 0 || lReturnValue )
          {
-            FILE* dbgLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_KeyState.log", "a");
+            FILE* dbgLog = NULL;
             if( dbgLog )
             {
                fprintf(dbgLog, "[CheckKeyState] Index=%d, KeyValue=%d, Raw=%d (0x%04X), Masked=%d, Return=%d\n",
@@ -210,7 +210,7 @@ BOOL CheckKeyState( int pKeyIndex )
          {
             HWND foreground = GetForegroundWindow();
             HWND gameWindow = GetActiveWindow();
-            FILE* focusLog = fopen("C:\\originalhr2\\HoverRaceAI\\Release\\Game2_FocusState.log", "a");
+            FILE* focusLog = NULL;
             if( focusLog )
             {
                fprintf(focusLog, "[FocusCheck] Foreground=%p, ActiveWindow=%p\n", foreground, gameWindow);
@@ -1073,7 +1073,7 @@ int MR_GameApp::MainLoop()
    MSG  lMessage;
    BOOL lEofGame = FALSE;
    int lFrameCount = 0;
-   FILE *logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "w");
+   FILE *logFile = NULL;
 
    if(logFile) fprintf(logFile, "--- MainLoop START ---\n");
    if(logFile) { fprintf(logFile, "Frame 0 STARTUP: About to enter while loop\n"); fflush(logFile); }
@@ -1194,7 +1194,7 @@ int MR_GameApp::MainLoop()
 
    Clean();
 
-   logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+   logFile = NULL;
    if(logFile) { fprintf(logFile, "--- MainLoop END ---\n"); fflush(logFile); fclose(logFile); }
 
    return 0;
@@ -1314,7 +1314,7 @@ BOOL MR_GameApp::InitGame()
    char lInitLogPath[MAX_PATH] = { 0 };
    GetTempPathA( sizeof(lInitLogPath), lInitLogPath );
    strcat_s( lInitLogPath, sizeof(lInitLogPath), "HoverNet-Game2-Init.log" );
-   FILE* logFile = fopen( lInitLogPath, "a" );
+   FILE* logFile = NULL;
    if(logFile) fprintf(logFile, "\n--- MR_GameApp::InitGame START ---\n"), fflush(logFile);
    
    BOOL lReturnValue =TRUE;
@@ -1489,7 +1489,7 @@ void MR_GameApp::RenderGameInfoOverlay( MR_VideoBuffer* pDest, const MR_ClientSe
 void MR_GameApp::RefreshView(BOOL pShouldPresent)
 {
    static int lColor = 0;
-   FILE *logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+   FILE *logFile = NULL;
    if(logFile) { fprintf(logFile, "RefreshView: ENTERED - pShouldPresent=%d\n", pShouldPresent ? 1 : 0); fflush(logFile); fclose(logFile); }
 
    // CRITICAL: Skip rendering if a menu or modal dialog is active
@@ -1502,7 +1502,7 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
    // In this case, skip rendering to let Windows draw the menu/dialog
    if (foregroundWindow != mMainWindow || activeWindow != mMainWindow)
    {
-      logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+      logFile = NULL;
       if(logFile) { fprintf(logFile, "RefreshView: SKIPPED - modal dialog or menu is active (foreground=%p, active=%p, main=%p)\n", foregroundWindow, activeWindow, mMainWindow); fflush(logFile); fclose(logFile); }
       return;  // Skip rendering entirely when menu/dialog is active
    }
@@ -1511,22 +1511,22 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
 
    try {
       // Game processing
-      logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+      logFile = NULL;
       if(logFile) { fprintf(logFile, "RefreshView: mVideoBuffer = %p\n", mVideoBuffer); fflush(logFile); fclose(logFile); }
       if( mVideoBuffer != NULL )
       {
-         logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+         logFile = NULL;
          if(logFile) { fprintf(logFile, "RefreshView: About to call Lock()\n"); fflush(logFile); fclose(logFile); }
          if( mVideoBuffer->Lock() )
          {
             bLocked = TRUE;  // Mark that we successfully locked
-            logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+            logFile = NULL;
             if(logFile) { fprintf(logFile, "RefreshView: Lock() succeeded, mCurrentSession=%p\n", mCurrentSession); fflush(logFile); fclose(logFile); }
             
             try {
                if( mCurrentSession != NULL )
                {
-               logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+               logFile = NULL;
                if(logFile) { fprintf(logFile, "RefreshView: mCurrentSession is NOT NULL, proceeding with rendering\n"); fflush(logFile); fclose(logFile); }
                MR_SimulationTime lTime = mCurrentSession->GetSimulationTime();
 
@@ -1558,15 +1558,15 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
                   }
                }
 
-               logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+               logFile = NULL;
                if(logFile) { fprintf(logFile, "RefreshView: MODE CHECK - mCurrentMode=%d, e3DView=%d, eDebugView=%d\n", (int)mCurrentMode, (int)e3DView, (int)eDebugView); fflush(logFile); fclose(logFile); }
 
                if( mCurrentMode == e3DView )
                {
-                  logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                  logFile = NULL;
                   if(logFile) { fprintf(logFile, "RefreshView: ENTERING e3DView block\n"); fflush(logFile); fclose(logFile); }
                   
-                  logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                  logFile = NULL;
                   if(logFile) { fprintf(logFile, "RefreshView: In e3DView mode\n"); fflush(logFile); fclose(logFile); }
                   
                      // Initialization: decrement mClrScrTodo and DO NOT call DrawBackground
@@ -1577,72 +1577,72 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
                         mClrScrTodo--;
                      }
 
-                     logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                     logFile = NULL;
                      if(logFile) { fprintf(logFile, "RefreshView: mObserver1=%p\n", mObserver1); fflush(logFile); fclose(logFile); }
                      
                      MR_MainCharacter* lCharacter1 = mCurrentSession->GetMainCharacter();
-                     logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                     logFile = NULL;
                      if(logFile) { fprintf(logFile, "RefreshView: GetMainCharacter() returned %p\n", lCharacter1); fflush(logFile); fclose(logFile); }
                      
                      if( mObserver1 != NULL && lCharacter1 != NULL )
                      {
-                        logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                        logFile = NULL;
                         if(logFile) { fprintf(logFile, "RefreshView: About to call Observer1 RenderNormalDisplay\n"); fflush(logFile); fclose(logFile); }
                         
                         try {
                            mObserver1->RenderNormalDisplay( mVideoBuffer, mCurrentSession, lCharacter1, lTime, mCurrentSession->GetBackImage() );
-                           logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                           logFile = NULL;
                            if(logFile) { fprintf(logFile, "RefreshView: Observer1 RenderNormalDisplay completed\n"); fflush(logFile); fclose(logFile); }
                         }
                         catch(...) {
-                           logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                           logFile = NULL;
                            if(logFile) { fprintf(logFile, "RefreshView: EXCEPTION in Observer1 RenderNormalDisplay!\n"); fflush(logFile); fclose(logFile); }
                         }
                      }
                      else
                      {
-                        logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                        logFile = NULL;
                         if(logFile) { fprintf(logFile, "RefreshView: Cannot render - observer1=%p, character1=%p\n", mObserver1, lCharacter1); fflush(logFile); fclose(logFile); }
                      }
 
-                  logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                  logFile = NULL;
                   if(logFile) { fprintf(logFile, "RefreshView: mObserver2=%p\n", mObserver2); fflush(logFile); fclose(logFile); }
                   
                   MR_MainCharacter* lCharacter2 = mCurrentSession->GetMainCharacter2();
-                  logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                  logFile = NULL;
                   if(logFile) { fprintf(logFile, "RefreshView: GetMainCharacter2() returned %p\n", lCharacter2); fflush(logFile); fclose(logFile); }
                      
                      if( mObserver2 != NULL && lCharacter2 != NULL )
                      {
-                        logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                        logFile = NULL;
                         if(logFile) { fprintf(logFile, "RefreshView: About to call Observer2 RenderNormalDisplay\n"); fflush(logFile); fclose(logFile); }
                         
                         try {
                            mObserver2->RenderNormalDisplay( mVideoBuffer, mCurrentSession, lCharacter2, lTime, mCurrentSession->GetBackImage() );
-                           logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                           logFile = NULL;
                            if(logFile) { fprintf(logFile, "RefreshView: Observer2 RenderNormalDisplay completed\n"); fflush(logFile); fclose(logFile); }
                         }
                         catch(...) {
-                           logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                           logFile = NULL;
                            if(logFile) { fprintf(logFile, "RefreshView: EXCEPTION in Observer2 RenderNormalDisplay!\n"); fflush(logFile); fclose(logFile); }
                         }
                      }
                      else
                      {
-                        logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                        logFile = NULL;
                         if(logFile) { fprintf(logFile, "RefreshView: Cannot render observer2 - observer2=%p, character2=%p\n", mObserver2, lCharacter2); fflush(logFile); fclose(logFile); }
                      }
 
                   // Render UI overlay with game information AFTER 3D view
-                  logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                  logFile = NULL;
                   if(logFile) { fprintf(logFile, "RefreshView: About to render UI overlay\n"); fflush(logFile); fclose(logFile); }
                   
                   RenderGameInfoOverlay( mVideoBuffer, mCurrentSession, lCharacter1, lCharacter2, lTime );
                   
-                  logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                  logFile = NULL;
                   if(logFile) { fprintf(logFile, "RefreshView: UI overlay rendering completed\n"); fflush(logFile); fclose(logFile); }
                   
-                  logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                  logFile = NULL;
                   if(logFile) { fprintf(logFile, "RefreshView: EXITING e3DView block\n"); fflush(logFile); fclose(logFile); }
                }
                else if( mCurrentMode == eDebugView )
@@ -1666,11 +1666,11 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
             }
             else
             {
-               logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+               logFile = NULL;
                if(logFile) { fprintf(logFile, "RefreshView: mCurrentSession is NULL! Clearing buffer instead of rendering\n"); fflush(logFile); fclose(logFile); }
                mVideoBuffer->Clear( lColor++ );
             }
-            logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+            logFile = NULL;
             if(logFile) { fprintf(logFile, "RefreshView: About to call Unlock()\n"); fflush(logFile); fclose(logFile); }
             
             if( bLocked && mVideoBuffer != NULL )
@@ -1683,7 +1683,7 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
                   {
                      MemoryBarrier();
                      mVideoBuffer->Unlock();
-                     logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                     logFile = NULL;
                      if(logFile) { fprintf(logFile, "RefreshView: Unlock() and Present() called\n"); fflush(logFile); fclose(logFile); }
                   }
                   else
@@ -1691,12 +1691,12 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
                      // Skip presentation - keeps last frame on screen instead of partial render
                      // This replicates the "unfocused window effect" that eliminates flickering
                      mVideoBuffer->Unlock();
-                     logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                     logFile = NULL;
                      if(logFile) { fprintf(logFile, "RefreshView: Unlock() called but Present SKIPPED to stabilize display\n"); fflush(logFile); fclose(logFile); }
                   }
                }
                catch(...) {
-                  logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                  logFile = NULL;
                   if(logFile) { fprintf(logFile, "RefreshView: EXCEPTION in Unlock()!\n"); fflush(logFile); fclose(logFile); }
                }
             }
@@ -1709,18 +1709,18 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
             {
                // Inner catch - catches exceptions during rendering
                // CRITICAL: Must unlock the buffer even if rendering fails
-               logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+               logFile = NULL;
                if(logFile) { fprintf(logFile, "RefreshView: CAUGHT EXCEPTION in rendering pipeline, attempting Unlock()\n"); fflush(logFile); fclose(logFile); }
                
                if( bLocked && mVideoBuffer != NULL )
                {
                   try {
                      mVideoBuffer->Unlock();
-                     logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                     logFile = NULL;
                      if(logFile) { fprintf(logFile, "RefreshView: Emergency Unlock() succeeded\n"); fflush(logFile); fclose(logFile); }
                   }
                   catch(...) {
-                     logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+                     logFile = NULL;
                      if(logFile) { fprintf(logFile, "RefreshView: Emergency Unlock() also failed!\n"); fflush(logFile); fclose(logFile); }
                   }
                }
@@ -1732,7 +1732,7 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
    catch(...)
    {
       // Outer catch - catches any uncaught exceptions
-      logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+      logFile = NULL;
       if(logFile) { fprintf(logFile, "RefreshView: OUTER EXCEPTION CATCH\n"); fflush(logFile); fclose(logFile); }
    }
 
@@ -1756,17 +1756,17 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
                MR_SoundServer::ApplyContinuousPlay();
             }
             catch(...) {
-               logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+               logFile = NULL;
                if(logFile) { fprintf(logFile, "RefreshView: EXCEPTION in ApplyContinuousPlay\n"); fflush(logFile); fclose(logFile); }
             }
             
-            logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+            logFile = NULL;
             if(logFile) { fprintf(logFile, "RefreshView: ApplyContinuousPlay completed\n"); fflush(logFile); fclose(logFile); }
          }
       }
    }
    */
-   logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+   logFile = NULL;
    if(logFile) { fprintf(logFile, "RefreshView: EXITING (success)\n"); fflush(logFile); fclose(logFile); }
 }
 
@@ -1774,7 +1774,7 @@ void MR_GameApp::RefreshView(BOOL pShouldPresent)
 
 void MR_GameApp::ReadAssyncInputControler()
 {
-   FILE *logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+   FILE *logFile = NULL;
    if(logFile) { fprintf(logFile, "ReadAssyncInputControler: ENTRY, mCurrentSession=%p\n", mCurrentSession); fflush(logFile); fclose(logFile); }
    
    gFirstKDBResetJoy1 = TRUE;
@@ -1782,7 +1782,7 @@ void MR_GameApp::ReadAssyncInputControler()
 
    if( mCurrentSession != NULL )
    {
-      logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+      logFile = NULL;
       if(logFile) { fprintf(logFile, "ReadAssyncInputControler: Session valid, checking controls\n"); fflush(logFile); fclose(logFile); }
       
       // Check controls regardless of window focus for gameplay
@@ -1794,13 +1794,13 @@ void MR_GameApp::ReadAssyncInputControler()
          int lControlState2 = 0;
 
          // Log to main loop for debugging
-         logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+         logFile = NULL;
          if(logFile) { fprintf(logFile, "ReadAssyncInput: mMotorOn1=%d, Shift check result=%d\n", mMotorOn1, CheckKeyState(mMotorOn1)); fflush(logFile); fclose(logFile); }
 
          if( CheckKeyState( mMotorOn1 ) )
          {
             lControlState1 |= MR_MainCharacter::eMotorOn;
-            logFile = fopen("c:\\originalhr\\HoverRace\\Release\\Game2_MainLoop.log", "a");
+            logFile = NULL;
             if(logFile) { fprintf(logFile, "Motor ON DETECTED\n"); fflush(logFile); fclose(logFile); }
          }
 
@@ -2133,7 +2133,7 @@ void MR_GameApp::NewLocalSession()
    int     lNbLap;
    BOOL    lAllowWeapons;
 
-   FILE* logFile = fopen("Game2_TrackLoad.log", "a");
+   FILE* logFile = NULL;
    if(logFile) fprintf(logFile, "\n=== NewLocalSession Start ===\n"), fflush(logFile);
    
    // Auto-load ClassicH.trk without dialog for graphics rendering
@@ -2618,7 +2618,7 @@ void MR_GameApp::NewInternetSession( )
    GetCurrentDirectoryA(sizeof(lLogPath), lLogPath);
    strcat_s(lLogPath, sizeof(lLogPath), "\\NewInternetSession.log");
    
-   FILE* lDebugLog = fopen(lLogPath, "a");
+   FILE* lDebugLog = NULL;
    if(lDebugLog) fprintf(lDebugLog, "\n=== NewInternetSession START at %I64d ===\n", __int64(timeGetTime())), fflush(lDebugLog);
 
    try
