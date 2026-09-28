@@ -1989,6 +1989,46 @@ BOOL CALLBACK MR_NetworkInterface::ListCallBack( HWND pWindow, UINT  pMsgId, WPA
                      break;
 
 
+                  case MRNM_CHAT_MESSAGE:
+                     {
+                        // This dialog polls MR_NetworkPort::Poll() directly instead of
+                        // going through MR_NetworkInterface::Poll() (see that function's
+                        // MRNM_CHAT_MESSAGE case above), so the RaceServer's 4-byte
+                        // sender-client-id prefix hasn't been stripped yet -- do that
+                        // here too, the same way, or it would show up as garbage
+                        // prepended to the chat text.
+                        if( lBuffer->mDataLen < (int)sizeof(int) )
+                        {
+                           break;
+                        }
+                        int lServerClientId = -1;
+                        memcpy( &lServerClientId, lBuffer->mData, sizeof(lServerClientId) );
+                        const int lPeerSlot = mActiveInterface->RegisterServerPeer( lServerClientId );
+
+                        CString lSenderName;
+                        if( lPeerSlot >= 0 && mActiveInterface->mClientName[ lPeerSlot ].GetLength() > 0 )
+                        {
+                           lSenderName = mActiveInterface->mClientName[ lPeerSlot ];
+                        }
+                        else
+                        {
+                           lSenderName.Format( "Player %d", lServerClientId );
+                        }
+
+                        CString lText( (const char*)lBuffer->mData + sizeof(int), lBuffer->mDataLen - sizeof(int) );
+
+                        HWND lChatLog = GetDlgItem( pWindow, IDC_WAITROOM_CHAT );
+                        if( lChatLog != NULL )
+                        {
+                           const int lExistingLen = GetWindowTextLength( lChatLog );
+                           CString lLine;
+                           lLine.Format( "%s%s: %s", lExistingLen > 0 ? "\r\n" : "", (const char*)lSenderName, (const char*)lText );
+                           SendMessage( lChatLog, EM_SETSEL, lExistingLen, lExistingLen );
+                           SendMessage( lChatLog, EM_REPLACESEL, FALSE, (LPARAM)(const char*)lLine );
+                        }
+                     }
+                     break;
+
                   case MRNM_LAG_TEST:
                      // return the message and add the current time
                      lAnswer.mMessageType = MRNM_LAG_ANSWER;

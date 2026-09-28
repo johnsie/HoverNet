@@ -106,6 +106,7 @@
 #define IDC_CHAT5                       1043
 #define IDC_CHAT6                       1044
 #define IDC_CHAT7                       1045
+#define IDC_WAITROOM_CHAT               1076
 #define IDC_ID_MAJOR                    1048
 #define IDC_KEY1                        1049
 #define IDC_KEY2                        1050
@@ -345,7 +346,7 @@
 #define _APS_3D_CONTROLS                     1
 #define _APS_NEXT_RESOURCE_VALUE        158
 #define _APS_NEXT_COMMAND_VALUE         40016
-#define _APS_NEXT_CONTROL_VALUE         1075
+#define _APS_NEXT_CONTROL_VALUE         1077
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
