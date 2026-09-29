@@ -184,7 +184,9 @@ sound's gain in the shared SDL2 mixer
 `SoundServer.cpp` also got the same API for consistency, but is no longer
 compiled on either platform). The Windows Options sheet now exposes the same
 persisted master-volume and mute behavior in a dedicated Audio tab, including
-live preview and Cancel rollback. A fullscreen toggle is also done: `SDL2Graphics.cpp` already
+live preview and Cancel rollback. Windows settings now write to the current
+user's registry hive instead of requiring machine-wide access, with a read
+fallback for legacy `HKLM` installations. A fullscreen toggle is also done: `SDL2Graphics.cpp` already
 calls `SDL_RenderSetLogicalSize` to scale the fixed-resolution framebuffer to
 whatever window size results, so `SDL_SetWindowFullscreen` alone (no render-
 path changes) toggles it, applied live from the same Settings screen and

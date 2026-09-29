@@ -547,18 +547,22 @@ void MR_GameApp::LoadRegistry()
 
 
    // Now verify in the registry if this information can not be retrieved
-   HKEY lProgramKey;
+   HKEY lProgramKey = NULL;
 
-   int lError = RegOpenKeyEx( HKEY_LOCAL_MACHINE,
-                     "SOFTWARE\\GrokkSoft\\HoverNet",
-                     // "SOFTWARE",
-                     // NULL,
-                     0,
-                     KEY_EXECUTE,
-                     &lProgramKey          );
+   // 2.0 settings are per-user. Prefer the writable HKCU location, but retain
+   // a read-only fallback to the legacy machine-wide key so existing installs
+   // migrate naturally the next time SaveRegistry writes their values.
+   int lError = RegOpenKeyEx( HKEY_CURRENT_USER,
+                              "SOFTWARE\\GrokkSoft\\HoverNet", 0,
+                              KEY_READ, &lProgramKey );
+   if( lError != ERROR_SUCCESS )
+   {
+      lError = RegOpenKeyEx( HKEY_LOCAL_MACHINE,
+                             "SOFTWARE\\GrokkSoft\\HoverNet", 0,
+                             KEY_READ, &lProgramKey );
+   }
 
-
-   // if( lError == ERROR_SUCCESS )
+   if( lError == ERROR_SUCCESS )
    {
       MR_UInt8 lControlBuffer[14];
       DWORD    lControlBufferSize = sizeof( lControlBuffer );
@@ -716,24 +720,17 @@ void MR_GameApp::LoadRegistry()
          }
          #endif
 
+      RegCloseKey( lProgramKey );
    }
 }
 
 void MR_GameApp::SaveRegistry()
 {
    BOOL lReturnValue = TRUE;
-   HKEY lProgramKey;
-
-   /*
-   int lError = RegOpenKeyEx( HKEY_LOCAL_MACHINE,
-                     "SOFTWARE\\GrokkSoft\\HoverNet",
-                     0,
-                     KEY_WRITE,
-                     &lProgramKey          );
-   */
+   HKEY lProgramKey = NULL;
 
    DWORD lDummy;
-   int lError = RegCreateKeyEx( HKEY_LOCAL_MACHINE,
+   int lError = RegCreateKeyEx( HKEY_CURRENT_USER,
                                 "SOFTWARE\\GrokkSoft\\HoverNet",
                                 0,
                                 NULL,
@@ -876,6 +873,8 @@ void MR_GameApp::SaveRegistry()
                ASSERT( FALSE );
             }
          }
+
+      RegCloseKey( lProgramKey );
    }
 }
 
