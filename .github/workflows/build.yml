@@ -235,6 +235,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Legacy Inno Setup packaging failed" }
 
           $x64Release = "build\windows-shared\Release"
+          $vcRedist = Join-Path $x64Release "vc_redist.x64.exe"
+          Invoke-WebRequest "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile $vcRedist
+          $vcSignature = Get-AuthenticodeSignature $vcRedist
+          if ($vcSignature.Status -ne "Valid" -or $vcSignature.SignerCertificate.Subject -notmatch "Microsoft Corporation") {
+            throw "Downloaded Visual C++ x64 Redistributable does not have a valid Microsoft signature"
+          }
           New-Item -ItemType Directory -Force `
             "$x64Release\NetTarget\Tracks", `
             "$x64Release\NetTarget\LinuxClient\assets" | Out-Null
@@ -242,7 +248,7 @@ jobs:
           Copy-Item "NetTarget\Tracks\*.trk" "$x64Release\NetTarget\Tracks\" -Force
           Copy-Item "NetTarget\LinuxClient\assets\menu-hovercraft.bmp" `
             "$x64Release\NetTarget\LinuxClient\assets\menu-hovercraft.bmp" -Force
-          & "scripts\validate-windows-x64-package.ps1" -ReleaseDir $x64Release
+          & "scripts\validate-windows-x64-package.ps1" -ReleaseDir $x64Release -RequireVCRedist
           $env:HOVERNET_X64_RELEASE_DIR = (Resolve-Path $x64Release).Path
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "packaging\windows\HoverNet-x64.iss"
           if ($LASTEXITCODE -ne 0) { throw "Shared x64 Inno Setup packaging failed" }

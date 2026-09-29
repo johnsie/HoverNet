@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$ReleaseDir
+    [string]$ReleaseDir,
+    [switch]$RequireVCRedist
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,10 @@ $required = @(
     "NetTarget\ObjFac1.dat",
     "NetTarget\LinuxClient\assets\menu-hovercraft.bmp"
 )
+
+if ($RequireVCRedist) {
+    $required += "vc_redist.x64.exe"
+}
 
 foreach ($relativePath in $required) {
     $path = Join-Path $release $relativePath

@@ -527,7 +527,15 @@ implementation, disables Windows `min`/`max` macros there, includes the standard
 algorithm declarations used in their place, and marks the CMake module graph as
 static so legacy API headers no longer request DLL imports. The same explicit
 compatibility boundary now covers the shared object-factory plug-in, including
-its MFC collection types and standard `min`/`max` calls.
+its MFC collection types and standard `min`/`max` calls. The installed plug-in
+now resolves `ObjFac1.dat` from its own package directory before using the
+source-tree development fallback, and the player is linked as a native Windows
+GUI application rather than exposing a console window. Clean x64 installers now
+bundle Microsoft's signed Visual C++ x64 Redistributable and install it
+silently before first launch; both CI systems authenticate its Microsoft
+signature and require it in the installer staging tree. Their installed-client
+smoke tests temporarily hide the checkout copy of `ObjFac1.dat`, preventing a
+build-runner path from masking a broken package again.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.
