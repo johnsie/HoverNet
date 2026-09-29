@@ -133,7 +133,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Shared x64 client or RaceServer build failed" }
 
           $required = @(
-            "build\windows-shared\Release\HoverNetGame2Player.exe",
+            "build\windows-shared\Release\HoverNet.exe",
             "build\windows-shared\Release\ObjFac1.dll",
             "build\windows-shared\Release\RaceServer.exe"
           )
@@ -147,7 +147,7 @@ jobs:
         run: |
           $env:SDL_VIDEODRIVER = "dummy"
           $env:SDL_AUDIODRIVER = "dummy"
-          $client = "build\windows-shared\Release\HoverNetGame2Player.exe"
+          $client = "build\windows-shared\Release\HoverNet.exe"
           $scenarios = @(
             "--frames 1",
             "--settings-screen --frames 2",

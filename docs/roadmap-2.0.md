@@ -493,8 +493,9 @@ diagnostic on Windows, and removes the shared RaceServer client dependency on
 the legacy MFC precompiled header. Its socket ownership is now pointer-width safe
 for native x64 Windows instead of truncating Winsock handles to 32-bit integers.
 GitHub Actions and GitLab CI now also configure the portable CMake graph with
-the native x64 MSVC toolchain and build `HoverNetGame2Player` plus its
-object-factory plug-in. GitLab retains the executable, plug-in, and x64 SDL2
+the native x64 MSVC toolchain and build the shared `HoverNetGame2Player`
+target as the player-facing `HoverNet.exe`, plus its object-factory plug-in.
+GitLab retains the executable, plug-in, and x64 SDL2
 runtime together as a testable pipeline artifact. Both pipelines now run that
 x64 executable with SDL's headless video/audio drivers through startup and
 bounded Local Play, Settings, Controls, pause, results, and onboarding flows.

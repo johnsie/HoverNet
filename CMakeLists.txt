@@ -354,8 +354,13 @@ target_link_libraries(HoverNetGame2Player PRIVATE HoverNetObserver HoverNetClien
 # SDL rewrites main() to SDL_main() on Windows. Its small platform entry-point
 # library supplies WinMain and forwards into that shared client entry point;
 # Linux deliberately has no equivalent dependency.
-if(WIN32 AND TARGET SDL2::SDL2main)
-    target_link_libraries(HoverNetGame2Player PRIVATE SDL2::SDL2main)
+if(WIN32)
+    # Keep the descriptive internal CMake target name, but ship the shared
+    # Windows client under the player-facing successor to legacy Game2.exe.
+    set_target_properties(HoverNetGame2Player PROPERTIES OUTPUT_NAME HoverNet)
+    if(TARGET SDL2::SDL2main)
+        target_link_libraries(HoverNetGame2Player PRIVATE SDL2::SDL2main)
+    endif()
 endif()
 
 if(BUILD_TESTING)
