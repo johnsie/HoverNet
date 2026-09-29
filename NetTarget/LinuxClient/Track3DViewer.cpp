@@ -39,6 +39,7 @@
 #include <cfloat>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <fstream>
 #include <string>
 #include <map>
@@ -3907,6 +3908,19 @@ private:
     bool mInitialized;
 };
 
+int FatalClientError(const std::string& message)
+{
+    std::fprintf(stderr, "%s\n", message.c_str());
+#ifdef _WIN32
+    const char* videoDriver = std::getenv("SDL_VIDEODRIVER");
+    if (videoDriver == nullptr || std::strcmp(videoDriver, "dummy") != 0) {
+        MessageBoxA(nullptr, message.c_str(), "HoverNet could not continue",
+                    MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+    }
+#endif
+    return 1;
+}
+
 bool IsPlayerMode(int argc, char** argv)
 {
 #ifdef HOVERNET_GAME2_PLAYER
@@ -3917,7 +3931,7 @@ bool IsPlayerMode(int argc, char** argv)
 }
 }
 
-int main(int argc, char** argv)
+int RunClient(int argc, char** argv)
 {
 #ifdef HOVERNET_GAME2_PLAYER
     if (HasArgument(argc, argv, "--print-config-paths")) {
@@ -3959,8 +3973,7 @@ int main(int argc, char** argv)
 #endif
     MR_VideoBuffer buffer(nullptr, 1.0, 0.5, 0.5);
     if (!buffer.SetVideoMode(kWidth, kHeight) || !buffer.Lock()) {
-        std::fprintf(stderr, "Could not create 3D framebuffer\n");
-        return 1;
+        return FatalClientError("Could not create the 3D framebuffer.");
     }
     MR_ClientSession session;
     const BOOL allowWeapons = playerMode ? TRUE : FALSE;
@@ -3972,6 +3985,12 @@ int main(int argc, char** argv)
     int room = 0;
 
     const std::string resourcePath = SourcePath("NetTarget/ObjFac1.dat");
+    std::ifstream resourceCheck(resourcePath.c_str(), std::ios::binary);
+    if (!resourceCheck.good()) {
+        return FatalClientError(std::string("Could not load game resources from ") + resourcePath +
+                                ". Reinstall HoverNet or restore ObjFac1.dat.");
+    }
+    resourceCheck.close();
     MR_ResourceLib resources(resourcePath.c_str());
 
     MR_3DViewPort viewport;
@@ -3980,8 +3999,7 @@ int main(int argc, char** argv)
     MR_Observer* observer = playerMode ? MR_Observer::New() : nullptr;
     bool debugView = playerMode && HasArgument(argc, argv, "--debug");
     if (playerMode && observer == nullptr) {
-        std::fprintf(stderr, "Could not create the Game2 observer\n");
-        return 1;
+        return FatalClientError("Could not create the race observer.");
     }
     if (observer != nullptr) observer->SetLargeHudText(LoadLargeHudText() ? TRUE : FALSE);
 #endif
@@ -4065,7 +4083,7 @@ int main(int argc, char** argv)
 
     SDL2GraphicsBackend graphics;
     if (!graphics.Initialize(nullptr, kWidth, kHeight)) {
-        return 1;
+        return FatalClientError(std::string("Could not initialize graphics: ") + SDL_GetError());
     }
 #ifdef HOVERNET_GAME2_PLAYER
     // The renderer's logical size keeps gameplay at its original resolution;
@@ -4300,8 +4318,7 @@ int main(int argc, char** argv)
     };
 
     if (playerMode && menuFontHandle == nullptr) {
-        std::fprintf(stderr, "Could not load the menu font\n");
-        return 1;
+        return FatalClientError("Could not load the menu font from ObjFac1.dat.");
     }
     if (playerMode) {
         if (HasArgument(argc, argv, "--lobby-screen")) {
@@ -5019,4 +5036,17 @@ int main(int argc, char** argv)
 #endif
 
     return 0;
+}
+
+int main(int argc, char** argv)
+{
+    try {
+        return RunClient(argc, argv);
+    }
+    catch (const std::exception& error) {
+        return FatalClientError(std::string("HoverNet stopped because of an unexpected error: ") + error.what());
+    }
+    catch (...) {
+        return FatalClientError("HoverNet stopped because of an unexpected error. Reinstall HoverNet if this continues.");
+    }
 }

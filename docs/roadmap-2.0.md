@@ -535,7 +535,13 @@ bundle Microsoft's signed Visual C++ x64 Redistributable and install it
 silently before first launch; both CI systems authenticate its Microsoft
 signature and require it in the installer staging tree. Their installed-client
 smoke tests temporarily hide the checkout copy of `ObjFac1.dat`, preventing a
-build-runner path from masking a broken package again.
+build-runner path from masking a broken package again. Because the shared Windows
+client is now a GUI-subsystem executable with no diagnostic console, fatal
+framebuffer, renderer, observer, resource-pack, and menu-font failures are also
+reported in a native error dialog while retaining `stderr` output for Linux and
+automation. The top-level client boundary catches legacy resource exceptions,
+and a missing `ObjFac1.dat` message includes the attempted path plus a reinstall
+remedy instead of briefly showing a black window and disappearing.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.
