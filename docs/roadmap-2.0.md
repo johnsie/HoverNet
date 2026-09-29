@@ -364,13 +364,21 @@ remains reachable through How to Play on the main menu.
 
 The Linux main menu is now consolidated into ImGui without looking like a
 settings dialog: an animated speed-line and perspective-grid race backdrop,
-stylised hovercraft silhouette, stronger title treatment, prominent race-mode
-actions, and a separate utility group give it a game-front-end hierarchy. It
-retains UI scaling, resized/fullscreen mouse accuracy, keyboard/controller
-navigation, version display, and bounded automation's Local Play default.
+a bespoke round-skirt hovercraft hero with visible pilot and oversized turbines,
+stronger title treatment, prominent race-mode actions, and a separate utility
+group give it a game-front-end hierarchy. It retains UI scaling,
+resized/fullscreen mouse accuracy, keyboard/controller navigation, version
+display, and bounded automation's Local Play default.
 
-The rest of Phase 3 (full ImGui menu consolidation, advanced controller axis
-customization, remaining HUD improvements and accessibility work, and
+The in-race and lobby Escape menu is now consolidated into that same ImGui
+visual language as well. It borrows the lobby's live ImGui context when nested
+there and owns a temporary context when opened during a race, preserving
+keyboard/controller navigation and all resume, race-switching, settings,
+controls, and quit behavior. `HoverNetPauseMenuSmoke` gives the standalone
+render/lifecycle path deterministic headless coverage.
+
+The rest of Phase 3 (remaining ImGui menu consolidation, advanced controller
+axis customization, remaining HUD improvements and accessibility work, and
 Windows/Linux menu parity) remains.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.

@@ -40,8 +40,8 @@ namespace
 constexpr int kWidth = 1024;
 constexpr int kHeight = 768;
 
-// WindowToLogicalPoint/RewriteMouseEventToLogical (used by ConfirmQuit and
-// RunPauseMenu below, for translating real mouse coordinates into the fixed
+// WindowToLogicalPoint/RewriteMouseEventToLogical (used by ConfirmQuit below,
+// for translating real mouse coordinates into the fixed
 // kWidth x kHeight space those raw bitmap-font screens draw at) now live in
 // ImGuiLogicalCoords.h -- pulled out of this file so
 // HoverNetImGuiLogicalMouseSmoke can exercise the exact same code the client
@@ -1036,7 +1036,8 @@ enum class PauseChoice
 };
 
 PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
-                         MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline);
+                         MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline,
+                         int pFrameLimit = -1);
 
 struct SettingsResult
 {
@@ -1244,7 +1245,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 // pause menu Escape brings up everywhere else in the client,
                 // so there's a way back out of an accidental press, and a way
                 // to reach Settings without leaving first.
-                const PauseChoice pauseChoice = RunPauseMenu(graphics, buffer, viewport, font, false);
+                const PauseChoice pauseChoice = RunPauseMenu(graphics, buffer, viewport, font, false, pFrameLimit);
                 if (pauseChoice == PauseChoice::eQuit) {
                     g_QuitConfirmed = true;
                     running = false;
@@ -1788,87 +1789,148 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
 // as a shortcut to the online lobby -- callers do exactly what eLeaveRace
 // already does when online (reset and rejoin the lobby).
 PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
-                         MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline)
+                         MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline,
+                         int pFrameLimit)
 {
-    const char* options[] = {"Resume", pIsOnline ? "Leave Race" : "New Local Race",
-                             "Online Multiplayer Lobby", "Settings", "Controls", "Quit HoverNet"};
-    constexpr int optionCount = 6;
-    int selected = 0;
-    const int panelWidth = std::min(520, viewport.GetXRes() - 48);
-    const int panelHeight = 504;
-    const UiRect panel{(viewport.GetXRes() - panelWidth) / 2,
-                       (viewport.GetYRes() - panelHeight) / 2, panelWidth, panelHeight};
-    const int buttonWidth = panelWidth - 80;
-    const int buttonHeight = 48;
-    const int firstButtonY = panel.y + 112;
+    const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
+    if (ownsImGuiContext) {
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+        ImFontConfig fontConfig;
+        fontConfig.SizePixels = 19.0f;
+        io.Fonts->AddFontDefault(&fontConfig);
+        ApplyHoverNetLobbyStyle(LoadUiScale());
+        ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+        ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+    }
 
-    while (true) {
+    const char* options[] = {"RESUME RACE", pIsOnline ? "LEAVE RACE" : "NEW LOCAL RACE",
+                             "ONLINE MULTIPLAYER", "SETTINGS", "CONTROLS", "QUIT HOVERNET"};
+    constexpr int optionCount = sizeof(options) / sizeof(options[0]);
+    PauseChoice choice = PauseChoice::eResume;
+    bool focusFirstButton = true;
+    bool running = true;
+    int framesShown = 0;
+
+    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            RewriteMouseEventToLogical(event, graphics.GetRenderer());
+            ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
-                return ConfirmQuit(graphics, buffer, viewport, font) ? PauseChoice::eQuit : PauseChoice::eResume;
-            }
-            if (event.type == SDL_KEYDOWN) {
-                if (event.key.keysym.sym == SDLK_ESCAPE) {
-                    return PauseChoice::eResume;
-                }
-                if (event.key.keysym.sym == SDLK_UP) {
-                    selected = (selected + optionCount - 1) % optionCount;
-                }
-                else if (event.key.keysym.sym == SDLK_DOWN) {
-                    selected = (selected + 1) % optionCount;
-                }
-                else if (event.key.keysym.sym == SDLK_RETURN) {
-                    return static_cast<PauseChoice>(selected);
+                if (ConfirmQuit(graphics, buffer, viewport, font)) {
+                    choice = PauseChoice::eQuit;
+                    running = false;
                 }
             }
-            else if (event.type == SDL_CONTROLLERBUTTONDOWN) {
-                const Uint8 button = event.cbutton.button;
-                if (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_START) {
-                    return PauseChoice::eResume;
-                }
-                if (button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
-                    selected = (selected + optionCount - 1) % optionCount;
-                }
-                else if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
-                    selected = (selected + 1) % optionCount;
-                }
-                else if (button == SDL_CONTROLLER_BUTTON_A) {
-                    return static_cast<PauseChoice>(selected);
-                }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+                running = false;
             }
-            else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
-                for (int index = 0; index < optionCount; ++index) {
-                    const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
-                                        buttonWidth, buttonHeight};
-                    if (button.Contains(event.button.x, event.button.y)) {
-                        return static_cast<PauseChoice>(index);
-                    }
-                }
-            }
-            else if (event.type == SDL_MOUSEMOTION) {
-                for (int index = 0; index < optionCount; ++index) {
-                    const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
-                                        buttonWidth, buttonHeight};
-                    if (button.Contains(event.motion.x, event.motion.y)) {
-                        selected = index;
-                    }
-                }
+            else if (event.type == SDL_CONTROLLERBUTTONDOWN &&
+                     (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
+                      event.cbutton.button == SDL_CONTROLLER_BUTTON_START)) {
+                running = false;
             }
         }
 
-        DrawUiPanel(buffer, panel);
-        DrawUiText(font, panel.x + panel.w / 2, panel.y + 24, "GAME PAUSED", &viewport,
-                   MR_Sprite::eCenter, MR_Sprite::eTop, 1);
-        for (int index = 0; index < optionCount; ++index) {
-            const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
-                                buttonWidth, buttonHeight};
-            DrawUiButton(buffer, font, viewport, button, options[index], index == selected);
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_RenderSetLogicalSize(renderer, 0, 0);
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::Begin("HoverNet Pause Menu", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+
+        const ImVec2 workPos = mainViewport->WorkPos;
+        const ImVec2 workSize = mainViewport->WorkSize;
+        const ImVec2 workEnd(workPos.x + workSize.x, workPos.y + workSize.y);
+        ImDrawList* background = ImGui::GetWindowDrawList();
+        background->AddRectFilledMultiColor(
+            workPos, workEnd,
+            IM_COL32(13, 13, 19, 255), IM_COL32(42, 10, 20, 255),
+            IM_COL32(7, 7, 11, 255), IM_COL32(17, 7, 12, 255));
+
+        const float horizonY = workPos.y + workSize.y * 0.60f;
+        const ImVec2 vanishingPoint(workPos.x + workSize.x * 0.28f, horizonY);
+        for (int line = -5; line <= 10; ++line) {
+            const float bottomX = workPos.x + workSize.x * (static_cast<float>(line) / 7.0f);
+            background->AddLine(vanishingPoint, ImVec2(bottomX, workEnd.y),
+                                IM_COL32(227, 43, 66, 55), 1.5f);
         }
-        graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
+        const float gridRows[] = {0.10f, 0.24f, 0.43f, 0.68f, 0.94f};
+        for (float row : gridRows) {
+            const float y = horizonY + (workEnd.y - horizonY) * row;
+            background->AddLine(ImVec2(workPos.x, y), ImVec2(workEnd.x, y),
+                                IM_COL32(240, 53, 75, 48), 1.0f);
+        }
+
+        ImGui::SetCursorPos(ImVec2(54.0f, 64.0f));
+        ImGui::BeginGroup();
+        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+        ImGui::SetWindowFontScale(2.1f);
+        ImGui::TextUnformatted("GAME PAUSED");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::TextColored(kHoverNetCoral, "%s", pIsOnline ? "ONLINE RACE" : "LOCAL RACE");
+        ImGui::Spacing();
+        ImGui::TextDisabled("Take a breath. The track will wait.");
+        ImGui::EndGroup();
+
+        const float panelWidth = std::min(430.0f, workSize.x * 0.48f);
+        const float panelHeight = std::min(590.0f, workSize.y - 72.0f);
+        ImGui::SetCursorPos(ImVec2(workSize.x - panelWidth - 38.0f, 36.0f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.96f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 20.0f));
+        ImGui::BeginChild("PauseMenuPanel", ImVec2(panelWidth, panelHeight), true);
+        HoverNetSectionHeading("RACE OPTIONS");
+        ImGui::Spacing();
+
+        if (focusFirstButton) {
+            ImGui::SetKeyboardFocusHere();
+            focusFirstButton = false;
+        }
+        for (int index = 0; index < optionCount; ++index) {
+            const float height = index < 3 ? 54.0f : 42.0f;
+            if (HoverNetButton(options[index], ImVec2(-FLT_MIN, height))) {
+                choice = static_cast<PauseChoice>(index);
+                running = false;
+            }
+            if (index == 2) {
+                ImGui::Spacing();
+                ImGui::TextDisabled("GAME & ACCESSIBILITY");
+                ImGui::Separator();
+            }
+            ImGui::Spacing();
+        }
+        HoverNetHint("Esc / B / Start: resume");
+        ImGui::EndChild();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor();
+
+        ImGui::End();
+        ImGui::Render();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         SDL_Delay(16);
     }
+
+    if (ownsImGuiContext) {
+        ImGui_ImplSDLRenderer2_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+    }
+    return choice;
 }
 
 struct LocalRaceSetup
@@ -2093,8 +2155,8 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
     }
 
-    // Settings can be opened both from the legacy in-race pause menu (where no
-    // ImGui context exists) and from the ImGui lobby.  Creating a second context
+    // Settings can be opened both from the standalone in-race pause menu (which
+    // owns its ImGui context) and from the ImGui lobby.  Creating a second context
     // in the latter case overwrote the SDL backend's context pointer; destroying
     // it on return then left the lobby using freed backend state and the process
     // exited on its next frame.  Borrow the caller's context when there is one,
@@ -3405,6 +3467,10 @@ int main(int argc, char** argv)
             RunControlsScreen(graphics, frameLimit);
             g_QuitConfirmed = true;
         }
+        else if (HasArgument(argc, argv, "--pause-menu")) {
+            RunPauseMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(), false, frameLimit);
+            g_QuitConfirmed = true;
+        }
         else if (HasArgument(argc, argv, "--onboarding")) {
             RunOnboardingScreen(graphics, frameLimit);
             g_QuitConfirmed = true;
@@ -3568,7 +3634,7 @@ int main(int argc, char** argv)
                 if (playerMode && menuFontHandle != nullptr) {
                     const bool isOnline = onlineClient.IsConnected();
                     const PauseChoice pauseChoice = RunPauseMenu(
-                        graphics, buffer, viewport, *menuFontHandle->GetSprite(), isOnline);
+                        graphics, buffer, viewport, *menuFontHandle->GetSprite(), isOnline, frameLimit);
                     if (pauseChoice == PauseChoice::eQuit) {
                         running = false;
                     }
