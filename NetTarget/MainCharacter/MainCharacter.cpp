@@ -1458,6 +1458,11 @@ double MR_MainCharacter::GetFuelLevel()const
    return mFuelLevel/eFuelCapacity;
 }
 
+BOOL MR_MainCharacter::IsOutOfControl()const
+{
+   return mOutOfControlDuration > 0;
+}
+
 MR_MainCharacter::eWeapon MR_MainCharacter::GetCurrentWeapon()const
 {
    return mCurrentWeapon;

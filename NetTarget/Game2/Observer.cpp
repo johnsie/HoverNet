@@ -83,6 +83,13 @@ MR_Observer::MR_Observer()
 
    mCockpitView = FALSE;
    mNetworkLatencyMs = -2;
+   mFeedbackCharacter = NULL;
+   mPreviousFuelLevel = 0.0;
+   mPreviousMineCount = 0;
+   mPreviousPowerUpCount = 0;
+   mWasOutOfControl = FALSE;
+   mFeedbackUntil = 0;
+   mFeedbackText[0] = 0;
 
    // Try to create sprite resources, but don't fail if they don't load
    try {
@@ -1741,6 +1748,57 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       int lStatusY = lYRes/16 + lHudFont->GetItemHeight() + 4;
       lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lStatusLine ), &m3DView,
                         MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
+
+      // State-change callouts make impacts and pickups readable even when the
+      // player cannot identify the legacy sound/sprite cue. A newly viewed
+      // craft establishes a baseline instead of reporting its starting loadout
+      // as pickups. Impact wins if several changes happen in the same frame.
+      const double lCurrentFuel = pViewingCharacter->GetFuelLevel();
+      const int lCurrentMines = pViewingCharacter->GetMineCount();
+      const int lCurrentPowerUps = pViewingCharacter->GetPowerUpCount();
+      const BOOL lOutOfControl = pViewingCharacter->IsOutOfControl();
+      if( mFeedbackCharacter != pViewingCharacter )
+      {
+         mFeedbackCharacter = pViewingCharacter;
+         mPreviousFuelLevel = lCurrentFuel;
+         mPreviousMineCount = lCurrentMines;
+         mPreviousPowerUpCount = lCurrentPowerUps;
+         mWasOutOfControl = lOutOfControl;
+         mFeedbackUntil = 0;
+         mFeedbackText[0] = 0;
+      }
+      else
+      {
+         if( lOutOfControl && !mWasOutOfControl )
+         {
+            snprintf( mFeedbackText, sizeof(mFeedbackText), "IMPACT - CONTROL DISRUPTED" );
+            mFeedbackUntil = pTime + 2200;
+         }
+         else if( lCurrentMines > mPreviousMineCount )
+         {
+            snprintf( mFeedbackText, sizeof(mFeedbackText), "MINE COLLECTED  (%d)", lCurrentMines );
+            mFeedbackUntil = pTime + 1800;
+         }
+         else if( lCurrentPowerUps > mPreviousPowerUpCount )
+         {
+            snprintf( mFeedbackText, sizeof(mFeedbackText), "POWER-UP COLLECTED  (%d)", lCurrentPowerUps );
+            mFeedbackUntil = pTime + 1800;
+         }
+         else if( lCurrentFuel > mPreviousFuelLevel + 0.001 )
+         {
+            snprintf( mFeedbackText, sizeof(mFeedbackText), "FUEL REPLENISHED  (%d%%)", lFuelPercent );
+            mFeedbackUntil = pTime + 1400;
+         }
+         mPreviousFuelLevel = lCurrentFuel;
+         mPreviousMineCount = lCurrentMines;
+         mPreviousPowerUpCount = lCurrentPowerUps;
+         mWasOutOfControl = lOutOfControl;
+      }
+      if( pTime >= 0 && pTime < mFeedbackUntil && mFeedbackText[0] != 0 )
+      {
+         lHudFont->StrBlt( lXRes/2, lYRes/4, Ascii2Simple( mFeedbackText ), &m3DView,
+                           MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
+      }
 
       // In-race chat: the line currently being typed (AddMessageKey/GetCurrentMessage,
       // real on Windows via MR_NetworkSession's override, a no-op stub on Linux) plus

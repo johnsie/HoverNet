@@ -97,6 +97,12 @@ int main()
     missileHit.mElementId = -1;
     missileHit.mHoverId = 1;
     hitSource->ApplyEffect(&missileHit, 0, 0, TRUE, 0, 0, 0, level);
+    if (!hitSource->IsOutOfControl()) {
+        std::fprintf(stderr, "Missile hit did not expose the loss-of-control state\n");
+        delete hitSource;
+        delete replicatedVictim;
+        return 1;
+    }
     const MR_ElementNetState hitState = hitSource->GetNetState();
     replicatedVictim->SetAsSlave();
     replicatedVictim->SetNetState(hitState.mDataLen, hitState.mData);

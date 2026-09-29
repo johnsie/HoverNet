@@ -211,6 +211,7 @@ class MR_MainCharacter:public MR_FreeElement
 
 
       MR_DllDeclare double GetFuelLevel()const;
+      MR_DllDeclare BOOL   IsOutOfControl()const;
       MR_DllDeclare double GetAbsoluteSpeed()const;
       MR_DllDeclare double GetDirectionalSpeed()const;
 

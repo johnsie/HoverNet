@@ -360,6 +360,12 @@ line, refreshed every two seconds, with explicit measuring and connection-lost
 states; local races say Local. The lag probe remains compatible with legacy peer
 relay behavior, while the server also echoes the opaque token to its sender.
 
+Damage and pickup feedback is now explicit as well. The HUD detects the transition
+into HoverNet's loss-of-control damage state and shows a prominent impact callout;
+fuel replenishment, mine collection, and power-up collection receive short,
+counted callouts derived from character state changes rather than being buried in
+the chat log or relying only on legacy sounds and sprites.
+
 Guided onboarding is now implemented on Linux as a three-step first-run
 walkthrough covering race selection, driving and weapons, and the race HUD. It
 is skipped for automated bounded runs, records completion only after Finish, and

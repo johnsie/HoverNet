@@ -49,6 +49,16 @@ class MR_Observer
       // otherwise the most recent server TCP round-trip in milliseconds.
       int             mNetworkLatencyMs;
 
+      // Short, high-visibility gameplay feedback derived from state changes.
+      // Kept per observer so local/split views never share stale pickup state.
+      const MR_MainCharacter* mFeedbackCharacter;
+      double          mPreviousFuelLevel;
+      int             mPreviousMineCount;
+      int             mPreviousPowerUpCount;
+      BOOL            mWasOutOfControl;
+      MR_SimulationTime mFeedbackUntil;
+      char            mFeedbackText[64];
+
       MR_2DViewPort m2DDebugView;
       MR_3DViewPort mWireFrameView;
       MR_3DViewPort m3DView;
