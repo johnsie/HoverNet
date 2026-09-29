@@ -492,8 +492,10 @@ under `%APPDATA%/HoverNet`, treats Linux `/proc` memory reporting as an optional
 diagnostic on Windows, and removes the shared RaceServer client dependency on
 the legacy MFC precompiled header. Its socket ownership is now pointer-width safe
 for native x64 Windows instead of truncating Winsock handles to 32-bit integers.
-Windows CI now also configures the portable CMake graph with the native x64
-MSVC toolchain and builds `HoverNetGame2Player` plus its object-factory plug-in.
+GitHub Actions and GitLab CI now also configure the portable CMake graph with
+the native x64 MSVC toolchain and build `HoverNetGame2Player` plus its
+object-factory plug-in. GitLab retains the executable, plug-in, and x64 SDL2
+runtime together as a testable pipeline artifact.
 This is a compile gate for the shared client, not yet a replacement for the
 legacy installer: Windows runtime smoke tests and packaging remain required
 before changing the player-facing executable.

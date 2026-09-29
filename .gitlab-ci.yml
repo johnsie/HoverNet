@@ -85,6 +85,22 @@ package:game:deb:
     paths:
       - dist/hovernet-game_*.deb
 
+build:game:windows:shared-x64:
+  stage: build
+  tags: ["$WINDOWS_RUNNER_TAG"]
+  script:
+    - '$vcpkgRoot = if ($env:VCPKG_ROOT) { $env:VCPKG_ROOT } elseif ($env:VCPKG_INSTALLATION_ROOT) { $env:VCPKG_INSTALLATION_ROOT } elseif (Test-Path "C:\vcpkg\vcpkg.exe") { "C:\vcpkg" } else { throw "vcpkg was not found; set VCPKG_ROOT on the Windows runner" }; $vcpkg = Join-Path $vcpkgRoot "vcpkg.exe"; & $vcpkg install "sdl2:x64-windows"; if ($LASTEXITCODE -ne 0) { throw "vcpkg failed to install x64 SDL2" }; $toolchain = Join-Path $vcpkgRoot "scripts\buildsystems\vcpkg.cmake"; cmake -S . -B build/windows-shared -A x64 -DCMAKE_TOOLCHAIN_FILE="$toolchain" -DVCPKG_TARGET_TRIPLET=x64-windows -DBUILD_TESTING=OFF; if ($LASTEXITCODE -ne 0) { throw "Shared x64 client configure failed" }; cmake --build build/windows-shared --target HoverNetGame2Player --config Release --parallel 2; if ($LASTEXITCODE -ne 0) { throw "Shared x64 client build failed" }'
+    - '$sdl = Join-Path $vcpkgRoot "installed\x64-windows\bin\SDL2.dll"; $required = @("build\windows-shared\Release\HoverNetGame2Player.exe", "build\windows-shared\Release\ObjFac1.dll", $sdl); $missing = $required | Where-Object { -not (Test-Path $_) }; if ($missing) { throw "Missing shared x64 runtime files: $($missing -join ", ")" }; Copy-Item $sdl "build\windows-shared\Release\SDL2.dll" -Force'
+  artifacts:
+    name: "hovernet-shared-windows-x64-${CI_COMMIT_REF_SLUG}"
+    expire_in: 7 days
+    paths:
+      - build/windows-shared/Release/HoverNetGame2Player.exe
+      - build/windows-shared/Release/ObjFac1.dll
+      - build/windows-shared/Release/SDL2.dll
+  rules:
+    - if: '$CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
 build:game:windows:
   stage: build
   tags: ["$WINDOWS_RUNNER_TAG"]
