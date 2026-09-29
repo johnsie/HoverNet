@@ -351,6 +351,12 @@ add_executable(HoverNetGame2Player
 add_dependencies(HoverNetGame2Player HoverNetHeadlessObjFac1)
 target_compile_definitions(HoverNetGame2Player PRIVATE _HAVE_SDL2 HOVERNET_GAME2_PLAYER HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}" HOVERNET_VERSION="${HOVERNET_VERSION}")
 target_link_libraries(HoverNetGame2Player PRIVATE HoverNetObserver HoverNetClientSession HoverNetResourceCore HoverNetVideoCore HoverNetRaceServerClient HoverNetImGui SDL2::SDL2)
+# SDL rewrites main() to SDL_main() on Windows. Its small platform entry-point
+# library supplies WinMain and forwards into that shared client entry point;
+# Linux deliberately has no equivalent dependency.
+if(WIN32 AND TARGET SDL2::SDL2main)
+    target_link_libraries(HoverNetGame2Player PRIVATE SDL2::SDL2main)
+endif()
 
 if(BUILD_TESTING)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/linux")

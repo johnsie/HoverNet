@@ -107,7 +107,7 @@ jobs:
         run: |
           $triplet = "x86-windows"
           $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT "vcpkg.exe"
-          & $vcpkg install "sdl2:$triplet"
+          & $vcpkg install "sdl2:$triplet" "sdl2:x64-windows"
           if ($LASTEXITCODE -ne 0) { throw "vcpkg failed to install SDL2" }
 
           $installed = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\$triplet"
@@ -118,6 +118,26 @@ jobs:
             Copy-Item "$installed\lib\manual-link\SDL2main.lib" "C:\SDL2\lib\x86\SDL2main.lib" -Force
           }
           Copy-Item "$installed\bin\SDL2.dll" "C:\SDL2\lib\x86\SDL2.dll" -Force
+
+      - name: Build shared x64 SDL2 client
+        shell: pwsh
+        run: |
+          $toolchain = Join-Path $env:VCPKG_INSTALLATION_ROOT "scripts\buildsystems\vcpkg.cmake"
+          cmake -S . -B build/windows-shared -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$toolchain" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DBUILD_TESTING=OFF
+          if ($LASTEXITCODE -ne 0) { throw "Shared x64 client configure failed" }
+
+          cmake --build build/windows-shared --target HoverNetGame2Player --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw "Shared x64 client build failed" }
+
+          $required = @(
+            "build\windows-shared\Release\HoverNetGame2Player.exe",
+            "build\windows-shared\Release\ObjFac1.dll"
+          )
+          $missing = $required | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "Missing shared x64 runtime files: $($missing -join ', ')" }
 
       - name: Build Windows client
         shell: pwsh
