@@ -1,3 +1,8 @@
+#ifdef _WIN32
+#include <afxwin.h>
+#include <afxtempl.h>
+#endif
+
 #include "../GraphicsSDL2/SDL2Graphics.h"
 #include "../Game2/ClientSession.h"
 #ifdef HOVERNET_GAME2_PLAYER

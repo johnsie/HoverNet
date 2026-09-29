@@ -440,10 +440,16 @@ BOOL MR_FactoryDll::Open( MR_UInt16 pDllId )
                               GetProcAddress( mHandle,
                                               "MR_GetObject" );
 
-      if( mInitModule != NULL )
+      if( mInitModule == NULL || mCleanModule == NULL ||
+          mGetObjectTypeCount == NULL || mGetObjectFamily == NULL ||
+          mGetObjectDescription == NULL || mGetObject == NULL )
       {
-         mInitModule( mHandle );
+         FreeLibrary( mHandle );
+         mHandle = NULL;
+         return FALSE;
       }
+
+      mInitModule( mHandle );
 
    }
 

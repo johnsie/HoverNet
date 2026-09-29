@@ -674,9 +674,15 @@ MR_ObjectFromFactory* CreateSurface(const MR_ObjectFromFactoryId& id)
 }
 }
 
+#ifdef _WIN32
+#define HOVERNET_PLUGIN_EXPORT __declspec(dllexport)
+#else
+#define HOVERNET_PLUGIN_EXPORT
+#endif
+
 extern "C"
 {
-void MR_InitModule(HMODULE)
+HOVERNET_PLUGIN_EXPORT void MR_InitModule(HMODULE)
 {
     MR_InitTrigoTables();
     const char* dataDirectory = std::getenv("HOVERNET_DATA_DIR");
@@ -711,23 +717,23 @@ void MR_InitModule(HMODULE)
     }
 }
 
-void MR_CleanModule()
+HOVERNET_PLUGIN_EXPORT void MR_CleanModule()
 {
     resourceLib.reset();
     MR_SoundServer::Close();
 }
 
-MR_UInt16 MR_GetObjectTypeCount()
+HOVERNET_PLUGIN_EXPORT MR_UInt16 MR_GetObjectTypeCount()
 {
     return 30;
 }
 
-CString MR_GetObjectFamily(MR_UInt16)
+HOVERNET_PLUGIN_EXPORT CString MR_GetObjectFamily(MR_UInt16)
 {
     return "Headless surfaces";
 }
 
-CString MR_GetObjectDescription(MR_UInt16 classId)
+HOVERNET_PLUGIN_EXPORT CString MR_GetObjectDescription(MR_UInt16 classId)
 {
     if (classId >= 50 && classId <= 73) {
         return "Headless track surface";
@@ -759,7 +765,7 @@ CString MR_GetObjectDescription(MR_UInt16 classId)
     return "";
 }
 
-MR_ObjectFromFactory* MR_GetObject(MR_UInt16 classId)
+HOVERNET_PLUGIN_EXPORT MR_ObjectFromFactory* MR_GetObject(MR_UInt16 classId)
 {
     const MR_ObjectFromFactoryId id = {1, classId};
     switch (classId) {

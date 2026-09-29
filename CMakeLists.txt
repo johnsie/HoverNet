@@ -11,7 +11,7 @@ if(WIN32)
     # StdAfx.h. CMake and vcpkg use the dynamic MSVC runtime (/MD), so MFC must
     # use its matching shared-DLL ABI as well. Without _AFXDLL, afx.h rejects
     # every translation unit before compilation with C1189.
-    add_compile_definitions(_AFXDLL HOVERNET_STATIC)
+    add_compile_definitions(_AFXDLL HOVERNET_STATIC NOMINMAX)
 endif()
 
 find_package(SDL2 REQUIRED)
@@ -101,6 +101,9 @@ add_library(HoverNetModelCore STATIC
 )
 
 target_link_libraries(HoverNetModelCore PUBLIC HoverNetPortableUtil)
+if(WIN32)
+    target_link_libraries(HoverNetModelCore PUBLIC winmm)
+endif()
 set_target_properties(HoverNetModelCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(HoverNetMainCharacter STATIC
