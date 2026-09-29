@@ -362,11 +362,12 @@ walkthrough covering race selection, driving and weapons, and the race HUD. It
 is skipped for automated bounded runs, records completion only after Finish, and
 remains reachable through How to Play on the main menu.
 
-The Linux main menu is now consolidated into the shared ImGui presentation as
-well, with UI scaling, reliable resized/fullscreen mouse coordinates, keyboard
-and controller navigation, version display, and the same panel/button styling as
-Settings, Controls, onboarding, local setup, and the lobby. Bounded automation
-still defaults to Local Play when no input is supplied.
+The Linux main menu is now consolidated into ImGui without looking like a
+settings dialog: an animated speed-line and perspective-grid race backdrop,
+stylised hovercraft silhouette, stronger title treatment, prominent race-mode
+actions, and a separate utility group give it a game-front-end hierarchy. It
+retains UI scaling, resized/fullscreen mouse accuracy, keyboard/controller
+navigation, version display, and bounded automation's Local Play default.
 
 The rest of Phase 3 (full ImGui menu consolidation, advanced controller axis
 customization, remaining HUD improvements and accessibility work, and

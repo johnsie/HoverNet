@@ -2684,8 +2684,12 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     bool focusFirstButton = true;
     bool running = true;
     int framesShown = 0;
+    // --frames bounds gameplay, not time spent idling at a menu with no human
+    // input. One rendered frame verifies this screen in automation, then the
+    // documented Local Play default continues into the actual bounded race.
+    const int menuFrameLimit = pFrameLimit < 0 ? -1 : 1;
 
-    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+    while (running && (menuFrameLimit < 0 || framesShown < menuFrameLimit)) {
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -2718,38 +2722,132 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings);
 
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 14.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, 92), false);
+        const ImVec2 workPos = mainViewport->WorkPos;
+        const ImVec2 workSize = mainViewport->WorkSize;
+        ImDrawList* background = ImGui::GetWindowDrawList();
+        const ImVec2 workEnd(workPos.x + workSize.x, workPos.y + workSize.y);
+
+        // A lightweight animated race scene built from ImGui primitives keeps the
+        // menu fast and resolution-independent without pretending it is a desktop
+        // form. The vanishing grid and streaks move continuously behind the UI.
+        background->AddRectFilledMultiColor(
+            workPos, workEnd,
+            IM_COL32(13, 13, 19, 255), IM_COL32(25, 10, 18, 255),
+            IM_COL32(7, 7, 11, 255), IM_COL32(12, 6, 10, 255));
+        const float horizonY = workPos.y + workSize.y * 0.54f;
+        const ImVec2 vanishingPoint(workPos.x + workSize.x * 0.35f, horizonY);
+        background->AddRectFilled(
+            ImVec2(workPos.x, horizonY), workEnd, IM_COL32(9, 9, 14, 235));
+        for (int line = -8; line <= 12; ++line) {
+            const float bottomX = workPos.x + workSize.x * (static_cast<float>(line) / 10.0f);
+            background->AddLine(vanishingPoint, ImVec2(bottomX, workEnd.y),
+                                IM_COL32(202, 32, 57, 72), 1.5f);
+        }
+        const float gridRows[] = {0.04f, 0.10f, 0.19f, 0.31f, 0.47f, 0.67f, 0.88f};
+        for (float row : gridRows) {
+            const float y = horizonY + (workEnd.y - horizonY) * row;
+            background->AddLine(ImVec2(workPos.x, y), ImVec2(workEnd.x, y),
+                                IM_COL32(240, 53, 75, 52), 1.0f);
+        }
+        const Uint32 animationTick = SDL_GetTicks() / 8;
+        for (int streak = 0; streak < 18; ++streak) {
+            const float x = workPos.x + static_cast<float>((streak * 193 + animationTick) %
+                static_cast<Uint32>(std::max(1.0f, workSize.x)));
+            const float y = workPos.y + 125.0f + static_cast<float>((streak * 47) %
+                static_cast<int>(std::max(1.0f, workSize.y * 0.38f)));
+            const float length = 35.0f + static_cast<float>((streak * 17) % 90);
+            background->AddLine(ImVec2(x, y), ImVec2(x + length, y - 8.0f),
+                                IM_COL32(255, 91, 108, 70), 2.0f);
+        }
+
+        // Stylised hovercraft silhouette, deliberately geometric to match the
+        // original game's angular low-poly visual language.
+        const float craftX = workPos.x + workSize.x * 0.30f;
+        const float craftY = workPos.y + workSize.y * 0.68f;
+        const float craftScale = std::min(workSize.x / 1200.0f, workSize.y / 760.0f);
+        ImVec2 craftBody[] = {
+            ImVec2(craftX - 180*craftScale, craftY + 28*craftScale),
+            ImVec2(craftX - 92*craftScale, craftY - 38*craftScale),
+            ImVec2(craftX + 72*craftScale, craftY - 52*craftScale),
+            ImVec2(craftX + 190*craftScale, craftY + 18*craftScale),
+            ImVec2(craftX + 105*craftScale, craftY + 62*craftScale),
+            ImVec2(craftX - 122*craftScale, craftY + 70*craftScale),
+        };
+        background->AddConvexPolyFilled(craftBody, 6, IM_COL32(218, 36, 63, 245));
+        background->AddTriangleFilled(
+            ImVec2(craftX - 52*craftScale, craftY - 42*craftScale),
+            ImVec2(craftX + 22*craftScale, craftY - 112*craftScale),
+            ImVec2(craftX + 74*craftScale, craftY - 48*craftScale),
+            IM_COL32(245, 224, 226, 235));
+        background->AddCircleFilled(ImVec2(craftX - 118*craftScale, craftY + 66*craftScale),
+                                    43*craftScale, IM_COL32(35, 35, 42, 255));
+        background->AddCircleFilled(ImVec2(craftX + 112*craftScale, craftY + 58*craftScale),
+                                    43*craftScale, IM_COL32(35, 35, 42, 255));
+        background->AddLine(ImVec2(craftX - 145*craftScale, craftY + 91*craftScale),
+                            ImVec2(craftX + 150*craftScale, craftY + 84*craftScale),
+                            IM_COL32(255, 72, 91, 100), 8*craftScale);
+
+        ImGui::SetCursorPos(ImVec2(48.0f, 48.0f));
+        ImGui::BeginGroup();
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(1.65f);
+        ImGui::SetWindowFontScale(2.35f);
         ImGui::TextUnformatted("HOVERNET");
         ImGui::SetWindowFontScale(1.0f);
-        ImGui::TextUnformatted("Race. Battle. Hover.");
-        ImGui::PopStyleColor();
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
-
-        const float panelWidth = std::min(460.0f, ImGui::GetContentRegionAvail().x);
-        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
-        ImGui::BeginChild("MainMenuPanel", ImVec2(panelWidth, -44.0f), true);
-        HoverNetSectionHeading("MAIN MENU");
+        ImGui::TextColored(kHoverNetCoral, "HIGH-SPEED COMBAT RACING");
         ImGui::Spacing();
-        for (int index = 0; index < optionCount; ++index) {
-            if (focusFirstButton && index == 0) {
-                ImGui::SetKeyboardFocusHere();
-                focusFirstButton = false;
-            }
-            if (HoverNetButton(options[index], ImVec2(-FLT_MIN, 48))) {
+        ImGui::TextDisabled("RACE THE LINE.  OWN THE TRACK.");
+        ImGui::PopStyleColor();
+        ImGui::EndGroup();
+
+        const float panelWidth = std::min(430.0f, workSize.x * 0.42f);
+        const float panelHeight = std::min(580.0f, workSize.y - 84.0f);
+        ImGui::SetCursorPos(ImVec2(workSize.x - panelWidth - 42.0f, 42.0f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.94f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 20.0f));
+        ImGui::BeginChild("MainMenuPanel", ImVec2(panelWidth, panelHeight), true);
+        ImGui::TextColored(kHoverNetCoral, "READY TO RACE?");
+        ImGui::TextDisabled("Choose your mode");
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (focusFirstButton) {
+            ImGui::SetKeyboardFocusHere();
+            focusFirstButton = false;
+        }
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+        if (HoverNetButton("LOCAL RACE", ImVec2(-FLT_MIN, 62))) {
+            choice = MenuChoice::eLocalPlay;
+            running = false;
+        }
+        ImGui::Spacing();
+        if (HoverNetButton("ONLINE MULTIPLAYER", ImVec2(-FLT_MIN, 62))) {
+            choice = MenuChoice::eOnlineLobby;
+            running = false;
+        }
+        ImGui::PopStyleVar();
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("GARAGE & SUPPORT");
+        ImGui::Separator();
+        ImGui::Spacing();
+        for (int index = 2; index < optionCount; ++index) {
+            if (HoverNetButton(options[index], ImVec2(-FLT_MIN, 42))) {
                 choice = static_cast<MenuChoice>(index);
                 running = false;
             }
             ImGui::Spacing();
         }
-        HoverNetHint("Arrow keys or D-pad to navigate; Enter or A to select.");
+        ImGui::PushTextWrapPos(0.0f);
+        HoverNetHint("Navigate with arrow keys or D-pad. Select with Enter or A.");
+        ImGui::PopTextWrapPos();
         ImGui::EndChild();
-        ImGui::TextDisabled("HoverNet %s", HOVERNET_VERSION);
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor();
+
+        ImGui::SetCursorPos(ImVec2(22.0f, workSize.y - 30.0f));
+        ImGui::TextDisabled("v%s   |   ESC / B: quit", HOVERNET_VERSION);
         ImGui::End();
 
         ImGui::Render();
