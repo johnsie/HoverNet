@@ -863,6 +863,24 @@ void SaveControllerBindings(const ControllerBindings& bindings)
         << static_cast<int>(bindings.selectWeapon) << '\n';
 }
 
+std::string OnboardingCompletePath()
+{
+    return ConfigDirPath() + "/onboarding_complete";
+}
+
+bool HasCompletedOnboarding()
+{
+    std::ifstream in(OnboardingCompletePath());
+    int completed = 0;
+    return (in >> completed) && completed == 1;
+}
+
+void SaveOnboardingComplete()
+{
+    std::ofstream out(OnboardingCompletePath());
+    out << 1 << '\n';
+}
+
 struct RemotePlayer
 {
     MR_MainCharacter* mCharacter = nullptr;
@@ -1038,6 +1056,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                                  const std::string& currentServerHost, unsigned currentServerPort,
                                  double currentVolume, bool currentFullscreen, int pFrameLimit);
 
+bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit);
 void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit);
 
 // pClient is caller-owned (not constructed here) and deliberately left connected
@@ -2331,6 +2350,118 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     return result;
 }
 
+bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
+{
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+    ImFontConfig fontConfig;
+    fontConfig.SizePixels = 19.0f;
+    io.Fonts->AddFontDefault(&fontConfig);
+    ApplyHoverNetLobbyStyle(LoadUiScale());
+    ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+    ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+
+    const char* titles[] = {"CHOOSE A RACE", "DRIVE YOUR HOVERCRAFT", "READ THE RACE"};
+    const char* bodies[] = {
+        "Local Play lets you choose a track, lap count, and whether weapons are enabled. "
+        "Online Lobby connects to the shared RaceServer, where you can join an open race "
+        "or host one for other players.",
+        "Use Left/Right to steer, Shift to accelerate, Down to brake or reverse, and Up "
+        "to jump. Ctrl fires, Tab selects a weapon, and Escape opens the pause menu. "
+        "A standard controller uses the left stick, triggers, A, X, Y, and Start.",
+        "The top HUD shows elapsed time and lap progress. The status line reports speed, "
+        "fuel, weapon readiness, and network latency. The minimap tracks racers. Open "
+        "Controls from the main or pause menu whenever you need to review or remap inputs."
+    };
+    int page = 0;
+    int framesShown = 0;
+    bool completed = false;
+    bool running = true;
+    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_QUIT) {
+                g_QuitConfirmed = true;
+                running = false;
+            }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+                running = false;
+            }
+        }
+
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_RenderSetLogicalSize(renderer, 0, 0);
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::Begin("HoverNet How to Play", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings);
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
+        ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
+        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+        ImGui::SetWindowFontScale(1.35f);
+        ImGui::TextUnformatted("WELCOME TO HOVERNET");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+
+        const float panelWidth = std::min(680.0f, ImGui::GetContentRegionAvail().x);
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
+        ImGui::BeginChild("OnboardingPanel", ImVec2(panelWidth, -60.0f), true);
+        ImGui::Text("STEP %d OF 3", page + 1);
+        HoverNetSectionHeading(titles[page]);
+        ImGui::Spacing();
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextUnformatted(bodies[page]);
+        ImGui::PopTextWrapPos();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        if (page > 0) {
+            if (HoverNetButton("Back", ImVec2(130, 40))) --page;
+            ImGui::SameLine();
+        }
+        const char* nextLabel = page == 2 ? "Finish" : "Next";
+        if (HoverNetButton(nextLabel, ImVec2(130, 40))) {
+            if (page == 2) {
+                completed = true;
+                running = false;
+            }
+            else {
+                ++page;
+            }
+        }
+        ImGui::EndChild();
+        ImGui::End();
+
+        ImGui::Render();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
+        SDL_Delay(16);
+    }
+
+    ImGui_ImplSDLRenderer2_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
+    return completed;
+}
+
 void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
 {
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
@@ -2528,6 +2659,7 @@ enum class MenuChoice
     eOnlineLobby,
     eSettings,
     eControls,
+    eHowToPlay,
 };
 
 // The very first screen in player mode: pick local play or the online lobby. Bounded
@@ -2540,8 +2672,8 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 {
     const int lineHeight = std::max(1, font.GetItemHeight());
     int selected = 0;
-    const char* options[] = {"Local Play", "Online Lobby", "Settings", "Controls"};
-    const int optionCount = 4;
+    const char* options[] = {"Local Play", "Online Lobby", "Settings", "Controls", "How to Play"};
+    const int optionCount = 5;
 
     bool running = true;
     MenuChoice choice = MenuChoice::eLocalPlay;
@@ -2751,6 +2883,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "UI_SCALE=%s\n", UiScalePath().c_str());
         std::fprintf(stderr, "KEYBOARD_BINDINGS=%s\n", KeyboardBindingsPath().c_str());
         std::fprintf(stderr, "CONTROLLER_BINDINGS=%s\n", ControllerBindingsPath().c_str());
+        std::fprintf(stderr, "ONBOARDING_COMPLETE=%s\n", OnboardingCompletePath().c_str());
         return 0;
     }
 #endif
@@ -3124,6 +3257,13 @@ int main(int argc, char** argv)
             RunControlsScreen(graphics, frameLimit);
             g_QuitConfirmed = true;
         }
+        else if (HasArgument(argc, argv, "--onboarding")) {
+            RunOnboardingScreen(graphics, frameLimit);
+            g_QuitConfirmed = true;
+        }
+        else if (frameLimit < 0 && !HasCompletedOnboarding()) {
+            if (RunOnboardingScreen(graphics, frameLimit)) SaveOnboardingComplete();
+        }
         bool pickingMode = !g_QuitConfirmed;
         while (pickingMode) {
             pickingMode = false;
@@ -3165,6 +3305,10 @@ int main(int argc, char** argv)
             }
             else if (choice == MenuChoice::eControls) {
                 RunControlsScreen(graphics, frameLimit);
+                pickingMode = !g_QuitConfirmed;
+            }
+            else if (choice == MenuChoice::eHowToPlay) {
+                if (RunOnboardingScreen(graphics, frameLimit)) SaveOnboardingComplete();
                 pickingMode = !g_QuitConfirmed;
             }
             else if (autoPlay) {

@@ -357,9 +357,14 @@ line, refreshed every two seconds, with explicit measuring and connection-lost
 states; local races say Local. The lag probe remains compatible with legacy peer
 relay behavior, while the server also echoes the opaque token to its sender.
 
+Guided onboarding is now implemented on Linux as a three-step first-run
+walkthrough covering race selection, driving and weapons, and the race HUD. It
+is skipped for automated bounded runs, records completion only after Finish, and
+remains reachable through How to Play on the main menu.
+
 The rest of Phase 3 (full ImGui menu consolidation, advanced controller axis
-customization, HUD improvements, guided onboarding, remaining accessibility
-work, and Windows/Linux menu parity) remains.
+customization, remaining HUD improvements and accessibility work, and
+Windows/Linux menu parity) remains.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.

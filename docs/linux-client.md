@@ -40,6 +40,11 @@ stick to steer, right trigger to accelerate, left trigger to brake or reverse,
 A to jump, X to fire, Y to select a weapon, and Start to open the pause menu.
 Menus support the D-pad, A to confirm, and B to go back where applicable.
 
+A three-step **How to Play** walkthrough appears on the first interactive run
+and remains available from the main menu. It covers choosing a race, driving and
+weapons, and reading the race HUD. Completing it stores
+`onboarding_complete` alongside the other per-user settings.
+
 The keyboard and controller bindings are available in-game through **Controls**
 on the main menu and the Escape menu, including while browsing the online lobby.
 Select any gameplay keyboard binding on that screen and press a new key to
