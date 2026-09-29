@@ -240,6 +240,7 @@ jobs:
           Copy-Item "NetTarget\Tracks\*.trk" "$x64Release\NetTarget\Tracks\" -Force
           Copy-Item "NetTarget\LinuxClient\assets\menu-hovercraft.bmp" `
             "$x64Release\NetTarget\LinuxClient\assets\menu-hovercraft.bmp" -Force
+          & "scripts\validate-windows-x64-package.ps1" -ReleaseDir $x64Release
           $env:HOVERNET_X64_RELEASE_DIR = (Resolve-Path $x64Release).Path
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "packaging\windows\HoverNet-x64.iss"
           if ($LASTEXITCODE -ne 0) { throw "Shared x64 Inno Setup packaging failed" }

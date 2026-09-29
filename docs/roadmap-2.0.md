@@ -504,7 +504,9 @@ playtesting remains required before making it the sole Windows download. Both
 CI systems now build a dedicated Inno Setup package named
 `HoverNet-<version>-windows-x64-setup.exe`, using `HoverNet.exe` and a colocated
 installed data tree; tagged releases attach it alongside the legacy Win32
-installer during the transition. Automated online-lobby coverage starts the portable x64
+installer during the transition. A shared packaging gate rejects missing or
+empty runtime assets, fewer than four tracks, and any client, plug-in, or SDL2
+binary whose PE header is not AMD64. Automated online-lobby coverage starts the portable x64
 RaceServer locally, negotiates protocol 2.0, and renders the real bounded lobby;
 it does not depend on or modify the production server. The Windows CMake graph
 also declares shared-MFC mode (`_AFXDLL`) to match its `/MD` dynamic CRT, fixing
