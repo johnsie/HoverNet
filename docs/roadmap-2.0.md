@@ -384,7 +384,9 @@ its critical state does not depend on colour perception.
 
 Online races now add a real RaceServer TCP round-trip measurement to that status
 line, refreshed every two seconds, with explicit measuring and connection-lost
-states; local races say Local. The lag probe remains compatible with legacy peer
+states; local races say Local. Measurements at or above 200 ms retain their exact
+value and add a `HIGH LATENCY` warning so connection quality is understandable
+without interpreting a raw number. The lag probe remains compatible with legacy peer
 relay behavior, while the server also echoes the opaque token to its sender.
 
 Damage and pickup feedback is now explicit as well. The HUD detects the transition

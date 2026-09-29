@@ -120,6 +120,7 @@ class MR_Observer
       // Text paired with the legacy colour-changing fuel meter, so critical
       // state never depends on colour perception alone.
       static const char* GetFuelWarningForPercent( int pFuelPercent );
+      static const char* GetLatencyWarningForMilliseconds( int pLatencyMs );
 
 
       void SetSplitMode( eSplitMode pMode );

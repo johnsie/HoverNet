@@ -21,6 +21,13 @@ int main()
         return 1;
     }
 
+    if (std::string(MR_Observer::GetLatencyWarningForMilliseconds(199)) != "" ||
+        std::string(MR_Observer::GetLatencyWarningForMilliseconds(200)) != "HIGH LATENCY") {
+        std::fprintf(stderr, "Latency warning threshold is incorrect\n");
+        observer->Delete();
+        return 1;
+    }
+
     observer->Delete();
     std::puts("Observer smoke test passed");
     return 0;

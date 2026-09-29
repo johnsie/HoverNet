@@ -173,6 +173,13 @@ const char* MR_Observer::GetFuelWarningForPercent( int pFuelPercent )
    return "";
 }
 
+const char* MR_Observer::GetLatencyWarningForMilliseconds( int pLatencyMs )
+{
+   // 200 ms round-trip is where fast steering and weapon timing become
+   // noticeably delayed; retain the exact measurement alongside this label.
+   return pLatencyMs >= 200 ? "HIGH LATENCY" : "";
+}
+
 
 void MR_Observer::Scroll( int pOffset )
 {   
@@ -1773,9 +1780,16 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       else
          snprintf( lPositionStatus, sizeof(lPositionStatus), "Pos %d-%d/%d", lBestRank, lWorstRank, lPlayerCount );
 
-      char lNetworkStatus[40];
+      char lNetworkStatus[56];
       if( mNetworkLatencyMs >= 0 )
-         snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Online %d ms", mNetworkLatencyMs );
+      {
+         const char* lLatencyWarning = GetLatencyWarningForMilliseconds( mNetworkLatencyMs );
+         if( lLatencyWarning[0] != 0 )
+            snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Online %d ms %s",
+                      mNetworkLatencyMs, lLatencyWarning );
+         else
+            snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Online %d ms", mNetworkLatencyMs );
+      }
       else if( mNetworkLatencyMs == -1 )
          snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Online (measuring)" );
       else if( mNetworkLatencyMs == -3 )
@@ -1803,7 +1817,7 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       }
       else
       {
-         char lStatusLine[192];
+         char lStatusLine[208];
          snprintf( lStatusLine, sizeof(lStatusLine), "%s   Speed %d%%   %s   %s   %s",
                    lPositionStatus, lSpeedPercent, lFuelStatus, lWeaponStatus, lNetworkStatus );
          lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lStatusLine ), &m3DView,
