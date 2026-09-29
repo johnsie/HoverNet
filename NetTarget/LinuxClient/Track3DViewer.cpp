@@ -3291,6 +3291,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
     };
     int listeningForBinding = -1;
     int listeningForControllerBinding = -1;
+    std::string bindingStatus;
     bool running = true;
     int framesShown = 0;
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
@@ -3312,8 +3313,21 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
                 }
                 else if (listeningForBinding >= 0 &&
                          IsValidBinding(event.key.keysym.scancode)) {
-                    *remappableBindings[listeningForBinding] = event.key.keysym.scancode;
+                    const int target = listeningForBinding;
+                    const SDL_Scancode previous = *remappableBindings[target];
+                    bool swapped = false;
+                    for (int index = 0; index < static_cast<int>(sizeof(remappableBindings) /
+                                                                  sizeof(remappableBindings[0])); ++index) {
+                        if (index != target && *remappableBindings[index] == event.key.keysym.scancode) {
+                            *remappableBindings[index] = previous;
+                            swapped = true;
+                            break;
+                        }
+                    }
+                    *remappableBindings[target] = event.key.keysym.scancode;
                     SaveKeyboardBindings(gKeyboardBindings);
+                    bindingStatus = swapped ? "Keyboard bindings swapped to keep each action unique."
+                                            : "Keyboard binding updated.";
                     listeningForBinding = -1;
                 }
                 else if (event.key.keysym.sym == SDLK_ESCAPE) {
@@ -3323,9 +3337,23 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
             else if (event.type == SDL_CONTROLLERBUTTONDOWN &&
                      listeningForControllerBinding >= 0 &&
                      IsValidControllerBinding(event.cbutton.button)) {
-                *remappableControllerBindings[listeningForControllerBinding] =
+                const int target = listeningForControllerBinding;
+                const SDL_GameControllerButton requested =
                     static_cast<SDL_GameControllerButton>(event.cbutton.button);
+                const SDL_GameControllerButton previous = *remappableControllerBindings[target];
+                bool swapped = false;
+                for (int index = 0; index < static_cast<int>(sizeof(remappableControllerBindings) /
+                                                              sizeof(remappableControllerBindings[0])); ++index) {
+                    if (index != target && *remappableControllerBindings[index] == requested) {
+                        *remappableControllerBindings[index] = previous;
+                        swapped = true;
+                        break;
+                    }
+                }
+                *remappableControllerBindings[target] = requested;
                 SaveControllerBindings(gControllerBindings);
+                bindingStatus = swapped ? "Controller bindings swapped to keep each action unique."
+                                        : "Controller binding updated.";
                 listeningForControllerBinding = -1;
             }
         }
@@ -3480,9 +3508,13 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
             SaveControllerBindings(gControllerBindings);
             listeningForBinding = -1;
             listeningForControllerBinding = -1;
+            bindingStatus = "Default controls restored.";
         }
         ImGui::Spacing();
-        HoverNetHint("Remaps, axis direction, and deadzone changes apply immediately.");
+        if (!bindingStatus.empty()) {
+            ImGui::TextColored(ImVec4(0.55f, 0.95f, 0.65f, 1.0f), "%s", bindingStatus.c_str());
+        }
+        HoverNetHint("Remaps, axis direction, and deadzone changes apply immediately. Reusing an input swaps bindings.");
         ImGui::EndChild();
         ImGui::Spacing();
         if (HoverNetButton("Back", ImVec2(-FLT_MIN, 40))) {

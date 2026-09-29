@@ -376,7 +376,9 @@ shared deadzone is adjustable. The extended settings load atomically while
 remaining backward-compatible with the earlier three-button file format. The
 Controls screen reports recognized controller availability, explains that Start
 remains reserved for pause, and consistently makes Escape cancel both keyboard
-and controller capture instead of closing the screen during a controller remap.
+and controller capture instead of closing the screen during a controller remap. Reusing an existing gameplay key or controller button now
+swaps the affected actions and confirms that change on screen, preserving a
+unique, understandable mapping rather than silently triggering both actions.
 
 The shared Windows/Linux race HUD now supplements its existing graphical meters
 and weapon sprites with a readable status line: explicit speed and fuel

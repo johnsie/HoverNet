@@ -61,7 +61,9 @@ the equivalent files under `~/.config/hovernet/`). Existing three-button
 controller files remain valid and are upgraded when next saved. The Controls
 screen reports whether SDL recognizes a connected controller, keeps Start
 reserved for pause, and Escape cancels either keyboard or controller capture
-before it can close the screen.
+before it can close the screen. Assigning a key or controller button already
+used by another gameplay action swaps the two bindings, so one input never
+silently triggers multiple actions.
 
 ## Display settings
 
