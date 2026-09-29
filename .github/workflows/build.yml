@@ -166,14 +166,14 @@ jobs:
 
           $serverPath = "build\windows-shared\Release\RaceServer.exe"
           $server = Start-Process -FilePath $serverPath `
-            -ArgumentList "19879", "build\windows-shared\shared-lobby-smoke.log", "--require-protocol-2" `
+            -ArgumentList "19879", "build\windows-shared\shared-online-race-smoke.log", "--require-protocol-2" `
             -PassThru
           try {
             Start-Sleep -Seconds 1
-            $lobbyClient = Start-Process -FilePath $client `
-              -ArgumentList "--lobby", "127.0.0.1", "19879", "--lobby-screen", "--frames", "2" `
+            $raceClient = Start-Process -FilePath $client `
+              -ArgumentList "--lobby", "127.0.0.1", "19879", "--online-race-smoke", "--frames", "120" `
               -Wait -PassThru
-            if ($lobbyClient.ExitCode -ne 0) { throw "Shared x64 online lobby smoke failed" }
+            if ($raceClient.ExitCode -ne 0) { throw "Shared x64 online race acceptance failed" }
           }
           finally {
             if (-not $server.HasExited) { Stop-Process -Id $server.Id -Force }
@@ -284,16 +284,16 @@ jobs:
               }
 
               $installedServer = Start-Process -FilePath "$x64Release\RaceServer.exe" `
-                -ArgumentList "19881", "$x64Release\installed-lobby-smoke.log", "--require-protocol-2" `
+                -ArgumentList "19881", "$x64Release\installed-online-race-smoke.log", "--require-protocol-2" `
                 -PassThru
               try {
                 Start-Sleep -Seconds 1
-                $installedLobby = Start-Process -FilePath "$installDir\HoverNet.exe" `
+                $installedRace = Start-Process -FilePath "$installDir\HoverNet.exe" `
                   -WorkingDirectory $installDir `
-                  -ArgumentList "--lobby", "127.0.0.1", "19881", "--lobby-screen", "--frames", "2" `
+                  -ArgumentList "--lobby", "127.0.0.1", "19881", "--online-race-smoke", "--frames", "120" `
                   -Wait -PassThru
-                if ($installedLobby.ExitCode -ne 0) {
-                  throw "Installed shared x64 online lobby smoke failed"
+                if ($installedRace.ExitCode -ne 0) {
+                  throw "Installed shared x64 online race acceptance failed"
                 }
               }
               finally {

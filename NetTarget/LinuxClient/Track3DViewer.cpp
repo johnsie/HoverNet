@@ -1308,7 +1308,8 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit);
 bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                     const MR_Sprite& font, RaceServerClient& pClient, std::string& host, unsigned& port,
                     std::string& outJoinedName, std::string& outTrackName, int& outNumLaps,
-                    int& outLocalClientId, std::vector<RaceServerPeer>& outPeers, int pFrameLimit)
+                    int& outLocalClientId, std::vector<RaceServerPeer>& outPeers, int pFrameLimit,
+                    bool pAutoHostStart = false)
 {
     // The lobby screen renders through Dear ImGui directly against the SDL_Renderer
     // graphics already owns, not the paletted MR_VideoBuffer the 3D game view uses --
@@ -1401,6 +1402,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     std::map<int, std::string> playerNames;
 
     std::string username = LoadUsername();
+    if (pAutoHostStart && username.empty()) username = "AcceptancePlayer";
     int selected = 0;
     LobbyPhase phase = LobbyPhase::eBrowsing;
     Uint32 lastRefresh = SDL_GetTicks();
@@ -1410,6 +1412,8 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     bool joined = false;
     bool isHost = false;
     bool connectionLossReported = false;
+    bool autoHostSent = false;
+    bool autoStartSent = false;
     std::vector<std::string> raceMembers;
     int framesShown = 0;
     bool hostPopupOpen = false;
@@ -1435,6 +1439,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     }
 
     HostPrefs hostPrefs = LoadHostPrefs();
+    if (pAutoHostStart) {
+        hostPrefs.mTrackIndex = 0;
+        hostPrefs.mLaps = 1;
+        hostPrefs.mWeapons = true;
+    }
     std::array<TrackPreview, kHostableTrackCount> lobbyTrackPreviews{};
 
     auto refreshGames = [&]() {
@@ -1488,7 +1497,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             outJoinedName = raceName;
             phase = LobbyPhase::eWaitingRoom;
             raceMembers.clear();
-            SaveHostPrefs(hostPrefs);
+            if (!pAutoHostStart) SaveHostPrefs(hostPrefs);
             statusText = "Race created - waiting for players";
         }
         else {
@@ -1541,6 +1550,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     SDL_StartTextInput();
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
+        if (pAutoHostStart && !autoHostSent) {
+            hostRaceNow();
+            autoHostSent = true;
+        }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
@@ -1736,6 +1749,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     statusText = "That name was taken -- you're now '" + username + "'";
                 }
             }
+        }
+
+        if (pAutoHostStart && isHost && !autoStartSent) {
+            client.StartRace();
+            autoStartSent = true;
         }
 
         // Disabling the renderer's logical size for the duration of this ImGui
@@ -4213,7 +4231,7 @@ int RunClient(int argc, char** argv)
         return true;
     };
 
-    auto joinOnlineRace = [&]() -> bool {
+    auto joinOnlineRace = [&](bool autoHostStart = false) -> bool {
         std::string joinedRace;
         std::string joinedTrack;
         int joinedLaps = 1;
@@ -4222,7 +4240,7 @@ int RunClient(int argc, char** argv)
         if (menuFontHandle == nullptr ||
             !RunLobbyScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(), onlineClient,
                             lobbyHost, lobbyPort, joinedRace, joinedTrack, joinedLaps, localClientId,
-                            knownPeers, frameLimit)) {
+                            knownPeers, frameLimit, autoHostStart)) {
             onlineClient.Disconnect();
             return false;
         }
@@ -4321,7 +4339,15 @@ int RunClient(int argc, char** argv)
         return FatalClientError("Could not load the menu font from ObjFac1.dat.");
     }
     if (playerMode) {
-        if (HasArgument(argc, argv, "--lobby-screen")) {
+        if (HasArgument(argc, argv, "--online-race-smoke")) {
+            // End-to-end installed-package acceptance: use the normal lobby protocol
+            // to host and start a race, then continue through normal track loading
+            // and the bounded gameplay loop below.
+            if (!joinOnlineRace(true)) {
+                return FatalClientError("Online race acceptance could not host, start, and load a race.");
+            }
+        }
+        else if (HasArgument(argc, argv, "--lobby-screen")) {
             // Deterministic CI entry point: exercise protocol negotiation and
             // render the real online lobby without relying on menu navigation
             // or joining/creating a race. A bounded lobby returns false when
