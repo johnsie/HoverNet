@@ -340,6 +340,12 @@ single action restores the defaults, and every accepted change is persisted in
 the per-user XDG configuration directory and applied immediately. Invalid or
 truncated binding files fall back atomically to the full default layout.
 
+Core controller gameplay buttons are now remappable and persisted alongside the
+keyboard layout: Jump, Fire, and Select Weapon can be reassigned from the
+Controls screen, with validated atomic loading and a shared reset-to-defaults
+action. Start remains reserved for pause, while steering and throttle/brake stay
+on the standard left-stick and trigger axes.
+
 The shared Windows/Linux race HUD now supplements its existing graphical meters
 and weapon sprites with a readable status line: explicit speed and fuel
 percentages plus missile charge/readiness, mine count, or power-up count. This
@@ -351,8 +357,8 @@ line, refreshed every two seconds, with explicit measuring and connection-lost
 states; local races say Local. The lag probe remains compatible with legacy peer
 relay behavior, while the server also echoes the opaque token to its sender.
 
-The rest of Phase 3 (full ImGui menu consolidation, controller customization,
-HUD improvements, guided onboarding, remaining accessibility
+The rest of Phase 3 (full ImGui menu consolidation, advanced controller axis
+customization, HUD improvements, guided onboarding, remaining accessibility
 work, and Windows/Linux menu parity) remains.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.

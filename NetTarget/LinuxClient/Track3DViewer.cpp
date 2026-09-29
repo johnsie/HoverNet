@@ -819,6 +819,50 @@ void SaveKeyboardBindings(const KeyboardBindings& bindings)
         << static_cast<int>(bindings.selectWeapon) << '\n';
 }
 
+struct ControllerBindings
+{
+    SDL_GameControllerButton jump = SDL_CONTROLLER_BUTTON_A;
+    SDL_GameControllerButton fire = SDL_CONTROLLER_BUTTON_X;
+    SDL_GameControllerButton selectWeapon = SDL_CONTROLLER_BUTTON_Y;
+};
+
+ControllerBindings gControllerBindings;
+
+std::string ControllerBindingsPath()
+{
+    return ConfigDirPath() + "/controller_bindings";
+}
+
+bool IsValidControllerBinding(int value)
+{
+    return value >= SDL_CONTROLLER_BUTTON_A && value < SDL_CONTROLLER_BUTTON_MAX &&
+           value != SDL_CONTROLLER_BUTTON_START;
+}
+
+ControllerBindings LoadControllerBindings()
+{
+    ControllerBindings bindings;
+    std::ifstream in(ControllerBindingsPath());
+    int values[3] = {};
+    if (in >> values[0] >> values[1] >> values[2]) {
+        for (int value : values) {
+            if (!IsValidControllerBinding(value)) return ControllerBindings{};
+        }
+        bindings.jump = static_cast<SDL_GameControllerButton>(values[0]);
+        bindings.fire = static_cast<SDL_GameControllerButton>(values[1]);
+        bindings.selectWeapon = static_cast<SDL_GameControllerButton>(values[2]);
+    }
+    return bindings;
+}
+
+void SaveControllerBindings(const ControllerBindings& bindings)
+{
+    std::ofstream out(ControllerBindingsPath());
+    out << static_cast<int>(bindings.jump) << ' '
+        << static_cast<int>(bindings.fire) << ' '
+        << static_cast<int>(bindings.selectWeapon) << '\n';
+}
+
 struct RemotePlayer
 {
     MR_MainCharacter* mCharacter = nullptr;
@@ -2309,7 +2353,12 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         &gKeyboardBindings.jump, &gKeyboardBindings.fire,
         &gKeyboardBindings.selectWeapon,
     };
+    SDL_GameControllerButton* remappableControllerBindings[] = {
+        &gControllerBindings.jump, &gControllerBindings.fire,
+        &gControllerBindings.selectWeapon,
+    };
     int listeningForBinding = -1;
+    int listeningForControllerBinding = -1;
     bool running = true;
     int framesShown = 0;
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
@@ -2335,6 +2384,14 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
                 else if (event.key.keysym.sym == SDLK_ESCAPE) {
                     running = false;
                 }
+            }
+            else if (event.type == SDL_CONTROLLERBUTTONDOWN &&
+                     listeningForControllerBinding >= 0 &&
+                     IsValidControllerBinding(event.cbutton.button)) {
+                *remappableControllerBindings[listeningForControllerBinding] =
+                    static_cast<SDL_GameControllerButton>(event.cbutton.button);
+                SaveControllerBindings(gControllerBindings);
+                listeningForControllerBinding = -1;
             }
         }
 
@@ -2410,18 +2467,38 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
                     ImGui::TextUnformatted(binding[1]);
                 }
                 ImGui::TableSetColumnIndex(2);
-                ImGui::TextUnformatted(binding[2]);
+                if (index >= 4 && index <= 6) {
+                    const int controllerIndex = index - 4;
+                    const char* buttonName = listeningForControllerBinding == controllerIndex
+                        ? "Press a button"
+                        : SDL_GameControllerGetStringForButton(
+                            *remappableControllerBindings[controllerIndex]);
+                    if (buttonName == nullptr || buttonName[0] == '\0') buttonName = "Unknown";
+                    char controllerLabel[96];
+                    std::snprintf(controllerLabel, sizeof(controllerLabel), "%s##ControllerBinding%d",
+                                  buttonName, controllerIndex);
+                    if (HoverNetButton(controllerLabel, ImVec2(-FLT_MIN, 0))) {
+                        listeningForControllerBinding = controllerIndex;
+                        listeningForBinding = -1;
+                    }
+                }
+                else {
+                    ImGui::TextUnformatted(binding[2]);
+                }
             }
             ImGui::EndTable();
         }
         ImGui::Spacing();
-        if (HoverNetButton("Reset keyboard defaults", ImVec2(-FLT_MIN, 34))) {
+        if (HoverNetButton("Reset all control defaults", ImVec2(-FLT_MIN, 34))) {
             gKeyboardBindings = KeyboardBindings{};
+            gControllerBindings = ControllerBindings{};
             SaveKeyboardBindings(gKeyboardBindings);
+            SaveControllerBindings(gControllerBindings);
             listeningForBinding = -1;
+            listeningForControllerBinding = -1;
         }
         ImGui::Spacing();
-        HoverNetHint("Select a keyboard binding to change it; changes apply immediately.");
+        HoverNetHint("Select a keyboard key or gameplay button to remap it; changes apply immediately.");
         ImGui::EndChild();
         ImGui::Spacing();
         if (HoverNetButton("Back", ImVec2(-FLT_MIN, 40))) {
@@ -2550,6 +2627,13 @@ struct KeyboardBindings
     SDL_Scancode selectWeapon = SDL_SCANCODE_TAB;
 };
 KeyboardBindings gKeyboardBindings;
+struct ControllerBindings
+{
+    SDL_GameControllerButton jump = SDL_CONTROLLER_BUTTON_A;
+    SDL_GameControllerButton fire = SDL_CONTROLLER_BUTTON_X;
+    SDL_GameControllerButton selectWeapon = SDL_CONTROLLER_BUTTON_Y;
+};
+ControllerBindings gControllerBindings;
 #endif
 
 RenderStats RenderScene(const MR_Level& level, int room, const MR_3DCoordinate& camera,
@@ -2666,6 +2750,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "WINDOW_SIZE=%s\n", WindowSizePath().c_str());
         std::fprintf(stderr, "UI_SCALE=%s\n", UiScalePath().c_str());
         std::fprintf(stderr, "KEYBOARD_BINDINGS=%s\n", KeyboardBindingsPath().c_str());
+        std::fprintf(stderr, "CONTROLLER_BINDINGS=%s\n", ControllerBindingsPath().c_str());
         return 0;
     }
 #endif
@@ -2689,6 +2774,7 @@ int main(int argc, char** argv)
     const bool playerMode = IsPlayerMode(argc, argv);
 #ifdef HOVERNET_GAME2_PLAYER
     gKeyboardBindings = LoadKeyboardBindings();
+    gControllerBindings = LoadControllerBindings();
 #endif
     MR_VideoBuffer buffer(nullptr, 1.0, 0.5, 0.5);
     if (!buffer.SetVideoMode(kWidth, kHeight) || !buffer.Lock()) {
@@ -3299,13 +3385,13 @@ int main(int argc, char** argv)
         const bool moveDown = keyboard[SDL_SCANCODE_E];
         const bool fire = keyboard[gKeyboardBindings.fire] ||
                   (gKeyboardBindings.fire == SDL_SCANCODE_LCTRL && keyboard[SDL_SCANCODE_RCTRL]) ||
-                  gameController.Button(SDL_CONTROLLER_BUTTON_X) ||
+                  gameController.Button(gControllerBindings.fire) ||
                   HasArgument(argc, argv, "--fire");
         const bool jump = keyboard[gKeyboardBindings.jump] ||
-                          gameController.Button(SDL_CONTROLLER_BUTTON_A) ||
+                          gameController.Button(gControllerBindings.jump) ||
                           HasArgument(argc, argv, "--jump");
         const bool selectWeapon = keyboard[gKeyboardBindings.selectWeapon] ||
-                                  gameController.Button(SDL_CONTROLLER_BUTTON_Y) ||
+                                  gameController.Button(gControllerBindings.selectWeapon) ||
                                   HasArgument(argc, argv, "--select-weapon");
 
 #ifdef HOVERNET_GAME2_PLAYER
