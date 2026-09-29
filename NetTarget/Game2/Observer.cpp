@@ -60,11 +60,13 @@ CString gCountdownStr    = "Start in %02d.%02d sec. for %d laps";
 CString gFinishStr       = "Finish in %d.%02d.%02d  %d of %d";
 CString gFinishStrSingle = "Finish in %d.%02d.%02d";
 CString gBestLapStr      = "  Best lap %d.%02d.%02d  ";
-CString gHeaderStr       = "%d.%02d.%02d  Lap:%d/%d";
+CString gHeaderStr       = "Race %d:%02d.%02d  Lap %d/%d";
 CString gLastLapStr      = "Last lap %d.%02d.%02d  Best %d.%02d.%02d";
 CString gCurLapStr       = "Current lap %d.%02d.%02d  Best %d.%02d.%02d";
 #endif
 
+CString gFirstLapTimeStr = "Lap time %d:%02d.%02d";
+CString gFinalLapStr     = "Race %d:%02d.%02d  FINAL LAP";
 
 
 MR_Observer::MR_Observer()
@@ -1668,9 +1670,10 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       }
       else if( pViewingCharacter->GetLap() == 0 )
       {
-         // First lap
+         // Show first-lap progress too; previously the lower timer stayed blank
+         // until the player completed an entire lap.
          sprintf( lMainLineBuffer, gHeaderStr, pTime/60000, (pTime%60000)/1000, (pTime%1000)/10, 1, pViewingCharacter->GetTotalLap() );
-         // sprintf( lLapLineBuffer, "Current lap %d.%02d.%02d", pTime/60000, (pTime%60000)/1000, (pTime%1000)/10 );
+         sprintf( lLapLineBuffer, gFirstLapTimeStr, pTime/60000, (pTime%60000)/1000, (pTime%1000)/10 );
 
       }
       else if( pViewingCharacter->GetLastLapCompletion() > (pTime-8000) )
@@ -1699,6 +1702,15 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
 
       }
       
+      // Make the final lap impossible to confuse with an ordinary lap counter.
+      if( pTime >= 0 && pViewingCharacter->GetTotalLap() > 1 &&
+          pViewingCharacter->GetLap()+1 == pViewingCharacter->GetTotalLap() &&
+          !pViewingCharacter->HasFinish() )
+      {
+         sprintf( lMainLineBuffer, gFinalLapStr,
+                  pTime/60000, (pTime%60000)/1000, (pTime%1000)/10 );
+      }
+
       // Render timer text at top and bottom center of screen.
       const MR_Sprite* lHudFont = mBaseFont->GetSprite();
       lHudFont->StrBlt( lXRes/2, lYRes/16, Ascii2Simple( lMainLineBuffer ), &m3DView, MR_Sprite::eCenter, MR_Sprite::eTop, 0 );

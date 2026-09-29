@@ -354,9 +354,12 @@ and weapon sprites with a readable status line: explicit speed and fuel
 percentages plus missile charge/readiness, mine count, or power-up count. Live
 position is included as an exact rank when known, or as an honest best/worst
 range for racers tied on the same completed lap (the relay protocol does not
-carry continuous checkpoint distance). This keeps the original compact artwork
-while removing the need to infer critical state from unlabeled bars and
-animation frames or displaying false within-lap precision.
+carry continuous checkpoint distance). Race timing is now explicitly labelled,
+the current-lap clock is visible from the first lap rather than appearing only
+after one full circuit, and the final circuit gets a prominent `FINAL LAP`
+banner. This keeps the original compact artwork while removing the need to
+infer critical state from unlabeled bars and animation frames or displaying
+false within-lap precision.
 
 Online races now add a real RaceServer TCP round-trip measurement to that status
 line, refreshed every two seconds, with explicit measuring and connection-lost
