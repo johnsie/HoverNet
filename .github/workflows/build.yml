@@ -267,9 +267,21 @@ jobs:
             $hiddenSourceData = "$sourceData.package-smoke-hidden"
             Move-Item $sourceData $hiddenSourceData
             try {
-              $installedClient = Start-Process -FilePath "$installDir\HoverNet.exe" `
-                -WorkingDirectory $installDir -ArgumentList "--frames", "1" -Wait -PassThru
-              if ($installedClient.ExitCode -ne 0) { throw "Installed shared x64 client smoke failed" }
+              $installedScenarios = @(
+                "--frames 1",
+                "--settings-screen --frames 2",
+                "--controls-reference --frames 2",
+                "--pause-menu --frames 2",
+                "--results-screen --frames 2",
+                "--onboarding --frames 2"
+              )
+              foreach ($scenario in $installedScenarios) {
+                $installedClient = Start-Process -FilePath "$installDir\HoverNet.exe" `
+                  -WorkingDirectory $installDir -ArgumentList ($scenario.Split(" ")) -Wait -PassThru
+                if ($installedClient.ExitCode -ne 0) {
+                  throw "Installed shared x64 client smoke failed: $scenario"
+                }
+              }
             }
             finally {
               Move-Item $hiddenSourceData $sourceData

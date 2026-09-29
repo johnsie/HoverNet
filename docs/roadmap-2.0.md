@@ -541,7 +541,11 @@ framebuffer, renderer, observer, resource-pack, and menu-font failures are also
 reported in a native error dialog while retaining `stderr` output for Linux and
 automation. The top-level client boundary catches legacy resource exceptions,
 and a missing `ObjFac1.dat` message includes the attempted path plus a reinstall
-remedy instead of briefly showing a black window and disappearing.
+remedy instead of briefly showing a black window and disappearing. The clean
+installed-client gate now exercises Local Play startup, Settings, Controls, the
+pause menu, results, and onboarding from the installed directory while the
+checkout resource pack is hidden, covering the core Phase 3 new-player flow in
+the artifact that is actually shipped rather than only in the build tree.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.
