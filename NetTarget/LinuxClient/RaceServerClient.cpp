@@ -100,8 +100,8 @@ bool RaceServerClient::ConnectWithProtocolVersion(
         if (lHost == nullptr || lHost->h_addr_list[0] == nullptr) return false;
         std::memcpy(&lAddr.sin_addr, lHost->h_addr_list[0], sizeof(lAddr.sin_addr));
     }
-    mSocket = static_cast<int>(socket(AF_INET, SOCK_STREAM, 0));
-    if (mSocket == static_cast<int>(INVALID_SOCKET) || connect(static_cast<SOCKET>(mSocket),
+    mSocket = static_cast<std::intptr_t>(socket(AF_INET, SOCK_STREAM, 0));
+    if (static_cast<SOCKET>(mSocket) == INVALID_SOCKET || connect(static_cast<SOCKET>(mSocket),
         reinterpret_cast<const SOCKADDR*>(&lAddr), sizeof(lAddr)) == SOCKET_ERROR)
     {
         Disconnect();
@@ -180,9 +180,9 @@ const std::string& RaceServerClient::GetProtocolError() const
     return mProtocolError;
 }
 
-int RaceServerClient::ReleaseSocket()
+std::intptr_t RaceServerClient::ReleaseSocket()
 {
-    const int lSocket = mSocket;
+    const std::intptr_t lSocket = mSocket;
     mSocket = -1;
     mReceiveBuffer.clear();
     return lSocket;
@@ -333,14 +333,23 @@ bool RaceServerClient::PollMessage(RaceServerMessage& pOut, int pTimeoutMs)
 
     fd_set lReadSet;
     FD_ZERO(&lReadSet);
-    FD_SET(mSocket, &lReadSet);
+#ifdef _WIN32
+    FD_SET(static_cast<SOCKET>(mSocket), &lReadSet);
+#else
+    FD_SET(static_cast<int>(mSocket), &lReadSet);
+#endif
 
     const int lTimeoutMs = pTimeoutMs > 0 ? pTimeoutMs : 0;
     struct timeval lTimeout;
     lTimeout.tv_sec = lTimeoutMs / 1000;
     lTimeout.tv_usec = (lTimeoutMs % 1000) * 1000;
 
-    const int lReady = select(mSocket + 1, &lReadSet, nullptr, nullptr, &lTimeout);
+#ifdef _WIN32
+    // Winsock ignores nfds; avoid narrowing the pointer-width SOCKET.
+    const int lReady = select(0, &lReadSet, nullptr, nullptr, &lTimeout);
+#else
+    const int lReady = select(static_cast<int>(mSocket) + 1, &lReadSet, nullptr, nullptr, &lTimeout);
+#endif
     if (lReady < 0)
     {
         Disconnect();

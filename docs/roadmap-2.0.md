@@ -457,7 +457,8 @@ The first portability pass now lets the SDL renderer create its own native Windo
 window (while preserving legacy HWND embedding), stores shared-client settings
 under `%APPDATA%/HoverNet`, treats Linux `/proc` memory reporting as an optional
 diagnostic on Windows, and removes the shared RaceServer client dependency on
-the legacy MFC precompiled header.
+the legacy MFC precompiled header. Its socket ownership is now pointer-width safe
+for native x64 Windows instead of truncating Winsock handles to 32-bit integers.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.

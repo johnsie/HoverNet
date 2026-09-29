@@ -1,4 +1,4 @@
-// RaceServerClient.h : Linux-native TCP client for HoverRace's centralized RaceServer.
+// RaceServerClient.h : portable TCP client for HoverRace's centralized RaceServer.
 //
 // This intentionally does not reuse Game2's MR_NetworkInterface (NetInterface.h/.cpp):
 // that class mixes the wire protocol with Win32 modal dialogs (HWND connect prompts),
@@ -116,7 +116,9 @@ public:
     // netcode (MR_NetworkPort::Connect takes a raw SOCKET) once a hosted/joined
     // race is ready to actually play, instead of opening a second connection
     // (and thus a second server-side identity) just for that.
-    int ReleaseSocket();
+    // intptr_t is wide enough for Win64 SOCKET (an unsigned pointer-sized
+    // handle) while remaining able to carry a POSIX file descriptor.
+    std::intptr_t ReleaseSocket();
 
     // Sends a raw message. pData/pLen may be null/0 for an empty payload.
     bool SendMessage(int messageType, const void* pData, std::size_t pLen);
@@ -233,7 +235,7 @@ public:
                                  std::size_t& pOutStateLen);
 
 private:
-    int mSocket;
+    std::intptr_t mSocket;
     std::vector<std::uint8_t> mReceiveBuffer;
     std::string mProtocolError;
     std::uint32_t mPingToken;
