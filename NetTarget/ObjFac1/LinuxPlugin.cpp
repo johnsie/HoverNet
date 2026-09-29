@@ -1,3 +1,11 @@
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#endif
+#include "StdAfx.h"
+
+#include <algorithm>
 #include "../Model/MazeElement.h"
 #include "../Model/Level.h"
 #include "../Model/ConcreteShape.h"

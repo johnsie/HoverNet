@@ -523,7 +523,9 @@ the initial x64 MSVC C1189 failure in the inherited compatibility headers. The
 next portability pass supplies that compatibility header to the shared sprite
 implementation, disables Windows `min`/`max` macros there, includes the standard
 algorithm declarations used in their place, and marks the CMake module graph as
-static so legacy API headers no longer request DLL imports.
+static so legacy API headers no longer request DLL imports. The same explicit
+compatibility boundary now covers the shared object-factory plug-in, including
+its MFC collection types and standard `min`/`max` calls.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.
