@@ -428,6 +428,8 @@ if(BUILD_TESTING)
     set_tests_properties(HoverNetPostRaceSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetOnboardingSmoke COMMAND HoverNetGame2Player --onboarding --frames 2)
     set_tests_properties(HoverNetOnboardingSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    add_test(NAME HoverNetOnboardingConfigSmoke COMMAND HoverNetGame2Player --onboarding-config --frames 2)
+    set_tests_properties(HoverNetOnboardingConfigSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetGame2PlayerDebug COMMAND HoverNetGame2Player --debug --frames 1)
     set_tests_properties(HoverNetGame2PlayerDebug PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetTrack3DViewerPowerup COMMAND HoverNetTrack3DViewer --powerup --frames 1)
@@ -442,6 +444,6 @@ if(BUILD_TESTING)
         COMMAND HoverNetGame2Player --autoplay --frames 600
                 --memory-report "${CMAKE_BINARY_DIR}/memory-baseline-report.csv")
     set_tests_properties(HoverNetMemoryBaselineSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-    set_tests_properties(HoverNetLinuxBootstrap HoverNetTrackViewer HoverNetTrack3DViewer HoverNetGame2Player HoverNetGame2PlayerAutoplay HoverNetGame2PlayerSwitchback HoverNetGame2PlayerAudio HoverNetGame2PlayerCombat HoverNetGame2PlayerWeaponCycle HoverNetGame2PlayerJump HoverNetGame2PlayerFire HoverNetGame2PlayerControls HoverNetSettingsScreenSmoke HoverNetControlsReferenceSmoke HoverNetPauseMenuSmoke HoverNetQuitConfirmationSmoke HoverNetPostRaceSmoke HoverNetOnboardingSmoke HoverNetGame2PlayerDebug HoverNetTrack3DViewerPowerup HoverNetMemoryBaselineSmoke
+    set_tests_properties(HoverNetLinuxBootstrap HoverNetTrackViewer HoverNetTrack3DViewer HoverNetGame2Player HoverNetGame2PlayerAutoplay HoverNetGame2PlayerSwitchback HoverNetGame2PlayerAudio HoverNetGame2PlayerCombat HoverNetGame2PlayerWeaponCycle HoverNetGame2PlayerJump HoverNetGame2PlayerFire HoverNetGame2PlayerControls HoverNetSettingsScreenSmoke HoverNetControlsReferenceSmoke HoverNetPauseMenuSmoke HoverNetQuitConfirmationSmoke HoverNetPostRaceSmoke HoverNetOnboardingSmoke HoverNetOnboardingConfigSmoke HoverNetGame2PlayerDebug HoverNetTrack3DViewerPowerup HoverNetMemoryBaselineSmoke
         PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 endif()

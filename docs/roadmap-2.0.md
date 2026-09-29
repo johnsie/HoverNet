@@ -414,10 +414,13 @@ has a single Restore defaults action covering identity, server, audio, display,
 and accessibility values; it previews those defaults live while retaining full
 Cancel rollback and only persists them after Save.
 
-Guided onboarding is now implemented on Linux as a three-step first-run
-walkthrough covering race selection, driving and weapons, and the race HUD. It
-is skipped for automated bounded runs, records completion only after Finish, and
-remains reachable through How to Play on the main menu.
+Guided onboarding is now implemented on Linux as a four-step first-run
+walkthrough covering race selection, driving and weapons, the race HUD, and
+configuration/accessibility. It explains live preview plus Save/Cancel semantics
+so a new player can safely adjust the game without external documentation. It is
+skipped for automated bounded runs, records completion only after Finish, and
+remains reachable through How to Play on the main menu. The first and final pages
+have separate bounded smoke coverage.
 
 The Linux main menu is now consolidated into ImGui without looking like a
 settings dialog: an animated speed-line and perspective-grid race backdrop,

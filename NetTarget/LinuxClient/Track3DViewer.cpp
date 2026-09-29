@@ -1279,7 +1279,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                                  double currentVolume, bool currentMuted, bool currentFullscreen,
                                  int pFrameLimit);
 
-bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit);
+bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pStartPage = 0);
 void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit);
 
 // pClient is caller-owned (not constructed here) and deliberately left connected
@@ -3015,7 +3015,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     return result;
 }
 
-bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
+bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pStartPage)
 {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -3028,7 +3028,9 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
-    const char* titles[] = {"CHOOSE A RACE", "DRIVE YOUR HOVERCRAFT", "READ THE RACE"};
+    const char* titles[] = {
+        "CHOOSE A RACE", "DRIVE YOUR HOVERCRAFT", "READ THE RACE", "MAKE IT YOURS"
+    };
     const char* bodies[] = {
         "Local Play lets you choose a track, lap count, and whether weapons are enabled. "
         "Online Lobby connects to the shared RaceServer, where you can join an open race "
@@ -3038,9 +3040,16 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         "A standard controller uses the left stick, triggers, A, X, Y, and Start.",
         "The top HUD shows elapsed time and lap progress. The status line reports speed, "
         "fuel, weapon readiness, and network latency. The minimap tracks racers. Open "
-        "Controls from the main or pause menu whenever you need to review or remap inputs."
+        "Controls from the main or pause menu whenever you need to review or remap inputs.",
+        "Settings controls your display name, RaceServer, sound, window mode, resolution, "
+        "UI scale, and accessibility options. Large HUD text keeps race information and "
+        "chat readable; Reduced motion and High contrast adjust the menus. Changes preview "
+        "live, Save keeps them, and Cancel restores your previous setup."
     };
-    int page = 0;
+    constexpr int pageCount = sizeof(titles) / sizeof(titles[0]);
+    static_assert(pageCount == sizeof(bodies) / sizeof(bodies[0]),
+                  "Every onboarding title needs body text");
+    int page = std::max(0, std::min(pStartPage, pageCount - 1));
     int framesShown = 0;
     bool completed = false;
     bool running = true;
@@ -3086,7 +3095,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         const float panelWidth = std::min(680.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
         ImGui::BeginChild("OnboardingPanel", ImVec2(panelWidth, -60.0f), true);
-        ImGui::Text("STEP %d OF 3", page + 1);
+        ImGui::Text("STEP %d OF %d", page + 1, pageCount);
         HoverNetSectionHeading(titles[page]);
         ImGui::Spacing();
         ImGui::PushTextWrapPos(0.0f);
@@ -3099,9 +3108,9 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
             if (HoverNetButton("Back", ImVec2(130, 40))) --page;
             ImGui::SameLine();
         }
-        const char* nextLabel = page == 2 ? "Finish" : "Next";
+        const char* nextLabel = page == pageCount - 1 ? "Finish" : "Next";
         if (HoverNetButton(nextLabel, ImVec2(130, 40))) {
-            if (page == 2) {
+            if (page == pageCount - 1) {
                 completed = true;
                 running = false;
             }
@@ -4110,7 +4119,11 @@ int main(int argc, char** argv)
         return 1;
     }
     if (playerMode) {
-        if (HasArgument(argc, argv, "--settings-screen")) {
+        if (HasArgument(argc, argv, "--onboarding-config")) {
+            RunOnboardingScreen(graphics, frameLimit, 3);
+            g_QuitConfirmed = true;
+        }
+        else if (HasArgument(argc, argv, "--settings-screen")) {
             RunSettingsScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
                               "Player", lobbyHost, lobbyPort, LoadVolume(), LoadMute(), LoadFullscreen(), frameLimit);
             g_QuitConfirmed = true;
