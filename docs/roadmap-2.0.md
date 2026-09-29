@@ -304,12 +304,11 @@ coordinate SDL reports (real events and the backend's own fallback alike)
 are already in the same space with zero scaling involved, so there is
 nothing left to get wrong regardless of window size, aspect ratio, or frame
 timing. Logical size is restored to the fixed `kWidth`/`kHeight` immediately
-after presenting each ImGui frame, before that loop's next iteration can
-reach a raw bitmap-font screen (`ConfirmQuit`, `RunPauseMenu`) that still
-needs it for its own letterboxed `Present()` calls -- those two keep using
-`WindowToLogicalPoint`/`RewriteMouseEventToLogical` (now in the shared
-`ImGuiLogicalCoords.h`) exactly as before, since they're unaffected by any of
-this. `HoverNetImGuiLogicalMouseSmoke` pins the fix down for real: it forces
+after presenting each ImGui frame, before gameplay renders again. Pause and
+quit have since joined the shared ImGui flow too, so the old raw-menu panel,
+hit-test, and letterbox coordinate helpers have been removed rather than left
+as a second UI path. `HoverNetImGuiLogicalMouseSmoke` pins the fix down for real:
+it forces
 a 16:9 window against the 4:3 legacy resolution (the exact mismatch every
 prior attempt broke on), warps the mouse to a real window position, and
 checks both that ImGui reports the button there as hovered *and* -- via
@@ -448,9 +447,9 @@ for tracks without map artwork. The lobby's Host Race flow now uses the same
 map-forward selector and course guidance rather than a smaller text-only dialog;
 browsing an existing race also shows a compact preview of its selected course.
 
-The rest of Phase 3 (remaining ImGui menu consolidation, remaining HUD
-improvements and accessibility work, and
-Windows/Linux menu parity) remains.
+The primary Linux player flows are now consolidated in ImGui; the remaining
+Phase 3 work is HUD/accessibility completion, exit-gate verification, and
+essential Windows/Linux parity while convergence moves toward the shared client.
 
 For the remaining Phase 3 work, "Windows/Linux parity" means converging on the
 shared SDL2/ImGui implementation. Avoid adding substantial new functionality to

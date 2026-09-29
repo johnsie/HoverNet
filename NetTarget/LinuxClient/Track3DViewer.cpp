@@ -7,7 +7,6 @@
 #include "../ThirdParty/imgui/imgui.h"
 #include "../ThirdParty/imgui/backends/imgui_impl_sdl2.h"
 #include "../ThirdParty/imgui/backends/imgui_impl_sdlrenderer2.h"
-#include "ImGuiLogicalCoords.h"
 #endif
 #include "../Model/GameSession.h"
 #include "../MazeCompiler/TrackCommonStuff.h"
@@ -45,18 +44,10 @@ namespace
 constexpr int kWidth = 1024;
 constexpr int kHeight = 768;
 
-// WindowToLogicalPoint/RewriteMouseEventToLogical (used by ConfirmQuit below,
-// for translating real mouse coordinates into the fixed
-// kWidth x kHeight space those raw bitmap-font screens draw at) now live in
-// ImGuiLogicalCoords.h -- pulled out of this file so
-// HoverNetImGuiLogicalMouseSmoke can exercise the exact same code the client
-// runs. The ImGui-driven screens (Lobby, Local Race Setup, Settings) don't
-// need any mouse-coordinate translation at all: they disable the renderer's
-// logical size for their own frame instead (see the "SDL_RenderSetLogicalSize
-// (...0, 0)" comment further down) so ImGui draws 1:1 against the real
-// window. Three straight attempts at correcting ImGui's mouse position for
-// the letterbox mismatch instead (v0.1.73 through v0.1.76) each looked right
-// and wasn't -- see git log for what didn't work and why.
+// Every interactive menu now renders 1:1 in real window coordinates through
+// ImGui. The renderer's fixed 1024x768 logical size is used only for the game
+// framebuffer and restored after each menu frame, so menus need no separate
+// letterbox mouse-coordinate translation path.
 
 // Set once the player has actually confirmed "yes, quit HoverNet" (see
 // ConfirmQuit, defined further down) from whichever screen they were on when
@@ -362,100 +353,6 @@ void DrawUiText(const MR_Sprite& font, int x, int y, const char* text, MR_3DView
                 int scaling = 1)
 {
     font.StrBlt(x, y, Ascii2Simple(text), dest, hAlign, vAlign, scaling);
-}
-
-struct UiRect
-{
-    int x;
-    int y;
-    int w;
-    int h;
-
-    bool Contains(int px, int py) const
-    {
-        return px >= x && py >= y && px < x + w && py < y + h;
-    }
-};
-
-constexpr MR_UInt8 kUiPanelColor = MR_RESERVED_COLORS_BEGINNING + 15;
-constexpr MR_UInt8 kUiPanelAltColor = MR_RESERVED_COLORS_BEGINNING + 14;
-constexpr MR_UInt8 kUiBorderColor = MR_RESERVED_COLORS_BEGINNING + 10;
-constexpr MR_UInt8 kUiSelectionColor = MR_RESERVED_COLORS_BEGINNING + 43;
-constexpr MR_UInt8 kUiButtonColor = MR_RESERVED_COLORS_BEGINNING + 12;
-constexpr MR_UInt8 kUiButtonActiveColor = MR_RESERVED_COLORS_BEGINNING + 40;
-
-void FillUiRect(MR_VideoBuffer& buffer, const UiRect& rect, MR_UInt8 color)
-{
-    const int left = std::max(0, rect.x);
-    const int right = std::min(buffer.GetXRes(), rect.x + rect.w);
-    const int top = std::max(0, rect.y);
-    const int bottom = std::min(buffer.GetYRes(), rect.y + rect.h);
-    if (left >= right || top >= bottom) {
-        return;
-    }
-    MR_UInt8* pixels = buffer.GetBuffer();
-    const int stride = buffer.GetLineLen();
-    for (int y = top; y < bottom; ++y) {
-        std::memset(pixels + y * stride + left, color, static_cast<std::size_t>(right - left));
-    }
-}
-
-void OutlineUiRect(MR_VideoBuffer& buffer, const UiRect& rect, MR_UInt8 color)
-{
-    FillUiRect(buffer, UiRect{rect.x, rect.y, rect.w, 1}, color);
-    FillUiRect(buffer, UiRect{rect.x, rect.y + rect.h - 1, rect.w, 1}, color);
-    FillUiRect(buffer, UiRect{rect.x, rect.y, 1, rect.h}, color);
-    FillUiRect(buffer, UiRect{rect.x + rect.w - 1, rect.y, 1, rect.h}, color);
-}
-
-void DrawUiPanel(MR_VideoBuffer& buffer, const UiRect& rect)
-{
-    FillUiRect(buffer, rect, kUiPanelColor);
-    OutlineUiRect(buffer, rect, kUiBorderColor);
-}
-
-void DrawUiButton(MR_VideoBuffer& buffer, const MR_Sprite& font, MR_3DViewPort& viewport,
-                  const UiRect& rect, const char* label, bool active = false)
-{
-    FillUiRect(buffer, rect, active ? kUiButtonActiveColor : kUiButtonColor);
-    OutlineUiRect(buffer, rect, active ? kUiButtonActiveColor : kUiBorderColor);
-    DrawUiText(font, rect.x + rect.w / 2, rect.y + rect.h / 2, label, &viewport,
-               MR_Sprite::eCenter, MR_Sprite::eCenter, 2);
-}
-
-// Word-wraps text to fit the viewport's width (this font is fixed-width, so pixel
-// width is exact from character count) instead of relying on every caller to hand-
-// trim its own strings to fit -- that approach already broke three separate times
-// as lines were extended, each only noticed from a screenshot after the fact.
-// Draws left-aligned starting at (x, y) and returns the y position after the last
-// wrapped line, so callers can keep laying out content below it.
-int DrawUiTextWrapped(const MR_Sprite& font, int x, int y, int lineHeight, const char* text,
-                      MR_3DViewPort* dest)
-{
-    // MR_Sprite::StrBlt advances by mWidth*3/4 per character (see Sprite.cpp), not
-    // the full glyph cell width -- match that exactly or this under-estimates how
-    // many characters actually fit and wraps too early.
-    const int charWidth = std::max(1, font.GetItemWidth() * 3 / 4);
-    const int maxChars = std::max(1, (dest->GetXRes() - x) / charWidth);
-
-    std::string remaining(text);
-    while (!remaining.empty()) {
-        if (static_cast<int>(remaining.size()) <= maxChars) {
-            DrawUiText(font, x, y, remaining.c_str(), dest);
-            y += lineHeight;
-            break;
-        }
-        // Break at the last space within the limit, so words don't get split.
-        std::size_t breakAt = remaining.rfind(' ', static_cast<std::size_t>(maxChars));
-        if (breakAt == std::string::npos || breakAt == 0) {
-            breakAt = static_cast<std::size_t>(maxChars);
-        }
-        DrawUiText(font, x, y, remaining.substr(0, breakAt).c_str(), dest);
-        y += lineHeight;
-        const std::size_t nextStart = remaining.find_first_not_of(' ', breakAt);
-        remaining = (nextStart == std::string::npos) ? std::string() : remaining.substr(nextStart);
-    }
-    return y;
 }
 
 // Loads the same bitmap font sprite MR_Observer uses for its HUD text, for the menu
