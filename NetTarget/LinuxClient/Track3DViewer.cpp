@@ -1302,9 +1302,30 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     (void)font;
     RaceServerClient& client = pClient;
 
-    if (!client.Connect(host, port)) {
+    while (!client.Connect(host, port)) {
         std::fprintf(stderr, "Lobby screen: could not connect to RaceServer at %s:%u\n", host.c_str(), port);
-        return false;
+        // Bounded smoke runs must never wait for interaction. Interactive players
+        // get an actionable cross-platform prompt instead of a terminal-only
+        // failure that looks like the Online Lobby button did nothing.
+        if (pFrameLimit >= 0) return false;
+
+        const SDL_MessageBoxButtonData buttons[] = {
+            {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Retry"},
+            {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Back to main menu"}
+        };
+        char message[320];
+        std::snprintf(message, sizeof(message),
+                      "Could not connect to the RaceServer at %s:%u.\n\n"
+                      "Check your connection, or change the server address in Settings.",
+                      host.c_str(), port);
+        const SDL_MessageBoxData messageBox = {
+            SDL_MESSAGEBOX_ERROR, graphics.GetWindow(), "HoverNet - Online Lobby",
+            message, 2, buttons, nullptr
+        };
+        int buttonId = 0;
+        if (SDL_ShowMessageBox(&messageBox, &buttonId) != 0 || buttonId != 1) {
+            return false;
+        }
     }
 
     std::vector<RaceServerGameInfo> games;

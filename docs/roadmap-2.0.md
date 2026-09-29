@@ -461,6 +461,9 @@ browsing an existing race also shows a compact preview of its selected course.
 The primary Linux player flows are now consolidated in ImGui; the remaining
 Phase 3 work is HUD/accessibility completion, exit-gate verification, and
 essential Windows/Linux parity while convergence moves toward the shared client.
+An unavailable RaceServer now produces an in-game cross-platform error with the
+failed address, Settings guidance, Retry, and Back actions instead of silently
+returning after writing only to the terminal; bounded automation remains noninteractive.
 
 For the remaining Phase 3 work, "Windows/Linux parity" means converging on the
 shared SDL2/ImGui implementation. Avoid adding substantial new functionality to
