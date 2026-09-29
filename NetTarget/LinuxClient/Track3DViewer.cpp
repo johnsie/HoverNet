@@ -10,6 +10,7 @@
 #include "ImGuiLogicalCoords.h"
 #endif
 #include "../Model/GameSession.h"
+#include "../MazeCompiler/TrackCommonStuff.h"
 #include "../ObjFac1/ObjFac1Res.h"
 #include "../ObjFacTools/ResActor.h"
 #include "../ObjFacTools/ResourceLib.h"
@@ -502,6 +503,133 @@ const TrackGuide kTrackGuides[] = {
 };
 static_assert(sizeof(kTrackGuides) / sizeof(kTrackGuides[0]) == kHostableTrackCount,
               "Every hostable track needs setup guidance");
+
+void HoverNetSectionHeading(const char* label);
+
+struct TrackPreview
+{
+    SDL_Texture* mTexture = nullptr;
+    int mWidth = 0;
+    int mHeight = 0;
+    bool mLoaded = false;
+};
+
+TrackPreview LoadTrackPreview(SDL_Renderer* renderer, const char* trackName)
+{
+    TrackPreview preview;
+    preview.mLoaded = true;
+    if (renderer == nullptr || trackName == nullptr) return preview;
+
+    try {
+        MR_RecordFile track;
+        const std::string path = SourcePath((std::string("NetTarget/Tracks/") + trackName + ".trk").c_str());
+        if (!track.OpenForRead(path.c_str()) || track.GetNbRecords() < 4) return preview;
+
+        std::array<MR_UInt8, MR_NB_COLORS * 3> palette{};
+        PALETTEENTRY* basicColors = MR_GetColors(0.75, 0.75, 0.05);
+        for (int index = 0; index < MR_BASIC_COLORS; ++index) {
+            const int paletteIndex = MR_RESERVED_COLORS_BEGINNING + index;
+            palette[paletteIndex * 3] = basicColors[index].peRed;
+            palette[paletteIndex * 3 + 1] = basicColors[index].peGreen;
+            palette[paletteIndex * 3 + 2] = basicColors[index].peBlue;
+        }
+        delete [] basicColors;
+
+        track.SelectRecord(2);
+        {
+            CArchive backgroundArchive(&track, CArchive::load | CArchive::bNoFlushOnDelete);
+            int imageType = 0;
+            backgroundArchive >> imageType;
+            if (imageType == MR_RAWBITMAP) {
+                std::array<MR_UInt8, MR_BACK_COLORS * 3> backgroundPalette{};
+                backgroundArchive.Read(backgroundPalette.data(), static_cast<UINT>(backgroundPalette.size()));
+                for (int index = 0; index < MR_BACK_COLORS; ++index) {
+                    const PALETTEENTRY& color = MR_ConvertColor(
+                        backgroundPalette[index * 3], backgroundPalette[index * 3 + 1],
+                        backgroundPalette[index * 3 + 2], 0.75, 0.75, 0.05);
+                    const int paletteIndex = MR_RESERVED_COLORS_BEGINNING + MR_BASIC_COLORS + index;
+                    palette[paletteIndex * 3] = color.peRed;
+                    palette[paletteIndex * 3 + 1] = color.peGreen;
+                    palette[paletteIndex * 3 + 2] = color.peBlue;
+                }
+            }
+        }
+
+        track.SelectRecord(3);
+        CArchive mapArchive(&track, CArchive::load | CArchive::bNoFlushOnDelete);
+        int x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+        mapArchive >> x0 >> x1 >> y0 >> y1;
+        MR_Sprite map;
+        map.Serialize(mapArchive);
+        preview.mWidth = map.GetItemWidth();
+        preview.mHeight = map.GetItemHeight();
+        if (preview.mWidth <= 0 || preview.mHeight <= 0 || map.GetNbItem() <= 0) return preview;
+
+        MR_VideoBuffer indexed(nullptr, 1.0, 0.5, 0.5);
+        if (!indexed.SetVideoMode(preview.mWidth, preview.mHeight) || !indexed.Lock()) return preview;
+        indexed.Clear(0);
+        MR_2DViewPort viewport;
+        viewport.Setup(&indexed, 0, 0, preview.mWidth, preview.mHeight);
+        map.Blt(0, 0, &viewport);
+
+        std::vector<MR_UInt8> pixels(static_cast<std::size_t>(preview.mWidth) * preview.mHeight * 4);
+        const MR_UInt8* source = indexed.GetBuffer();
+        for (int pixel = 0; pixel < preview.mWidth * preview.mHeight; ++pixel) {
+            const int colorIndex = source[pixel];
+            pixels[pixel * 4] = palette[colorIndex * 3];
+            pixels[pixel * 4 + 1] = palette[colorIndex * 3 + 1];
+            pixels[pixel * 4 + 2] = palette[colorIndex * 3 + 2];
+            pixels[pixel * 4 + 3] = colorIndex == 0 ? 0 : 255;
+        }
+
+        preview.mTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
+                                              SDL_TEXTUREACCESS_STATIC,
+                                              preview.mWidth, preview.mHeight);
+        if (preview.mTexture != nullptr) {
+            SDL_UpdateTexture(preview.mTexture, nullptr, pixels.data(), preview.mWidth * 4);
+            SDL_SetTextureBlendMode(preview.mTexture, SDL_BLENDMODE_BLEND);
+        }
+    }
+    catch (...) {
+        if (preview.mTexture != nullptr) SDL_DestroyTexture(preview.mTexture);
+        preview.mTexture = nullptr;
+        preview.mWidth = 0;
+        preview.mHeight = 0;
+    }
+    return preview;
+}
+
+void DrawTrackPreview(const TrackPreview& preview)
+{
+    HoverNetSectionHeading("Track map");
+    const ImVec2 available = ImGui::GetContentRegionAvail();
+    const ImVec2 frameSize(std::max(1.0f, available.x),
+                           std::max(180.0f, available.y - 4.0f));
+    const ImVec2 frameMin = ImGui::GetCursorScreenPos();
+    const ImVec2 frameMax(frameMin.x + frameSize.x, frameMin.y + frameSize.y);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilled(frameMin, frameMax, IM_COL32(13, 13, 18, 255), 8.0f);
+    draw->AddRect(frameMin, frameMax, IM_COL32(105, 105, 120, 255), 8.0f);
+
+    if (preview.mTexture != nullptr && preview.mWidth > 0 && preview.mHeight > 0) {
+        const float inset = 18.0f;
+        const float scale = std::min((frameSize.x - 2.0f * inset) / preview.mWidth,
+                                     (frameSize.y - 2.0f * inset) / preview.mHeight);
+        const ImVec2 imageSize(preview.mWidth * scale, preview.mHeight * scale);
+        const ImVec2 imageMin(frameMin.x + (frameSize.x - imageSize.x) * 0.5f,
+                              frameMin.y + (frameSize.y - imageSize.y) * 0.5f);
+        draw->AddImage(reinterpret_cast<ImTextureID>(preview.mTexture), imageMin,
+                       ImVec2(imageMin.x + imageSize.x, imageMin.y + imageSize.y));
+    }
+    else {
+        const char* unavailable = "Map preview unavailable";
+        const ImVec2 textSize = ImGui::CalcTextSize(unavailable);
+        draw->AddText(ImVec2(frameMin.x + (frameSize.x - textSize.x) * 0.5f,
+                             frameMin.y + (frameSize.y - textSize.y) * 0.5f),
+                      IM_COL32(180, 180, 190, 255), unavailable);
+    }
+    ImGui::Dummy(frameSize);
+}
 
 // Per-user settings directory, following the XDG Base Directory spec (the
 // documented, conventional location on Linux) instead of the four separate
@@ -2305,6 +2433,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     bool running = true;
     bool cancelled = false;
     int framesShown = 0;
+    std::array<TrackPreview, kHostableTrackCount> trackPreviews{};
 
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
@@ -2366,12 +2495,15 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Spacing();
         ImGui::Spacing();
 
-        const float centerWidth = std::min(460.0f, ImGui::GetContentRegionAvail().x);
-        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
-        // Use all remaining vertical space. A fixed-height panel began scrolling
-        // after course briefings were added even when the window had unused room
-        // below it; height 0 tells ImGui to extend the child to the content edge.
-        ImGui::BeginChild("LocalRaceSetupPanel", ImVec2(centerWidth, 0), true);
+        const float panelWidth = std::min(900.0f, ImGui::GetContentRegionAvail().x);
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
+        ImGui::BeginChild("LocalRaceSetupPanel", ImVec2(panelWidth, 0), true);
+
+        const float contentWidth = ImGui::GetContentRegionAvail().x;
+        const bool sideBySide = contentWidth >= 610.0f;
+        const float gap = ImGui::GetStyle().ItemSpacing.x;
+        const float controlsWidth = sideBySide ? contentWidth * 0.52f : contentWidth;
+        ImGui::BeginChild("RaceOptions", ImVec2(controlsWidth, sideBySide ? 0.0f : 390.0f), false);
 
         ImGui::PushItemWidth(-1.0f);
         ImGui::TextUnformatted("Track");
@@ -2406,6 +2538,24 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             cancelled = true;
             running = false;
         }
+        ImGui::EndChild();
+
+        TrackPreview& preview = trackPreviews[prefs.mTrackIndex];
+        if (!preview.mLoaded) {
+            preview = LoadTrackPreview(graphics.GetRenderer(), kHostableTracks[prefs.mTrackIndex]);
+        }
+        if (sideBySide) {
+            ImGui::SameLine(0.0f, gap);
+            ImGui::BeginChild("TrackPreview", ImVec2(0, 0), false);
+            DrawTrackPreview(preview);
+            ImGui::EndChild();
+        }
+        else {
+            ImGui::Spacing();
+            ImGui::BeginChild("TrackPreview", ImVec2(0, 240.0f), false);
+            DrawTrackPreview(preview);
+            ImGui::EndChild();
+        }
 
         ImGui::EndChild();
         ImGui::End();
@@ -2420,6 +2570,9 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         SDL_Delay(16);
     }
 
+    for (TrackPreview& preview : trackPreviews) {
+        if (preview.mTexture != nullptr) SDL_DestroyTexture(preview.mTexture);
+    }
     ImGui_ImplSDLRenderer2_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
