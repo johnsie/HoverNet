@@ -3263,6 +3263,15 @@ BOOL CALLBACK MR_GameApp::AudioDialogFunc( HWND pWindow, UINT pMsgId, WPARAM pWP
             if( This->mObserver1 != NULL ) This->mObserver1->SetLargeHudText( lLarge );
             if( This->mObserver2 != NULL ) This->mObserver2->SetLargeHudText( lLarge );
          }
+         if( pMsgId == WM_COMMAND && LOWORD(pWParam) == IDC_RESET_AUDIO_HUD )
+         {
+            SendDlgItemMessage( pWindow, IDC_MASTER_VOLUME, TBM_SETPOS, TRUE, 100 );
+            CheckDlgButton( pWindow, IDC_MUTE_AUDIO, BST_UNCHECKED );
+            CheckDlgButton( pWindow, IDC_LARGE_HUD_TEXT, BST_UNCHECKED );
+            MR_SoundServer::SetMasterVolume( 1.0 );
+            if( This->mObserver1 != NULL ) This->mObserver1->SetLargeHudText( FALSE );
+            if( This->mObserver2 != NULL ) This->mObserver2->SetLargeHudText( FALSE );
+         }
          break;
 
       case WM_NOTIFY:

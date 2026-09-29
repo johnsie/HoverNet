@@ -335,6 +335,7 @@
 #define IDC_MASTER_VOLUME               1077
 #define IDC_MUTE_AUDIO                  1078
 #define IDC_LARGE_HUD_TEXT              1079
+#define IDC_RESET_AUDIO_HUD              1080
 #define ID_GAME_NEW                     0xE100
 #define ID_GAME_LOAD                    0xE101
 #define ID_GAME_FAST_SAVE               0xE103
@@ -350,7 +351,7 @@
 #define _APS_3D_CONTROLS                     1
 #define _APS_NEXT_RESOURCE_VALUE        163
 #define _APS_NEXT_COMMAND_VALUE         40016
-#define _APS_NEXT_CONTROL_VALUE         1080
+#define _APS_NEXT_CONTROL_VALUE         1081
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
