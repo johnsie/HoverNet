@@ -7,6 +7,7 @@
 #include "../VideoServices/Sprite.h"
 #include "../VideoServices/2DViewport.h"
 
+#include <algorithm>
 #include <cstring>
 
 MR_Sprite::MR_Sprite() : mNbItem(0), mItemHeight(0), mTotalHeight(0), mWidth(0), mData(nullptr) {}
