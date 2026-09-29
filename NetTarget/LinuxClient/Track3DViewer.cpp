@@ -1289,17 +1289,14 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit);
 // server afterward (player position sync), so the connection can't be scoped to
 // just this function the way it could when all it did was browse/chat.
 bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
-                    const MR_Sprite& font, RaceServerClient& pClient, const std::string& host, unsigned port,
+                    const MR_Sprite& font, RaceServerClient& pClient, std::string& host, unsigned& port,
                     std::string& outJoinedName, std::string& outTrackName, int& outNumLaps,
                     int& outLocalClientId, std::vector<RaceServerPeer>& outPeers, int pFrameLimit)
 {
     // The lobby screen renders through Dear ImGui directly against the SDL_Renderer
     // graphics already owns, not the paletted MR_VideoBuffer the 3D game view uses --
-    // buffer/viewport/font are unused here now, kept only so the call site (shared
-    // with the old rendering path) doesn't need to change.
-    (void)buffer;
-    (void)viewport;
-    (void)font;
+    // buffer/viewport/font are also passed to Settings when recovery from a
+    // failed connection needs a corrected server address.
     RaceServerClient& client = pClient;
 
     while (!client.Connect(host, port)) {
@@ -1313,6 +1310,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
 
         const SDL_MessageBoxButtonData buttons[] = {
             {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Retry"},
+            {0, 2, "Open Settings"},
             {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Back to main menu"}
         };
         char message[320];
@@ -1329,11 +1327,30 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         }
         const SDL_MessageBoxData messageBox = {
             SDL_MESSAGEBOX_ERROR, graphics.GetWindow(), "HoverNet - Online Lobby",
-            message, 2, buttons, nullptr
+            message, 3, buttons, nullptr
         };
         int buttonId = 0;
-        if (SDL_ShowMessageBox(&messageBox, &buttonId) != 0 || buttonId != 1) {
+        if (SDL_ShowMessageBox(&messageBox, &buttonId) != 0 || buttonId == 0) {
             return false;
+        }
+        if (buttonId == 2) {
+            const SettingsResult settings = RunSettingsScreen(
+                graphics, buffer, viewport, font, LoadUsername(), host, port,
+                LoadVolume(), LoadMute(), LoadFullscreen(), -1);
+            if (settings.confirmed) {
+                SaveUsername(settings.username);
+                host = settings.serverHost;
+                port = settings.serverPort;
+                SaveServerUrl(host, port);
+                SaveVolume(settings.volume);
+                SaveMute(settings.muted);
+                SaveFullscreen(settings.fullscreen);
+                SaveWindowSize(WindowSize{settings.windowWidth, settings.windowHeight});
+                SaveUiScale(settings.uiScale);
+                SaveLargeHudText(settings.largeHudText);
+                SaveReducedMotion(settings.reducedMotion);
+                SaveHighContrast(settings.highContrast);
+            }
         }
     }
 

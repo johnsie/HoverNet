@@ -462,8 +462,9 @@ The primary Linux player flows are now consolidated in ImGui; the remaining
 Phase 3 work is HUD/accessibility completion, exit-gate verification, and
 essential Windows/Linux parity while convergence moves toward the shared client.
 An unavailable RaceServer now produces an in-game cross-platform error with the
-failed address, Settings guidance, Retry, and Back actions instead of silently
-returning after writing only to the terminal. Protocol-version rejection displays
+failed address plus Retry, Open Settings, and Back actions instead of silently
+returning after writing only to the terminal. Saving a corrected server address
+retries it immediately without leaving the online flow. Protocol-version rejection displays
 the server's reason and recommends a compatible release rather than misreporting
 it as a generic outage; bounded automation remains noninteractive.
 
