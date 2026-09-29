@@ -2678,6 +2678,19 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
+    SDL_Texture* menuHovercraftTexture = nullptr;
+    const std::string menuHovercraftPath =
+        SourcePath("NetTarget/LinuxClient/assets/menu-hovercraft.bmp");
+    if (SDL_Surface* menuHovercraftSurface = SDL_LoadBMP(menuHovercraftPath.c_str())) {
+        SDL_SetSurfaceBlendMode(menuHovercraftSurface, SDL_BLENDMODE_BLEND);
+        menuHovercraftTexture =
+            SDL_CreateTextureFromSurface(graphics.GetRenderer(), menuHovercraftSurface);
+        SDL_FreeSurface(menuHovercraftSurface);
+        if (menuHovercraftTexture != nullptr) {
+            SDL_SetTextureBlendMode(menuHovercraftTexture, SDL_BLENDMODE_BLEND);
+        }
+    }
+
     const char* options[] = {"Local Play", "Online Lobby", "Settings", "Controls", "How to Play"};
     constexpr int optionCount = sizeof(options) / sizeof(options[0]);
     MenuChoice choice = MenuChoice::eLocalPlay;
@@ -2760,32 +2773,44 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                                 IM_COL32(255, 91, 108, 70), 2.0f);
         }
 
-        // Stylised hovercraft silhouette, deliberately geometric to match the
-        // original game's angular low-poly visual language.
+        const float panelWidth = std::min(430.0f, workSize.x * 0.42f);
         const float craftX = workPos.x + workSize.x * 0.30f;
         const float craftY = workPos.y + workSize.y * 0.68f;
         const float craftScale = std::min(workSize.x / 1200.0f, workSize.y / 760.0f);
-        ImVec2 craftBody[] = {
-            ImVec2(craftX - 180*craftScale, craftY + 28*craftScale),
-            ImVec2(craftX - 92*craftScale, craftY - 38*craftScale),
-            ImVec2(craftX + 72*craftScale, craftY - 52*craftScale),
-            ImVec2(craftX + 190*craftScale, craftY + 18*craftScale),
-            ImVec2(craftX + 105*craftScale, craftY + 62*craftScale),
-            ImVec2(craftX - 122*craftScale, craftY + 70*craftScale),
-        };
-        background->AddConvexPolyFilled(craftBody, 6, IM_COL32(218, 36, 63, 245));
-        background->AddTriangleFilled(
-            ImVec2(craftX - 52*craftScale, craftY - 42*craftScale),
-            ImVec2(craftX + 22*craftScale, craftY - 112*craftScale),
-            ImVec2(craftX + 74*craftScale, craftY - 48*craftScale),
-            IM_COL32(245, 224, 226, 235));
-        background->AddCircleFilled(ImVec2(craftX - 118*craftScale, craftY + 66*craftScale),
-                                    43*craftScale, IM_COL32(35, 35, 42, 255));
-        background->AddCircleFilled(ImVec2(craftX + 112*craftScale, craftY + 58*craftScale),
-                                    43*craftScale, IM_COL32(35, 35, 42, 255));
-        background->AddLine(ImVec2(craftX - 145*craftScale, craftY + 91*craftScale),
-                            ImVec2(craftX + 150*craftScale, craftY + 84*craftScale),
-                            IM_COL32(255, 72, 91, 100), 8*craftScale);
+        if (menuHovercraftTexture != nullptr) {
+            // This hero render is derived from HoverNet's original round-skirt
+            // craft: oversized turbines and a visible pilot give the menu a
+            // stronger arcade-racing identity without under-body lighting.
+            const float availableWidth = std::max(220.0f, workSize.x - panelWidth - 66.0f);
+            const float craftSize = std::min(availableWidth, workSize.y * 0.72f);
+            const float imageX = workPos.x + std::max(8.0f, (availableWidth - craftSize) * 0.5f);
+            const float imageY = workPos.y + std::max(155.0f, workSize.y - craftSize - 18.0f);
+            background->AddImage(
+                reinterpret_cast<ImTextureID>(menuHovercraftTexture),
+                ImVec2(imageX, imageY), ImVec2(imageX + craftSize, imageY + craftSize));
+        }
+        else {
+            // Keep the menu usable in development if its packaged artwork is
+            // missing by falling back to the original geometric silhouette.
+            ImVec2 craftBody[] = {
+                ImVec2(craftX - 180*craftScale, craftY + 28*craftScale),
+                ImVec2(craftX - 92*craftScale, craftY - 38*craftScale),
+                ImVec2(craftX + 72*craftScale, craftY - 52*craftScale),
+                ImVec2(craftX + 190*craftScale, craftY + 18*craftScale),
+                ImVec2(craftX + 105*craftScale, craftY + 62*craftScale),
+                ImVec2(craftX - 122*craftScale, craftY + 70*craftScale),
+            };
+            background->AddConvexPolyFilled(craftBody, 6, IM_COL32(218, 36, 63, 245));
+            background->AddTriangleFilled(
+                ImVec2(craftX - 52*craftScale, craftY - 42*craftScale),
+                ImVec2(craftX + 22*craftScale, craftY - 112*craftScale),
+                ImVec2(craftX + 74*craftScale, craftY - 48*craftScale),
+                IM_COL32(245, 224, 226, 235));
+            background->AddCircleFilled(ImVec2(craftX - 118*craftScale, craftY + 66*craftScale),
+                                        43*craftScale, IM_COL32(35, 35, 42, 255));
+            background->AddCircleFilled(ImVec2(craftX + 112*craftScale, craftY + 58*craftScale),
+                                        43*craftScale, IM_COL32(35, 35, 42, 255));
+        }
 
         ImGui::SetCursorPos(ImVec2(48.0f, 48.0f));
         ImGui::BeginGroup();
@@ -2799,7 +2824,6 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         ImGui::PopStyleColor();
         ImGui::EndGroup();
 
-        const float panelWidth = std::min(430.0f, workSize.x * 0.42f);
         const float panelHeight = std::min(580.0f, workSize.y - 84.0f);
         ImGui::SetCursorPos(ImVec2(workSize.x - panelWidth - 42.0f, 42.0f));
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.94f));
@@ -2859,6 +2883,9 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         SDL_Delay(16);
     }
 
+    if (menuHovercraftTexture != nullptr) {
+        SDL_DestroyTexture(menuHovercraftTexture);
+    }
     ImGui_ImplSDLRenderer2_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
