@@ -377,6 +377,13 @@ keyboard/controller navigation and all resume, race-switching, settings,
 controls, and quit behavior. `HoverNetPauseMenuSmoke` gives the standalone
 render/lifecycle path deterministic headless coverage.
 
+Finishing a race now opens a dedicated ImGui results flow instead of merely
+printing “Press ESC to exit the race.” It presents placement, finish time, and
+best lap, then offers explicit routes to keep driving, configure another local
+race, enter online multiplayer, or quit. Keyboard/controller navigation and
+quit confirmation remain consistent with the other menus, and
+`HoverNetPostRaceSmoke` covers its standalone render/lifecycle path.
+
 The rest of Phase 3 (remaining ImGui menu consolidation, advanced controller
 axis customization, remaining HUD improvements and accessibility work, and
 Windows/Linux menu parity) remains.

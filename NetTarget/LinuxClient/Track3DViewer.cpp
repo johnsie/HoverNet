@@ -1039,6 +1039,19 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                          MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline,
                          int pFrameLimit = -1);
 
+enum class PostRaceChoice
+{
+    eContinue,
+    eNewLocalRace,
+    eOnlineLobby,
+    eQuit,
+};
+
+PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
+                                 MR_3DViewPort& viewport, const MR_Sprite& font,
+                                 MR_SimulationTime pFinishTime, MR_SimulationTime pBestLap,
+                                 int pRank, int pPlayerCount, int pFrameLimit = -1);
+
 struct SettingsResult
 {
     bool confirmed = false;
@@ -1916,6 +1929,176 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         ImGui::PopStyleColor();
 
         ImGui::End();
+        ImGui::Render();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
+        SDL_Delay(16);
+    }
+
+    if (ownsImGuiContext) {
+        ImGui_ImplSDLRenderer2_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+    }
+    return choice;
+}
+
+
+void FormatRaceTime(MR_SimulationTime pTime, char* pBuffer, std::size_t pBufferSize)
+{
+    const MR_SimulationTime safeTime = std::max<MR_SimulationTime>(0, pTime);
+    std::snprintf(pBuffer, pBufferSize, "%d:%02d.%02d",
+                  safeTime / 60000, (safeTime % 60000) / 1000, (safeTime % 1000) / 10);
+}
+
+PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
+                                 MR_3DViewPort& viewport, const MR_Sprite& font,
+                                 MR_SimulationTime pFinishTime, MR_SimulationTime pBestLap,
+                                 int pRank, int pPlayerCount, int pFrameLimit)
+{
+    const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
+    if (ownsImGuiContext) {
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+        ImFontConfig fontConfig;
+        fontConfig.SizePixels = 19.0f;
+        io.Fonts->AddFontDefault(&fontConfig);
+        ApplyHoverNetLobbyStyle(LoadUiScale());
+        ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+        ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+    }
+
+    char finishTime[32];
+    char bestLap[32];
+    FormatRaceTime(pFinishTime, finishTime, sizeof(finishTime));
+    FormatRaceTime(pBestLap, bestLap, sizeof(bestLap));
+    PostRaceChoice choice = PostRaceChoice::eContinue;
+    bool focusFirstButton = true;
+    bool running = true;
+    int framesShown = 0;
+
+    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_QUIT) {
+                if (ConfirmQuit(graphics, buffer, viewport, font)) {
+                    choice = PostRaceChoice::eQuit;
+                    running = false;
+                }
+            }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+                running = false;
+            }
+            else if (event.type == SDL_CONTROLLERBUTTONDOWN &&
+                     event.cbutton.button == SDL_CONTROLLER_BUTTON_B) {
+                running = false;
+            }
+        }
+
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_RenderSetLogicalSize(renderer, 0, 0);
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::Begin("HoverNet Race Results", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings);
+
+        const ImVec2 workPos = mainViewport->WorkPos;
+        const ImVec2 workSize = mainViewport->WorkSize;
+        const ImVec2 workEnd(workPos.x + workSize.x, workPos.y + workSize.y);
+        ImDrawList* background = ImGui::GetWindowDrawList();
+        background->AddRectFilledMultiColor(
+            workPos, workEnd,
+            IM_COL32(18, 12, 20, 255), IM_COL32(69, 13, 28, 255),
+            IM_COL32(8, 8, 13, 255), IM_COL32(23, 8, 14, 255));
+        const float stripeWidth = std::max(32.0f, workSize.x / 18.0f);
+        for (float x = workPos.x - workSize.y; x < workEnd.x; x += stripeWidth * 2.0f) {
+            background->AddQuadFilled(
+                ImVec2(x, workEnd.y), ImVec2(x + stripeWidth, workEnd.y),
+                ImVec2(x + workSize.y * 0.36f + stripeWidth, workPos.y),
+                ImVec2(x + workSize.y * 0.36f, workPos.y), IM_COL32(255, 255, 255, 10));
+        }
+
+        const float cardWidth = std::min(680.0f, workSize.x - 48.0f);
+        const float cardHeight = std::min(620.0f, workSize.y - 48.0f);
+        ImGui::SetCursorPos(ImVec2((workSize.x - cardWidth) * 0.5f,
+                                   (workSize.y - cardHeight) * 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.065f, 0.065f, 0.085f, 0.97f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 12.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
+        ImGui::BeginChild("ResultsCard", ImVec2(cardWidth, cardHeight), true);
+
+        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+        ImGui::SetWindowFontScale(2.0f);
+        const char* heading = pRank == 1 ? "VICTORY!" : "RACE COMPLETE";
+        const float headingWidth = ImGui::CalcTextSize(heading).x;
+        ImGui::SetCursorPosX((ImGui::GetContentRegionAvail().x - headingWidth) * 0.5f);
+        ImGui::TextUnformatted(heading);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        const char* subtitle = pRank == 1 ? "You owned the track." : "Finish line crossed.";
+        const float subtitleWidth = ImGui::CalcTextSize(subtitle).x;
+        ImGui::SetCursorPosX((ImGui::GetContentRegionAvail().x - subtitleWidth) * 0.5f);
+        ImGui::TextColored(kHoverNetCoral, "%s", subtitle);
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::BeginTable("RaceResultStats", 3,
+                              ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
+            const char* labels[] = {"POSITION", "FINISH TIME", "BEST LAP"};
+            char position[32];
+            std::snprintf(position, sizeof(position), "%d / %d", pRank, std::max(1, pPlayerCount));
+            const char* values[] = {position, finishTime, bestLap};
+            for (int column = 0; column < 3; ++column) {
+                ImGui::TableNextColumn();
+                const float labelWidth = ImGui::CalcTextSize(labels[column]).x;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                    std::max(0.0f, (ImGui::GetColumnWidth() - labelWidth) * 0.5f));
+                ImGui::TextDisabled("%s", labels[column]);
+                ImGui::SetWindowFontScale(1.35f);
+                const float valueWidth = ImGui::CalcTextSize(values[column]).x;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                    std::max(0.0f, (ImGui::GetColumnWidth() - valueWidth) * 0.5f));
+                ImGui::TextColored(kHoverNetWhite, "%s", values[column]);
+                ImGui::SetWindowFontScale(1.0f);
+            }
+            ImGui::EndTable();
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        if (focusFirstButton) {
+            ImGui::SetKeyboardFocusHere();
+            focusFirstButton = false;
+        }
+        const char* actions[] = {"KEEP DRIVING", "NEW LOCAL RACE", "ONLINE MULTIPLAYER", "QUIT HOVERNET"};
+        for (int index = 0; index < 4; ++index) {
+            if (HoverNetButton(actions[index], ImVec2(-FLT_MIN, index == 0 ? 54.0f : 44.0f))) {
+                choice = static_cast<PostRaceChoice>(index);
+                running = false;
+            }
+            ImGui::Spacing();
+        }
+        HoverNetHint("Esc / B: keep driving");
+        ImGui::EndChild();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor();
+        ImGui::End();
+
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
@@ -3471,6 +3654,11 @@ int main(int argc, char** argv)
             RunPauseMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(), false, frameLimit);
             g_QuitConfirmed = true;
         }
+        else if (HasArgument(argc, argv, "--results-screen")) {
+            RunPostRaceScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
+                              83456, 27341, 1, 4, frameLimit);
+            g_QuitConfirmed = true;
+        }
         else if (HasArgument(argc, argv, "--onboarding")) {
             RunOnboardingScreen(graphics, frameLimit);
             g_QuitConfirmed = true;
@@ -3809,14 +3997,38 @@ int main(int argc, char** argv)
             }
             if (!finishAnnounced && mainCharacter->HasFinish()) {
                 finishAnnounced = true;
-                // Windows used to say "press F2 to return to the internet
-                // meeting room" here (IDS_F2_TORETURN, NetworkSession.cpp) --
-                // that's the online-only legacy dialog flow this client
-                // doesn't have. Escape already opens the pause menu (with a
-                // Quit option) whether the race just finished or not, so
-                // there's nothing race-finish-specific for it to do beyond
-                // telling the player it's there.
-                session.AddMessage("Press ESC to exit the race");
+                const PostRaceChoice resultChoice = RunPostRaceScreen(
+                    graphics, buffer, viewport, *menuFontHandle->GetSprite(),
+                    mainCharacter->GetTotalTime(), mainCharacter->GetBestLapDuration(),
+                    session.GetRank(mainCharacter), session.GetNbPlayers(),
+                    frameLimit < 0 ? -1 : 2);
+                if (resultChoice == PostRaceChoice::eQuit) {
+                    running = false;
+                    continue;
+                }
+                if (resultChoice == PostRaceChoice::eOnlineLobby) {
+                    missileSeen = false;
+                    finishAnnounced = false;
+                    if (!resetRaceSession() || !joinOnlineRace()) {
+                        running = false;
+                    }
+                    wasOnlineConnected = onlineClient.IsConnected();
+                    continue;
+                }
+                if (resultChoice == PostRaceChoice::eNewLocalRace) {
+                    const LocalRaceSetup setup = RunLocalRaceSetup(
+                        graphics, buffer, viewport, *menuFontHandle->GetSprite(), frameLimit);
+                    if (setup.confirmed) {
+                        missileSeen = false;
+                        finishAnnounced = false;
+                        if (!loadLocalRace(setup.trackName, setup.laps, setup.weapons)) {
+                            running = false;
+                        }
+                        wasOnlineConnected = onlineClient.IsConnected();
+                    }
+                    continue;
+                }
+                session.AddMessage("Race complete -- press ESC for race options");
             }
             if (onlineClient.IsConnected() && localClientId >= 0) {
                 while (mainCharacter->HitQueueCount() > 0) {
