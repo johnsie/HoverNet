@@ -428,6 +428,10 @@ there and owns a temporary context when opened during a race, preserving
 keyboard/controller navigation and all resume, race-switching, settings,
 controls, and quit behavior. `HoverNetPauseMenuSmoke` gives the standalone
 render/lifecycle path deterministic headless coverage.
+The quit confirmation now follows the same context-sharing pattern and visual
+language, defaults keyboard/controller focus to the safe Keep Playing action,
+and retains Escape/B cancellation plus explicit confirmation for closing.
+`HoverNetQuitConfirmationSmoke` covers its standalone lifecycle path.
 
 Finishing a race now opens a dedicated ImGui results flow instead of merely
 printing “Press ESC to exit the race.” It presents placement, finish time, and

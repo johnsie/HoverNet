@@ -1324,7 +1324,7 @@ void HoverNetHint(const char* label)
 // Forward-declared: defined below, but RunLobbyScreen (right below) already
 // needs to call it from its own SDL_QUIT handling.
 bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
-                 const MR_Sprite& font);
+                 const MR_Sprite& font, int pFrameLimit = -1);
 
 // PauseChoice/RunPauseMenu and SettingsResult/RunSettingsScreen are fully
 // defined further below (where the pause menu and settings screen already
@@ -2106,78 +2106,124 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     return joined;
 }
 
-// Clicking the window's close (X) button used to quit immediately, with no
-// chance to change your mind mid-race or reject an accidental click -- unlike
-// every other way to quit (the pause menu's own "Quit HoverNet" button, or
-// choosing not to via Resume), which is already itself a deliberate menu
-// choice. Returns true if the player actually wants to quit.
+// Clicking the window's close (X) button opens the same shared ImGui visual
+// language as the rest of the Phase 3 menus. It borrows an active context when
+// invoked from another ImGui screen and owns one when invoked directly from a
+// race. Returns true only after an explicit destructive confirmation.
 bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
-                 const MR_Sprite& font)
+                 const MR_Sprite& font, int pFrameLimit)
 {
-    const char* options[] = {"Yes, quit HoverNet", "No, keep playing"};
-    constexpr int optionCount = 2;
-    int selected = 1;  // Defaults to "No" so a stray Enter doesn't quit.
-    const int panelWidth = std::min(420, viewport.GetXRes() - 48);
-    const int panelHeight = 220;
-    const UiRect panel{(viewport.GetXRes() - panelWidth) / 2,
-                       (viewport.GetYRes() - panelHeight) / 2, panelWidth, panelHeight};
-    const int buttonWidth = panelWidth - 80;
-    const int buttonHeight = 44;
-    const int firstButtonY = panel.y + 100;
+    (void)buffer;
+    (void)viewport;
+    (void)font;
+    const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
+    if (ownsImGuiContext) {
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+        ImFontConfig fontConfig;
+        fontConfig.SizePixels = 19.0f;
+        io.Fonts->AddFontDefault(&fontConfig);
+        ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
+        ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+        ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+    }
 
-    while (true) {
+    bool confirmed = false;
+    bool running = true;
+    bool focusSafeChoice = true;
+    int framesShown = 0;
+    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            RewriteMouseEventToLogical(event, graphics.GetRenderer());
+            ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
-                // Clicking X again while this is up means they really do want out.
-                return true;
+                confirmed = true; // A second close request is deliberate.
+                running = false;
             }
-            if (event.type == SDL_KEYDOWN) {
-                if (event.key.keysym.sym == SDLK_ESCAPE) {
-                    return false;
-                }
-                if (event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_LEFT) {
-                    selected = (selected + optionCount - 1) % optionCount;
-                }
-                else if (event.key.keysym.sym == SDLK_DOWN || event.key.keysym.sym == SDLK_RIGHT) {
-                    selected = (selected + 1) % optionCount;
-                }
-                else if (event.key.keysym.sym == SDLK_RETURN) {
-                    return selected == 0;
-                }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+                running = false;
             }
-            else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
-                for (int index = 0; index < optionCount; ++index) {
-                    const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
-                                        buttonWidth, buttonHeight};
-                    if (button.Contains(event.button.x, event.button.y)) {
-                        return index == 0;
-                    }
-                }
-            }
-            else if (event.type == SDL_MOUSEMOTION) {
-                for (int index = 0; index < optionCount; ++index) {
-                    const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
-                                        buttonWidth, buttonHeight};
-                    if (button.Contains(event.motion.x, event.motion.y)) {
-                        selected = index;
-                    }
-                }
+            else if (event.type == SDL_CONTROLLERBUTTONDOWN &&
+                     event.cbutton.button == SDL_CONTROLLER_BUTTON_B) {
+                running = false;
             }
         }
 
-        DrawUiPanel(buffer, panel);
-        DrawUiText(font, panel.x + panel.w / 2, panel.y + 28, "QUIT HOVERNET?", &viewport,
-                   MR_Sprite::eCenter, MR_Sprite::eTop, 1);
-        for (int index = 0; index < optionCount; ++index) {
-            const UiRect button{panel.x + 40, firstButtonY + index * (buttonHeight + 12),
-                                buttonWidth, buttonHeight};
-            DrawUiButton(buffer, font, viewport, button, options[index], index == selected);
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_RenderSetLogicalSize(renderer, 0, 0);
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::Begin("Quit HoverNet", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+
+        const ImVec2 workSize = mainViewport->WorkSize;
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        const ImVec2 workEnd(mainViewport->WorkPos.x + workSize.x,
+                             mainViewport->WorkPos.y + workSize.y);
+        draw->AddRectFilledMultiColor(mainViewport->WorkPos, workEnd,
+            IM_COL32(12, 12, 18, 255), IM_COL32(55, 10, 20, 255),
+            IM_COL32(7, 7, 11, 255), IM_COL32(24, 7, 13, 255));
+
+        const float panelWidth = std::min(520.0f, workSize.x - 48.0f);
+        const float panelHeight = 310.0f;
+        ImGui::SetCursorPos(ImVec2((workSize.x - panelWidth) * 0.5f,
+                                   (workSize.y - panelHeight) * 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.98f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
+        ImGui::BeginChild("QuitConfirmationPanel", ImVec2(panelWidth, panelHeight), true);
+        HoverNetSectionHeading("LEAVE THE RACE?");
+        ImGui::Spacing();
+        ImGui::TextWrapped("Quit HoverNet and return to your desktop?");
+        ImGui::TextDisabled("Unsaved race progress will be lost.");
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        if (focusSafeChoice) {
+            ImGui::SetKeyboardFocusHere();
+            focusSafeChoice = false;
         }
-        graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
+        if (HoverNetButton("KEEP PLAYING", ImVec2(-FLT_MIN, 54.0f))) {
+            running = false;
+        }
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.42f, 0.08f, 0.12f, 1.0f));
+        if (HoverNetButton("QUIT HOVERNET", ImVec2(-FLT_MIN, 48.0f))) {
+            confirmed = true;
+            running = false;
+        }
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+        HoverNetHint("Esc / B: keep playing");
+        ImGui::EndChild();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor();
+        ImGui::End();
+
+        ImGui::Render();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         SDL_Delay(16);
     }
+
+    if (ownsImGuiContext) {
+        ImGui_ImplSDLRenderer2_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+    }
+    return confirmed;
 }
 
 // pIsOnline only changes the middle option's label -- callers already know
@@ -4178,6 +4224,10 @@ int main(int argc, char** argv)
         }
         else if (HasArgument(argc, argv, "--pause-menu")) {
             RunPauseMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(), false, frameLimit);
+            g_QuitConfirmed = true;
+        }
+        else if (HasArgument(argc, argv, "--quit-confirmation")) {
+            ConfirmQuit(graphics, buffer, viewport, *menuFontHandle->GetSprite(), frameLimit);
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--results-screen")) {
