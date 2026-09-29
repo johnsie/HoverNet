@@ -72,6 +72,14 @@ int main()
         std::fprintf(stderr, "Remote player was not exposed to HUD enumeration\n");
         return 1;
     }
+    int bestRank = 0;
+    int worstRank = 0;
+    session.GetRankRange(player, bestRank, worstRank);
+    if (bestRank != 1 || worstRank != 2) {
+        std::fprintf(stderr, "Same-lap position range was %d-%d instead of 1-2\n",
+                     bestRank, worstRank);
+        return 1;
+    }
 
     session.SetControlState(MR_MainCharacter::eMotorOn | MR_MainCharacter::eRight, 0);
     session.Process();

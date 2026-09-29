@@ -1738,6 +1738,16 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
             break;
       }
 
+      int lBestRank = 1;
+      int lWorstRank = 1;
+      const int lPlayerCount = pSession->GetNbPlayers();
+      pSession->GetRankRange( pViewingCharacter, lBestRank, lWorstRank );
+      char lPositionStatus[32];
+      if( lBestRank == lWorstRank )
+         snprintf( lPositionStatus, sizeof(lPositionStatus), "Pos %d/%d", lBestRank, lPlayerCount );
+      else
+         snprintf( lPositionStatus, sizeof(lPositionStatus), "Pos %d-%d/%d", lBestRank, lWorstRank, lPlayerCount );
+
       char lNetworkStatus[40];
       if( mNetworkLatencyMs >= 0 )
          snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Online %d ms", mNetworkLatencyMs );
@@ -1755,8 +1765,8 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
          // the dense status into two short lines lets both render at native
          // size (scaling=1) instead of StrBlt auto-shrinking one long line.
          char lDriveStatus[80];
-         snprintf( lDriveStatus, sizeof(lDriveStatus), "Speed %d%%   Fuel %d%%",
-                   lSpeedPercent, lFuelPercent );
+         snprintf( lDriveStatus, sizeof(lDriveStatus), "%s   Speed %d%%   Fuel %d%%",
+                   lPositionStatus, lSpeedPercent, lFuelPercent );
          lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lDriveStatus ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
          lHudFont->StrBlt( lXRes/2, lStatusY + lHudFont->GetItemHeight() + 3,
@@ -1769,8 +1779,8 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       else
       {
          char lStatusLine[160];
-         snprintf( lStatusLine, sizeof(lStatusLine), "Speed %d%%   Fuel %d%%   %s   %s",
-                   lSpeedPercent, lFuelPercent, lWeaponStatus, lNetworkStatus );
+         snprintf( lStatusLine, sizeof(lStatusLine), "%s   Speed %d%%   Fuel %d%%   %s   %s",
+                   lPositionStatus, lSpeedPercent, lFuelPercent, lWeaponStatus, lNetworkStatus );
          lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lStatusLine ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
       }

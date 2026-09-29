@@ -401,23 +401,59 @@ int MR_ClientSession::GetNbPlayers()const
 
 int MR_ClientSession::GetRank( const MR_MainCharacter* pPlayer )const
 {
-   int lRank = 1;
-   if( pPlayer == NULL || !pPlayer->HasFinish() )
-   {
-      return lRank;
-   }
+   int lBestRank = 1;
+   int lWorstRank = 1;
+   GetRankRange( pPlayer, lBestRank, lWorstRank );
+   return lBestRank;
+}
 
+void MR_ClientSession::GetRankRange( const MR_MainCharacter* pPlayer, int& pBestRank,
+                                     int& pWorstRank )const
+{
+   pBestRank = 1;
+   pWorstRank = 1;
+   if( pPlayer == NULL ) return;
+
+   const BOOL lPlayerFinished = pPlayer->HasFinish();
+   const int lPlayerLap = pPlayer->GetLap();
+   const MR_SimulationTime lPlayerTime = pPlayer->GetTotalTime();
    const int lNbPlayers = GetNbPlayers();
    for( int lIndex = 0; lIndex < lNbPlayers; ++lIndex )
    {
       const MR_MainCharacter* lOther = GetPlayer( lIndex );
-      if( lOther != NULL && lOther != pPlayer && lOther->HasFinish() &&
-          lOther->GetTotalTime() < pPlayer->GetTotalTime() )
+      if( lOther == NULL || lOther == pPlayer ) continue;
+
+      BOOL lAhead = FALSE;
+      BOOL lTied = FALSE;
+      if( lPlayerFinished )
       {
-         lRank++;
+         if( lOther->HasFinish() )
+         {
+            if( lOther->GetTotalTime() < lPlayerTime ) lAhead = TRUE;
+            else if( lOther->GetTotalTime() == lPlayerTime ) lTied = TRUE;
+         }
+      }
+      else if( lOther->HasFinish() || lOther->GetLap() > lPlayerLap )
+      {
+         lAhead = TRUE;
+      }
+      else if( lOther->GetLap() == lPlayerLap )
+      {
+         // The relay protocol carries completed laps but no continuous
+         // checkpoint/distance progress, so same-lap racers are an honest tie.
+         lTied = TRUE;
+      }
+
+      if( lAhead )
+      {
+         ++pBestRank;
+         ++pWorstRank;
+      }
+      else if( lTied )
+      {
+         ++pWorstRank;
       }
    }
-   return lRank;
 }
 
 void MR_ClientSession::SetMap( MR_Sprite* pMap, int pX0, int pY0, int pX1, int pY1 )

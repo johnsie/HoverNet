@@ -110,6 +110,8 @@ class MR_ClientSession
 
       virtual int   GetNbPlayers()const;
       virtual int   GetRank( const MR_MainCharacter* pPlayer )const;
+      void          GetRankRange( const MR_MainCharacter* pPlayer, int& pBestRank,
+                                  int& pWorstRank )const;
       virtual const MR_MainCharacter* GetPlayer( int pPlayerIndex )const;
 
       // Chat related functions (all messages are already converted in internal ASCII
