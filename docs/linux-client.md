@@ -71,7 +71,9 @@ Cancel. **Large HUD text** is a separate accessibility option: it keeps race
 status at the bitmap font's native size and splits dense information across
 shorter lines so it is not automatically shrunk to fit. **Reduced motion**
 freezes the main menu's moving speed streaks while preserving its racing scene
-and all navigation cues.
+and all navigation cues. **High contrast menus** use blacker surfaces, white
+primary text, brighter secondary text and borders, and stronger focus/selection
+states throughout the ImGui interface.
 
 ## Bounded Runs
 

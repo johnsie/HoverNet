@@ -369,6 +369,9 @@ text accessibility option also avoids the bitmap renderer's automatic shrinking:
 dense race status is split across short native-size lines independently of menu
 UI scaling. A separate persisted Reduced motion option freezes the main menu's
 speed streak animation without removing its racing backdrop or navigation cues.
+Persisted High contrast menus replace subtle dark shades with blacker surfaces,
+white body text, brighter secondary text and borders, darker action buttons, and
+stronger focus/selection states across the shared ImGui theme.
 
 Guided onboarding is now implemented on Linux as a three-step first-run
 walkthrough covering race selection, driving and weapons, and the race HUD. It

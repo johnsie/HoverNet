@@ -798,6 +798,24 @@ void SaveReducedMotion(bool enabled)
     out << (enabled ? 1 : 0) << '\n';
 }
 
+std::string HighContrastPath()
+{
+    return ConfigDirPath() + "/high_contrast";
+}
+
+bool LoadHighContrast()
+{
+    std::ifstream in(HighContrastPath());
+    int enabled = 0;
+    return (in >> enabled) && enabled != 0;
+}
+
+void SaveHighContrast(bool enabled)
+{
+    std::ofstream out(HighContrastPath());
+    out << (enabled ? 1 : 0) << '\n';
+}
+
 struct KeyboardBindings
 {
     SDL_Scancode accelerate = SDL_SCANCODE_LSHIFT;
@@ -1000,7 +1018,7 @@ constexpr ImVec4 kHoverNetRedActive{0.70f, 0.12f, 0.18f, 1.00f};
 constexpr ImVec4 kHoverNetCoral{0.98f, 0.45f, 0.48f, 1.00f};
 constexpr ImVec4 kHoverNetWhite{1.00f, 1.00f, 1.00f, 1.00f};
 
-void ApplyHoverNetLobbyStyle(float scale)
+void ApplyHoverNetLobbyStyle(float scale, bool highContrast)
 {
     ImGuiStyle& style = ImGui::GetStyle();
     style = ImGuiStyle();
@@ -1021,17 +1039,28 @@ void ApplyHoverNetLobbyStyle(float scale)
     style.WindowBorderSize = 0.0f;
     style.ChildBorderSize = 1.0f;
     style.PopupBorderSize = 1.0f;
-    style.FrameBorderSize = 0.0f;
+    style.FrameBorderSize = highContrast ? 1.0f : 0.0f;
 
-    // A slightly lighter shade per surface (window < panel < input field) is what
-    // makes a flat dark UI read as layered instead of as one big black rectangle.
-    const ImVec4 windowBg{0.09f, 0.09f, 0.11f, 1.00f};
-    const ImVec4 panelBg{0.14f, 0.14f, 0.17f, 1.00f};
-    const ImVec4 fieldBg{0.11f, 0.11f, 0.13f, 1.00f};
-    const ImVec4 softBorder{0.24f, 0.24f, 0.28f, 1.00f};
-    const ImVec4 text{0.93f, 0.93f, 0.95f, 1.00f};
-    const ImVec4 textMuted{0.56f, 0.56f, 0.60f, 1.00f};
-    const ImVec4 selection{0.86f, 0.20f, 0.27f, 0.35f};
+    // High contrast removes subtle near-neighbour shades: surfaces become much
+    // darker, secondary text and borders brighter, and action red darker under
+    // white labels. The standard palette retains its softer layered appearance.
+    const ImVec4 windowBg = highContrast ? ImVec4(0.01f, 0.01f, 0.01f, 1.00f)
+                                         : ImVec4(0.09f, 0.09f, 0.11f, 1.00f);
+    const ImVec4 panelBg = highContrast ? ImVec4(0.045f, 0.045f, 0.055f, 1.00f)
+                                        : ImVec4(0.14f, 0.14f, 0.17f, 1.00f);
+    const ImVec4 fieldBg = highContrast ? ImVec4(0.00f, 0.00f, 0.00f, 1.00f)
+                                        : ImVec4(0.11f, 0.11f, 0.13f, 1.00f);
+    const ImVec4 softBorder = highContrast ? ImVec4(0.82f, 0.82f, 0.86f, 1.00f)
+                                           : ImVec4(0.24f, 0.24f, 0.28f, 1.00f);
+    const ImVec4 text = highContrast ? ImVec4(1.00f, 1.00f, 1.00f, 1.00f)
+                                     : ImVec4(0.93f, 0.93f, 0.95f, 1.00f);
+    const ImVec4 textMuted = highContrast ? ImVec4(0.82f, 0.82f, 0.86f, 1.00f)
+                                          : ImVec4(0.56f, 0.56f, 0.60f, 1.00f);
+    const ImVec4 actionRed = highContrast ? ImVec4(0.58f, 0.03f, 0.10f, 1.00f) : kHoverNetRed;
+    const ImVec4 actionHover = highContrast ? ImVec4(0.78f, 0.08f, 0.16f, 1.00f) : kHoverNetRedHover;
+    const ImVec4 actionActive = highContrast ? ImVec4(0.42f, 0.01f, 0.06f, 1.00f) : kHoverNetRedActive;
+    const ImVec4 selection = highContrast ? ImVec4(0.95f, 0.15f, 0.22f, 0.62f)
+                                          : ImVec4(0.86f, 0.20f, 0.27f, 0.35f);
 
     ImVec4* colors = style.Colors;
     colors[ImGuiCol_Text] = text;
@@ -1043,21 +1072,21 @@ void ApplyHoverNetLobbyStyle(float scale)
     colors[ImGuiCol_FrameBg] = fieldBg;
     colors[ImGuiCol_FrameBgHovered] = ImVec4(0.18f, 0.15f, 0.17f, 1.00f);
     colors[ImGuiCol_FrameBgActive] = ImVec4(0.22f, 0.16f, 0.18f, 1.00f);
-    colors[ImGuiCol_CheckMark] = kHoverNetCoral;
-    colors[ImGuiCol_SliderGrab] = kHoverNetRed;
-    colors[ImGuiCol_SliderGrabActive] = kHoverNetRedActive;
-    colors[ImGuiCol_Button] = kHoverNetRed;
-    colors[ImGuiCol_ButtonHovered] = kHoverNetRedHover;
-    colors[ImGuiCol_ButtonActive] = kHoverNetRedActive;
+    colors[ImGuiCol_CheckMark] = highContrast ? kHoverNetWhite : kHoverNetCoral;
+    colors[ImGuiCol_SliderGrab] = actionRed;
+    colors[ImGuiCol_SliderGrabActive] = actionActive;
+    colors[ImGuiCol_Button] = actionRed;
+    colors[ImGuiCol_ButtonHovered] = actionHover;
+    colors[ImGuiCol_ButtonActive] = actionActive;
     colors[ImGuiCol_Header] = selection;
     colors[ImGuiCol_HeaderHovered] = ImVec4(0.86f, 0.20f, 0.27f, 0.55f);
     colors[ImGuiCol_HeaderActive] = ImVec4(0.86f, 0.20f, 0.27f, 0.75f);
     colors[ImGuiCol_Separator] = softBorder;
-    colors[ImGuiCol_SeparatorHovered] = kHoverNetRedHover;
-    colors[ImGuiCol_SeparatorActive] = kHoverNetRedActive;
-    colors[ImGuiCol_ResizeGrip] = ImVec4(kHoverNetRed.x, kHoverNetRed.y, kHoverNetRed.z, 0.25f);
-    colors[ImGuiCol_ResizeGripHovered] = kHoverNetRedHover;
-    colors[ImGuiCol_ResizeGripActive] = kHoverNetRedActive;
+    colors[ImGuiCol_SeparatorHovered] = actionHover;
+    colors[ImGuiCol_SeparatorActive] = actionActive;
+    colors[ImGuiCol_ResizeGrip] = ImVec4(actionRed.x, actionRed.y, actionRed.z, 0.25f);
+    colors[ImGuiCol_ResizeGripHovered] = actionHover;
+    colors[ImGuiCol_ResizeGripActive] = actionActive;
     colors[ImGuiCol_TextSelectedBg] = ImVec4(kHoverNetRed.x, kHoverNetRed.y, kHoverNetRed.z, 0.40f);
     colors[ImGuiCol_ScrollbarBg] = windowBg;
     colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.30f, 0.30f, 0.34f, 1.00f);
@@ -1149,6 +1178,7 @@ struct SettingsResult
     float uiScale = 1.0f;
     bool largeHudText = false;
     bool reducedMotion = false;
+    bool highContrast = false;
 };
 
 SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
@@ -1323,7 +1353,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     ImFontConfig fontConfig;
     fontConfig.SizePixels = 19.0f;
     io.Fonts->AddFontDefault(&fontConfig);
-    ApplyHoverNetLobbyStyle(LoadUiScale());
+    ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
@@ -1384,6 +1414,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                         SaveUiScale(settings.uiScale);
                         SaveLargeHudText(settings.largeHudText);
                         SaveReducedMotion(settings.reducedMotion);
+                        SaveHighContrast(settings.highContrast);
                     }
                 }
                 else if (pauseChoice == PauseChoice::eControls) {
@@ -1902,7 +1933,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         ImFontConfig fontConfig;
         fontConfig.SizePixels = 19.0f;
         io.Fonts->AddFontDefault(&fontConfig);
-        ApplyHoverNetLobbyStyle(LoadUiScale());
+        ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
     }
@@ -2056,7 +2087,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImFontConfig fontConfig;
         fontConfig.SizePixels = 19.0f;
         io.Fonts->AddFontDefault(&fontConfig);
-        ApplyHoverNetLobbyStyle(LoadUiScale());
+        ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
     }
@@ -2241,7 +2272,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     ImFontConfig fontConfig;
     fontConfig.SizePixels = 19.0f;
     io.Fonts->AddFontDefault(&fontConfig);
-    ApplyHoverNetLobbyStyle(LoadUiScale());
+    ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
@@ -2404,6 +2435,8 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     bool applyUiScale = false;
     bool largeHudText = LoadLargeHudText();
     bool reducedMotion = LoadReducedMotion();
+    const bool currentHighContrast = LoadHighContrast();
+    bool highContrast = currentHighContrast;
     bool fullscreen = currentFullscreen;
     int windowWidth = 0;
     int windowHeight = 0;
@@ -2443,7 +2476,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImFontConfig fontConfig;
         fontConfig.SizePixels = 19.0f;
         io.Fonts->AddFontDefault(&fontConfig);
-        ApplyHoverNetLobbyStyle(LoadUiScale());
+        ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
     }
@@ -2580,6 +2613,10 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::TextDisabled("Keeps race information at the font's native size.");
         ImGui::Checkbox("Reduced motion", &reducedMotion);
         ImGui::TextDisabled("Disables animated menu speed streaks.");
+        if (ImGui::Checkbox("High contrast menus", &highContrast)) {
+            applyUiScale = true;
+        }
+        ImGui::TextDisabled("Strengthens text, borders, fields, and focus states.");
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -2648,7 +2685,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         if (applyUiScale) {
-            ApplyHoverNetLobbyStyle(uiScalePercent / 100.0f);
+            ApplyHoverNetLobbyStyle(uiScalePercent / 100.0f, highContrast);
             applyUiScale = false;
         }
         SDL_Delay(16);
@@ -2673,7 +2710,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             SDL_SetWindowPosition(graphics.GetWindow(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
         }
         if (!ownsImGuiContext) {
-            ApplyHoverNetLobbyStyle(currentUiScale);
+            ApplyHoverNetLobbyStyle(currentUiScale, currentHighContrast);
         }
     }
 
@@ -2689,6 +2726,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     result.uiScale = uiScalePercent / 100.0f;
     result.largeHudText = largeHudText;
     result.reducedMotion = reducedMotion;
+    result.highContrast = highContrast;
     return result;
 }
 
@@ -2701,7 +2739,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
     ImFontConfig fontConfig;
     fontConfig.SizePixels = 19.0f;
     io.Fonts->AddFontDefault(&fontConfig);
-    ApplyHoverNetLobbyStyle(LoadUiScale());
+    ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
@@ -2815,7 +2853,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         ImFontConfig fontConfig;
         fontConfig.SizePixels = 19.0f;
         io.Fonts->AddFontDefault(&fontConfig);
-        ApplyHoverNetLobbyStyle(LoadUiScale());
+        ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
     }
@@ -3047,7 +3085,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     ImFontConfig fontConfig;
     fontConfig.SizePixels = 19.0f;
     io.Fonts->AddFontDefault(&fontConfig);
-    ApplyHoverNetLobbyStyle(LoadUiScale());
+    ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
@@ -3849,6 +3887,7 @@ int main(int argc, char** argv)
                     SaveUiScale(settings.uiScale);
                     SaveLargeHudText(settings.largeHudText);
                     SaveReducedMotion(settings.reducedMotion);
+                    SaveHighContrast(settings.highContrast);
                 }
                 pickingMode = !g_QuitConfirmed;
             }
@@ -4005,6 +4044,7 @@ int main(int argc, char** argv)
                             SaveUiScale(settings.uiScale);
                             SaveLargeHudText(settings.largeHudText);
                             SaveReducedMotion(settings.reducedMotion);
+                            SaveHighContrast(settings.highContrast);
                         }
                     }
                     else if (pauseChoice == PauseChoice::eControls) {
