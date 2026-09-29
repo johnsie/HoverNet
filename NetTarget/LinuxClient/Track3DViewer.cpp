@@ -848,6 +848,24 @@ void SaveVolume(double volume)
     out << volume << '\n';
 }
 
+std::string MutePath()
+{
+    return ConfigDirPath() + "/mute";
+}
+
+bool LoadMute()
+{
+    std::ifstream in(MutePath());
+    int value = 0;
+    return (in >> value) && value != 0;
+}
+
+void SaveMute(bool muted)
+{
+    std::ofstream out(MutePath());
+    out << (muted ? 1 : 0) << '\n';
+}
+
 std::string FullscreenPath()
 {
     return ConfigDirPath() + "/fullscreen";
@@ -1330,6 +1348,7 @@ struct SettingsResult
     std::string serverHost;
     unsigned serverPort = 0;
     double volume = 1.0;
+    bool muted = false;
     bool fullscreen = false;
     int windowWidth = 1024;
     int windowHeight = 768;
@@ -1342,7 +1361,8 @@ struct SettingsResult
 SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                                  const MR_Sprite& font, const std::string& currentUsername,
                                  const std::string& currentServerHost, unsigned currentServerPort,
-                                 double currentVolume, bool currentFullscreen, int pFrameLimit);
+                                 double currentVolume, bool currentMuted, bool currentFullscreen,
+                                 int pFrameLimit);
 
 bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit);
 void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit);
@@ -1548,7 +1568,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 else if (pauseChoice == PauseChoice::eSettings) {
                     const SettingsResult settings = RunSettingsScreen(
                         graphics, buffer, viewport, font, username, host, port,
-                        LoadVolume(), LoadFullscreen(), pFrameLimit);
+                        LoadVolume(), LoadMute(), LoadFullscreen(), pFrameLimit);
                     if (settings.confirmed) {
                         SaveUsername(settings.username);
                         if (settings.username != username) {
@@ -1565,6 +1585,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                         // lobby is (re)opened.
                         SaveServerUrl(settings.serverHost, settings.serverPort);
                         SaveVolume(settings.volume);
+                        SaveMute(settings.muted);
                         SaveFullscreen(settings.fullscreen);
                         WindowSize savedSize;
                         savedSize.width = settings.windowWidth;
@@ -2687,7 +2708,8 @@ bool IsBlank(const char* text)
 SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                                  const MR_Sprite& font, const std::string& currentUsername,
                                  const std::string& currentServerHost, unsigned currentServerPort,
-                                 double currentVolume, bool currentFullscreen, int pFrameLimit)
+                                 double currentVolume, bool currentMuted, bool currentFullscreen,
+                                 int pFrameLimit)
 {
     (void)buffer;
     (void)viewport;
@@ -2699,6 +2721,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     std::snprintf(hostBuf, sizeof(hostBuf), "%s", currentServerHost.c_str());
     int port = static_cast<int>(currentServerPort);
     float volumePercent = static_cast<float>(currentVolume * 100.0);
+    bool muted = currentMuted;
     const float currentUiScale = LoadUiScale();
     float uiScalePercent = currentUiScale * 100.0f;
     bool applyUiScale = false;
@@ -2820,7 +2843,9 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         const float centerWidth = std::min(460.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
-        ImGui::BeginChild("SettingsPanel", ImVec2(centerWidth, 540), true);
+        // Fill the available height so added accessibility/audio controls do not
+        // force scrolling while the screen still has unused space below.
+        ImGui::BeginChild("SettingsPanel", ImVec2(centerWidth, 0), true);
 
         ImGui::TextUnformatted("Display Name");
         ImGui::PushItemWidth(-1.0f);
@@ -2859,13 +2884,15 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Separator();
         ImGui::Spacing();
 
-        ImGui::TextUnformatted("Volume");
+        ImGui::TextUnformatted("Audio");
+        if (ImGui::Checkbox("Mute all sound", &muted)) {
+            MR_SoundServer::SetMasterVolume(muted ? 0.0 : volumePercent / 100.0);
+        }
         ImGui::PushItemWidth(-1.0f);
-        // Applied live (not just on Save) so the slider itself gives audible
-        // feedback -- matches how most games let you hear the level you're
-        // picking rather than only finding out after confirming.
+        // Keep the chosen level independently of mute so unmuting restores it
+        // instead of forgetting the player's setting. Both controls preview live.
         if (ImGui::SliderFloat("##Volume", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
-            MR_SoundServer::SetMasterVolume(volumePercent / 100.0);
+            MR_SoundServer::SetMasterVolume(muted ? 0.0 : volumePercent / 100.0);
         }
         ImGui::PopItemWidth();
 
@@ -2972,7 +2999,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     if (cancelled) {
         // Unlike username/host, display and audio changes preview live. Cancel
         // restores the exact mode, window size, and volume from entry.
-        MR_SoundServer::SetMasterVolume(currentVolume);
+        MR_SoundServer::SetMasterVolume(currentMuted ? 0.0 : currentVolume);
         SDL_SetWindowFullscreen(graphics.GetWindow(), currentFullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
         if (!currentFullscreen) {
             SDL_SetWindowSize(graphics.GetWindow(), currentWindowWidth, currentWindowHeight);
@@ -2989,6 +3016,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     result.serverHost = hostBuf;
     result.serverPort = static_cast<unsigned>(port);
     result.volume = volumePercent / 100.0;
+    result.muted = muted;
     result.fullscreen = fullscreen;
     result.windowWidth = windowWidth;
     result.windowHeight = windowHeight;
@@ -3717,6 +3745,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "USERNAME=%s\n", UsernamePath().c_str());
         std::fprintf(stderr, "SERVER_URL=%s\n", ServerUrlPath().c_str());
         std::fprintf(stderr, "WINDOW_SIZE=%s\n", WindowSizePath().c_str());
+        std::fprintf(stderr, "MUTE=%s\n", MutePath().c_str());
         std::fprintf(stderr, "UI_SCALE=%s\n", UiScalePath().c_str());
         std::fprintf(stderr, "KEYBOARD_BINDINGS=%s\n", KeyboardBindingsPath().c_str());
         std::fprintf(stderr, "CONTROLLER_BINDINGS=%s\n", ControllerBindingsPath().c_str());
@@ -3732,7 +3761,7 @@ int main(int argc, char** argv)
     } factoryCleanup;
 #ifdef HOVERNET_GAME2_PLAYER
     MR_SoundServer::Init(nullptr);
-    MR_SoundServer::SetMasterVolume(LoadVolume());
+    MR_SoundServer::SetMasterVolume(LoadMute() ? 0.0 : LoadVolume());
     struct SoundServerCleanup
     {
         ~SoundServerCleanup() { MR_SoundServer::Close(); }
@@ -4095,7 +4124,7 @@ int main(int argc, char** argv)
     if (playerMode) {
         if (HasArgument(argc, argv, "--settings-screen")) {
             RunSettingsScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                              "Player", lobbyHost, lobbyPort, LoadVolume(), LoadFullscreen(), frameLimit);
+                              "Player", lobbyHost, lobbyPort, LoadVolume(), LoadMute(), LoadFullscreen(), frameLimit);
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--controls-reference")) {
@@ -4141,13 +4170,14 @@ int main(int argc, char** argv)
                 // to relaunch or stumble into a race just to get back out of it.
                 const SettingsResult settings = RunSettingsScreen(
                     graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                    LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), LoadFullscreen(), frameLimit);
+                    LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), LoadMute(), LoadFullscreen(), frameLimit);
                 if (settings.confirmed) {
                     SaveUsername(settings.username);
                     lobbyHost = settings.serverHost;
                     lobbyPort = settings.serverPort;
                     SaveServerUrl(lobbyHost, lobbyPort);
                     SaveVolume(settings.volume);
+                    SaveMute(settings.muted);
                     SaveFullscreen(settings.fullscreen);
                     WindowSize savedSize;
                     savedSize.width = settings.windowWidth;
@@ -4298,13 +4328,14 @@ int main(int argc, char** argv)
                     else if (pauseChoice == PauseChoice::eSettings) {
                         const SettingsResult settings = RunSettingsScreen(
                             graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                            LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), LoadFullscreen(), frameLimit);
+                            LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), LoadMute(), LoadFullscreen(), frameLimit);
                         if (settings.confirmed) {
                             SaveUsername(settings.username);
                             lobbyHost = settings.serverHost;
                             lobbyPort = settings.serverPort;
                             SaveServerUrl(lobbyHost, lobbyPort);
                             SaveVolume(settings.volume);
+                            SaveMute(settings.muted);
                             SaveFullscreen(settings.fullscreen);
                             WindowSize savedSize;
                             savedSize.width = settings.windowWidth;

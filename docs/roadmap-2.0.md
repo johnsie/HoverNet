@@ -176,8 +176,10 @@ first time its new path is read, so upgrading players keep their settings.
 `HoverNetGame2Player --print-config-paths` prints the resolved paths for
 diagnosis. A first piece of "audio and volume settings" is also done: a master
 volume slider (0-100%) in the Settings screen, applied live while dragging and
-persisted alongside the other settings. `MR_SoundServer::SetMasterVolume`/
-`GetMasterVolume` scale every sound's gain in the shared SDL2 mixer
+persisted alongside the other settings. A separate persisted mute control
+preserves that chosen level while silencing all audio, previews live, and rolls
+back with Cancel. `MR_SoundServer::SetMasterVolume`/`GetMasterVolume` scale every
+sound's gain in the shared SDL2 mixer
 (`HeadlessSoundServer.cpp`, which Windows now builds too -- the legacy OpenAL
 `SoundServer.cpp` also got the same API for consistency, but is no longer
 compiled on either platform) -- verified with a clean MSBuild rebuild of

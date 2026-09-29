@@ -59,9 +59,11 @@ controller files remain valid and are upgraded when next saved.
 
 ## Display settings
 
-The Settings screen supports windowed/fullscreen mode, master volume, and common
-window resolutions from 1024x768 through 2560x1440. Resolution and fullscreen
-changes preview immediately; Cancel restores the previous display state. Saved
+The Settings screen supports windowed/fullscreen mode, master volume, a separate
+mute control, and common window resolutions from 1024x768 through 2560x1440.
+Muting preserves the chosen volume for later unmuting; both controls preview live
+and Cancel restores the previous audio state. Resolution and fullscreen changes
+preview immediately; Cancel restores the previous display state. Saved
 window dimensions are restored on the next launch, and the window can also be
 resized directly while windowed.
 
