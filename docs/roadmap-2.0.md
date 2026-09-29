@@ -385,7 +385,9 @@ Windows Options now exposes and persists the same Large HUD text mode, applies
 it to every local, split-screen, network, and online race observer, previews it
 for an active race, and rolls it back on Cancel. Its Audio & HUD page also has a
 combined defaults action that previews full volume, unmuted audio, and normal HUD
-text without persisting until the property sheet is accepted. Persisted High
+text without persisting until the property sheet is accepted. The Windows display
+page likewise offers a reversible reset to neutral gamma, contrast, and brightness,
+with live preview and the existing Cancel rollback. Persisted High
 contrast menus replace subtle dark shades with blacker surfaces,
 white body text, brighter secondary text and borders, darker action buttons, and
 stronger focus/selection states across the shared ImGui theme. Settings also

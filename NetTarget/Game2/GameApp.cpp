@@ -3168,7 +3168,18 @@ BOOL CALLBACK MR_GameApp::DisplayIntensityDialogFunc( HWND pWindow, UINT  pMsgId
             SendDlgItemMessage( pWindow, IDC_BRIGHTNESS_SLIDER, TBM_GETPOS, 0, 0 )/100.0
          );
          This->AssignPalette();
-         break;         
+         break;
+
+      case WM_COMMAND:
+         if( LOWORD(pWParam) == IDC_RESET_DISPLAY )
+         {
+            SendDlgItemMessage( pWindow, IDC_GAMMA_SLIDER, TBM_SETPOS, TRUE, 100 );
+            SendDlgItemMessage( pWindow, IDC_CONTRAST_SLIDER, TBM_SETPOS, TRUE, 100 );
+            SendDlgItemMessage( pWindow, IDC_BRIGHTNESS_SLIDER, TBM_SETPOS, TRUE, 100 );
+            This->mVideoBuffer->CreatePalette( 1.0, 1.0, 1.0 );
+            This->AssignPalette();
+         }
+         break;
 
       case TB_ENDTRACK:
          {
