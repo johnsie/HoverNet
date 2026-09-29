@@ -102,6 +102,8 @@ class MR_GameApp
       double mGamma;
       double mContrast;
       double mBrightness;
+      double mMasterVolume;
+      BOOL   mMuted;
 
       CString mNickName;
 
@@ -122,6 +124,7 @@ class MR_GameApp
       static LRESULT CALLBACK DispatchFunc( HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
       static BOOL CALLBACK    DisplayIntensityDialogFunc( HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
       static BOOL CALLBACK    ControlDialogFunc( HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
+      static BOOL CALLBACK    AudioDialogFunc( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM pLParam );
       static BOOL CALLBACK    BadModeDialogFunc( HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
       static BOOL CALLBACK    MovieDialogFunc(   HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );
       static BOOL CALLBACK    AboutDlgFunc(      HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam );

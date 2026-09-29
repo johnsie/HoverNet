@@ -182,8 +182,9 @@ back with Cancel. `MR_SoundServer::SetMasterVolume`/`GetMasterVolume` scale ever
 sound's gain in the shared SDL2 mixer
 (`HeadlessSoundServer.cpp`, which Windows now builds too -- the legacy OpenAL
 `SoundServer.cpp` also got the same API for consistency, but is no longer
-compiled on either platform) -- verified with a clean MSBuild rebuild of
-Game2.vcxproj. A fullscreen toggle is also done: `SDL2Graphics.cpp` already
+compiled on either platform). The Windows Options sheet now exposes the same
+persisted master-volume and mute behavior in a dedicated Audio tab, including
+live preview and Cancel rollback. A fullscreen toggle is also done: `SDL2Graphics.cpp` already
 calls `SDL_RenderSetLogicalSize` to scale the fixed-resolution framebuffer to
 whatever window size results, so `SDL_SetWindowFullscreen` alone (no render-
 path changes) toggles it, applied live from the same Settings screen and

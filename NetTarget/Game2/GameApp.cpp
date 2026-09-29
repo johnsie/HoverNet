@@ -519,6 +519,8 @@ void MR_GameApp::LoadRegistry()
    mGamma       = 1.0;        // Neutral gamma
    mContrast    = 1.0;        // Maximum contrast
    mBrightness  = 1.0;        // Maximum brightness
+   mMasterVolume = 1.0;
+   mMuted        = FALSE;
 
    // Nickname
    char  lBuffer[80];
@@ -598,6 +600,21 @@ void MR_GameApp::LoadRegistry()
          mGamma      = lVideoSetting[0];
          mContrast   = lVideoSetting[1];
          mBrightness = lVideoSetting[2];
+      }
+
+      DWORD lVolumePercent = 100;
+      DWORD lAudioSettingSize = sizeof(lVolumePercent);
+      if( RegQueryValueEx( lProgramKey, "MasterVolume", 0, NULL,
+                           (MR_UInt8*)&lVolumePercent, &lAudioSettingSize ) == ERROR_SUCCESS )
+      {
+         mMasterVolume = min(100u, lVolumePercent) / 100.0;
+      }
+      DWORD lMuted = 0;
+      lAudioSettingSize = sizeof(lMuted);
+      if( RegQueryValueEx( lProgramKey, "Muted", 0, NULL,
+                           (MR_UInt8*)&lMuted, &lAudioSettingSize ) == ERROR_SUCCESS )
+      {
+         mMuted = lMuted != 0;
       }
 
 
@@ -776,6 +793,13 @@ void MR_GameApp::SaveRegistry()
          lReturnValue = FALSE;
          ASSERT( FALSE );
       }
+
+      DWORD lVolumePercent = (DWORD)(mMasterVolume * 100.0 + 0.5);
+      DWORD lMuted = mMuted ? 1 : 0;
+      RegSetValueEx( lProgramKey, "MasterVolume", 0, REG_DWORD,
+                     (MR_UInt8*)&lVolumePercent, sizeof(lVolumePercent) );
+      RegSetValueEx( lProgramKey, "Muted", 0, REG_DWORD,
+                     (MR_UInt8*)&lMuted, sizeof(lMuted) );
 
       if( RegSetValueEx(    lProgramKey,
                             "Alias",
@@ -1990,7 +2014,8 @@ void MR_GameApp::NewLocalSession()
    {
       try { DeleteMovieWnd(); } catch(...) { throw; }
 
-      try { MR_SoundServer::Init( mMainWindow ); } catch(...) { throw; }
+      try { MR_SoundServer::Init( mMainWindow );
+         MR_SoundServer::SetMasterVolume( mMuted ? 0.0 : mMasterVolume ); } catch(...) { throw; }
 
       try { MR_DllObjectFactory::Init(); } catch(...) { throw; }
       
@@ -2173,6 +2198,7 @@ void MR_GameApp::NewSplitSession()
       // Create the new session
       DeleteMovieWnd();
       MR_SoundServer::Init( mMainWindow );
+         MR_SoundServer::SetMasterVolume( mMuted ? 0.0 : mMasterVolume );
 
       mObserver1 = MR_Observer::New();
       mObserver2 = MR_Observer::New();
@@ -2256,6 +2282,7 @@ void MR_GameApp::NewNetworkSession( BOOL pServer )
 
       DeleteMovieWnd();
       MR_SoundServer::Init( mMainWindow );
+         MR_SoundServer::SetMasterVolume( mMuted ? 0.0 : mMasterVolume );
 
       lCurrentSession = new MR_NetworkSession( FALSE, gKeyFilled?mMajorID:-1, gKeyFilled?mMinorID:-1, mMainWindow );
    }
@@ -2263,6 +2290,7 @@ void MR_GameApp::NewNetworkSession( BOOL pServer )
    {
       DeleteMovieWnd();
       MR_SoundServer::Init( mMainWindow );
+         MR_SoundServer::SetMasterVolume( mMuted ? 0.0 : mMasterVolume );
 
       lCurrentSession = new MR_NetworkSession( FALSE, gKeyFilled?mMajorID:-1, gKeyFilled?mMinorID:-1, mMainWindow );
 
@@ -2425,6 +2453,7 @@ void MR_GameApp::NewInternetSession( )
          DeleteMovieWnd();
          
          MR_SoundServer::Init( mMainWindow );
+         MR_SoundServer::SetMasterVolume( mMuted ? 0.0 : mMasterVolume );
 
          lCurrentSession = new MR_NetworkSession( TRUE, gKeyFilled?mMajorID:-1, gKeyFilled?mMinorID:-1, mMainWindow );
 
@@ -2526,7 +2555,7 @@ void MR_GameApp::NewInternetSession( )
 
 void MR_GameApp::SetProperties()
 {
-    PROPSHEETPAGE psp[2];
+    PROPSHEETPAGE psp[3];
     PROPSHEETHEADER psh;
 
     psp[0].dwSize      = sizeof(PROPSHEETPAGE);
@@ -2546,6 +2575,15 @@ void MR_GameApp::SetProperties()
     psp[1].pszTitle    = MAKEINTRESOURCE( IDS_KEYS_SETTING );
     psp[1].lParam      = 0;
     psp[1].pfnCallback = NULL;
+
+    psp[2].dwSize      = sizeof(PROPSHEETPAGE);
+    psp[2].dwFlags     = PSP_USETITLE;
+    psp[2].hInstance   = mInstance;
+    psp[2].pszTemplate = MAKEINTRESOURCE(IDD_AUDIO);
+    psp[2].pfnDlgProc  = AudioDialogFunc;
+    psp[2].pszTitle    = "Audio";
+    psp[2].lParam      = 0;
+    psp[2].pfnCallback = NULL;
 
     psh.dwSize         = sizeof(PROPSHEETHEADER);
     psh.dwFlags        = PSH_PROPSHEETPAGE|PSH_NOAPPLYNOW|PSH_PROPTITLE;
@@ -3180,6 +3218,51 @@ BOOL CALLBACK MR_GameApp::DisplayIntensityDialogFunc( HWND pWindow, UINT  pMsgId
    return lReturnValue;
 }
 
+
+BOOL CALLBACK MR_GameApp::AudioDialogFunc( HWND pWindow, UINT pMsgId, WPARAM pWParam, LPARAM pLParam )
+{
+   static double lOriginalVolume;
+   static BOOL lOriginalMuted;
+
+   switch( pMsgId )
+   {
+      case WM_INITDIALOG:
+         lOriginalVolume = This->mMasterVolume;
+         lOriginalMuted = This->mMuted;
+         SendDlgItemMessage( pWindow, IDC_MASTER_VOLUME, TBM_SETRANGE, 0, MAKELONG(0, 100) );
+         SendDlgItemMessage( pWindow, IDC_MASTER_VOLUME, TBM_SETPOS, TRUE,
+                             (LPARAM)(This->mMasterVolume * 100.0 + 0.5) );
+         CheckDlgButton( pWindow, IDC_MUTE_AUDIO, This->mMuted ? BST_CHECKED : BST_UNCHECKED );
+         return TRUE;
+
+      case WM_HSCROLL:
+      case WM_COMMAND:
+         if( pMsgId == WM_HSCROLL || LOWORD(pWParam) == IDC_MUTE_AUDIO )
+         {
+            const double lVolume = SendDlgItemMessage( pWindow, IDC_MASTER_VOLUME,
+                                                       TBM_GETPOS, 0, 0 ) / 100.0;
+            const BOOL lMuted = IsDlgButtonChecked( pWindow, IDC_MUTE_AUDIO ) == BST_CHECKED;
+            MR_SoundServer::SetMasterVolume( lMuted ? 0.0 : lVolume );
+         }
+         break;
+
+      case WM_NOTIFY:
+         if( ((NMHDR FAR*)pLParam)->code == PSN_RESET )
+         {
+            MR_SoundServer::SetMasterVolume( lOriginalMuted ? 0.0 : lOriginalVolume );
+         }
+         else if( ((NMHDR FAR*)pLParam)->code == PSN_APPLY )
+         {
+            This->mMasterVolume = SendDlgItemMessage( pWindow, IDC_MASTER_VOLUME,
+                                                      TBM_GETPOS, 0, 0 ) / 100.0;
+            This->mMuted = IsDlgButtonChecked( pWindow, IDC_MUTE_AUDIO ) == BST_CHECKED;
+            MR_SoundServer::SetMasterVolume( This->mMuted ? 0.0 : This->mMasterVolume );
+            This->SaveRegistry();
+         }
+         break;
+   }
+   return FALSE;
+}
 
 BOOL CALLBACK MR_GameApp::ControlDialogFunc( HWND pWindow, UINT  pMsgId, WPARAM  pWParam, LPARAM  pLParam )
 {

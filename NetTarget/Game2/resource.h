@@ -17,6 +17,7 @@
 #define IDD_TCP_CLIENT                  104
 #define IDD_NET_PROGRESS                105
 #define IDD_DISPLAY_INTENSITY           107
+#define IDD_AUDIO                       162
 #define IDD_TRACK_SELECT                108
 #define IDD_CONTROL                     110
 #define IDD_BAD_MODE                    111
@@ -331,6 +332,8 @@
 #define IDS_CUR_LAP                     40186
 #define IDS_HIT_TITLE                   40187
 #define IDS_HIT_CHART                   40188
+#define IDC_MASTER_VOLUME               1077
+#define IDC_MUTE_AUDIO                  1078
 #define ID_GAME_NEW                     0xE100
 #define ID_GAME_LOAD                    0xE101
 #define ID_GAME_FAST_SAVE               0xE103
@@ -344,9 +347,9 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_3D_CONTROLS                     1
-#define _APS_NEXT_RESOURCE_VALUE        158
+#define _APS_NEXT_RESOURCE_VALUE        163
 #define _APS_NEXT_COMMAND_VALUE         40016
-#define _APS_NEXT_CONTROL_VALUE         1077
+#define _APS_NEXT_CONTROL_VALUE         1079
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
