@@ -8,7 +8,7 @@
 #include "ResBitmap.h"
 #include "../VideoServices/Patch.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(HOVERNET_STATIC)
 #ifdef MR_OBJ_FAC_TOOLS
    #define MR_DllDeclare   __declspec( dllexport )
 #else

@@ -32,7 +32,7 @@
 #include "../Util/BitPacking.h"
 
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(HOVERNET_STATIC)
 #ifdef MR_MAIN_CHARACTER
    #define MR_DllDeclare   __declspec( dllexport )
 #else

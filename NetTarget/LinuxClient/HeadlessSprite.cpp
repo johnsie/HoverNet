@@ -1,3 +1,9 @@
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include "../VideoServices/StdAfx.h"
+#endif
 #include "../VideoServices/Sprite.h"
 #include "../VideoServices/2DViewport.h"
 

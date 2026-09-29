@@ -23,7 +23,7 @@
 #ifndef FAST_FIFO_H
 #define FAST_FIFO_H
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(HOVERNET_STATIC)
 #ifdef MR_UTIL
    #define MR_DllDeclare   __declspec( dllexport )
 #else

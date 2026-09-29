@@ -11,7 +11,7 @@ if(WIN32)
     # StdAfx.h. CMake and vcpkg use the dynamic MSVC runtime (/MD), so MFC must
     # use its matching shared-DLL ABI as well. Without _AFXDLL, afx.h rejects
     # every translation unit before compilation with C1189.
-    add_compile_definitions(_AFXDLL)
+    add_compile_definitions(_AFXDLL HOVERNET_STATIC)
 endif()
 
 find_package(SDL2 REQUIRED)

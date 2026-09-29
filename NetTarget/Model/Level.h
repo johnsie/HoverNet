@@ -26,7 +26,7 @@
 #include "ShapeCollisions.h"
 #include "../Util/FastArray.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(HOVERNET_STATIC)
 #ifdef MR_MODEL
    #define MR_DllDeclare   __declspec( dllexport )
 #else
