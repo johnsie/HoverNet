@@ -117,6 +117,9 @@ class MR_Observer
       void SetCockpitView( BOOL pOn );
       void SetNetworkLatency( int pLatencyMs );
       void SetLargeHudText( BOOL pEnabled );
+      // Text paired with the legacy colour-changing fuel meter, so critical
+      // state never depends on colour perception alone.
+      static const char* GetFuelWarningForPercent( int pFuelPercent );
 
 
       void SetSplitMode( eSplitMode pMode );

@@ -378,7 +378,9 @@ the current-lap clock is visible from the first lap rather than appearing only
 after one full circuit, and the final circuit gets a prominent `FINAL LAP`
 banner. This keeps the original compact artwork while removing the need to
 infer critical state from unlabeled bars and animation frames or displaying
-false within-lap precision.
+false within-lap precision. Fuel state also gains explicit `LOW FUEL` and
+`FUEL EMPTY` warnings at the same thresholds as the colour-changing meter, so
+its critical state does not depend on colour perception.
 
 Online races now add a real RaceServer TCP round-trip measurement to that status
 line, refreshed every two seconds, with explicit measuring and connection-lost

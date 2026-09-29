@@ -166,6 +166,13 @@ void MR_Observer::SetLargeHudText( BOOL pEnabled )
    mLargeHudText = pEnabled;
 }
 
+const char* MR_Observer::GetFuelWarningForPercent( int pFuelPercent )
+{
+   if( pFuelPercent <= 0 ) return "FUEL EMPTY";
+   if( pFuelPercent < 20 ) return "LOW FUEL";
+   return "";
+}
+
 
 void MR_Observer::Scroll( int pOffset )
 {   
@@ -1726,6 +1733,12 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       if( lSpeedPercent > 999 ) lSpeedPercent = 999;
       if( lFuelPercent < 0 ) lFuelPercent = 0;
       if( lFuelPercent > 100 ) lFuelPercent = 100;
+      char lFuelStatus[40];
+      const char* lFuelWarning = GetFuelWarningForPercent( lFuelPercent );
+      if( lFuelWarning[0] != 0 )
+         snprintf( lFuelStatus, sizeof(lFuelStatus), "Fuel %d%% %s", lFuelPercent, lFuelWarning );
+      else
+         snprintf( lFuelStatus, sizeof(lFuelStatus), "Fuel %d%%", lFuelPercent );
 
       char lWeaponStatus[48];
       switch( pViewingCharacter->GetCurrentWeapon() )
@@ -1776,9 +1789,9 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
          // The bitmap font cannot be scaled above its native pixels. Splitting
          // the dense status into two short lines lets both render at native
          // size (scaling=1) instead of StrBlt auto-shrinking one long line.
-         char lDriveStatus[80];
-         snprintf( lDriveStatus, sizeof(lDriveStatus), "%s   Speed %d%%   Fuel %d%%",
-                   lPositionStatus, lSpeedPercent, lFuelPercent );
+         char lDriveStatus[96];
+         snprintf( lDriveStatus, sizeof(lDriveStatus), "%s   Speed %d%%   %s",
+                   lPositionStatus, lSpeedPercent, lFuelStatus );
          lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lDriveStatus ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
          lHudFont->StrBlt( lXRes/2, lStatusY + lHudFont->GetItemHeight() + 3,
@@ -1790,9 +1803,9 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       }
       else
       {
-         char lStatusLine[160];
-         snprintf( lStatusLine, sizeof(lStatusLine), "%s   Speed %d%%   Fuel %d%%   %s   %s",
-                   lPositionStatus, lSpeedPercent, lFuelPercent, lWeaponStatus, lNetworkStatus );
+         char lStatusLine[192];
+         snprintf( lStatusLine, sizeof(lStatusLine), "%s   Speed %d%%   %s   %s   %s",
+                   lPositionStatus, lSpeedPercent, lFuelStatus, lWeaponStatus, lNetworkStatus );
          lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lStatusLine ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
       }
