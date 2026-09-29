@@ -33,8 +33,10 @@ int main()
         return 1;
     }
 
+    // A compact-height viewport exercises the split-screen case where normal
+    // chat is reduced, while Large HUD must retain native-size glyphs.
     MR_VideoBuffer buffer(nullptr, 1.0, 0.5, 0.5);
-    if (!buffer.SetVideoMode(640, 480) || !buffer.Lock()) {
+    if (!buffer.SetVideoMode(640, 240) || !buffer.Lock()) {
         std::fprintf(stderr, "Could not create a framebuffer\n");
         return 1;
     }
@@ -53,6 +55,7 @@ int main()
         return 1;
     }
 
+    observer->SetLargeHudText(TRUE);
     const int pixelCount = buffer.GetXRes() * buffer.GetYRes();
 
     observer->RenderNormalDisplay(&buffer, &session, player, session.GetSimulationTime(), session.GetBackImage());
@@ -82,7 +85,7 @@ int main()
         return 1;
     }
 
-    std::printf("ObserverChatRenderSmoke passed: chat message changed %d pixels on screen\n", changedPixels);
+    std::printf("ObserverChatRenderSmoke passed: native-size chat changed %d pixels on screen\n", changedPixels);
     observer->Delete();
     return 0;
 }

@@ -1855,7 +1855,12 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       // out code that this live function never called into, so nothing was ever drawn
       // on screen for chat during a race on either platform. Reimplemented here instead.
       const MR_Sprite* lChatFont = mBaseFont->GetSprite();
-      const int lChatFontScaling = 1 + (lChatFont->GetItemHeight()*12)/lYRes;
+      // Large HUD text is an accessibility mode for all time-sensitive race
+      // information, including chat. In compact/split viewports the legacy
+      // formula shrinks chat to fit; keep it at native size when requested and
+      // rely on the existing wrapping/line cap to contain it.
+      const int lChatFontScaling = mLargeHudText ? 1 :
+         1 + (lChatFont->GetItemHeight()*12)/lYRes;
       const int lChatLineSpacing = lChatFont->GetItemHeight()/lChatFontScaling;
       const int lChatXMargin = 2*lChatFont->GetItemWidth()/lChatFontScaling;
       int lChatYMargin = lYRes - lYRes/6 - lChatLineSpacing;

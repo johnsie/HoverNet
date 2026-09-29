@@ -194,7 +194,7 @@ BEGIN
     LTEXT           "Muting preserves the selected volume.",IDC_STATIC,10,55,165,8
     CONTROL         "Large HUD text",IDC_LARGE_HUD_TEXT,"Button",BS_AUTOCHECKBOX |
                     WS_TABSTOP,10,72,75,12
-    LTEXT           "Keeps race information at the native font size.",IDC_STATIC,88,74,92,16
+    LTEXT           "Keeps race information and chat at native size.",IDC_STATIC,88,74,92,16
     PUSHBUTTON      "Restore audio && HUD defaults",IDC_RESET_AUDIO_HUD,10,96,166,14
 END
 

@@ -392,7 +392,9 @@ counted callouts derived from character state changes rather than being buried i
 the chat log or relying only on legacy sounds and sprites. A persisted Large HUD
 text accessibility option also avoids the bitmap renderer's automatic shrinking:
 dense race status is split across short native-size lines independently of menu
-UI scaling. A separate persisted Reduced motion option freezes the main menu's
+UI scaling. The same mode now keeps received chat and the active chat prompt at
+native size in compact and split-screen viewports instead of shrinking the text.
+A separate persisted Reduced motion option freezes the main menu's
 speed streak animation without removing its racing backdrop or navigation cues.
 Windows Options now exposes and persists the same Large HUD text mode, applies
 it to every local, split-screen, network, and online race observer, previews it

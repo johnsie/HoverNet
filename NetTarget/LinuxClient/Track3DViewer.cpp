@@ -2867,7 +2867,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::PopItemWidth();
         ImGui::Spacing();
         ImGui::Checkbox("Large HUD text", &largeHudText);
-        ImGui::TextDisabled("Keeps race information at the font's native size.");
+        ImGui::TextDisabled("Keeps race information and chat at the font's native size.");
         ImGui::Checkbox("Reduced motion", &reducedMotion);
         ImGui::TextDisabled("Disables animated menu speed streaks.");
         if (ImGui::Checkbox("High contrast menus", &highContrast)) {
@@ -4715,7 +4715,7 @@ int main(int argc, char** argv)
                 if (!chatBuffer.empty() && menuFontHandle != nullptr) {
                     const std::string prompt = "Chat: " + chatBuffer + "_";
                     DrawUiText(*menuFontHandle->GetSprite(), 20, kHeight - 40, prompt.c_str(), &viewport,
-                               MR_Sprite::eLeft, MR_Sprite::eTop, 2);
+                               MR_Sprite::eLeft, MR_Sprite::eTop, LoadLargeHudText() ? 1 : 2);
                 }
                 observer->PlaySoundsSafe(session.GetCurrentLevel(), mainCharacter);
                 MR_SoundServer::ApplyContinuousPlay();
