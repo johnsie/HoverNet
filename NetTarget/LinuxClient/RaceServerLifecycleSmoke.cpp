@@ -110,11 +110,30 @@ int main(int argc, char** argv)
     }
     lSecond.Disconnect();
 
+    // Keep a lobby-style connection open across the shutdown. The interactive
+    // client only offers its reconnect panel after PollMessage observes EOF and
+    // clears the socket, so exercise that exact transition instead of merely
+    // proving that a brand-new client can connect after restart.
+    RaceServerClient lRecoveringClient;
+    if (!lRecoveringClient.Connect("127.0.0.1", lPort)) {
+        std::fprintf(stderr, "Recovery client could not connect before shutdown\n");
+        return 1;
+    }
+
     if (!StopServer(lPid)) {
         std::fprintf(stderr, "RaceServer did not exit cleanly on SIGTERM\n");
         return 1;
     }
     gServerPid = -1;
+
+    RaceServerMessage lClosedMessage;
+    for (int lTry = 0; lTry < 20 && lRecoveringClient.IsConnected(); ++lTry) {
+        lRecoveringClient.PollMessage(lClosedMessage, 100);
+    }
+    if (lRecoveringClient.IsConnected()) {
+        std::fprintf(stderr, "Client did not detect the stopped RaceServer\n");
+        return 1;
+    }
 
     lPid = StartServer(lServerPath, lPort);
     gServerPid = lPid;
@@ -122,11 +141,10 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "RaceServer could not restart on the same port\n");
         return 1;
     }
-    RaceServerClient lAfterRestart;
     std::vector<RaceServerGameInfo> lRaces;
-    if (!lAfterRestart.Connect("127.0.0.1", lPort) ||
-        !lAfterRestart.ListGames(lRaces) || !lRaces.empty()) {
-        std::fprintf(stderr, "Restarted server did not have clean race state\n");
+    if (!lRecoveringClient.Connect("127.0.0.1", lPort) ||
+        !lRecoveringClient.ListGames(lRaces) || !lRaces.empty()) {
+        std::fprintf(stderr, "Existing client could not reconnect to clean restarted server state\n");
         return 1;
     }
     if (!StopServer(lPid)) {
@@ -135,6 +153,6 @@ int main(int argc, char** argv)
     }
     gServerPid = -1;
 
-    std::puts("RaceServer capacity, graceful shutdown, and restart lifecycle passed");
+    std::puts("RaceServer capacity, disconnect detection, reconnect, and restart lifecycle passed");
     return 0;
 }
