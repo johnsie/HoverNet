@@ -780,6 +780,24 @@ void SaveLargeHudText(bool enabled)
     out << (enabled ? 1 : 0) << '\n';
 }
 
+std::string ReducedMotionPath()
+{
+    return ConfigDirPath() + "/reduced_motion";
+}
+
+bool LoadReducedMotion()
+{
+    std::ifstream in(ReducedMotionPath());
+    int enabled = 0;
+    return (in >> enabled) && enabled != 0;
+}
+
+void SaveReducedMotion(bool enabled)
+{
+    std::ofstream out(ReducedMotionPath());
+    out << (enabled ? 1 : 0) << '\n';
+}
+
 struct KeyboardBindings
 {
     SDL_Scancode accelerate = SDL_SCANCODE_LSHIFT;
@@ -1130,6 +1148,7 @@ struct SettingsResult
     int windowHeight = 768;
     float uiScale = 1.0f;
     bool largeHudText = false;
+    bool reducedMotion = false;
 };
 
 SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
@@ -1364,6 +1383,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                         SaveWindowSize(savedSize);
                         SaveUiScale(settings.uiScale);
                         SaveLargeHudText(settings.largeHudText);
+                        SaveReducedMotion(settings.reducedMotion);
                     }
                 }
                 else if (pauseChoice == PauseChoice::eControls) {
@@ -2383,6 +2403,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     float uiScalePercent = currentUiScale * 100.0f;
     bool applyUiScale = false;
     bool largeHudText = LoadLargeHudText();
+    bool reducedMotion = LoadReducedMotion();
     bool fullscreen = currentFullscreen;
     int windowWidth = 0;
     int windowHeight = 0;
@@ -2557,6 +2578,8 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Spacing();
         ImGui::Checkbox("Large HUD text", &largeHudText);
         ImGui::TextDisabled("Keeps race information at the font's native size.");
+        ImGui::Checkbox("Reduced motion", &reducedMotion);
+        ImGui::TextDisabled("Disables animated menu speed streaks.");
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -2665,6 +2688,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     result.windowHeight = windowHeight;
     result.uiScale = uiScalePercent / 100.0f;
     result.largeHudText = largeHudText;
+    result.reducedMotion = reducedMotion;
     return result;
 }
 
@@ -3046,6 +3070,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     bool focusFirstButton = true;
     bool running = true;
     int framesShown = 0;
+    const bool reducedMotion = LoadReducedMotion();
     // --frames bounds gameplay, not time spent idling at a menu with no human
     // input. One rendered frame verifies this screen in automation, then the
     // documented Local Play default continues into the actual bounded race.
@@ -3091,7 +3116,8 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 
         // A lightweight animated race scene built from ImGui primitives keeps the
         // menu fast and resolution-independent without pretending it is a desktop
-        // form. The vanishing grid and streaks move continuously behind the UI.
+        // form. The vanishing grid remains static; speed streaks move unless the
+        // player's Reduced motion accessibility setting freezes them.
         background->AddRectFilledMultiColor(
             workPos, workEnd,
             IM_COL32(13, 13, 19, 255), IM_COL32(25, 10, 18, 255),
@@ -3111,7 +3137,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             background->AddLine(ImVec2(workPos.x, y), ImVec2(workEnd.x, y),
                                 IM_COL32(240, 53, 75, 52), 1.0f);
         }
-        const Uint32 animationTick = SDL_GetTicks() / 8;
+        const Uint32 animationTick = reducedMotion ? 0 : SDL_GetTicks() / 8;
         for (int streak = 0; streak < 18; ++streak) {
             const float x = workPos.x + static_cast<float>((streak * 193 + animationTick) %
                 static_cast<Uint32>(std::max(1.0f, workSize.x)));
@@ -3822,6 +3848,7 @@ int main(int argc, char** argv)
                     SaveWindowSize(savedSize);
                     SaveUiScale(settings.uiScale);
                     SaveLargeHudText(settings.largeHudText);
+                    SaveReducedMotion(settings.reducedMotion);
                 }
                 pickingMode = !g_QuitConfirmed;
             }
@@ -3977,6 +4004,7 @@ int main(int argc, char** argv)
                             SaveWindowSize(savedSize);
                             SaveUiScale(settings.uiScale);
                             SaveLargeHudText(settings.largeHudText);
+                            SaveReducedMotion(settings.reducedMotion);
                         }
                     }
                     else if (pauseChoice == PauseChoice::eControls) {

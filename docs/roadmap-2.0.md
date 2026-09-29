@@ -367,7 +367,8 @@ counted callouts derived from character state changes rather than being buried i
 the chat log or relying only on legacy sounds and sprites. A persisted Large HUD
 text accessibility option also avoids the bitmap renderer's automatic shrinking:
 dense race status is split across short native-size lines independently of menu
-UI scaling.
+UI scaling. A separate persisted Reduced motion option freezes the main menu's
+speed streak animation without removing its racing backdrop or navigation cues.
 
 Guided onboarding is now implemented on Linux as a three-step first-run
 walkthrough covering race selection, driving and weapons, and the race HUD. It

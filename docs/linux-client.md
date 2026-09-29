@@ -69,7 +69,9 @@ UI scale is adjustable from 75% to 150% in the same screen and applies to every
 ImGui-based menu. Like resolution and volume, it previews live and rolls back on
 Cancel. **Large HUD text** is a separate accessibility option: it keeps race
 status at the bitmap font's native size and splits dense information across
-shorter lines so it is not automatically shrunk to fit.
+shorter lines so it is not automatically shrunk to fit. **Reduced motion**
+freezes the main menu's moving speed streaks while preserving its racing scene
+and all navigation cues.
 
 ## Bounded Runs
 
