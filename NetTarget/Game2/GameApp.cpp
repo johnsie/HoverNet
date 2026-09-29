@@ -521,6 +521,7 @@ void MR_GameApp::LoadRegistry()
    mBrightness  = 1.0;        // Maximum brightness
    mMasterVolume = 1.0;
    mMuted        = FALSE;
+   mLargeHudText  = FALSE;
 
    // Nickname
    char  lBuffer[80];
@@ -612,6 +613,13 @@ void MR_GameApp::LoadRegistry()
                            (MR_UInt8*)&lMuted, &lAudioSettingSize ) == ERROR_SUCCESS )
       {
          mMuted = lMuted != 0;
+      }
+      DWORD lLargeHudText = 0;
+      lAudioSettingSize = sizeof(lLargeHudText);
+      if( RegQueryValueEx( lProgramKey, "LargeHudText", 0, NULL,
+                           (MR_UInt8*)&lLargeHudText, &lAudioSettingSize ) == ERROR_SUCCESS )
+      {
+         mLargeHudText = lLargeHudText != 0;
       }
 
 
@@ -786,10 +794,13 @@ void MR_GameApp::SaveRegistry()
 
       DWORD lVolumePercent = (DWORD)(mMasterVolume * 100.0 + 0.5);
       DWORD lMuted = mMuted ? 1 : 0;
+      DWORD lLargeHudText = mLargeHudText ? 1 : 0;
       RegSetValueEx( lProgramKey, "MasterVolume", 0, REG_DWORD,
                      (MR_UInt8*)&lVolumePercent, sizeof(lVolumePercent) );
       RegSetValueEx( lProgramKey, "Muted", 0, REG_DWORD,
                      (MR_UInt8*)&lMuted, sizeof(lMuted) );
+      RegSetValueEx( lProgramKey, "LargeHudText", 0, REG_DWORD,
+                     (MR_UInt8*)&lLargeHudText, sizeof(lLargeHudText) );
 
       if( RegSetValueEx(    lProgramKey,
                             "Alias",
@@ -2012,7 +2023,8 @@ void MR_GameApp::NewLocalSession()
       try { MR_DllObjectFactory::Init(); } catch(...) { throw; }
       
       try { 
-         mObserver1 = MR_Observer::New(); 
+         mObserver1 = MR_Observer::New();
+         if( mObserver1 != NULL ) mObserver1->SetLargeHudText( mLargeHudText );
       } catch(const std::exception& e) { 
          mObserver1 = NULL;
          // Don't set lSuccess = FALSE - we'll try to continue without the observer
@@ -2193,7 +2205,10 @@ void MR_GameApp::NewSplitSession()
          MR_SoundServer::SetMasterVolume( mMuted ? 0.0 : mMasterVolume );
 
       mObserver1 = MR_Observer::New();
+
+      if( mObserver1 != NULL ) mObserver1->SetLargeHudText( mLargeHudText );
       mObserver2 = MR_Observer::New();
+      if( mObserver2 != NULL ) mObserver2->SetLargeHudText( mLargeHudText );
 
       mObserver1->SetSplitMode( MR_Observer::eUpperSplit );
       mObserver2->SetSplitMode( MR_Observer::eLowerSplit );
@@ -2335,6 +2350,8 @@ void MR_GameApp::NewNetworkSession( BOOL pServer )
    {
 
       mObserver1 = MR_Observer::New();
+
+      if( mObserver1 != NULL ) mObserver1->SetLargeHudText( mLargeHudText );
 
 
       // Load the track
@@ -2483,6 +2500,7 @@ void MR_GameApp::NewInternetSession( )
          if( lSuccess )
          {
             mObserver1 = MR_Observer::New();
+            if( mObserver1 != NULL ) mObserver1->SetLargeHudText( mLargeHudText );
             
             lSuccess = lCurrentSession->CreateMainCharacter();
          }
@@ -2573,7 +2591,7 @@ void MR_GameApp::SetProperties()
     psp[2].hInstance   = mInstance;
     psp[2].pszTemplate = MAKEINTRESOURCE(IDD_AUDIO);
     psp[2].pfnDlgProc  = AudioDialogFunc;
-    psp[2].pszTitle    = "Audio";
+    psp[2].pszTitle    = "Audio & HUD";
     psp[2].lParam      = 0;
     psp[2].pfnCallback = NULL;
 
@@ -3215,16 +3233,19 @@ BOOL CALLBACK MR_GameApp::AudioDialogFunc( HWND pWindow, UINT pMsgId, WPARAM pWP
 {
    static double lOriginalVolume;
    static BOOL lOriginalMuted;
+   static BOOL lOriginalLargeHudText;
 
    switch( pMsgId )
    {
       case WM_INITDIALOG:
          lOriginalVolume = This->mMasterVolume;
          lOriginalMuted = This->mMuted;
+         lOriginalLargeHudText = This->mLargeHudText;
          SendDlgItemMessage( pWindow, IDC_MASTER_VOLUME, TBM_SETRANGE, 0, MAKELONG(0, 100) );
          SendDlgItemMessage( pWindow, IDC_MASTER_VOLUME, TBM_SETPOS, TRUE,
                              (LPARAM)(This->mMasterVolume * 100.0 + 0.5) );
          CheckDlgButton( pWindow, IDC_MUTE_AUDIO, This->mMuted ? BST_CHECKED : BST_UNCHECKED );
+         CheckDlgButton( pWindow, IDC_LARGE_HUD_TEXT, This->mLargeHudText ? BST_CHECKED : BST_UNCHECKED );
          return TRUE;
 
       case WM_HSCROLL:
@@ -3236,18 +3257,27 @@ BOOL CALLBACK MR_GameApp::AudioDialogFunc( HWND pWindow, UINT pMsgId, WPARAM pWP
             const BOOL lMuted = IsDlgButtonChecked( pWindow, IDC_MUTE_AUDIO ) == BST_CHECKED;
             MR_SoundServer::SetMasterVolume( lMuted ? 0.0 : lVolume );
          }
+         if( pMsgId == WM_COMMAND && LOWORD(pWParam) == IDC_LARGE_HUD_TEXT )
+         {
+            const BOOL lLarge = IsDlgButtonChecked( pWindow, IDC_LARGE_HUD_TEXT ) == BST_CHECKED;
+            if( This->mObserver1 != NULL ) This->mObserver1->SetLargeHudText( lLarge );
+            if( This->mObserver2 != NULL ) This->mObserver2->SetLargeHudText( lLarge );
+         }
          break;
 
       case WM_NOTIFY:
          if( ((NMHDR FAR*)pLParam)->code == PSN_RESET )
          {
             MR_SoundServer::SetMasterVolume( lOriginalMuted ? 0.0 : lOriginalVolume );
+            if( This->mObserver1 != NULL ) This->mObserver1->SetLargeHudText( lOriginalLargeHudText );
+            if( This->mObserver2 != NULL ) This->mObserver2->SetLargeHudText( lOriginalLargeHudText );
          }
          else if( ((NMHDR FAR*)pLParam)->code == PSN_APPLY )
          {
             This->mMasterVolume = SendDlgItemMessage( pWindow, IDC_MASTER_VOLUME,
                                                       TBM_GETPOS, 0, 0 ) / 100.0;
             This->mMuted = IsDlgButtonChecked( pWindow, IDC_MUTE_AUDIO ) == BST_CHECKED;
+            This->mLargeHudText = IsDlgButtonChecked( pWindow, IDC_LARGE_HUD_TEXT ) == BST_CHECKED;
             MR_SoundServer::SetMasterVolume( This->mMuted ? 0.0 : This->mMasterVolume );
             This->SaveRegistry();
          }

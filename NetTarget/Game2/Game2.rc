@@ -181,7 +181,7 @@ BEGIN
     LTEXT           "Brightness",IDC_STATIC,13,44,36,8
 END
 
-IDD_AUDIO DIALOG 0, 0, 186, 70
+IDD_AUDIO DIALOG 0, 0, 186, 92
 STYLE DS_SETFONT | DS_3DLOOK | WS_CHILD | WS_BORDER
 FONT 8, "MS Sans Serif"
 BEGIN
@@ -191,6 +191,9 @@ BEGIN
     CONTROL         "Mute all sound",IDC_MUTE_AUDIO,"Button",BS_AUTOCHECKBOX |
                     WS_TABSTOP,10,39,75,12
     LTEXT           "Muting preserves the selected volume.",IDC_STATIC,10,55,165,8
+    CONTROL         "Large HUD text",IDC_LARGE_HUD_TEXT,"Button",BS_AUTOCHECKBOX |
+                    WS_TABSTOP,10,72,75,12
+    LTEXT           "Keeps race information at the native font size.",IDC_STATIC,88,74,92,16
 END
 
 IDD_TRACK_SELECT DIALOGEX 0, 0, 244, 141

@@ -104,6 +104,7 @@ class MR_GameApp
       double mBrightness;
       double mMasterVolume;
       BOOL   mMuted;
+      BOOL   mLargeHudText;
 
       CString mNickName;
 

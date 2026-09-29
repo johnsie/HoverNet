@@ -381,7 +381,9 @@ text accessibility option also avoids the bitmap renderer's automatic shrinking:
 dense race status is split across short native-size lines independently of menu
 UI scaling. A separate persisted Reduced motion option freezes the main menu's
 speed streak animation without removing its racing backdrop or navigation cues.
-Persisted High contrast menus replace subtle dark shades with blacker surfaces,
+Windows Options now exposes and persists the same Large HUD text mode, applies
+it to every local, split-screen, network, and online race observer, previews it
+for an active race, and rolls it back on Cancel. Persisted High contrast menus replace subtle dark shades with blacker surfaces,
 white body text, brighter secondary text and borders, darker action buttons, and
 stronger focus/selection states across the shared ImGui theme. Settings also
 has a single Restore defaults action covering identity, server, audio, display,
