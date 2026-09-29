@@ -419,8 +419,10 @@ walkthrough covering race selection, driving and weapons, the race HUD, and
 configuration/accessibility. It explains live preview plus Save/Cancel semantics
 so a new player can safely adjust the game without external documentation. It is
 skipped for automated bounded runs, records completion only after Finish, and
-remains reachable through How to Play on the main menu. The first and final pages
-have separate bounded smoke coverage.
+remains reachable through How to Play on the main menu. Completion is versioned,
+so players who finished the earlier three-step walkthrough see this expanded
+version once; finishing records the new version. The first and final pages have
+separate bounded smoke coverage.
 
 The Linux main menu is now consolidated into ImGui without looking like a
 settings dialog: an animated speed-line and perspective-grid race backdrop,

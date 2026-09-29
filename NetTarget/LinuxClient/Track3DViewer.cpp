@@ -1056,6 +1056,8 @@ void SaveControllerBindings(const ControllerBindings& bindings)
         << bindings.deadzone << '\n';
 }
 
+constexpr int kOnboardingVersion = 2;
+
 std::string OnboardingCompletePath()
 {
     return ConfigDirPath() + "/onboarding_complete";
@@ -1064,14 +1066,14 @@ std::string OnboardingCompletePath()
 bool HasCompletedOnboarding()
 {
     std::ifstream in(OnboardingCompletePath());
-    int completed = 0;
-    return (in >> completed) && completed == 1;
+    int completedVersion = 0;
+    return (in >> completedVersion) && completedVersion == kOnboardingVersion;
 }
 
 void SaveOnboardingComplete()
 {
     std::ofstream out(OnboardingCompletePath());
-    out << 1 << '\n';
+    out << kOnboardingVersion << '\n';
 }
 
 struct RemotePlayer
