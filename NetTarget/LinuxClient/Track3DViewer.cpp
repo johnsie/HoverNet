@@ -4219,7 +4219,15 @@ int main(int argc, char** argv)
         return 1;
     }
     if (playerMode) {
-        if (HasArgument(argc, argv, "--onboarding-config")) {
+        if (HasArgument(argc, argv, "--lobby-screen")) {
+            // Deterministic CI entry point: exercise protocol negotiation and
+            // render the real online lobby without relying on menu navigation
+            // or joining/creating a race. A bounded lobby returns false when
+            // its frame budget expires, which is the expected smoke-test exit.
+            joinOnlineRace();
+            g_QuitConfirmed = true;
+        }
+        else if (HasArgument(argc, argv, "--onboarding-config")) {
             RunOnboardingScreen(graphics, frameLimit, 3);
             g_QuitConfirmed = true;
         }

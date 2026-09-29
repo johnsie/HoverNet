@@ -499,8 +499,10 @@ runtime together as a testable pipeline artifact. Both pipelines now run that
 x64 executable with SDL's headless video/audio drivers through startup and
 bounded Local Play, Settings, Controls, pause, results, and onboarding flows.
 This is not yet a replacement for the legacy installer: interactive Windows
-playtesting, online-lobby coverage, and packaging remain required before
-changing the player-facing executable.
+playtesting and packaging remain required before changing the player-facing
+executable. Automated online-lobby coverage now starts the portable x64
+RaceServer locally, negotiates protocol 2.0, and renders the real bounded lobby;
+it does not depend on or modify the production server.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.

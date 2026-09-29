@@ -129,12 +129,13 @@ jobs:
             -DBUILD_TESTING=OFF
           if ($LASTEXITCODE -ne 0) { throw "Shared x64 client configure failed" }
 
-          cmake --build build/windows-shared --target HoverNetGame2Player --config Release --parallel 2
-          if ($LASTEXITCODE -ne 0) { throw "Shared x64 client build failed" }
+          cmake --build build/windows-shared --target HoverNetGame2Player RaceServer --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw "Shared x64 client or RaceServer build failed" }
 
           $required = @(
             "build\windows-shared\Release\HoverNetGame2Player.exe",
-            "build\windows-shared\Release\ObjFac1.dll"
+            "build\windows-shared\Release\ObjFac1.dll",
+            "build\windows-shared\Release\RaceServer.exe"
           )
           $missing = $required | Where-Object { -not (Test-Path $_) }
           if ($missing) { throw "Missing shared x64 runtime files: $($missing -join ', ')" }
@@ -161,6 +162,19 @@ jobs:
             if ($LASTEXITCODE -ne 0) {
               throw "Shared x64 client smoke scenario failed: $scenario"
             }
+          }
+
+          $serverPath = "build\windows-shared\Release\RaceServer.exe"
+          $server = Start-Process -FilePath $serverPath `
+            -ArgumentList "19879", "build\windows-shared\shared-lobby-smoke.log", "--require-protocol-2" `
+            -PassThru
+          try {
+            Start-Sleep -Seconds 1
+            & $client --lobby 127.0.0.1 19879 --lobby-screen --frames 2
+            if ($LASTEXITCODE -ne 0) { throw "Shared x64 online lobby smoke failed" }
+          }
+          finally {
+            if (-not $server.HasExited) { Stop-Process -Id $server.Id -Force }
           }
 
       - name: Build Windows client
