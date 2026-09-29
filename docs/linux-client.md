@@ -49,11 +49,13 @@ The keyboard and controller bindings are available in-game through **Controls**
 on the main menu and the Escape menu, including while browsing the online lobby.
 Select any gameplay keyboard binding on that screen and press a new key to
 change it immediately. Jump, Fire, and Select Weapon controller buttons can be
-changed the same way; analog steering and triggers remain fixed. Escape cancels
-keyboard capture, and **Reset all control defaults** restores the original
-layout. Bindings are stored in `$XDG_CONFIG_HOME/hovernet/keyboard_bindings`
-and `controller_bindings` (or the equivalent files under
-`~/.config/hovernet/`).
+changed the same way. Steering, accelerate, and brake can each use any standard
+stick or trigger axis; their direction can be inverted independently and the
+shared analog deadzone is adjustable. Escape cancels keyboard capture, and
+**Reset all control defaults** restores the original layout. Bindings are stored
+in `$XDG_CONFIG_HOME/hovernet/keyboard_bindings` and `controller_bindings` (or
+the equivalent files under `~/.config/hovernet/`). Existing three-button
+controller files remain valid and are upgraded when next saved.
 
 ## Display settings
 

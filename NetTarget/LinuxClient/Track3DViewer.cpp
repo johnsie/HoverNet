@@ -824,6 +824,13 @@ struct ControllerBindings
     SDL_GameControllerButton jump = SDL_CONTROLLER_BUTTON_A;
     SDL_GameControllerButton fire = SDL_CONTROLLER_BUTTON_X;
     SDL_GameControllerButton selectWeapon = SDL_CONTROLLER_BUTTON_Y;
+    SDL_GameControllerAxis steerAxis = SDL_CONTROLLER_AXIS_LEFTX;
+    SDL_GameControllerAxis accelerateAxis = SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
+    SDL_GameControllerAxis brakeAxis = SDL_CONTROLLER_AXIS_TRIGGERLEFT;
+    bool invertSteering = false;
+    bool invertAccelerate = false;
+    bool invertBrake = false;
+    int deadzone = 8000;
 };
 
 ControllerBindings gControllerBindings;
@@ -839,19 +846,53 @@ bool IsValidControllerBinding(int value)
            value != SDL_CONTROLLER_BUTTON_START;
 }
 
+bool IsValidControllerAxis(int value)
+{
+    return value >= SDL_CONTROLLER_AXIS_LEFTX && value < SDL_CONTROLLER_AXIS_MAX;
+}
+
 ControllerBindings LoadControllerBindings()
 {
     ControllerBindings bindings;
     std::ifstream in(ControllerBindingsPath());
-    int values[3] = {};
-    if (in >> values[0] >> values[1] >> values[2]) {
-        for (int value : values) {
-            if (!IsValidControllerBinding(value)) return ControllerBindings{};
-        }
-        bindings.jump = static_cast<SDL_GameControllerButton>(values[0]);
-        bindings.fire = static_cast<SDL_GameControllerButton>(values[1]);
-        bindings.selectWeapon = static_cast<SDL_GameControllerButton>(values[2]);
+    int buttons[3] = {};
+    if (!(in >> buttons[0] >> buttons[1] >> buttons[2])) return bindings;
+    for (int button : buttons) {
+        if (!IsValidControllerBinding(button)) return ControllerBindings{};
     }
+    bindings.jump = static_cast<SDL_GameControllerButton>(buttons[0]);
+    bindings.fire = static_cast<SDL_GameControllerButton>(buttons[1]);
+    bindings.selectWeapon = static_cast<SDL_GameControllerButton>(buttons[2]);
+
+    // A legacy file ends after the three button values. Preserve it and use
+    // default axes; once saved again it is upgraded to the extended format.
+    in >> std::ws;
+    if (in.peek() == std::char_traits<char>::eof()) return bindings;
+
+    int axes[3] = {};
+    int inverted[3] = {};
+    int deadzone = 0;
+    if (!(in >> axes[0] >> axes[1] >> axes[2] >>
+              inverted[0] >> inverted[1] >> inverted[2] >> deadzone)) {
+        return ControllerBindings{};
+    }
+    for (int axis : axes) {
+        if (!IsValidControllerAxis(axis)) return ControllerBindings{};
+    }
+    for (int value : inverted) {
+        if (value != 0 && value != 1) return ControllerBindings{};
+    }
+    in >> std::ws;
+    if (deadzone < 0 || deadzone > 30000 || in.peek() != std::char_traits<char>::eof()) {
+        return ControllerBindings{};
+    }
+    bindings.steerAxis = static_cast<SDL_GameControllerAxis>(axes[0]);
+    bindings.accelerateAxis = static_cast<SDL_GameControllerAxis>(axes[1]);
+    bindings.brakeAxis = static_cast<SDL_GameControllerAxis>(axes[2]);
+    bindings.invertSteering = inverted[0] != 0;
+    bindings.invertAccelerate = inverted[1] != 0;
+    bindings.invertBrake = inverted[2] != 0;
+    bindings.deadzone = deadzone;
     return bindings;
 }
 
@@ -860,7 +901,14 @@ void SaveControllerBindings(const ControllerBindings& bindings)
     std::ofstream out(ControllerBindingsPath());
     out << static_cast<int>(bindings.jump) << ' '
         << static_cast<int>(bindings.fire) << ' '
-        << static_cast<int>(bindings.selectWeapon) << '\n';
+        << static_cast<int>(bindings.selectWeapon) << ' '
+        << static_cast<int>(bindings.steerAxis) << ' '
+        << static_cast<int>(bindings.accelerateAxis) << ' '
+        << static_cast<int>(bindings.brakeAxis) << ' '
+        << (bindings.invertSteering ? 1 : 0) << ' '
+        << (bindings.invertAccelerate ? 1 : 0) << ' '
+        << (bindings.invertBrake ? 1 : 0) << ' '
+        << bindings.deadzone << '\n';
 }
 
 std::string OnboardingCompletePath()
@@ -2865,6 +2913,37 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
             ImGui::EndTable();
         }
         ImGui::Spacing();
+        HoverNetSectionHeading("CONTROLLER AXES");
+        const char* axisNames[] = {"Left stick X", "Left stick Y", "Right stick X",
+                                   "Right stick Y", "Left trigger", "Right trigger"};
+        int steerAxis = static_cast<int>(gControllerBindings.steerAxis);
+        int accelerateAxis = static_cast<int>(gControllerBindings.accelerateAxis);
+        int brakeAxis = static_cast<int>(gControllerBindings.brakeAxis);
+        bool controllerAxesChanged = false;
+        ImGui::SetNextItemWidth(-1.0f);
+        controllerAxesChanged |= ImGui::Combo("Steering axis", &steerAxis, axisNames,
+                                              static_cast<int>(SDL_CONTROLLER_AXIS_MAX));
+        controllerAxesChanged |= ImGui::Checkbox("Invert steering", &gControllerBindings.invertSteering);
+        ImGui::SetNextItemWidth(-1.0f);
+        controllerAxesChanged |= ImGui::Combo("Accelerate axis", &accelerateAxis, axisNames,
+                                              static_cast<int>(SDL_CONTROLLER_AXIS_MAX));
+        controllerAxesChanged |= ImGui::Checkbox("Invert accelerate direction",
+                                                  &gControllerBindings.invertAccelerate);
+        ImGui::SetNextItemWidth(-1.0f);
+        controllerAxesChanged |= ImGui::Combo("Brake / reverse axis", &brakeAxis, axisNames,
+                                              static_cast<int>(SDL_CONTROLLER_AXIS_MAX));
+        controllerAxesChanged |= ImGui::Checkbox("Invert brake direction",
+                                                  &gControllerBindings.invertBrake);
+        ImGui::SetNextItemWidth(-1.0f);
+        controllerAxesChanged |= ImGui::SliderInt("Axis deadzone", &gControllerBindings.deadzone,
+                                                   0, 24000, "%d");
+        if (controllerAxesChanged) {
+            gControllerBindings.steerAxis = static_cast<SDL_GameControllerAxis>(steerAxis);
+            gControllerBindings.accelerateAxis = static_cast<SDL_GameControllerAxis>(accelerateAxis);
+            gControllerBindings.brakeAxis = static_cast<SDL_GameControllerAxis>(brakeAxis);
+            SaveControllerBindings(gControllerBindings);
+        }
+        ImGui::Spacing();
         if (HoverNetButton("Reset all control defaults", ImVec2(-FLT_MIN, 34))) {
             gKeyboardBindings = KeyboardBindings{};
             gControllerBindings = ControllerBindings{};
@@ -2874,7 +2953,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
             listeningForControllerBinding = -1;
         }
         ImGui::Spacing();
-        HoverNetHint("Select a keyboard key or gameplay button to remap it; changes apply immediately.");
+        HoverNetHint("Remaps, axis direction, and deadzone changes apply immediately.");
         ImGui::EndChild();
         ImGui::Spacing();
         if (HoverNetButton("Back", ImVec2(-FLT_MIN, 40))) {
@@ -3157,6 +3236,13 @@ struct ControllerBindings
     SDL_GameControllerButton jump = SDL_CONTROLLER_BUTTON_A;
     SDL_GameControllerButton fire = SDL_CONTROLLER_BUTTON_X;
     SDL_GameControllerButton selectWeapon = SDL_CONTROLLER_BUTTON_Y;
+    SDL_GameControllerAxis steerAxis = SDL_CONTROLLER_AXIS_LEFTX;
+    SDL_GameControllerAxis accelerateAxis = SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
+    SDL_GameControllerAxis brakeAxis = SDL_CONTROLLER_AXIS_TRIGGERLEFT;
+    bool invertSteering = false;
+    bool invertAccelerate = false;
+    bool invertBrake = false;
+    int deadzone = 8000;
 };
 ControllerBindings gControllerBindings;
 #endif
@@ -3907,14 +3993,18 @@ int main(int argc, char** argv)
 #endif
 
         const Uint8* keyboard = SDL_GetKeyboardState(nullptr);
-        constexpr Sint16 kControllerDeadzone = 8000;
-        const Sint16 controllerSteer = gameController.Axis(SDL_CONTROLLER_AXIS_LEFTX);
-        const bool controllerLeft = controllerSteer < -kControllerDeadzone;
-        const bool controllerRight = controllerSteer > kControllerDeadzone;
-        const bool controllerAccelerate =
-            gameController.Axis(SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > kControllerDeadzone;
-        const bool controllerBrake =
-            gameController.Axis(SDL_CONTROLLER_AXIS_TRIGGERLEFT) > kControllerDeadzone;
+        int controllerSteer = static_cast<int>(gameController.Axis(gControllerBindings.steerAxis));
+        if (gControllerBindings.invertSteering) controllerSteer = -controllerSteer;
+        const bool controllerLeft = controllerSteer < -gControllerBindings.deadzone;
+        const bool controllerRight = controllerSteer > gControllerBindings.deadzone;
+        int controllerAccelerateValue =
+            static_cast<int>(gameController.Axis(gControllerBindings.accelerateAxis));
+        int controllerBrakeValue =
+            static_cast<int>(gameController.Axis(gControllerBindings.brakeAxis));
+        if (gControllerBindings.invertAccelerate) controllerAccelerateValue = -controllerAccelerateValue;
+        if (gControllerBindings.invertBrake) controllerBrakeValue = -controllerBrakeValue;
+        const bool controllerAccelerate = controllerAccelerateValue > gControllerBindings.deadzone;
+        const bool controllerBrake = controllerBrakeValue > gControllerBindings.deadzone;
         const bool turnLeft = keyboard[gKeyboardBindings.steerLeft] || controllerLeft ||
                               (!playerMode && keyboard[SDL_SCANCODE_A]);
         const bool turnRight = keyboard[gKeyboardBindings.steerRight] || controllerRight ||

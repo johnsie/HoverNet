@@ -343,8 +343,11 @@ truncated binding files fall back atomically to the full default layout.
 Core controller gameplay buttons are now remappable and persisted alongside the
 keyboard layout: Jump, Fire, and Select Weapon can be reassigned from the
 Controls screen, with validated atomic loading and a shared reset-to-defaults
-action. Start remains reserved for pause, while steering and throttle/brake stay
-on the standard left-stick and trigger axes.
+action. Start remains reserved for pause. Advanced analog customization is now
+implemented too: steering, accelerate, and brake can each map to any standard
+SDL stick/trigger axis, direction inversion is independent per action, and the
+shared deadzone is adjustable. The extended settings load atomically while
+remaining backward-compatible with the earlier three-button file format.
 
 The shared Windows/Linux race HUD now supplements its existing graphical meters
 and weapon sprites with a readable status line: explicit speed and fuel
@@ -384,8 +387,8 @@ race, enter online multiplayer, or quit. Keyboard/controller navigation and
 quit confirmation remain consistent with the other menus, and
 `HoverNetPostRaceSmoke` covers its standalone render/lifecycle path.
 
-The rest of Phase 3 (remaining ImGui menu consolidation, advanced controller
-axis customization, remaining HUD improvements and accessibility work, and
+The rest of Phase 3 (remaining ImGui menu consolidation, remaining HUD
+improvements and accessibility work, and
 Windows/Linux menu parity) remains.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
