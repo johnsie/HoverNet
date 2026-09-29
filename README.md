@@ -15,7 +15,8 @@ Launch the game and open the multiplayer lobby to see races other players have o
 
 Downloads for both Windows and Linux are published on the [Releases page](../../releases).
 
-- **Windows**: download and run the installer (`HoverNet-setup.exe`).
+- **Windows 32 bit**: Classic MFC forums layout. Download and run the installer (`HoverNet-setup-32.exe`).
+- **Windows 64 bit**: Experimental cross-platform SDL2/IMGUI layout. Download and run the installer (`HoverNet-setup-64.exe`).
 - **Linux**: download the `.deb` package and install it (`sudo apt install ./hovernet-game_*.deb`), then launch it from your applications menu or run `hovernet` from a terminal.
 
 ## Controls
