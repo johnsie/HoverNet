@@ -2368,7 +2368,10 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         const float centerWidth = std::min(460.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
-        ImGui::BeginChild("LocalRaceSetupPanel", ImVec2(centerWidth, 445), true);
+        // Use all remaining vertical space. A fixed-height panel began scrolling
+        // after course briefings were added even when the window had unused room
+        // below it; height 0 tells ImGui to extend the child to the content edge.
+        ImGui::BeginChild("LocalRaceSetupPanel", ImVec2(centerWidth, 0), true);
 
         ImGui::PushItemWidth(-1.0f);
         ImGui::TextUnformatted("Track");
