@@ -66,7 +66,10 @@ window dimensions are restored on the next launch, and the window can also be
 resized directly while windowed.
 
 UI scale is adjustable from 75% to 150% in the same screen and applies to every
-ImGui-based menu. Like resolution and volume, it previews live and rolls back on Cancel.
+ImGui-based menu. Like resolution and volume, it previews live and rolls back on
+Cancel. **Large HUD text** is a separate accessibility option: it keeps race
+status at the bitmap font's native size and splits dense information across
+shorter lines so it is not automatically shrunk to fit.
 
 ## Bounded Runs
 

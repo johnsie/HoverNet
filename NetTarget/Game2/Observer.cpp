@@ -83,6 +83,7 @@ MR_Observer::MR_Observer()
 
    mCockpitView = FALSE;
    mNetworkLatencyMs = -2;
+   mLargeHudText = FALSE;
    mFeedbackCharacter = NULL;
    mPreviousFuelLevel = 0.0;
    mPreviousMineCount = 0;
@@ -156,6 +157,11 @@ void MR_Observer::SetCockpitView( BOOL pOn )
 void MR_Observer::SetNetworkLatency( int pLatencyMs )
 {
    mNetworkLatencyMs = pLatencyMs;
+}
+
+void MR_Observer::SetLargeHudText( BOOL pEnabled )
+{
+   mLargeHudText = pEnabled;
 }
 
 
@@ -1742,12 +1748,32 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       else
          snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Local" );
 
-      char lStatusLine[160];
-      snprintf( lStatusLine, sizeof(lStatusLine), "Speed %d%%   Fuel %d%%   %s   %s",
-                lSpeedPercent, lFuelPercent, lWeaponStatus, lNetworkStatus );
       int lStatusY = lYRes/16 + lHudFont->GetItemHeight() + 4;
-      lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lStatusLine ), &m3DView,
-                        MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
+      if( mLargeHudText )
+      {
+         // The bitmap font cannot be scaled above its native pixels. Splitting
+         // the dense status into two short lines lets both render at native
+         // size (scaling=1) instead of StrBlt auto-shrinking one long line.
+         char lDriveStatus[80];
+         snprintf( lDriveStatus, sizeof(lDriveStatus), "Speed %d%%   Fuel %d%%",
+                   lSpeedPercent, lFuelPercent );
+         lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lDriveStatus ), &m3DView,
+                           MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
+         lHudFont->StrBlt( lXRes/2, lStatusY + lHudFont->GetItemHeight() + 3,
+                           Ascii2Simple( lWeaponStatus ), &m3DView,
+                           MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
+         lHudFont->StrBlt( lXRes/2, lStatusY + 2*(lHudFont->GetItemHeight() + 3),
+                           Ascii2Simple( lNetworkStatus ), &m3DView,
+                           MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
+      }
+      else
+      {
+         char lStatusLine[160];
+         snprintf( lStatusLine, sizeof(lStatusLine), "Speed %d%%   Fuel %d%%   %s   %s",
+                   lSpeedPercent, lFuelPercent, lWeaponStatus, lNetworkStatus );
+         lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lStatusLine ), &m3DView,
+                           MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
+      }
 
       // State-change callouts make impacts and pickups readable even when the
       // player cannot identify the legacy sound/sprite cue. A newly viewed

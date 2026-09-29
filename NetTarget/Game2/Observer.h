@@ -48,6 +48,7 @@ class MR_Observer
       // -2 local race, -1 online but awaiting a sample, -3 connection lost,
       // otherwise the most recent server TCP round-trip in milliseconds.
       int             mNetworkLatencyMs;
+      BOOL            mLargeHudText;
 
       // Short, high-visibility gameplay feedback derived from state changes.
       // Kept per observer so local/split views never share stale pickup state.
@@ -115,6 +116,7 @@ class MR_Observer
 
       void SetCockpitView( BOOL pOn );
       void SetNetworkLatency( int pLatencyMs );
+      void SetLargeHudText( BOOL pEnabled );
 
 
       void SetSplitMode( eSplitMode pMode );

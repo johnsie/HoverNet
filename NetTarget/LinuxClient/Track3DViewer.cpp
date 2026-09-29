@@ -762,6 +762,24 @@ void SaveUiScale(float scale)
     out << scale << '\n';
 }
 
+std::string LargeHudTextPath()
+{
+    return ConfigDirPath() + "/large_hud_text";
+}
+
+bool LoadLargeHudText()
+{
+    std::ifstream in(LargeHudTextPath());
+    int enabled = 0;
+    return (in >> enabled) && enabled != 0;
+}
+
+void SaveLargeHudText(bool enabled)
+{
+    std::ofstream out(LargeHudTextPath());
+    out << (enabled ? 1 : 0) << '\n';
+}
+
 struct KeyboardBindings
 {
     SDL_Scancode accelerate = SDL_SCANCODE_LSHIFT;
@@ -1111,6 +1129,7 @@ struct SettingsResult
     int windowWidth = 1024;
     int windowHeight = 768;
     float uiScale = 1.0f;
+    bool largeHudText = false;
 };
 
 SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
@@ -1344,6 +1363,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                         savedSize.height = settings.windowHeight;
                         SaveWindowSize(savedSize);
                         SaveUiScale(settings.uiScale);
+                        SaveLargeHudText(settings.largeHudText);
                     }
                 }
                 else if (pauseChoice == PauseChoice::eControls) {
@@ -2362,6 +2382,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     const float currentUiScale = LoadUiScale();
     float uiScalePercent = currentUiScale * 100.0f;
     bool applyUiScale = false;
+    bool largeHudText = LoadLargeHudText();
     bool fullscreen = currentFullscreen;
     int windowWidth = 0;
     int windowHeight = 0;
@@ -2533,6 +2554,9 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             applyUiScale = true;
         }
         ImGui::PopItemWidth();
+        ImGui::Spacing();
+        ImGui::Checkbox("Large HUD text", &largeHudText);
+        ImGui::TextDisabled("Keeps race information at the font's native size.");
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -2640,6 +2664,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     result.windowWidth = windowWidth;
     result.windowHeight = windowHeight;
     result.uiScale = uiScalePercent / 100.0f;
+    result.largeHudText = largeHudText;
     return result;
 }
 
@@ -3414,6 +3439,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "Could not create the Game2 observer\n");
         return 1;
     }
+    if (observer != nullptr) observer->SetLargeHudText(LoadLargeHudText() ? TRUE : FALSE);
 #endif
     MR_3DCoordinate camera;
     MR_Angle orientation = 0;
@@ -3621,6 +3647,7 @@ int main(int argc, char** argv)
         renderStats = RenderScene(*level, room, camera, orientation, viewport, resources,
                                   SDL_GetTicks(), mainCharacter);
         applyPalette();
+        if (observer != nullptr) observer->SetLargeHudText(LoadLargeHudText() ? TRUE : FALSE);
         return true;
     };
 
@@ -3724,6 +3751,7 @@ int main(int argc, char** argv)
         renderStats = RenderScene(*level, room, camera, orientation, viewport, resources,
                                   SDL_GetTicks(), mainCharacter);
         applyPalette();
+        if (observer != nullptr) observer->SetLargeHudText(LoadLargeHudText() ? TRUE : FALSE);
         return true;
     };
 
@@ -3732,7 +3760,12 @@ int main(int argc, char** argv)
         return 1;
     }
     if (playerMode) {
-        if (HasArgument(argc, argv, "--controls-reference")) {
+        if (HasArgument(argc, argv, "--settings-screen")) {
+            RunSettingsScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
+                              "Player", lobbyHost, lobbyPort, LoadVolume(), LoadFullscreen(), frameLimit);
+            g_QuitConfirmed = true;
+        }
+        else if (HasArgument(argc, argv, "--controls-reference")) {
             RunControlsScreen(graphics, frameLimit);
             g_QuitConfirmed = true;
         }
@@ -3788,6 +3821,7 @@ int main(int argc, char** argv)
                     savedSize.height = settings.windowHeight;
                     SaveWindowSize(savedSize);
                     SaveUiScale(settings.uiScale);
+                    SaveLargeHudText(settings.largeHudText);
                 }
                 pickingMode = !g_QuitConfirmed;
             }
@@ -3942,6 +3976,7 @@ int main(int argc, char** argv)
                             savedSize.height = settings.windowHeight;
                             SaveWindowSize(savedSize);
                             SaveUiScale(settings.uiScale);
+                            SaveLargeHudText(settings.largeHudText);
                         }
                     }
                     else if (pauseChoice == PauseChoice::eControls) {
