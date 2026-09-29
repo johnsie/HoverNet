@@ -504,6 +504,14 @@ const TrackGuide kTrackGuides[] = {
 static_assert(sizeof(kTrackGuides) / sizeof(kTrackGuides[0]) == kHostableTrackCount,
               "Every hostable track needs setup guidance");
 
+int FindHostableTrack(const std::string& trackName)
+{
+    for (int index = 0; index < kHostableTrackCount; ++index) {
+        if (trackName == kHostableTracks[index]) return index;
+    }
+    return -1;
+}
+
 void HoverNetSectionHeading(const char* label);
 
 struct TrackPreview
@@ -599,12 +607,13 @@ TrackPreview LoadTrackPreview(SDL_Renderer* renderer, const char* trackName)
     return preview;
 }
 
-void DrawTrackPreview(const TrackPreview& preview)
+void DrawTrackPreview(const TrackPreview& preview, float minimumHeight = 180.0f,
+                      bool showHeading = true)
 {
-    HoverNetSectionHeading("Track map");
+    if (showHeading) HoverNetSectionHeading("Track map");
     const ImVec2 available = ImGui::GetContentRegionAvail();
     const ImVec2 frameSize(std::max(1.0f, available.x),
-                           std::max(180.0f, available.y - 4.0f));
+                           std::max(minimumHeight, available.y - 4.0f));
     const ImVec2 frameMin = ImGui::GetCursorScreenPos();
     const ImVec2 frameMax(frameMin.x + frameSize.x, frameMin.y + frameSize.y);
     ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -1423,7 +1432,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     }
 
     HostPrefs hostPrefs = LoadHostPrefs();
-    std::array<TrackPreview, kHostableTrackCount> hostTrackPreviews{};
+    std::array<TrackPreview, kHostableTrackCount> lobbyTrackPreviews{};
 
     auto refreshGames = [&]() {
         gamesBeingListed.clear();
@@ -1836,6 +1845,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 // shorter labels but "Availability:" ran past it and overlapped the
                 // value that followed on the same line.
                 const float labelColumnWidth = ImGui::CalcTextSize("Availability:").x + 12.0f;
+                const int trackIndex = FindHostableTrack(trackName);
+                const float mapWidth = trackIndex >= 0 ? 145.0f : 0.0f;
+                ImGui::BeginChild("SelectedRaceMetadata",
+                                  ImVec2(ImGui::GetContentRegionAvail().x - mapWidth,
+                                         122.0f), false);
                 ImGui::Text("Track name:");
                 ImGui::SameLine(labelColumnWidth);
                 ImGui::TextUnformatted(trackName.empty() ? "-" : trackName.c_str());
@@ -1845,6 +1859,18 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 ImGui::Text("Availability:");
                 ImGui::SameLine(labelColumnWidth);
                 ImGui::TextWrapped("%s", availability.empty() ? "-" : availability.c_str());
+                ImGui::EndChild();
+                if (trackIndex >= 0) {
+                    TrackPreview& preview = lobbyTrackPreviews[trackIndex];
+                    if (!preview.mLoaded) {
+                        preview = LoadTrackPreview(graphics.GetRenderer(),
+                                                   kHostableTracks[trackIndex]);
+                    }
+                    ImGui::SameLine();
+                    ImGui::BeginChild("SelectedRaceMap", ImVec2(0, 122.0f), false);
+                    DrawTrackPreview(preview, 110.0f, false);
+                    ImGui::EndChild();
+                }
                 ImGui::Spacing();
                 ImGui::TextUnformatted("Players list:");
                 ImGui::BeginChild("PlayersListBox", ImVec2(-FLT_MIN, 90), true);
@@ -1987,7 +2013,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             ImGui::Checkbox("Weapons enabled", &hostPrefs.mWeapons);
             ImGui::EndChild();
 
-            TrackPreview& preview = hostTrackPreviews[hostPrefs.mTrackIndex];
+            TrackPreview& preview = lobbyTrackPreviews[hostPrefs.mTrackIndex];
             if (!preview.mLoaded) {
                 preview = LoadTrackPreview(graphics.GetRenderer(),
                                            kHostableTracks[hostPrefs.mTrackIndex]);
@@ -2031,7 +2057,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     }
     SDL_StopTextInput();
 
-    for (TrackPreview& preview : hostTrackPreviews) {
+    for (TrackPreview& preview : lobbyTrackPreviews) {
         if (preview.mTexture != nullptr) SDL_DestroyTexture(preview.mTexture);
     }
     ImGui_ImplSDLRenderer2_Shutdown();

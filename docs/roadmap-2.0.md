@@ -411,7 +411,8 @@ from unexplained internal track names. Local setup also loads the selected
 track's embedded minimap into a cached, aspect-correct preview beside the race
 options, with a stacked fallback for narrow windows and an explicit placeholder
 for tracks without map artwork. The lobby's Host Race flow now uses the same
-map-forward selector and course guidance rather than a smaller text-only dialog.
+map-forward selector and course guidance rather than a smaller text-only dialog;
+browsing an existing race also shows a compact preview of its selected course.
 
 The rest of Phase 3 (remaining ImGui menu consolidation, remaining HUD
 improvements and accessibility work, and
