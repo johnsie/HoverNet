@@ -373,7 +373,10 @@ action. Start remains reserved for pause. Advanced analog customization is now
 implemented too: steering, accelerate, and brake can each map to any standard
 SDL stick/trigger axis, direction inversion is independent per action, and the
 shared deadzone is adjustable. The extended settings load atomically while
-remaining backward-compatible with the earlier three-button file format.
+remaining backward-compatible with the earlier three-button file format. The
+Controls screen reports recognized controller availability, explains that Start
+remains reserved for pause, and consistently makes Escape cancel both keyboard
+and controller capture instead of closing the screen during a controller remap.
 
 The shared Windows/Linux race HUD now supplements its existing graphical meters
 and weapon sprites with a readable status line: explicit speed and fuel

@@ -58,7 +58,10 @@ shared analog deadzone is adjustable. Escape cancels keyboard capture, and
 **Reset all control defaults** restores the original layout. Bindings are stored
 in `$XDG_CONFIG_HOME/hovernet/keyboard_bindings` and `controller_bindings` (or
 the equivalent files under `~/.config/hovernet/`). Existing three-button
-controller files remain valid and are upgraded when next saved.
+controller files remain valid and are upgraded when next saved. The Controls
+screen reports whether SDL recognizes a connected controller, keeps Start
+reserved for pause, and Escape cancels either keyboard or controller capture
+before it can close the screen.
 
 ## Display settings
 

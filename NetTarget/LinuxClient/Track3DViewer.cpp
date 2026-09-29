@@ -3303,15 +3303,18 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
                 running = false;
             }
             else if (event.type == SDL_KEYDOWN) {
-                if (listeningForBinding >= 0) {
-                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        listeningForBinding = -1;
-                    }
-                    else if (IsValidBinding(event.key.keysym.scancode)) {
-                        *remappableBindings[listeningForBinding] = event.key.keysym.scancode;
-                        SaveKeyboardBindings(gKeyboardBindings);
-                        listeningForBinding = -1;
-                    }
+                if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE &&
+                    (listeningForBinding >= 0 || listeningForControllerBinding >= 0)) {
+                    // Escape always cancels capture first. Controller capture used
+                    // to fall through and close the entire Controls screen.
+                    listeningForBinding = -1;
+                    listeningForControllerBinding = -1;
+                }
+                else if (listeningForBinding >= 0 &&
+                         IsValidBinding(event.key.keysym.scancode)) {
+                    *remappableBindings[listeningForBinding] = event.key.keysym.scancode;
+                    SaveKeyboardBindings(gKeyboardBindings);
+                    listeningForBinding = -1;
                 }
                 else if (event.key.keysym.sym == SDLK_ESCAPE) {
                     running = false;
@@ -3356,6 +3359,23 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         const float centerWidth = std::min(700.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
         ImGui::BeginChild("ControlsPanel", ImVec2(centerWidth, -52.0f), true);
+        int recognizedControllers = 0;
+        const char* firstControllerName = nullptr;
+        for (int index = 0; index < SDL_NumJoysticks(); ++index) {
+            if (!SDL_IsGameController(index)) continue;
+            ++recognizedControllers;
+            if (firstControllerName == nullptr) firstControllerName = SDL_GameControllerNameForIndex(index);
+        }
+        if (recognizedControllers > 0) {
+            ImGui::TextColored(ImVec4(0.55f, 0.95f, 0.65f, 1.0f), "Controller ready: %s%s",
+                               firstControllerName != nullptr ? firstControllerName : "SDL controller",
+                               recognizedControllers > 1 ? " (+ more connected)" : "");
+        }
+        else {
+            ImGui::TextDisabled("No SDL-compatible controller detected; keyboard controls remain available.");
+        }
+        ImGui::TextDisabled("Start is reserved for pause. Escape cancels binding capture.");
+        ImGui::Spacing();
         if (ImGui::BeginTable("ControlBindings", 3,
                               ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
                               ImGuiTableFlags_SizingStretchProp)) {
@@ -3393,6 +3413,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
                     std::snprintf(buttonLabel, sizeof(buttonLabel), "%s##Binding%d", keyName, index);
                     if (HoverNetButton(buttonLabel, ImVec2(-FLT_MIN, 0))) {
                         listeningForBinding = index;
+                        listeningForControllerBinding = -1;
                     }
                 }
                 else {
