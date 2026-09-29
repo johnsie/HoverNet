@@ -404,7 +404,10 @@ printing “Press ESC to exit the race.” It presents placement, finish time, a
 best lap, then offers explicit routes to keep driving, configure another local
 race, enter online multiplayer, or quit. Keyboard/controller navigation and
 quit confirmation remain consistent with the other menus, and
-`HoverNetPostRaceSmoke` covers its standalone render/lifecycle path.
+`HoverNetPostRaceSmoke` covers its standalone render/lifecycle path. Local race
+setup and the online host dialog now describe each bundled course's character,
+difficulty, and suggested race length instead of asking new players to choose
+from unexplained internal track names.
 
 The rest of Phase 3 (remaining ImGui menu consolidation, remaining HUD
 improvements and accessibility work, and

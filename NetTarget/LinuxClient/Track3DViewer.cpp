@@ -482,6 +482,27 @@ MR_SpriteHandle* LoadUiFont()
 const char* const kHostableTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River"};
 constexpr int kHostableTrackCount = sizeof(kHostableTracks) / sizeof(kHostableTracks[0]);
 
+struct TrackGuide
+{
+    const char* mCharacter;
+    const char* mDifficulty;
+    const char* mDescription;
+    int mSuggestedLaps;
+};
+
+// Short, player-facing guidance for the bundled tracks. The setup screen used
+// to expose only internal filenames, leaving a first-time player no basis for
+// choosing a course or sensible race length.
+const TrackGuide kTrackGuides[] = {
+    {"Balanced", "Beginner", "The classic all-round HoverNet circuit: a good place to learn handling and weapons.", 5},
+    {"Obstacles", "Intermediate", "A longer obstacle course where clean lines and controlled jumps matter.", 3},
+    {"Winding", "Intermediate", "A long, twisting route with jumps and water features breaking up its straights.", 3},
+    {"Technical", "Advanced", "A compact corridor course that rewards precise steering and quick reactions.", 5},
+    {"Fast", "Intermediate", "A flowing waterside course suited to sustained speed and close racing.", 4},
+};
+static_assert(sizeof(kTrackGuides) / sizeof(kTrackGuides[0]) == kHostableTrackCount,
+              "Every hostable track needs setup guidance");
+
 // Per-user settings directory, following the XDG Base Directory spec (the
 // documented, conventional location on Linux) instead of the four separate
 // dotfiles (.hovernet_host_prefs, .hovernet_local_race_prefs,
@@ -1803,6 +1824,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         }
         if (ImGui::BeginPopupModal("HostRace", &hostPopupOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Combo("Track", &hostPrefs.mTrackIndex, kHostableTracks, kHostableTrackCount);
+            const TrackGuide& guide = kTrackGuides[hostPrefs.mTrackIndex];
+            ImGui::TextDisabled("%s - %s", guide.mCharacter, guide.mDifficulty);
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 380.0f);
+            ImGui::TextWrapped("%s", guide.mDescription);
+            ImGui::PopTextWrapPos();
             ImGui::SliderInt("Laps", &hostPrefs.mLaps, 1, 20);
             ImGui::Checkbox("Weapons", &hostPrefs.mWeapons);
             ImGui::Spacing();
@@ -2342,13 +2368,26 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         const float centerWidth = std::min(460.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
-        ImGui::BeginChild("LocalRaceSetupPanel", ImVec2(centerWidth, 380), true);
+        ImGui::BeginChild("LocalRaceSetupPanel", ImVec2(centerWidth, 445), true);
 
         ImGui::PushItemWidth(-1.0f);
         ImGui::TextUnformatted("Track");
         ImGui::Combo("##Track", &prefs.mTrackIndex, kHostableTracks, kHostableTrackCount);
+        ImGui::PopItemWidth();
+
+        const TrackGuide& guide = kTrackGuides[prefs.mTrackIndex];
         ImGui::Spacing();
+        HoverNetSectionHeading("Course briefing");
+        ImGui::Text("Style: %s", guide.mCharacter);
+        ImGui::SameLine();
+        ImGui::TextDisabled("  Difficulty: %s", guide.mDifficulty);
+        ImGui::TextWrapped("%s", guide.mDescription);
+        ImGui::Spacing();
+
         ImGui::TextUnformatted("Laps");
+        ImGui::SameLine();
+        ImGui::TextDisabled("Suggested: %d", guide.mSuggestedLaps);
+        ImGui::PushItemWidth(-1.0f);
         ImGui::SliderInt("##Laps", &prefs.mLaps, 1, 20);
         ImGui::PopItemWidth();
         ImGui::Spacing();
