@@ -1423,6 +1423,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     }
 
     HostPrefs hostPrefs = LoadHostPrefs();
+    std::array<TrackPreview, kHostableTrackCount> hostTrackPreviews{};
 
     auto refreshGames = [&]() {
         gamesBeingListed.clear();
@@ -1950,23 +1951,67 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             ImGui::OpenPopup("HostRace");
             requestOpenHostPopup = false;
         }
-        if (ImGui::BeginPopupModal("HostRace", &hostPopupOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Combo("Track", &hostPrefs.mTrackIndex, kHostableTracks, kHostableTrackCount);
+        const ImGuiViewport* popupViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowSize(
+            ImVec2(std::min(860.0f, popupViewport->WorkSize.x - 40.0f),
+                   std::min(560.0f, popupViewport->WorkSize.y - 40.0f)),
+            ImGuiCond_Appearing);
+        if (ImGui::BeginPopupModal("HostRace", &hostPopupOpen)) {
+            HoverNetSectionHeading("Host race");
+            const float contentWidth = ImGui::GetContentRegionAvail().x;
+            const float selectorHeight = ImGui::GetContentRegionAvail().y -
+                ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().ItemSpacing.y;
+            const bool sideBySide = contentWidth >= 610.0f;
+            const float gap = ImGui::GetStyle().ItemSpacing.x;
+            const float controlsWidth = sideBySide ? contentWidth * 0.52f : contentWidth;
+
+            ImGui::BeginChild("HostRaceOptions",
+                              ImVec2(controlsWidth, sideBySide ? selectorHeight : 315.0f), false);
+            ImGui::TextUnformatted("Track");
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::Combo("##HostTrack", &hostPrefs.mTrackIndex,
+                         kHostableTracks, kHostableTrackCount);
             const TrackGuide& guide = kTrackGuides[hostPrefs.mTrackIndex];
-            ImGui::TextDisabled("%s - %s", guide.mCharacter, guide.mDifficulty);
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 380.0f);
-            ImGui::TextWrapped("%s", guide.mDescription);
-            ImGui::PopTextWrapPos();
-            ImGui::SliderInt("Laps", &hostPrefs.mLaps, 1, 20);
-            ImGui::Checkbox("Weapons", &hostPrefs.mWeapons);
             ImGui::Spacing();
-            if (HoverNetButton("Create Race", ImVec2(140, 32))) {
+            HoverNetSectionHeading("Course briefing");
+            ImGui::Text("Style: %s", guide.mCharacter);
+            ImGui::SameLine();
+            ImGui::TextDisabled("  Difficulty: %s", guide.mDifficulty);
+            ImGui::TextWrapped("%s", guide.mDescription);
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Laps");
+            ImGui::SameLine();
+            ImGui::TextDisabled("Suggested: %d", guide.mSuggestedLaps);
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::SliderInt("##HostLaps", &hostPrefs.mLaps, 1, 20);
+            ImGui::Checkbox("Weapons enabled", &hostPrefs.mWeapons);
+            ImGui::EndChild();
+
+            TrackPreview& preview = hostTrackPreviews[hostPrefs.mTrackIndex];
+            if (!preview.mLoaded) {
+                preview = LoadTrackPreview(graphics.GetRenderer(),
+                                           kHostableTracks[hostPrefs.mTrackIndex]);
+            }
+            if (sideBySide) {
+                ImGui::SameLine(0.0f, gap);
+                ImGui::BeginChild("HostTrackPreview", ImVec2(0, selectorHeight), false);
+                DrawTrackPreview(preview);
+                ImGui::EndChild();
+            }
+            else {
+                ImGui::Spacing();
+                ImGui::BeginChild("HostTrackPreview", ImVec2(0, 190.0f), false);
+                DrawTrackPreview(preview);
+                ImGui::EndChild();
+            }
+
+            if (HoverNetButton("Create Race", ImVec2(160, 36))) {
                 hostRaceNow();
                 hostPopupOpen = false;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (HoverNetButton("Cancel", ImVec2(120, 32))) {
+            if (HoverNetButton("Cancel", ImVec2(120, 36))) {
                 hostPopupOpen = false;
                 ImGui::CloseCurrentPopup();
             }
@@ -1986,6 +2031,9 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     }
     SDL_StopTextInput();
 
+    for (TrackPreview& preview : hostTrackPreviews) {
+        if (preview.mTexture != nullptr) SDL_DestroyTexture(preview.mTexture);
+    }
     ImGui_ImplSDLRenderer2_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
