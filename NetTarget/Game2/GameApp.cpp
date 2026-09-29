@@ -549,18 +549,11 @@ void MR_GameApp::LoadRegistry()
    // Now verify in the registry if this information can not be retrieved
    HKEY lProgramKey = NULL;
 
-   // 2.0 settings are per-user. Prefer the writable HKCU location, but retain
-   // a read-only fallback to the legacy machine-wide key so existing installs
-   // migrate naturally the next time SaveRegistry writes their values.
+   // HoverNet 2.0 settings are private to the current Windows user and use a
+   // neutral product namespace rather than implying a current company owner.
    int lError = RegOpenKeyEx( HKEY_CURRENT_USER,
-                              "SOFTWARE\\GrokkSoft\\HoverNet", 0,
+                              "SOFTWARE\\HoverNet", 0,
                               KEY_READ, &lProgramKey );
-   if( lError != ERROR_SUCCESS )
-   {
-      lError = RegOpenKeyEx( HKEY_LOCAL_MACHINE,
-                             "SOFTWARE\\GrokkSoft\\HoverNet", 0,
-                             KEY_READ, &lProgramKey );
-   }
 
    if( lError == ERROR_SUCCESS )
    {
@@ -731,7 +724,7 @@ void MR_GameApp::SaveRegistry()
 
    DWORD lDummy;
    int lError = RegCreateKeyEx( HKEY_CURRENT_USER,
-                                "SOFTWARE\\GrokkSoft\\HoverNet",
+                                "SOFTWARE\\HoverNet",
                                 0,
                                 NULL,
                                 REG_OPTION_NON_VOLATILE,
