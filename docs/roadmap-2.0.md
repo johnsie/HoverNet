@@ -545,7 +545,10 @@ remedy instead of briefly showing a black window and disappearing. The clean
 installed-client gate now exercises Local Play startup, Settings, Controls, the
 pause menu, results, and onboarding from the installed directory while the
 checkout resource pack is hidden, covering the core Phase 3 new-player flow in
-the artifact that is actually shipped rather than only in the build tree.
+the artifact that is actually shipped rather than only in the build tree. The
+same isolated package test now starts a temporary protocol-2 RaceServer and
+requires the installed client to connect and render its real online lobby, so
+clean-install coverage includes both the local and online entry paths.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.

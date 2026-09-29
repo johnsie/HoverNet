@@ -282,6 +282,23 @@ jobs:
                   throw "Installed shared x64 client smoke failed: $scenario"
                 }
               }
+
+              $installedServer = Start-Process -FilePath "$x64Release\RaceServer.exe" `
+                -ArgumentList "19881", "$x64Release\installed-lobby-smoke.log", "--require-protocol-2" `
+                -PassThru
+              try {
+                Start-Sleep -Seconds 1
+                $installedLobby = Start-Process -FilePath "$installDir\HoverNet.exe" `
+                  -WorkingDirectory $installDir `
+                  -ArgumentList "--lobby", "127.0.0.1", "19881", "--lobby-screen", "--frames", "2" `
+                  -Wait -PassThru
+                if ($installedLobby.ExitCode -ne 0) {
+                  throw "Installed shared x64 online lobby smoke failed"
+                }
+              }
+              finally {
+                if (-not $installedServer.HasExited) { Stop-Process -Id $installedServer.Id -Force }
+              }
             }
             finally {
               Move-Item $hiddenSourceData $sourceData
