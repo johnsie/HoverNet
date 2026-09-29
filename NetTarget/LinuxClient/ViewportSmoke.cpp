@@ -37,6 +37,13 @@ int main()
     viewport.RenderWallSurface(MR_3DCoordinate(4000, 2000, 2500),
                                MR_3DCoordinate(4000, -2000, 0), 4000, bitmap);
 
+    // At this distance a one-unit-tall wall collapses to zero projected pixels
+    // at its first edge. RenderAlternateWallSurface used to divide by that
+    // projected height and terminate the process with SIGFPE mid-race.
+    viewport.RenderAlternateWallSurface(MR_3DCoordinate(4000, 2000, 1001),
+                                        MR_3DCoordinate(4000, -2000, 1000),
+                                        4000, bitmap, bitmap, 1, 0);
+
     int nonZeroPixels = 0;
     const int pixelCount = buffer.GetXRes() * buffer.GetYRes();
     for (int index = 0; index < pixelCount; ++index) {

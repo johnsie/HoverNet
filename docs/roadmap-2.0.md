@@ -140,6 +140,13 @@ required invocation is `scripts/run-raceserver-soak.sh build/linux 86400`.
 - Add clean handling for missing tracks, missing object libraries, server outages, and malformed settings.
 - Establish a repeatable frame-time and memory baseline.
 
+A Linux mid-race SIGFPE affecting both local and multiplayer play was traced from
+kernel trap records to `RenderAlternateWallSurface`: distant or edge-on geometry
+could round one projected wall edge to zero height and use that height as a
+divisor. Degenerate edges now use zero ratio variation with 64-bit intermediates,
+and `HoverNetViewportSmoke` renders the formerly crashing projection directly.
+Post-menu race state is also initialized and no longer read after a menu-only exit.
+
 **Exit gate:** Two-hour local and online sessions complete on both platforms without crashes, hangs, or growing memory use.
 
 ## Phase 2 — Harden multiplayer and RaceServer

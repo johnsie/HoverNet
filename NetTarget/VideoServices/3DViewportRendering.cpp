@@ -298,7 +298,27 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
       lDYTop_4096    = ((lScreenY1Top-lScreenY0Top)*4096)/(lScreenX1-lScreenX0 /*-1*/);
       lDYBottom_4096 = ((lScreenY1Bottom-lScreenY0Bottom)*4096)/(lScreenX1-lScreenX0/*-1*/);
       
-      lRatioVariationPerColumn_16384 = ((lScreenY0Bottom-lScreenY0Top)-(lScreenY1Bottom-lScreenY1Top))*16384/((lScreenY0Bottom-lScreenY0Top)*(lScreenX1-lScreenX0));
+      const MR_Int32 lProjectedHeight0 = lScreenY0Bottom-lScreenY0Top;
+      const MR_Int32 lProjectedHeight1 = lScreenY1Bottom-lScreenY1Top;
+      // A distant or edge-on wall can collapse to zero pixels high after the
+      // integer projection above. The old expression divided by that height,
+      // raising SIGFPE and terminating both local and online Linux races. A
+      // collapsed edge has no useful perspective ratio variation; zero is the
+      // stable limiting value. Use 64-bit intermediates for nearby/tall walls
+      // so the guard is not undermined by signed 32-bit multiplication overflow.
+      if( lProjectedHeight0 != 0 )
+      {
+         const std::int64_t lRatioNumerator =
+            static_cast<std::int64_t>(lProjectedHeight0-lProjectedHeight1)*16384;
+         const std::int64_t lRatioDenominator =
+            static_cast<std::int64_t>(lProjectedHeight0)*(lScreenX1-lScreenX0);
+         lRatioVariationPerColumn_16384 = static_cast<MR_Int32>(
+            lRatioNumerator/lRatioDenominator );
+      }
+      else
+      {
+         lRatioVariationPerColumn_16384 = 0;
+      }
    }
    else
    {

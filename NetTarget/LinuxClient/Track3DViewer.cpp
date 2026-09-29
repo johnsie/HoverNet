@@ -3851,7 +3851,7 @@ int main(int argc, char** argv)
 #endif
     MR_3DCoordinate camera;
     MR_Angle orientation = 0;
-    RenderStats renderStats;
+    RenderStats renderStats{0, 0};
     int nonZeroPixels = 0;
 
     // The standalone viewer opens its requested track immediately. The game
@@ -4279,7 +4279,13 @@ int main(int argc, char** argv)
     }
 #endif
 
-    if (playerMode && !g_QuitConfirmed && (level == nullptr || mainCharacter == nullptr)) {
+    if (playerMode && g_QuitConfirmed) {
+        // Menu-only bounded runs and a confirmed quit have no race to report or
+        // enter. Returning here also prevents reads of race-only state after the
+        // menu flow, which previously produced corrupted counters in real logs.
+        return 0;
+    }
+    if (playerMode && (level == nullptr || mainCharacter == nullptr)) {
         std::fprintf(stderr, "No race was selected\n");
         return 1;
     }
