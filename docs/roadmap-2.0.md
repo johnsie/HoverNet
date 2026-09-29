@@ -477,7 +477,10 @@ it as a generic outage; bounded automation remains noninteractive. If a connecte
 RaceServer disappears while the lobby is open, stale race and roster controls are
 replaced by explicit Reconnect and Back actions. A successful reconnect returns to
 the browser and requests fresh race and player lists rather than retaining an
-invalid waiting-room state. The lifecycle smoke test now keeps that client alive
+invalid waiting-room state. The disconnect panel also opens Settings directly;
+saving a corrected address updates the active lobby target and retries it
+immediately, while Cancel returns without altering the failed connection. The
+lifecycle smoke test now keeps that client alive
 through a graceful server shutdown, verifies that polling detects the closed
 socket, and reconnects the same object after restart to confirm clean state.
 

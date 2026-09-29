@@ -1408,6 +1408,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     int framesShown = 0;
     bool hostPopupOpen = false;
     bool requestOpenHostPopup = false;
+    bool requestOpenRecoverySettings = false;
     // The old hand-drawn lobby let you start typing chat from anywhere by pressing
     // T; with a real text field there's no such affordance, so without this the
     // player has to notice and click the chat box before Enter does anything --
@@ -1435,6 +1436,25 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         client.SendMessage(eRSMsgListGames, nullptr, 0);
         lastRefresh = SDL_GetTicks();
         statusText = "Refreshing race list...";
+    };
+    auto reconnectToServer = [&]() {
+        if (!client.Connect(host, port)) {
+            const std::string reason = client.GetProtocolError();
+            statusText = reason.empty() ? "Reconnect failed - check the server address in Settings" : reason;
+            return false;
+        }
+        games.clear(); gamesBeingListed.clear(); lobbyUsers.clear(); raceMembers.clear();
+        playerNames.clear(); outPeers.clear(); outJoinedName.clear(); outTrackName.clear();
+        selected = 0; joined = false; isHost = false; receivedInitialRoster = false;
+        connectionLossReported = false;
+        phase = username.empty() ? LobbyPhase::eEnteringName : LobbyPhase::eBrowsing;
+        statusText = "Reconnected to the shared HoverNet lobby.";
+        if (!username.empty()) {
+            client.SetPlayerName(username);
+            client.ListLobbyUsers();
+            refreshGames();
+        }
+        return true;
     };
     auto joinSelected = [&]() {
         if (!games.empty() && selected >= 0 && selected < static_cast<int>(games.size()) &&
@@ -1771,38 +1791,15 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             const float panelWidth = std::min(520.0f, ImGui::GetContentRegionAvail().x);
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
                                  std::max(0.0f, (ImGui::GetContentRegionAvail().x - panelWidth) * 0.5f));
-            ImGui::BeginChild("ConnectionLost", ImVec2(panelWidth, 220), true);
+            ImGui::BeginChild("ConnectionLost", ImVec2(panelWidth, 275), true);
             HoverNetSectionHeading("CONNECTION LOST");
             ImGui::TextWrapped("The RaceServer connection closed. Race and player details shown before the disconnect may no longer be valid.");
             ImGui::Spacing();
             if (HoverNetButton("Reconnect", ImVec2(-1, 42))) {
-                if (client.Connect(host, port)) {
-                    games.clear();
-                    gamesBeingListed.clear();
-                    lobbyUsers.clear();
-                    raceMembers.clear();
-                    playerNames.clear();
-                    outPeers.clear();
-                    outJoinedName.clear();
-                    outTrackName.clear();
-                    selected = 0;
-                    joined = false;
-                    isHost = false;
-                    receivedInitialRoster = false;
-                    connectionLossReported = false;
-                    phase = username.empty() ? LobbyPhase::eEnteringName : LobbyPhase::eBrowsing;
-                    statusText = "Reconnected to the shared HoverNet lobby.";
-                    if (!username.empty()) {
-                        client.SetPlayerName(username);
-                        client.ListLobbyUsers();
-                        refreshGames();
-                    }
-                }
-                else {
-                    const std::string reason = client.GetProtocolError();
-                    statusText = reason.empty() ? "Reconnect failed - check the server address in Settings"
-                                                : reason;
-                }
+                reconnectToServer();
+            }
+            if (HoverNetButton("Open Settings", ImVec2(-1, 42))) {
+                requestOpenRecoverySettings = true;
             }
             if (HoverNetButton("Back to main menu", ImVec2(-1, 42))) {
                 running = false;
@@ -2100,6 +2097,25 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
+        if (requestOpenRecoverySettings) {
+            requestOpenRecoverySettings = false;
+            const SettingsResult settings = RunSettingsScreen(
+                graphics, buffer, viewport, font, username, host, port,
+                LoadVolume(), LoadMute(), LoadFullscreen(), pFrameLimit);
+            if (settings.confirmed) {
+                username = settings.username;
+                std::snprintf(usernameBuf, sizeof(usernameBuf), "%s", username.c_str());
+                host = settings.serverHost;
+                port = settings.serverPort;
+                SaveUsername(username); SaveServerUrl(host, port);
+                SaveVolume(settings.volume); SaveMute(settings.muted);
+                SaveFullscreen(settings.fullscreen);
+                SaveWindowSize(WindowSize{settings.windowWidth, settings.windowHeight});
+                SaveUiScale(settings.uiScale); SaveLargeHudText(settings.largeHudText);
+                SaveReducedMotion(settings.reducedMotion); SaveHighContrast(settings.highContrast);
+                reconnectToServer();
+            }
+        }
         SDL_Delay(16);
     }
     SDL_StopTextInput();
