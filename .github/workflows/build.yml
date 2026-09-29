@@ -170,10 +170,17 @@ jobs:
             -PassThru
           try {
             Start-Sleep -Seconds 1
-            $raceClient = Start-Process -FilePath $client `
-              -ArgumentList "--lobby", "127.0.0.1", "19879", "--online-race-smoke", "--frames", "120" `
+            $hostClient = Start-Process -FilePath $client `
+              -ArgumentList "--lobby", "127.0.0.1", "19879", "--online-race-host-smoke", "--frames", "300" `
+              -PassThru
+            Start-Sleep -Seconds 1
+            $joinClient = Start-Process -FilePath $client `
+              -ArgumentList "--lobby", "127.0.0.1", "19879", "--online-race-join-smoke", "--frames", "300" `
               -Wait -PassThru
-            if ($raceClient.ExitCode -ne 0) { throw "Shared x64 online race acceptance failed" }
+            $hostClient.WaitForExit()
+            if ($hostClient.ExitCode -ne 0 -or $joinClient.ExitCode -ne 0) {
+              throw "Shared x64 two-client online race acceptance failed"
+            }
           }
           finally {
             if (-not $server.HasExited) { Stop-Process -Id $server.Id -Force }
@@ -288,12 +295,18 @@ jobs:
                 -PassThru
               try {
                 Start-Sleep -Seconds 1
-                $installedRace = Start-Process -FilePath "$installDir\HoverNet.exe" `
+                $installedHost = Start-Process -FilePath "$installDir\HoverNet.exe" `
                   -WorkingDirectory $installDir `
-                  -ArgumentList "--lobby", "127.0.0.1", "19881", "--online-race-smoke", "--frames", "120" `
+                  -ArgumentList "--lobby", "127.0.0.1", "19881", "--online-race-host-smoke", "--frames", "300" `
+                  -PassThru
+                Start-Sleep -Seconds 1
+                $installedJoiner = Start-Process -FilePath "$installDir\HoverNet.exe" `
+                  -WorkingDirectory $installDir `
+                  -ArgumentList "--lobby", "127.0.0.1", "19881", "--online-race-join-smoke", "--frames", "300" `
                   -Wait -PassThru
-                if ($installedRace.ExitCode -ne 0) {
-                  throw "Installed shared x64 online race acceptance failed"
+                $installedHost.WaitForExit()
+                if ($installedHost.ExitCode -ne 0 -or $installedJoiner.ExitCode -ne 0) {
+                  throw "Installed shared x64 two-client online race acceptance failed"
                 }
               }
               finally {

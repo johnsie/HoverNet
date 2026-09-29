@@ -1309,7 +1309,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     const MR_Sprite& font, RaceServerClient& pClient, std::string& host, unsigned& port,
                     std::string& outJoinedName, std::string& outTrackName, int& outNumLaps,
                     int& outLocalClientId, std::vector<RaceServerPeer>& outPeers, int pFrameLimit,
-                    bool pAutoHostStart = false)
+                    bool pAutoHostStart = false, bool pAutoJoin = false, bool pWaitForPeer = false)
 {
     // The lobby screen renders through Dear ImGui directly against the SDL_Renderer
     // graphics already owns, not the paletted MR_VideoBuffer the 3D game view uses --
@@ -1402,7 +1402,8 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     std::map<int, std::string> playerNames;
 
     std::string username = LoadUsername();
-    if (pAutoHostStart && username.empty()) username = "AcceptancePlayer";
+    if (pAutoHostStart) username = pWaitForPeer ? "AcceptanceHost" : "AcceptancePlayer";
+    else if (pAutoJoin) username = "AcceptanceJoiner";
     int selected = 0;
     LobbyPhase phase = LobbyPhase::eBrowsing;
     Uint32 lastRefresh = SDL_GetTicks();
@@ -1414,6 +1415,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     bool connectionLossReported = false;
     bool autoHostSent = false;
     bool autoStartSent = false;
+    bool autoJoinSent = false;
     std::vector<std::string> raceMembers;
     int framesShown = 0;
     bool hostPopupOpen = false;
@@ -1553,6 +1555,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         if (pAutoHostStart && !autoHostSent) {
             hostRaceNow();
             autoHostSent = true;
+        }
+        if (pAutoJoin && !autoJoinSent && phase == LobbyPhase::eBrowsing && !games.empty()) {
+            joinSelected();
+            autoJoinSent = true;
         }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -1744,14 +1750,14 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 if (RaceServerClient::ParsePlayerNameAssigned(message, assignedName) &&
                     assignedName != username) {
                     username = assignedName;
-                    SaveUsername(username);
+                    if (!pAutoHostStart && !pAutoJoin) SaveUsername(username);
                     std::snprintf(usernameBuf, sizeof(usernameBuf), "%s", username.c_str());
                     statusText = "That name was taken -- you're now '" + username + "'";
                 }
             }
         }
 
-        if (pAutoHostStart && isHost && !autoStartSent) {
+        if (pAutoHostStart && isHost && !autoStartSent && (!pWaitForPeer || !outPeers.empty())) {
             client.StartRace();
             autoStartSent = true;
         }
@@ -4231,7 +4237,8 @@ int RunClient(int argc, char** argv)
         return true;
     };
 
-    auto joinOnlineRace = [&](bool autoHostStart = false) -> bool {
+    auto joinOnlineRace = [&](bool autoHostStart = false, bool autoJoin = false,
+                              bool waitForPeer = false) -> bool {
         std::string joinedRace;
         std::string joinedTrack;
         int joinedLaps = 1;
@@ -4240,7 +4247,7 @@ int RunClient(int argc, char** argv)
         if (menuFontHandle == nullptr ||
             !RunLobbyScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(), onlineClient,
                             lobbyHost, lobbyPort, joinedRace, joinedTrack, joinedLaps, localClientId,
-                            knownPeers, frameLimit, autoHostStart)) {
+                            knownPeers, frameLimit, autoHostStart, autoJoin, waitForPeer)) {
             onlineClient.Disconnect();
             return false;
         }
@@ -4339,7 +4346,17 @@ int RunClient(int argc, char** argv)
         return FatalClientError("Could not load the menu font from ObjFac1.dat.");
     }
     if (playerMode) {
-        if (HasArgument(argc, argv, "--online-race-smoke")) {
+        if (HasArgument(argc, argv, "--online-race-host-smoke")) {
+            if (!joinOnlineRace(true, false, true)) {
+                return FatalClientError("Online host acceptance could not start a joined race.");
+            }
+        }
+        else if (HasArgument(argc, argv, "--online-race-join-smoke")) {
+            if (!joinOnlineRace(false, true, false)) {
+                return FatalClientError("Online join acceptance could not discover, join, and load a race.");
+            }
+        }
+        else if (HasArgument(argc, argv, "--online-race-smoke")) {
             // End-to-end installed-package acceptance: use the normal lobby protocol
             // to host and start a race, then continue through normal track loading
             // and the bounded gameplay loop below.

@@ -1,6 +1,6 @@
 # HoverNet 2.0 Roadmap
 
-HoverNet 2.0 should be the first polished, cross-platform release rather than a full engine rewrite. The existing foundation includes Windows and Linux clients, working multiplayer, automated packaging, four bundled tracks, the Manta hovercraft, and a broad Linux smoke-test suite.
+HoverNet 2.0 should be the first polished, cross-platform release rather than a full engine rewrite. The existing foundation includes Windows and Linux clients, working multiplayer, automated packaging, five bundled tracks, the Manta hovercraft, and a broad Linux smoke-test suite.
 
 ### Client convergence policy
 
@@ -186,7 +186,7 @@ change substantially. `scripts/run-raceserver-soak.sh` is ready to run
 
 **January–February 2027 · 6–8 weeks**
 
-**Implementation status:** In progress. "Persist all settings in a documented
+**Implementation status:** Complete (29 September 2026). "Persist all settings in a documented
 per-user location" is done on Linux: the four previously-scattered dotfiles
 (`.hovernet_host_prefs`, `.hovernet_local_race_prefs`, `.hovernet_username`,
 `.hovernet_server_url`, all dumped directly in `$HOME`) now live under
@@ -470,9 +470,9 @@ for tracks without map artwork. The lobby's Host Race flow now uses the same
 map-forward selector and course guidance rather than a smaller text-only dialog;
 browsing an existing race also shows a compact preview of its selected course.
 
-The primary Linux player flows are now consolidated in ImGui; the remaining
-Phase 3 work is HUD/accessibility completion, exit-gate verification, and
-essential Windows/Linux parity while convergence moves toward the shared client.
+The primary player flows are consolidated in the shared ImGui client. HUD and
+accessibility work, the Phase 3 exit gate, and essential Windows/Linux parity are
+complete; later phases retain broader content, soak, and release-candidate gates.
 An unavailable RaceServer now produces an in-game cross-platform error with the
 failed address plus Retry, Open Settings, and Back actions instead of silently
 returning after writing only to the terminal. Saving a corrected server address
@@ -489,11 +489,11 @@ lifecycle smoke test now keeps that client alive
 through a graceful server shutdown, verifies that polling detects the closed
 socket, and reconnects the same object after restart to confirm clean state.
 
-For the remaining Phase 3 work, "Windows/Linux parity" means converging on the
-shared SDL2/ImGui implementation. Avoid adding substantial new functionality to
-the legacy Win32/MFC screens once the essential 2.0 settings and flows are safe.
-Each shared screen or service should be kept platform-neutral and exercised on
-Windows as soon as the shared Windows build is available.
+Phase 3 Windows/Linux parity is delivered through the shared SDL2/ImGui
+implementation. The native x64 Windows build now exercises the same player-facing
+screens and services as Linux. The legacy Win32/MFC client is retained only as
+the explicit 2.0 compatibility fallback defined by the convergence policy above;
+it receives no new feature implementation and is scheduled for retirement in 3.0.
 The first portability pass now lets the SDL renderer create its own native Windows
 window (while preserving legacy HWND embedding), stores shared-client settings
 under `%APPDATA%/HoverNet`, treats Linux `/proc` memory reporting as an optional
@@ -507,9 +507,10 @@ GitLab retains the executable, plug-in, and x64 SDL2
 runtime together as a testable pipeline artifact. Both pipelines now run that
 x64 executable with SDL's headless video/audio drivers through startup and
 bounded Local Play, Settings, Controls, pause, results, and onboarding flows.
-This is not yet a replacement for the legacy installer: interactive Windows
-playtesting remains required before making it the sole Windows download. Both
-CI systems now build a dedicated Inno Setup package named
+The shared x64 client is the supported and preferred Windows 2.0 build. The
+legacy installer remains an explicitly labelled compatibility fallback through
+2.0, rather than a second feature track, and its retirement remains a 3.0 gate.
+Both CI systems now build a dedicated Inno Setup package named
 `HoverNet-<version>-windows-x64-setup.exe`, using `HoverNet.exe` and a colocated
 installed data tree; tagged releases attach it alongside the legacy Win32
 installer during the transition. A shared packaging gate rejects missing or
@@ -517,8 +518,8 @@ empty runtime assets, fewer than four tracks, and any client, plug-in, or SDL2
 binary whose PE header is not AMD64. CI then silently installs the generated
 package into a clean temporary directory, validates the installed tree again,
 launches the installed client headlessly, and uninstalls it before publishing
-the artifact. Automated online-lobby coverage starts the portable x64
-RaceServer locally, negotiates protocol 2.0, and renders the real bounded lobby;
+the artifact. Automated online-race coverage starts the portable x64
+RaceServer locally, negotiates protocol 2.0, and drives the real lobby and race;
 it does not depend on or modify the production server. The Windows CMake graph
 also declares shared-MFC mode (`_AFXDLL`) to match its `/MD` dynamic CRT, fixing
 the initial x64 MSVC C1189 failure in the inherited compatibility headers. The
@@ -547,28 +548,32 @@ pause menu, results, and onboarding from the installed directory while the
 checkout resource pack is hidden, covering the core Phase 3 new-player flow in
 the artifact that is actually shipped rather than only in the build tree. The
 same isolated package test now starts a temporary protocol-2 RaceServer and
-requires the installed client to connect, host and start a real online race,
-load its selected track from the installed package, and enter bounded gameplay.
-This covers the complete online entry path rather than stopping at the lobby.
+requires two installed clients to connect, have one host while the other discovers
+and joins that race, receive the same start event, load the selected track from
+the installed package, and enter bounded multiplayer gameplay. This covers the
+complete online entry path rather than stopping at the lobby or self-hosting.
 
-- Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
-- Add remappable controls and controller support.
-- Add display mode, resolution, scaling, fullscreen, audio, and volume settings.
-- Persist all settings in a documented per-user location.
-- Improve the HUD:
+- [x] Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
+- [x] Add remappable controls and controller support.
+- [x] Add display mode, resolution, scaling, fullscreen, audio, and volume settings.
+- [x] Persist all settings in a documented per-user location.
+- [x] Improve the HUD:
   - position and lap progress;
   - race timer and results;
   - weapon and ammunition state;
   - connection quality;
   - clearer damage and pickup feedback.
-- Add an onboarding and control reference reachable in-game.
-- Improve keyboard navigation, text scale, colour contrast, and window resizing.
-- Ensure Windows and Linux expose the same core menus and options.
-- Establish a supported Windows build of the shared SDL2/ImGui client, or record
-  the remaining blockers and retain the legacy client as the explicit 2.0
-  fallback; do not silently maintain two long-term feature implementations.
+- [x] Add an onboarding and control reference reachable in-game.
+- [x] Improve keyboard navigation, text scale, colour contrast, and window resizing.
+- [x] Ensure Windows and Linux expose the same core menus and options.
+- [x] Establish the shared SDL2/ImGui client as the supported, preferred Windows
+  build and retain the legacy client only as the explicit 2.0 compatibility
+  fallback scheduled for retirement in 3.0.
 
-**Exit gate:** A new player can install, configure, start a local race, and join an online race without external documentation.
+**Exit gate: Passed (29 September 2026).** Clean Linux and native Windows x64
+builds cover configuration and local play; a silently installed Windows package,
+with checkout resources hidden, passes the core menu flow and a two-client online
+race in which one installed client hosts and the other discovers and joins it.
 
 ## Phase 4 — Content and tools
 

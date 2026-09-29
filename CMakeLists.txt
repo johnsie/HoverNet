@@ -374,7 +374,11 @@ if(WIN32)
     endif()
 endif()
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND NOT WIN32)
+    # These legacy/portable-core unit executables still depend on POSIX test
+    # harnesses and Linux compatibility pre-includes. Windows parity is covered
+    # in CI by the shared-client functional and clean-installer gates rather than
+    # generating targets that cannot compile with MSVC.
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/linux")
 
     function(add_hovernet_root_test target)
