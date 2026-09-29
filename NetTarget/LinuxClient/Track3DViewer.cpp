@@ -75,6 +75,17 @@ std::string SourcePath(const char* relativePath)
     if (dataDirectory != nullptr && dataDirectory[0] != '\0') {
         return std::string(dataDirectory) + "/" + relativePath;
     }
+
+    // Installed/portable builds keep their data tree beside the executable.
+    // Prefer it over the compile-time checkout, which exists only on the build
+    // machine and made a copied Windows executable unable to load any assets.
+    char* basePath = SDL_GetBasePath();
+    if (basePath != nullptr) {
+        const std::string installedPath = std::string(basePath) + relativePath;
+        SDL_free(basePath);
+        std::ifstream installedFile(installedPath.c_str(), std::ios::binary);
+        if (installedFile.good()) return installedPath;
+    }
     return std::string(HOVERNET_SOURCE_DIR) + "/" + relativePath;
 }
 

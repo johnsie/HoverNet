@@ -500,8 +500,11 @@ runtime together as a testable pipeline artifact. Both pipelines now run that
 x64 executable with SDL's headless video/audio drivers through startup and
 bounded Local Play, Settings, Controls, pause, results, and onboarding flows.
 This is not yet a replacement for the legacy installer: interactive Windows
-playtesting and packaging remain required before changing the player-facing
-executable. Automated online-lobby coverage now starts the portable x64
+playtesting remains required before making it the sole Windows download. Both
+CI systems now build a dedicated Inno Setup package named
+`HoverNet-<version>-windows-x64-setup.exe`, using `HoverNet.exe` and a colocated
+installed data tree; tagged releases attach it alongside the legacy Win32
+installer during the transition. Automated online-lobby coverage starts the portable x64
 RaceServer locally, negotiates protocol 2.0, and renders the real bounded lobby;
 it does not depend on or modify the production server. The Windows CMake graph
 also declares shared-MFC mode (`_AFXDLL`) to match its `/MD` dynamic CRT, fixing
