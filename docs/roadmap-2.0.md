@@ -506,7 +506,10 @@ CI systems now build a dedicated Inno Setup package named
 installed data tree; tagged releases attach it alongside the legacy Win32
 installer during the transition. A shared packaging gate rejects missing or
 empty runtime assets, fewer than four tracks, and any client, plug-in, or SDL2
-binary whose PE header is not AMD64. Automated online-lobby coverage starts the portable x64
+binary whose PE header is not AMD64. CI then silently installs the generated
+package into a clean temporary directory, validates the installed tree again,
+launches the installed client headlessly, and uninstalls it before publishing
+the artifact. Automated online-lobby coverage starts the portable x64
 RaceServer locally, negotiates protocol 2.0, and renders the real bounded lobby;
 it does not depend on or modify the production server. The Windows CMake graph
 also declares shared-MFC mode (`_AFXDLL`) to match its `/MD` dynamic CRT, fixing

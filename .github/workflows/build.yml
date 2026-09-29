@@ -245,6 +245,27 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "packaging\windows\HoverNet-x64.iss"
           if ($LASTEXITCODE -ne 0) { throw "Shared x64 Inno Setup packaging failed" }
 
+          $installer = Get-ChildItem "dist\*-windows-x64-setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Shared x64 installer was not generated" }
+          $installDir = Join-Path $env:RUNNER_TEMP "HoverNet-x64-install-smoke"
+          $installArgs = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$installDir")
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList $installArgs -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Shared x64 installer smoke failed with exit code $($install.ExitCode)" }
+          try {
+            & "scripts\validate-windows-x64-package.ps1" -ReleaseDir $installDir
+            $env:SDL_VIDEODRIVER = "dummy"
+            $env:SDL_AUDIODRIVER = "dummy"
+            & "$installDir\HoverNet.exe" --frames 1
+            if ($LASTEXITCODE -ne 0) { throw "Installed shared x64 client smoke failed" }
+          }
+          finally {
+            $uninstaller = Join-Path $installDir "unins000.exe"
+            if (Test-Path $uninstaller) {
+              Start-Process -FilePath $uninstaller `
+                -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+            }
+          }
+
       - name: Upload Windows installers
         uses: actions/upload-artifact@v4
         with:
