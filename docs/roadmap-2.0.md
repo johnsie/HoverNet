@@ -453,6 +453,11 @@ shared SDL2/ImGui implementation. Avoid adding substantial new functionality to
 the legacy Win32/MFC screens once the essential 2.0 settings and flows are safe.
 Each shared screen or service should be kept platform-neutral and exercised on
 Windows as soon as the shared Windows build is available.
+The first portability pass now lets the SDL renderer create its own native Windows
+window (while preserving legacy HWND embedding), stores shared-client settings
+under `%APPDATA%/HoverNet`, treats Linux `/proc` memory reporting as an optional
+diagnostic on Windows, and removes the shared RaceServer client dependency on
+the legacy MFC precompiled header.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.

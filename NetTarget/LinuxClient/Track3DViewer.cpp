@@ -23,7 +23,11 @@
 #include "../VideoServices/VideoBuffer.h"
 
 #include <SDL.h>
+#ifdef _WIN32
+#include <direct.h>
+#else
 #include <sys/stat.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -137,12 +141,15 @@ std::string ParseMemoryReportPath(int argc, char** argv)
     return "";
 }
 
-// Linux-only (this file isn't built on Windows today -- see CMakeLists.txt):
-// reads the process's current resident set size out of /proc. Returns -1 if
-// it couldn't be read rather than guessing, since a silently-wrong 0 would
-// look exactly like "no memory growth" in the report this feeds.
+// Reads resident memory where the host exposes the Linux /proc interface.
+// The diagnostic is optional on other platforms: returning -1 records
+// "unavailable" rather than preventing the shared client from building or
+// inventing a misleading zero measurement.
 long ReadResidentMemoryKB()
 {
+#ifdef _WIN32
+    return -1;
+#else
     std::ifstream lStatus("/proc/self/status");
     std::string lLine;
     while (std::getline(lStatus, lLine)) {
@@ -151,6 +158,7 @@ long ReadResidentMemoryKB()
         }
     }
     return -1;
+#endif
 }
 
 std::string ParseTrackArg(int argc, char** argv)
@@ -649,21 +657,31 @@ void DrawTrackPreview(const TrackPreview& preview, float minimumHeight = 180.0f,
 // behavior when $HOME is unset) rather than failing outright.
 std::string ConfigDirPath()
 {
-    const char* xdgConfigHome = std::getenv("XDG_CONFIG_HOME");
     std::string base;
+    std::string dir;
+#ifdef _WIN32
+    // APPDATA is the conventional per-user roaming configuration root and is
+    // available without tying the shared client to MFC or registry settings.
+    const char* appData = std::getenv("APPDATA");
+    base = appData != nullptr && appData[0] != '\0' ? appData : ".";
+    dir = base + "/HoverNet";
+    _mkdir(dir.c_str());
+#else
+    const char* xdgConfigHome = std::getenv("XDG_CONFIG_HOME");
     if (xdgConfigHome != nullptr && xdgConfigHome[0] != '\0') {
         base = xdgConfigHome;
     } else {
         const char* home = std::getenv("HOME");
         base = std::string(home != nullptr ? home : ".") + "/.config";
     }
-    const std::string dir = base + "/hovernet";
+    dir = base + "/hovernet";
     // mkdir -p in two steps: base ($XDG_CONFIG_HOME or ~/.config) may not exist
     // either on a fresh account. EEXIST is the expected/common case, not a
     // failure; anything else just means the later fopen calls will fail too,
     // which they already handle (LoadX returns defaults, SaveX silently no-ops).
     mkdir(base.c_str(), 0755);
     mkdir(dir.c_str(), 0755);
+#endif
     return dir;
 }
 

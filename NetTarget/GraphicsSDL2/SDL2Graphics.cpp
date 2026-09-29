@@ -36,19 +36,24 @@ bool SDL2GraphicsBackend::Initialize(void* windowHandle, int width, int height)
 {
     if (m_initialized) return false;
     m_width = width; m_height = height;
-#ifdef _WIN32
-    HWND hwnd = static_cast<HWND>(windowHandle);
-    if (!hwnd) return false;
-#endif
-
     if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0)
     { return false; }
 
+    const std::string windowTitle = std::string("HoverNet ") + HOVERNET_VERSION;
 #ifdef _WIN32
-    m_window = SDL_CreateWindowFrom(hwnd);
+    // The legacy client embeds SDL in its existing HWND. The shared client has
+    // no Win32 host window and must let SDL create the top-level window, just
+    // as it does on Linux. Supporting both paths lets migration happen without
+    // keeping separate render backends.
+    HWND hwnd = static_cast<HWND>(windowHandle);
+    if (hwnd != nullptr) {
+        m_window = SDL_CreateWindowFrom(hwnd);
+    } else {
+        m_window = SDL_CreateWindow(windowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                    width, height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    }
 #else
     (void)windowHandle;
-    const std::string windowTitle = std::string("HoverNet ") + HOVERNET_VERSION;
     m_window = SDL_CreateWindow(windowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                 width, height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 #endif

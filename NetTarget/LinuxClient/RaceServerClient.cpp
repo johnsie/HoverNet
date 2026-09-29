@@ -1,6 +1,8 @@
 #ifdef _WIN32
-#include "../Game2/StdAfx.h"
-#include <winsock.h>
+// Keep the shared client independent of the legacy MFC precompiled header.
+// winsock2 must precede windows.h in any translation unit that later includes it.
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
 #include <cerrno>

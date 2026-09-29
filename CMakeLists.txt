@@ -265,6 +265,9 @@ add_library(HoverNetRaceServerClient STATIC
     NetTarget/LinuxClient/RaceServerClient.cpp
 )
 target_include_directories(HoverNetRaceServerClient PUBLIC NetTarget/LinuxClient)
+if(WIN32)
+    target_link_libraries(HoverNetRaceServerClient PUBLIC ws2_32)
+endif()
 
 add_executable(HoverNetRaceServerClientSmoke
     NetTarget/LinuxClient/RaceServerClientSmoke.cpp
