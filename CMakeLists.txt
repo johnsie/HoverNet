@@ -6,6 +6,14 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(WIN32)
+    # The portable graph still consumes a small MFC compatibility layer through
+    # StdAfx.h. CMake and vcpkg use the dynamic MSVC runtime (/MD), so MFC must
+    # use its matching shared-DLL ABI as well. Without _AFXDLL, afx.h rejects
+    # every translation unit before compilation with C1189.
+    add_compile_definitions(_AFXDLL)
+endif()
+
 find_package(SDL2 REQUIRED)
 include(CTest)
 find_package(Threads REQUIRED)

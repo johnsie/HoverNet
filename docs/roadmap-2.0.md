@@ -503,7 +503,9 @@ This is not yet a replacement for the legacy installer: interactive Windows
 playtesting and packaging remain required before changing the player-facing
 executable. Automated online-lobby coverage now starts the portable x64
 RaceServer locally, negotiates protocol 2.0, and renders the real bounded lobby;
-it does not depend on or modify the production server.
+it does not depend on or modify the production server. The Windows CMake graph
+also declares shared-MFC mode (`_AFXDLL`) to match its `/MD` dynamic CRT, fixing
+the initial x64 MSVC C1189 failure in the inherited compatibility headers.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.
