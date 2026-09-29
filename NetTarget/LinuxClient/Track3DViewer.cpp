@@ -1303,7 +1303,9 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     RaceServerClient& client = pClient;
 
     while (!client.Connect(host, port)) {
-        std::fprintf(stderr, "Lobby screen: could not connect to RaceServer at %s:%u\n", host.c_str(), port);
+        const std::string failureReason = client.GetProtocolError();
+        std::fprintf(stderr, "Lobby screen: could not connect to RaceServer at %s:%u%s%s\n",
+                     host.c_str(), port, failureReason.empty() ? "" : ": ", failureReason.c_str());
         // Bounded smoke runs must never wait for interaction. Interactive players
         // get an actionable cross-platform prompt instead of a terminal-only
         // failure that looks like the Online Lobby button did nothing.
@@ -1314,10 +1316,17 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Back to main menu"}
         };
         char message[320];
-        std::snprintf(message, sizeof(message),
-                      "Could not connect to the RaceServer at %s:%u.\n\n"
-                      "Check your connection, or change the server address in Settings.",
-                      host.c_str(), port);
+        if (!failureReason.empty()) {
+            std::snprintf(message, sizeof(message),
+                          "The RaceServer at %s:%u rejected this client.\n\n%s\n\n"
+                          "Install a compatible HoverNet release or choose another server in Settings.",
+                          host.c_str(), port, failureReason.c_str());
+        } else {
+            std::snprintf(message, sizeof(message),
+                          "Could not connect to the RaceServer at %s:%u.\n\n"
+                          "Check your connection, or change the server address in Settings.",
+                          host.c_str(), port);
+        }
         const SDL_MessageBoxData messageBox = {
             SDL_MESSAGEBOX_ERROR, graphics.GetWindow(), "HoverNet - Online Lobby",
             message, 2, buttons, nullptr
