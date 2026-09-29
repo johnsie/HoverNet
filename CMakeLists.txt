@@ -368,7 +368,7 @@ target_link_libraries(HoverNetGame2Player PRIVATE HoverNetObserver HoverNetClien
 if(WIN32)
     # Keep the descriptive internal CMake target name, but ship the shared
     # Windows client under the player-facing successor to legacy Game2.exe.
-    set_target_properties(HoverNetGame2Player PROPERTIES OUTPUT_NAME HoverNet)
+    set_target_properties(HoverNetGame2Player PROPERTIES OUTPUT_NAME HoverNet WIN32_EXECUTABLE TRUE)
     if(TARGET SDL2::SDL2main)
         target_link_libraries(HoverNetGame2Player PRIVATE SDL2::SDL2main)
     endif()

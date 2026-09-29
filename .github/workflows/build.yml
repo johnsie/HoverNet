@@ -158,8 +158,8 @@ jobs:
           )
           foreach ($scenario in $scenarios) {
             $arguments = $scenario.Split(' ')
-            & $client @arguments
-            if ($LASTEXITCODE -ne 0) {
+            $process = Start-Process -FilePath $client -ArgumentList $arguments -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
               throw "Shared x64 client smoke scenario failed: $scenario"
             }
           }
@@ -170,8 +170,10 @@ jobs:
             -PassThru
           try {
             Start-Sleep -Seconds 1
-            & $client --lobby 127.0.0.1 19879 --lobby-screen --frames 2
-            if ($LASTEXITCODE -ne 0) { throw "Shared x64 online lobby smoke failed" }
+            $lobbyClient = Start-Process -FilePath $client `
+              -ArgumentList "--lobby", "127.0.0.1", "19879", "--lobby-screen", "--frames", "2" `
+              -Wait -PassThru
+            if ($lobbyClient.ExitCode -ne 0) { throw "Shared x64 online lobby smoke failed" }
           }
           finally {
             if (-not $server.HasExited) { Stop-Process -Id $server.Id -Force }
@@ -255,8 +257,17 @@ jobs:
             & "scripts\validate-windows-x64-package.ps1" -ReleaseDir $installDir
             $env:SDL_VIDEODRIVER = "dummy"
             $env:SDL_AUDIODRIVER = "dummy"
-            & "$installDir\HoverNet.exe" --frames 1
-            if ($LASTEXITCODE -ne 0) { throw "Installed shared x64 client smoke failed" }
+            $sourceData = "NetTarget\ObjFac1.dat"
+            $hiddenSourceData = "$sourceData.package-smoke-hidden"
+            Move-Item $sourceData $hiddenSourceData
+            try {
+              $installedClient = Start-Process -FilePath "$installDir\HoverNet.exe" `
+                -WorkingDirectory $installDir -ArgumentList "--frames", "1" -Wait -PassThru
+              if ($installedClient.ExitCode -ne 0) { throw "Installed shared x64 client smoke failed" }
+            }
+            finally {
+              Move-Item $hiddenSourceData $sourceData
+            }
           }
           finally {
             $uninstaller = Join-Path $installDir "unins000.exe"

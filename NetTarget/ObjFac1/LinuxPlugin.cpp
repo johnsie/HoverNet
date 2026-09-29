@@ -682,7 +682,7 @@ MR_ObjectFromFactory* CreateSurface(const MR_ObjectFromFactoryId& id)
 
 extern "C"
 {
-HOVERNET_PLUGIN_EXPORT void MR_InitModule(HMODULE)
+HOVERNET_PLUGIN_EXPORT void MR_InitModule(HMODULE module)
 {
     MR_InitTrigoTables();
     const char* dataDirectory = std::getenv("HOVERNET_DATA_DIR");
@@ -690,7 +690,28 @@ HOVERNET_PLUGIN_EXPORT void MR_InitModule(HMODULE)
     if (dataDirectory != nullptr && dataDirectory[0] != '\0') {
         lDatPath = std::string(dataDirectory) + "/NetTarget/ObjFac1.dat";
     }
+#ifdef _WIN32
+    else {
+        char modulePath[MAX_PATH];
+        const DWORD modulePathLength = GetModuleFileNameA(module, modulePath, MAX_PATH);
+        if (modulePathLength > 0 && modulePathLength < MAX_PATH) {
+            std::string moduleDirectory(modulePath, modulePathLength);
+            const std::string::size_type separator = moduleDirectory.find_last_of("\\/");
+            if (separator != std::string::npos) {
+                moduleDirectory.resize(separator);
+                const std::string installedDataPath = moduleDirectory + "/NetTarget/ObjFac1.dat";
+                if (GetFileAttributesA(installedDataPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                    lDatPath = installedDataPath;
+                }
+            }
+        }
 #ifdef HOVERNET_SOURCE_DIR
+        if (lDatPath.empty()) lDatPath = HOVERNET_SOURCE_DIR "/NetTarget/ObjFac1.dat";
+#else
+        if (lDatPath.empty()) lDatPath = "NetTarget/ObjFac1.dat";
+#endif
+    }
+#elif defined(HOVERNET_SOURCE_DIR)
     else {
         lDatPath = HOVERNET_SOURCE_DIR "/NetTarget/ObjFac1.dat";
     }
