@@ -1392,6 +1392,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     bool running = true;
     bool joined = false;
     bool isHost = false;
+    bool connectionLossReported = false;
     std::vector<std::string> raceMembers;
     int framesShown = 0;
     bool hostPopupOpen = false;
@@ -1716,6 +1717,14 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         // to kWidth x kHeight below, before this loop's *next* iteration's
         // event polling can reach a raw-framebuffer screen like ConfirmQuit
         // that still needs it (see HoverNetImGuiLogicalMouseSmoke).
+        // PollMessage closes the client when recv() reports that the server has
+        // gone away. Record that transition once so a useful reconnect failure
+        // reason is not overwritten on every subsequent frame.
+        if (!client.IsConnected() && !connectionLossReported) {
+            statusText = "Connection to RaceServer lost";
+            connectionLossReported = true;
+        }
+
         SDL_RenderSetLogicalSize(graphics.GetRenderer(), 0, 0);
         ImGui_ImplSDLRenderer2_NewFrame();
         ImGui_ImplSDL2_NewFrame();
@@ -1747,7 +1756,49 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         ImGui::PopStyleColor();
         ImGui::Spacing();
 
-        if (phase == LobbyPhase::eEnteringName) {
+        if (!client.IsConnected()) {
+            const float panelWidth = std::min(520.0f, ImGui::GetContentRegionAvail().x);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                                 std::max(0.0f, (ImGui::GetContentRegionAvail().x - panelWidth) * 0.5f));
+            ImGui::BeginChild("ConnectionLost", ImVec2(panelWidth, 220), true);
+            HoverNetSectionHeading("CONNECTION LOST");
+            ImGui::TextWrapped("The RaceServer connection closed. Race and player details shown before the disconnect may no longer be valid.");
+            ImGui::Spacing();
+            if (HoverNetButton("Reconnect", ImVec2(-1, 42))) {
+                if (client.Connect(host, port)) {
+                    games.clear();
+                    gamesBeingListed.clear();
+                    lobbyUsers.clear();
+                    raceMembers.clear();
+                    playerNames.clear();
+                    outPeers.clear();
+                    outJoinedName.clear();
+                    outTrackName.clear();
+                    selected = 0;
+                    joined = false;
+                    isHost = false;
+                    receivedInitialRoster = false;
+                    connectionLossReported = false;
+                    phase = username.empty() ? LobbyPhase::eEnteringName : LobbyPhase::eBrowsing;
+                    statusText = "Reconnected to the shared HoverNet lobby.";
+                    if (!username.empty()) {
+                        client.SetPlayerName(username);
+                        client.ListLobbyUsers();
+                        refreshGames();
+                    }
+                }
+                else {
+                    const std::string reason = client.GetProtocolError();
+                    statusText = reason.empty() ? "Reconnect failed - check the server address in Settings"
+                                                : reason;
+                }
+            }
+            if (HoverNetButton("Back to main menu", ImVec2(-1, 42))) {
+                running = false;
+            }
+            ImGui::EndChild();
+        }
+        else if (phase == LobbyPhase::eEnteringName) {
             ImGui::Spacing();
             ImGui::TextUnformatted("Welcome to HoverNet -- enter a username:");
             ImGui::SetNextItemWidth(320);

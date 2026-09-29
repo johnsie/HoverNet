@@ -473,7 +473,11 @@ failed address plus Retry, Open Settings, and Back actions instead of silently
 returning after writing only to the terminal. Saving a corrected server address
 retries it immediately without leaving the online flow. Protocol-version rejection displays
 the server's reason and recommends a compatible release rather than misreporting
-it as a generic outage; bounded automation remains noninteractive.
+it as a generic outage; bounded automation remains noninteractive. If a connected
+RaceServer disappears while the lobby is open, stale race and roster controls are
+replaced by explicit Reconnect and Back actions. A successful reconnect returns to
+the browser and requests fresh race and player lists rather than retaining an
+invalid waiting-room state.
 
 For the remaining Phase 3 work, "Windows/Linux parity" means converging on the
 shared SDL2/ImGui implementation. Avoid adding substantial new functionality to
