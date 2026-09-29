@@ -495,10 +495,12 @@ for native x64 Windows instead of truncating Winsock handles to 32-bit integers.
 GitHub Actions and GitLab CI now also configure the portable CMake graph with
 the native x64 MSVC toolchain and build `HoverNetGame2Player` plus its
 object-factory plug-in. GitLab retains the executable, plug-in, and x64 SDL2
-runtime together as a testable pipeline artifact.
-This is a compile gate for the shared client, not yet a replacement for the
-legacy installer: Windows runtime smoke tests and packaging remain required
-before changing the player-facing executable.
+runtime together as a testable pipeline artifact. Both pipelines now run that
+x64 executable with SDL's headless video/audio drivers through startup and
+bounded Local Play, Settings, Controls, pause, results, and onboarding flows.
+This is not yet a replacement for the legacy installer: interactive Windows
+playtesting, online-lobby coverage, and packaging remain required before
+changing the player-facing executable.
 
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.
