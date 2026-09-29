@@ -2662,85 +2662,108 @@ enum class MenuChoice
     eHowToPlay,
 };
 
-// The very first screen in player mode: pick local play or the online lobby. Bounded
-// by pFrameLimit exactly like RunLobbyScreen, and defaults to eLocalPlay if the
-// player never chooses (Escape, or the frame budget runs out under an automated/
-// headless run) -- this is what keeps every existing --frames-bounded test working
-// unchanged even though the menu is now always shown first in player mode.
+// The first player screen. A bounded/headless run still defaults to Local Play
+// if no button is activated, preserving the automated gameplay contract.
 MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                        const MR_Sprite& font, int pFrameLimit)
 {
-    const int lineHeight = std::max(1, font.GetItemHeight());
-    int selected = 0;
-    const char* options[] = {"Local Play", "Online Lobby", "Settings", "Controls", "How to Play"};
-    const int optionCount = 5;
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+    ImFontConfig fontConfig;
+    fontConfig.SizePixels = 19.0f;
+    io.Fonts->AddFontDefault(&fontConfig);
+    ApplyHoverNetLobbyStyle(LoadUiScale());
+    ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+    ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
-    bool running = true;
+    const char* options[] = {"Local Play", "Online Lobby", "Settings", "Controls", "How to Play"};
+    constexpr int optionCount = sizeof(options) / sizeof(options[0]);
     MenuChoice choice = MenuChoice::eLocalPlay;
+    bool focusFirstButton = true;
+    bool running = true;
     int framesShown = 0;
 
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
+            ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
                 if (ConfirmQuit(graphics, buffer, viewport, font)) {
                     g_QuitConfirmed = true;
                     running = false;
                 }
             }
-            else if (event.type == SDL_KEYDOWN) {
-                const SDL_Keycode key = event.key.keysym.sym;
-                if (key == SDLK_ESCAPE) {
-                    running = false;
-                }
-                else if (key == SDLK_UP) {
-                    selected = (selected + optionCount - 1) % optionCount;
-                }
-                else if (key == SDLK_DOWN) {
-                    selected = (selected + 1) % optionCount;
-                }
-                else if (key == SDLK_RETURN) {
-                    choice = static_cast<MenuChoice>(selected);
-                    running = false;
-                }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+                running = false;
             }
-            else if (event.type == SDL_CONTROLLERBUTTONDOWN) {
-                const Uint8 button = event.cbutton.button;
-                if (button == SDL_CONTROLLER_BUTTON_B) {
-                    running = false;
-                }
-                else if (button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
-                    selected = (selected + optionCount - 1) % optionCount;
-                }
-                else if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
-                    selected = (selected + 1) % optionCount;
-                }
-                else if (button == SDL_CONTROLLER_BUTTON_A) {
-                    choice = static_cast<MenuChoice>(selected);
-                    running = false;
-                }
+            else if (event.type == SDL_CONTROLLERBUTTONDOWN &&
+                     event.cbutton.button == SDL_CONTROLLER_BUTTON_B) {
+                running = false;
             }
         }
 
-        viewport.Clear(0);
-        int y = lineHeight * 3;
-        DrawUiText(font, viewport.GetXRes() / 2, y, "HOVERNET", &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
-        y += lineHeight * 3;
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_RenderSetLogicalSize(renderer, 0, 0);
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::Begin("HoverNet Main Menu", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings);
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 14.0f));
+        ImGui::BeginChild("HeaderBar", ImVec2(0, 92), false);
+        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+        ImGui::SetWindowFontScale(1.65f);
+        ImGui::TextUnformatted("HOVERNET");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::TextUnformatted("Race. Battle. Hover.");
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+
+        const float panelWidth = std::min(460.0f, ImGui::GetContentRegionAvail().x);
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
+        ImGui::BeginChild("MainMenuPanel", ImVec2(panelWidth, -44.0f), true);
+        HoverNetSectionHeading("MAIN MENU");
+        ImGui::Spacing();
         for (int index = 0; index < optionCount; ++index) {
-            char line[64];
-            std::snprintf(line, sizeof(line), "%s%s", index == selected ? "> " : "  ", options[index]);
-            DrawUiText(font, viewport.GetXRes() / 2, y, line, &viewport, MR_Sprite::eCenter, MR_Sprite::eTop);
-            y += lineHeight;
+            if (focusFirstButton && index == 0) {
+                ImGui::SetKeyboardFocusHere();
+                focusFirstButton = false;
+            }
+            if (HoverNetButton(options[index], ImVec2(-FLT_MIN, 48))) {
+                choice = static_cast<MenuChoice>(index);
+                running = false;
+            }
+            ImGui::Spacing();
         }
-        y += lineHeight;
-        DrawUiText(font, viewport.GetXRes() / 2, y, "Up/Down or D-pad   Enter/A: confirm", &viewport,
-                   MR_Sprite::eCenter, MR_Sprite::eTop);
+        HoverNetHint("Arrow keys or D-pad to navigate; Enter or A to select.");
+        ImGui::EndChild();
+        ImGui::TextDisabled("HoverNet %s", HOVERNET_VERSION);
+        ImGui::End();
 
-        graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
+        ImGui::Render();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         SDL_Delay(16);
     }
 
+    ImGui_ImplSDLRenderer2_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
     return choice;
 }
 #endif
