@@ -2,6 +2,13 @@
 
 HoverNet 3.0 begins only after HoverNet 2.0 has shipped and its release criteria remain healthy in production. Its purpose is to replace the remaining 1990s-era technical constraints with a modern, authoritative, extensible racing platform while preserving HoverRace's fast handling, compact tracks, weapons, and visual identity.
 
+HoverNet 3.0 also completes the client convergence begun in 2.0. It has one
+shared Windows/Linux client codebase; operating-system-specific code is limited
+to narrow integration layers such as packaging, filesystem locations, window
+and controller discovery, signing, and installers. The legacy Win32/MFC client
+may be retained as part of the installable 2.0 legacy release, but it is not a
+3.0 runtime, fallback, or second feature implementation.
+
 This is approximately an 18-to-24-month programme for a small team. Dates should be assigned only after 2.0 is complete; durations below are relative to the 3.0 kickoff.
 
 ## Product goals
@@ -29,6 +36,9 @@ It should not become a generic game engine. Every technical investment must supp
 - Prototype client prediction, server reconciliation, interpolation, and lag compensation under artificial loss, latency, and jitter.
 - Evaluate the rendering and platform layer with a narrow criterion: preserve gameplay while reducing platform-specific code.
 - Decide whether to evolve the existing C++ codebase or build a new client around a reusable simulation core.
+- Inventory every feature still exclusive to the legacy Win32/MFC client and
+  assign it one of three outcomes: migrate to shared code, replace with a shared
+  design, or explicitly retire it.
 - Produce migration plans for classic tracks, resources, settings, player identities, and hosted servers.
 
 **Exit gate:** A two-player prototype produces matching simulation hashes across platforms and remains playable at the agreed network latency target.
@@ -67,6 +77,11 @@ It should not become a generic game engine. Every technical investment must supp
 **Months 7–13**
 
 - Replace remaining Win32/MFC-specific runtime paths with a shared cross-platform application layer.
+- Make the shared client the only 3.0 desktop runtime; Windows and Linux must use
+  the same menu, HUD, settings, input, rendering, audio, and networking feature
+  implementations, with platform adapters kept narrow and independently tested.
+- Remove the legacy Windows client from 3.0 packages after migration coverage
+  proves all supported player flows and settings have a shared equivalent.
 - Introduce a maintainable renderer with widescreen, high-DPI, windowed, borderless, and fullscreen support.
 - Preserve a classic visual preset while adding modern lighting, particles, effects, and scalable quality options.
 - Build a unified UI system for menus, HUD, lobby, settings, results, replays, and editor workflows.

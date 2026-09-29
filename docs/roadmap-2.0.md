@@ -2,6 +2,20 @@
 
 HoverNet 2.0 should be the first polished, cross-platform release rather than a full engine rewrite. The existing foundation includes Windows and Linux clients, working multiplayer, automated packaging, four bundled tracks, the Manta hovercraft, and a broad Linux smoke-test suite.
 
+### Client convergence policy
+
+HoverNet 2.0 is the transition release toward one shared desktop client. The
+legacy Win32/MFC client remains supported through 2.0 as a compatibility and
+release fallback, but receives only essential parity, accessibility, stability,
+security, and packaging work. Substantial new client features should be built in
+the shared SDL2/ImGui path and made portable across Windows and Linux rather than
+implemented twice. Where schedule and risk allow, 2.0 should ship the shared
+client on both platforms; otherwise the legacy Windows client remains available
+until the shared Windows build passes the same functional and release gates.
+
+Retiring the legacy Windows runtime is deliberately a HoverNet 3.0 gate, not a
+reason to delay a stable 2.0 release.
+
 Assuming one or two regular contributors, this is a realistic six-to-eight-month roadmap beginning in October 2026.
 
 ## Implementation status
@@ -434,6 +448,12 @@ The rest of Phase 3 (remaining ImGui menu consolidation, remaining HUD
 improvements and accessibility work, and
 Windows/Linux menu parity) remains.
 
+For the remaining Phase 3 work, "Windows/Linux parity" means converging on the
+shared SDL2/ImGui implementation. Avoid adding substantial new functionality to
+the legacy Win32/MFC screens once the essential 2.0 settings and flows are safe.
+Each shared screen or service should be kept platform-neutral and exercised on
+Windows as soon as the shared Windows build is available.
+
 - Consolidate the main menu, settings, pause menu, lobby, local setup, and post-race flow into one consistent ImGui design.
 - Add remappable controls and controller support.
 - Add display mode, resolution, scaling, fullscreen, audio, and volume settings.
@@ -447,6 +467,9 @@ Windows/Linux menu parity) remains.
 - Add an onboarding and control reference reachable in-game.
 - Improve keyboard navigation, text scale, colour contrast, and window resizing.
 - Ensure Windows and Linux expose the same core menus and options.
+- Establish a supported Windows build of the shared SDL2/ImGui client, or record
+  the remaining blockers and retain the legacy client as the explicit 2.0
+  fallback; do not silently maintain two long-term feature implementations.
 
 **Exit gate:** A new player can install, configure, start a local race, and join an online race without external documentation.
 
@@ -471,6 +494,9 @@ Windows/Linux menu parity) remains.
 - Remove generated binaries and build artefacts from source control; enforce this through `.gitignore` and CI.
 - Add compiler warnings and sanitizers on Linux.
 - Add Windows smoke tests beyond compilation.
+- Exercise the shared SDL2/ImGui client on Windows in CI, including its menus,
+  settings, input, local-race startup, and online lobby path. Keep legacy-client
+  jobs only while they are required for the 2.0 compatibility fallback.
 - Make x64 the supported Windows client, RaceServer, compiler, and packaging
   target. Audit pointer/integer casts, structure-size assumptions, third-party
   libraries, installers, plug-ins, and saved/network formats before retiring
