@@ -379,7 +379,10 @@ UI scaling. A separate persisted Reduced motion option freezes the main menu's
 speed streak animation without removing its racing backdrop or navigation cues.
 Persisted High contrast menus replace subtle dark shades with blacker surfaces,
 white body text, brighter secondary text and borders, darker action buttons, and
-stronger focus/selection states across the shared ImGui theme.
+stronger focus/selection states across the shared ImGui theme. Settings also
+has a single Restore defaults action covering identity, server, audio, display,
+and accessibility values; it previews those defaults live while retaining full
+Cancel rollback and only persists them after Save.
 
 Guided onboarding is now implemented on Linux as a three-step first-run
 walkthrough covering race selection, driving and weapons, and the race HUD. It

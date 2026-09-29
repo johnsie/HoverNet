@@ -75,7 +75,10 @@ shorter lines so it is not automatically shrunk to fit. **Reduced motion**
 freezes the main menu's moving speed streaks while preserving its racing scene
 and all navigation cues. **High contrast menus** use blacker surfaces, white
 primary text, brighter secondary text and borders, and stronger focus/selection
-states throughout the ImGui interface.
+states throughout the ImGui interface. **Restore defaults** previews the
+built-in identity, server, audio, display, and accessibility defaults together;
+those changes are only persisted by Save, while Cancel restores the exact state
+from before Settings was opened.
 
 ## Bounded Runs
 

@@ -2958,6 +2958,33 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Spacing();
         ImGui::Spacing();
 
+        if (HoverNetButton("Restore defaults", ImVec2(-FLT_MIN, 34))) {
+            std::snprintf(usernameBuf, sizeof(usernameBuf), "%s", "Player");
+            std::snprintf(hostBuf, sizeof(hostBuf), "%s", kDefaultLobbyHost);
+            port = static_cast<int>(kDefaultLobbyPort);
+            volumePercent = 100.0f;
+            muted = false;
+            uiScalePercent = 100.0f;
+            largeHudText = false;
+            reducedMotion = false;
+            highContrast = false;
+            selectedResolution = 0;
+            windowWidth = resolutions[0].width;
+            windowHeight = resolutions[0].height;
+            fullscreen = false;
+
+            // Defaults are a live preview, just like changing these controls
+            // individually. Cancel below still restores the exact entry state.
+            MR_SoundServer::SetMasterVolume(1.0);
+            SDL_SetWindowFullscreen(graphics.GetWindow(), 0);
+            SDL_SetWindowSize(graphics.GetWindow(), windowWidth, windowHeight);
+            SDL_SetWindowPosition(graphics.GetWindow(), SDL_WINDOWPOS_CENTERED,
+                                  SDL_WINDOWPOS_CENTERED);
+            applyUiScale = true;
+        }
+        ImGui::TextDisabled("Preview only until Save is selected.");
+        ImGui::Spacing();
+
         const bool canSave = !usernameBlank && !hostBlank && portValid;
         ImGui::BeginDisabled(!canSave);
         if (HoverNetButton("Save", ImVec2(-FLT_MIN, 40))) {
