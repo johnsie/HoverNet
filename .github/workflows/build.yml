@@ -2,6 +2,10 @@ name: Build and package HoverNet
 
 on:
   push:
+    # The community-tracks-N tags only host downloadable track files (see
+    # docs/community-tracks.md); they are not builds.
+    tags-ignore:
+      - 'community-tracks-*'
   pull_request:
   workflow_dispatch:
 
