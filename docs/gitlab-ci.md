@@ -7,7 +7,7 @@ The pipeline builds and packages the central `RaceServer` and native Linux game 
 Configure protected runners with these tags, or override the CI variables in GitLab:
 
 - `race-server`: C++14 compiler, `dpkg-deb`, Bash, and narrowly scoped deployment privileges. It builds/packages the server and deploys tagged releases.
-- `windows`: PowerShell, Visual Studio MSBuild, all client dependencies, and Inno Setup (`iscc` on `PATH`).
+- `windows`: PowerShell, Visual Studio MSBuild with the **C++ CMake tools for Windows** component, all client dependencies, and Inno Setup (`iscc` on `PATH`).
 
 Mark the `race-server` runner and the production environment as protected. The deploy job is manual and runs only for a protected Git tag.
 
