@@ -1609,6 +1609,19 @@ bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
     return pressed;
 }
 
+// A secondary action (Leave, Back, Host ...): a muted fill so the one primary
+// action on a screen (Start Race, Join Game) is the only red button and reads as
+// the thing to press.
+bool HoverNetQuietButton(const char* label, const ImVec2& size = ImVec2(0, 0))
+{
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.24f, 0.30f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.33f, 0.33f, 0.41f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.18f, 0.23f, 1.0f));
+    const bool pressed = HoverNetButton(label, size);
+    ImGui::PopStyleColor(3);
+    return pressed;
+}
+
 // Section titles ("Game list", "Chat section", ...) in a coral accent, legible on
 // the dark panel background, distinguishing them from ordinary body text without
 // another loud color block.
@@ -1781,7 +1794,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         chatLog.push_back(line);
         // ImGui's chat pane scrolls, so it can keep far more history visible than
         // the old fixed-height hand-drawn panel could.
-        constexpr std::size_t kMaxChatLines = 40;
+        constexpr std::size_t kMaxChatLines = 200;
         if (chatLog.size() > kMaxChatLines) {
             chatLog.erase(chatLog.begin());
         }
@@ -1826,6 +1839,13 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     // player has to notice and click the chat box before Enter does anything --
     // easy to read as "chat is broken". Focus it by default instead.
     bool focusChatInput = true;
+    // The chat log follows the newest message unless the player scrolled up to read
+    // older ones (see the ChatLog child); sending a message always jumps back down.
+    bool chatForcePin = true;
+    bool chatWasPinned = true;
+    // Test hooks (screenshots only): HOVERNET_TEST_LOBBY_DEMO=browse|waiting fills the
+    // lobby with sample races, users and chat once connected.
+    const char* demoMode = std::getenv("HOVERNET_TEST_LOBBY_DEMO");
 
     char usernameBuf[24] = {0};
     char chatBuf[64] = {0};
@@ -2186,6 +2206,45 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             autoStartSent = true;
         }
 
+        if (demoMode != nullptr && framesShown == 9) {
+            pushChat("Banshee: just joined, hello!");
+            pushChat("* Banshee entered the lobby");
+            pushChat("Speedy-Gonzales: welcome Banshee, this is the newest message");
+        }
+        // Screenshot fixture: sample races, users and chat so the layout can be checked
+        // headlessly with a populated lobby. Never set in normal play.
+        if (demoMode != nullptr && framesShown == 3 && phase == LobbyPhase::eBrowsing) {
+            const std::string mode = demoMode;
+            for (int i = 0; i < 4; ++i) {
+                static const char* const kNames[] = {"Speedy-Gonzales", "NightRider", "zoom_zoom", "Skeletor-Linux1"};
+                RaceServerPeer peer; peer.mClientId = 200 + i; peer.mName = kNames[i];
+                lobbyUsers.push_back(peer);
+            }
+            const char* const kLines[] = {
+                "* NightRider entered the lobby", "Speedy-Gonzales: anyone up for Steeplechase?",
+                "NightRider: yes! 3 laps, weapons on", "zoom_zoom: give me a minute, downloading a track",
+                "* zoom_zoom entered the lobby", "Speedy-Gonzales: no rush", "NightRider: hosting now",
+                "zoom_zoom: ok joined", "Skeletor-Linux1: hi all", "Speedy-Gonzales: Windows or Linux?",
+                "zoom_zoom: windows x64", "NightRider: linux here, works great", "Speedy-Gonzales: nice",
+                "zoom_zoom: ready when you are", "NightRider: starting in a sec", "Skeletor-Linux1: who is host?",
+                "NightRider: me", "Speedy-Gonzales: gl hf everyone"};
+            for (const char* line : kLines) pushChat(line);
+            if (mode == "waiting") {
+                phase = LobbyPhase::eWaitingRoom;
+                outTrackName = "Steeplechase"; outNumLaps = 3; outWeapons = true; isHost = true;
+                raceMembers = {"NightRider", "zoom_zoom", "Speedy-Gonzales", "Banshee", "Q-Ball", "Turbo-Tess", "Lil_Hover"};
+                statusText = "Race created - waiting for players";
+            }
+            else {
+                RaceServerGameInfo a; a.mRaceId = 1; a.mName = "Steeplechase"; a.mTrack = "Steeplechase";
+                a.mNumLaps = 3; a.mNumPlayers = 2; a.mWeapons = true;
+                RaceServerGameInfo b; b.mRaceId = 2; b.mName = "Tidal Causeway"; b.mTrack = "Tidal Causeway";
+                b.mNumLaps = 5; b.mNumPlayers = 1; b.mWeapons = false;
+                games = {a, b};
+                selected = 0;
+            }
+        }
+
         // Disabling the renderer's logical size for the duration of this ImGui
         // frame (rather than forcing ImGui to draw at the fixed kWidth x
         // kHeight logical size main.cpp's legacy framebuffer needs, and then
@@ -2222,25 +2281,6 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                       ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
 
-        // Header banner: a solid accent-color strip reads as a title, not just
-        // another line of body text -- everything below it stays on the neutral
-        // panel palette so the red isn't fighting itself across the whole screen.
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
-        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(1.35f);
-        ImGui::TextUnformatted("HOVERNET LOBBY");
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.90f, 0.91f, 1.0f));
-        ImGui::TextUnformatted(statusText.c_str());
-        ImGui::PopStyleColor();
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
-        ImGui::Spacing();
-
         if (!client.IsConnected()) {
             const float panelWidth = std::min(520.0f, ImGui::GetContentRegionAvail().x);
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
@@ -2248,6 +2288,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             ImGui::BeginChild("ConnectionLost", ImVec2(panelWidth, 275), true);
             HoverNetSectionHeading("CONNECTION LOST");
             ImGui::TextWrapped("The RaceServer connection closed. Race and player details shown before the disconnect may no longer be valid.");
+            if (!statusText.empty()) {
+                ImGui::Spacing();
+                AccentNote(statusText);
+            }
             ImGui::Spacing();
             if (HoverNetButton("Reconnect", ImVec2(-1, 42))) {
                 reconnectToServer();
@@ -2278,17 +2322,29 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             }
         }
         else {
-            // Panel grid matches the Windows client's IDD_INTERNET_MEETING dialog:
-            // game list (top-left), game details + player list (top-middle), the
-            // action buttons (top-right), then the lobby roster and chat below.
+            // Panel grid (after the Windows client's IDD_INTERNET_MEETING dialog): race
+            // list | race details | actions on top, then the lobby roster and chat
+            // below. While you are in a race the race list is hidden and its room goes
+            // to the details, so the player list never needs to scroll.
+            const float spacing = ImGui::GetStyle().ItemSpacing.x;
+            const bool inWaitingRoomEarly = (phase == LobbyPhase::eWaitingRoom);
             const float availWidth = ImGui::GetContentRegionAvail().x;
             const float availHeight = ImGui::GetContentRegionAvail().y;
-            // Race list stays short (there are only ever a handful of open races),
-            // but the lobby roster and chat below need real room -- in practice
-            // there can be far more users and chat history than races to show.
-            const float topHeight = availHeight * 0.45f;
+            // The top row needs about 250 px to show a race and its players without
+            // scrolling; the chat keeps at least ~260 px (around ten lines) and is
+            // scrollable beyond that. Anything in between is split evenly.
+            // Browsing needs less (no player list); a waiting room has to fit all eight
+            // players beside the race info without scrolling.
+            const float topHeight = inWaitingRoomEarly
+                ? std::max(305.0f, std::min(availHeight * 0.44f, availHeight - 250.0f))
+                : std::max(298.0f, std::min(availHeight * 0.43f, availHeight - 260.0f));
+            const float actionsWidth = std::max(176.0f, availWidth * 0.17f);
             const float leftColWidth = availWidth * 0.29f;
-            const float detailsColWidth = availWidth * 0.55f;
+            const bool inWaitingRoom = (phase == LobbyPhase::eWaitingRoom);
+            const float detailsColWidth = inWaitingRoom
+                ? availWidth - actionsWidth - spacing
+                : availWidth - leftColWidth - actionsWidth - 2.0f * spacing;
+            constexpr int kMaxPlayersPerRace = 8; // the RaceServer's per-race limit
 
             const RaceServerGameInfo* selectedGame =
                 (phase == LobbyPhase::eBrowsing && !games.empty() && selected >= 0 &&
@@ -2296,109 +2352,148 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     ? &games[static_cast<std::size_t>(selected)]
                     : nullptr;
 
-            ImGui::BeginChild("GameListPanel", ImVec2(leftColWidth, topHeight), true);
-            HoverNetSectionHeading("Game list");
-            if (phase == LobbyPhase::eWaitingRoom) {
-                ImGui::TextDisabled("You're in a race -- see Game details.");
-            }
-            else if (ImGui::BeginListBox("##races", ImVec2(-FLT_MIN, -FLT_MIN))) {
-                if (games.empty()) {
-                    ImGui::TextDisabled("No open races - host one to get started");
-                }
-                for (int i = 0; i < static_cast<int>(games.size()); ++i) {
-                    const RaceServerGameInfo& game = games[static_cast<std::size_t>(i)];
-                    char label[256];
-                    std::snprintf(label, sizeof(label), "%s%s", game.mName.c_str(),
-                                  game.mStarted ? "  (racing)" : "");
-                    const bool isSelected = (i == selected);
-                    if (ImGui::Selectable(label, isSelected, ImGuiSelectableFlags_AllowDoubleClick)) {
-                        selected = i;
-                        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-                            joinSelected();
+            if (!inWaitingRoom) {
+                ImGui::BeginChild("GameListPanel", ImVec2(leftColWidth, topHeight), true);
+                HoverNetSectionHeading("Game list");
+                if (ImGui::BeginListBox("##races", ImVec2(-FLT_MIN, -FLT_MIN))) {
+                    if (games.empty()) {
+                        ImGui::PushTextWrapPos(0.0f);
+                        ImGui::TextDisabled("No open races - host one to get started");
+                        ImGui::PopTextWrapPos();
+                    }
+                    for (int i = 0; i < static_cast<int>(games.size()); ++i) {
+                        const RaceServerGameInfo& game = games[static_cast<std::size_t>(i)];
+                        char label[256];
+                        std::snprintf(label, sizeof(label), "%s%s", game.mName.c_str(),
+                                      game.mStarted ? "  (racing)" : "");
+                        const bool isSelected = (i == selected);
+                        if (ImGui::Selectable(label, isSelected, ImGuiSelectableFlags_AllowDoubleClick)) {
+                            selected = i;
+                            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                                joinSelected();
+                            }
                         }
                     }
+                    ImGui::EndListBox();
                 }
-                ImGui::EndListBox();
-            }
-            ImGui::EndChild();
-
-            ImGui::SameLine();
-            ImGui::BeginChild("GameDetailsPanel", ImVec2(detailsColWidth, topHeight), true);
-            HoverNetSectionHeading("Game details");
-            {
-                const std::string trackName = (phase == LobbyPhase::eWaitingRoom)
-                    ? outTrackName
-                    : (selectedGame != nullptr ? selectedGame->mTrack : std::string());
-                const int laps = (phase == LobbyPhase::eWaitingRoom)
-                    ? outNumLaps
-                    : (selectedGame != nullptr ? selectedGame->mNumLaps : 0);
-                const std::string availability = (phase == LobbyPhase::eWaitingRoom)
-                    ? statusText
-                    : (selectedGame != nullptr
-                           ? (selectedGame->mStarted ? "Race in progress" : "Waiting for players")
-                           : std::string());
-
-                // Column offset sized to the widest label ("Availability:") plus a
-                // gap, rather than a guessed pixel count -- a fixed 120px fit the
-                // shorter labels but "Availability:" ran past it and overlapped the
-                // value that followed on the same line.
-                const float labelColumnWidth = ImGui::CalcTextSize("Availability:").x + 12.0f;
-                const int trackIndex = FindHostableTrack(trackName);
-                const float mapWidth = trackIndex >= 0 ? 145.0f : 0.0f;
-                ImGui::BeginChild("SelectedRaceMetadata",
-                                  ImVec2(ImGui::GetContentRegionAvail().x - mapWidth,
-                                         122.0f), false);
-                ImGui::Text("Track name:");
-                ImGui::SameLine(labelColumnWidth);
-                ImGui::TextUnformatted(trackName.empty() ? "-" : trackName.c_str());
-                ImGui::Text("Laps:");
-                ImGui::SameLine(labelColumnWidth);
-                ImGui::Text("%d", laps);
-                ImGui::Text("Availability:");
-                ImGui::SameLine(labelColumnWidth);
-                ImGui::TextWrapped("%s", availability.empty() ? "-" : availability.c_str());
                 ImGui::EndChild();
+                ImGui::SameLine();
+            }
+
+            ImGui::BeginChild("GameDetailsPanel", ImVec2(detailsColWidth, topHeight), true,
+                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            HoverNetSectionHeading(inWaitingRoom ? "Your race" : "Game details");
+            // One consistent "label  value" row style for both modes (labels dimmed).
+            const float infoLabelWidth = ImGui::CalcTextSize("Weapons:").x + 16.0f;
+            auto infoRow = [&](const char* label, const std::string& value) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.62f, 0.62f, 0.69f, 1.0f));
+                ImGui::TextUnformatted(label);
+                ImGui::PopStyleColor();
+                ImGui::SameLine(infoLabelWidth);
+                ImGui::TextWrapped("%s", value.c_str());
+            };
+            if (inWaitingRoom) {
+                // Race info on the left, the whole player list on the right at full
+                // height, so all eight players are visible without scrolling.
+                const float infoWidth = std::max(250.0f, ImGui::GetContentRegionAvail().x * 0.46f);
+                ImGui::BeginChild("RaceInfoColumn", ImVec2(infoWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
+                const int waitingTrackIndex = FindHostableTrack(outTrackName);
+                const TrackBriefing waitingBriefing = BriefingFor(waitingTrackIndex);
+                infoRow("Track:", outTrackName.empty() ? "-" : outTrackName);
+                infoRow("Laps:", waitingBriefing.mFreePlay ? "none (free play)" : std::to_string(outNumLaps));
+                infoRow("Weapons:", outWeapons ? "On" : "Off");
+                if (!waitingBriefing.mCharacter.empty()) {
+                    infoRow("Style:", waitingBriefing.mCharacter + " - " + waitingBriefing.mDifficulty);
+                }
+                ImGui::Spacing();
+                if (waitingTrackIndex >= 0) {
+                    TrackPreview& preview = lobbyTrackPreviews[waitingTrackIndex];
+                    if (!preview.mLoaded) {
+                        preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(waitingTrackIndex).c_str());
+                    }
+                    ImGui::BeginChild("SelectedRaceMap", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
+                    DrawTrackPreview(preview, 80.0f, false);
+                    ImGui::EndChild();
+                }
+                ImGui::EndChild();
+                ImGui::SameLine();
+                ImGui::BeginChild("PlayersColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
+                ImGui::Text("Players (%d / %d)", 1 + static_cast<int>(raceMembers.size()), kMaxPlayersPerRace);
+                ImGui::BeginChild("PlayersListBox", ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y), true);
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 2.0f)); // compact rows
+                ImGui::BulletText("%s (you)%s", username.c_str(), isHost ? " - host" : "");
+                for (const std::string& member : raceMembers) {
+                    ImGui::BulletText("%s", member.c_str());
+                }
+                ImGui::PopStyleVar();
+                ImGui::EndChild();
+                ImGui::EndChild();
+            }
+            else {
+                const bool haveSelection = selectedGame != nullptr;
+                const std::string trackName = haveSelection ? selectedGame->mTrack : std::string();
+                const int trackIndex = FindHostableTrack(trackName);
+                const TrackBriefing briefing = BriefingFor(trackIndex);
+                const float mapWidth = std::min(190.0f, ImGui::GetContentRegionAvail().x * 0.36f);
+                const float infoHeight = 178.0f;
+                ImGui::BeginChild("SelectedRaceMap", ImVec2(mapWidth, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
                 if (trackIndex >= 0) {
                     TrackPreview& preview = lobbyTrackPreviews[trackIndex];
                     if (!preview.mLoaded) {
                         preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(trackIndex).c_str());
                     }
-                    ImGui::SameLine();
-                    ImGui::BeginChild("SelectedRaceMap", ImVec2(0, 122.0f), false);
-                    DrawTrackPreview(preview, 110.0f, false);
-                    ImGui::EndChild();
+                    DrawTrackPreview(preview, 96.0f, false);
                 }
-                ImGui::Spacing();
-                ImGui::TextUnformatted("Players list:");
-                ImGui::BeginChild("PlayersListBox", ImVec2(-FLT_MIN, 90), true);
-                if (phase == LobbyPhase::eWaitingRoom) {
-                    ImGui::BulletText("You");
-                    for (const std::string& member : raceMembers) {
-                        ImGui::BulletText("%s", member.c_str());
-                    }
-                }
-                else if (selectedGame != nullptr) {
-                    ImGui::Text("%d player%s", selectedGame->mNumPlayers,
-                                selectedGame->mNumPlayers == 1 ? "" : "s");
+                else {
+                    DrawTrackPreview(TrackPreview(), 96.0f, false);
                 }
                 ImGui::EndChild();
+                ImGui::SameLine();
+                ImGui::BeginChild("SelectedRaceInfo", ImVec2(0, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f)); // compact rows
+                if (haveSelection) {
+                    infoRow("Track:", trackName);
+                    infoRow("Laps:", briefing.mFreePlay ? "none (free play)" : std::to_string(selectedGame->mNumLaps));
+                    infoRow("Weapons:", selectedGame->mWeapons ? "On" : "Off");
+                    infoRow("Players:", std::to_string(selectedGame->mNumPlayers) + " / " + std::to_string(kMaxPlayersPerRace));
+                    if (trackIndex >= 0) {
+                        infoRow("Style:", briefing.mCharacter + " - " + briefing.mDifficulty);
+                    }
+                    infoRow("Status:", selectedGame->mStarted ? "Race in progress" : "Waiting for players");
+                }
+                else {
+                    ImGui::PushTextWrapPos(0.0f);
+                    ImGui::TextDisabled("Select a race in the list to see its track, laps, weapons and players, "
+                                        "or host your own.");
+                    ImGui::PopTextWrapPos();
+                }
+                ImGui::PopStyleVar();
+                ImGui::EndChild();
+                if (haveSelection && trackIndex >= 0 && !briefing.mDescription.empty()) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.62f, 0.62f, 0.69f, 1.0f));
+                    ImGui::TextWrapped("%s", briefing.mDescription.c_str());
+                    ImGui::PopStyleColor();
+                }
             }
             ImGui::EndChild();
 
             ImGui::SameLine();
             ImGui::BeginChild("ActionsPanel", ImVec2(0, topHeight), true);
-            if (phase == LobbyPhase::eWaitingRoom) {
+            if (inWaitingRoom) {
                 if (isHost) {
-                    if (HoverNetButton("Start Race", ImVec2(-FLT_MIN, 0))) {
+                    // The one primary action: the only filled red button on the screen.
+                    if (HoverNetButton("Start Race", ImVec2(-FLT_MIN, 40))) {
                         client.StartRace();
                         statusText = "Starting race...";
                     }
                 }
                 else {
-                    ImGui::TextDisabled("Waiting for host...");
+                    ImGui::PushTextWrapPos(0.0f);
+                    ImGui::TextDisabled("Waiting for the host to start the race...");
+                    ImGui::PopTextWrapPos();
                 }
                 ImGui::Spacing();
-                if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, 0))) {
+                if (HoverNetQuietButton("Leave Race", ImVec2(-FLT_MIN, 0))) {
                     cancelWaitingRoom();
                 }
             }
@@ -2411,10 +2506,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 const bool canJoin = selectedGame != nullptr && !selectedGame->mStarted && trackKnown &&
                                      (!trackNeedsDownload || trackDownloadable);
                 ImGui::BeginDisabled(!canJoin);
-                if (HoverNetButton(trackNeedsDownload ? "Download & Join..." : "Join Game...", ImVec2(-FLT_MIN, 0))) {
+                if (HoverNetButton(trackNeedsDownload ? "Download & Join" : "Join Game", ImVec2(-FLT_MIN, 40))) {
                     joinSelected();
                 }
                 ImGui::EndDisabled();
+                ImGui::PushTextWrapPos(0.0f);
                 if (!trackKnown) {
                     ImGui::TextWrapped("This race uses a track this version of HoverNet does not have. "
                                        "Update the game to join it.");
@@ -2423,54 +2519,105 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     ImGui::TextWrapped("You don't have this community track yet (%s). It downloads when you join.",
                                        FormatMegabytes(selectedTrack->mDownloadBytes).c_str());
                 }
+                ImGui::PopTextWrapPos();
                 ImGui::Spacing();
-                if (HoverNetButton("Host Race...", ImVec2(-FLT_MIN, 0))) {
+                if (HoverNetQuietButton("Host Race...", ImVec2(-FLT_MIN, 0))) {
                     requestOpenHostPopup = true;
                 }
             }
-            // Push Quit to the bottom of the panel, mirroring the Windows dialog's
-            // spaced-out button column.
+            // What just happened ("Race created", "Joined - waiting for host", errors...)
+            // lives here, in the column's spare space, instead of a banner of its own.
+            if (!statusText.empty()) {
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+                ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
+                ImGui::TextWrapped("%s", statusText.c_str());
+                ImGui::PopStyleColor();
+            }
+            // Leaving the lobby sits apart at the bottom so it is not hit by mistake.
             ImGui::SetCursorPosY(topHeight - ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().WindowPadding.y);
-            if (HoverNetButton("Quit", ImVec2(-FLT_MIN, 0))) {
+            if (HoverNetQuietButton("Back to Menu", ImVec2(-FLT_MIN, 0))) {
                 running = false;
             }
             ImGui::EndChild();
 
+            // ---- bottom row: who is here, and the chat ----
             ImGui::BeginChild("UsersListPanel", ImVec2(leftColWidth, 0), true);
-            HoverNetSectionHeading("Users list");
-            if (ImGui::BeginListBox("##users", ImVec2(-FLT_MIN, -FLT_MIN))) {
-                for (const RaceServerPeer& user : lobbyUsers) {
-                    ImGui::Selectable(user.mName.c_str());
-                }
-                ImGui::EndListBox();
+            // You are always in the list, then everyone else who is in the lobby (the
+            // server announces only the *other* users, so you have to add yourself).
+            std::vector<std::string> otherUsers;
+            for (const RaceServerPeer& user : lobbyUsers) {
+                if (user.mName != username) otherUsers.push_back(user.mName);
             }
+            std::sort(otherUsers.begin(), otherUsers.end(), [](const std::string& a, const std::string& b) {
+                std::string la = a, lb = b;
+                for (char& c : la) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                for (char& c : lb) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                return la != lb ? la < lb : a < b;
+            });
+            {
+                char heading[48];
+                std::snprintf(heading, sizeof(heading), "Users list (%d)", 1 + static_cast<int>(otherUsers.size()));
+                HoverNetSectionHeading(heading);
+            }
+            ImGui::BeginChild("UsersListBox", ImVec2(-FLT_MIN, -FLT_MIN), true);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f)); // compact rows
+            ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
+            ImGui::Text("%s (you)", username.c_str());
+            ImGui::PopStyleColor();
+            for (const std::string& name : otherUsers) {
+                ImGui::TextUnformatted(name.c_str());
+            }
+            ImGui::PopStyleVar();
+            ImGui::EndChild();
             ImGui::EndChild();
 
             ImGui::SameLine();
             ImGui::BeginChild("ChatPanel", ImVec2(0, 0), true);
-            HoverNetSectionHeading("Chat section");
-            ImGui::BeginChild("ChatLog", ImVec2(0, ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeightWithSpacing()),
-                              true);
-            for (const std::string& chatLine : chatLog) {
-                ImGui::TextWrapped("%s", chatLine.c_str());
-            }
-            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
-                ImGui::SetScrollHereY(1.0f);
+            HoverNetSectionHeading("Chat");
+            const float chatInputRow = ImGui::GetFrameHeightWithSpacing();
+            ImGui::BeginChild("ChatLog", ImVec2(0, ImGui::GetContentRegionAvail().y - chatInputRow), true);
+            {
+                // Scroll positions read here are last frame's, i.e. *before* any line
+                // added this frame: if the log was at the bottom (or a message was just
+                // sent) it stays pinned to the newest message; if the player scrolled up
+                // to read history it is left alone.
+                const bool pinned = chatForcePin || ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 4.0f;
+                for (const std::string& chatLine : chatLog) {
+                    const bool systemLine = chatLine.size() > 2 && chatLine[0] == '*' && chatLine[1] == ' ';
+                    if (systemLine) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.62f, 0.62f, 0.69f, 1.0f));
+                    ImGui::TextWrapped("%s", chatLine.c_str());
+                    if (systemLine) ImGui::PopStyleColor();
+                }
+                if (pinned) {
+                    ImGui::SetScrollHereY(1.0f);
+                }
+                chatForcePin = false;
+                chatWasPinned = pinned;
             }
             ImGui::EndChild();
             if (focusChatInput) {
                 ImGui::SetKeyboardFocusHere();
                 focusChatInput = false;
             }
-            ImGui::SetNextItemWidth(-90);
+            const float jumpWidth = chatWasPinned ? 0.0f : 132.0f;
+            ImGui::SetNextItemWidth(-(90.0f + jumpWidth + (chatWasPinned ? 0.0f : spacing)));
             bool sendChat = ImGui::InputText("##chat", chatBuf, sizeof(chatBuf),
                                              ImGuiInputTextFlags_EnterReturnsTrue);
+            if (!chatWasPinned) {
+                ImGui::SameLine();
+                if (HoverNetQuietButton("Jump to latest", ImVec2(jumpWidth, 0))) {
+                    chatForcePin = true;
+                }
+            }
             ImGui::SameLine();
             sendChat = HoverNetButton("Send", ImVec2(-FLT_MIN, 0)) || sendChat;
             if (sendChat && chatBuf[0] != '\0') {
                 const std::string outgoing(chatBuf);
                 if (client.SendMessage(eRSMsgChatMessage, outgoing.data(), outgoing.size())) {
                     pushChat(username + ": " + outgoing);
+                    chatForcePin = true;
                 }
                 chatBuf[0] = '\0';
                 ImGui::SetKeyboardFocusHere(-1);
@@ -2603,6 +2750,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        CaptureFrameIfRequested(renderer, framesShown, pFrameLimit);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         if (requestOpenRecoverySettings) {

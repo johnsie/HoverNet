@@ -541,6 +541,14 @@ if(BUILD_TESTING AND NOT WIN32)
         COMMAND HoverNetGame2Player --autoplay --frames 600
                 --memory-report "${CMAKE_BINARY_DIR}/memory-baseline-report.csv")
     set_tests_properties(HoverNetMemoryBaselineSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    if(HOVERNET_SANITIZE)
+        # This test judges a leak by RSS growth over a 600-frame run (limit 20%). Under
+        # AddressSanitizer the same run grows 13-22% from the sanitizer's own overhead
+        # (shadow/redzone memory), so it passes or fails with machine load; the normal
+        # build grows about 0.5%. Real leaks are caught by LeakSanitizer in the rest of
+        # the suite, and this check still runs on the non-sanitizer build.
+        set_tests_properties(HoverNetMemoryBaselineSmoke PROPERTIES DISABLED TRUE)
+    endif()
     set_tests_properties(HoverNetLinuxBootstrap HoverNetTrackViewer HoverNetTrack3DViewer HoverNetGame2Player HoverNetGame2PlayerAutoplay HoverNetGame2PlayerSwitchback HoverNetGame2PlayerAudio HoverNetGame2PlayerCombat HoverNetGame2PlayerWeaponCycle HoverNetGame2PlayerJump HoverNetGame2PlayerFire HoverNetGame2PlayerControls HoverNetSettingsScreenSmoke HoverNetControlsReferenceSmoke HoverNetPauseMenuSmoke HoverNetQuitConfirmationSmoke HoverNetPostRaceSmoke HoverNetOnboardingSmoke HoverNetOnboardingConfigSmoke HoverNetGame2PlayerDebug HoverNetTrack3DViewerPowerup HoverNetMemoryBaselineSmoke
         PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 endif()
