@@ -4,6 +4,10 @@
 NetTarget/**/Release/*.pdb
 NetTarget/**/Debug/*.pdb
 
+# The community track pack is a separate (~700 MB) download, never committed.
+# Only its manifest (NetTarget/CommunityTracks.tsv) lives in the repository.
+NetTarget/CommunityTracks/
+
 # Generated build and package output (at any repository depth)
 build/
 [Dd]ebug/

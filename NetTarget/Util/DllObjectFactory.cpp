@@ -23,6 +23,9 @@
 
 #include "DllObjectFactory.h"
 
+#include <stdexcept>
+#include <string>
+
 #ifndef _WIN32
 #include <limits.h>
 #include <unistd.h>
@@ -309,6 +312,13 @@ void MR_ObjectFromFactory::SerializePtr( CArchive& pArchive, MR_ObjectFromFactor
       else
       {
          pPtr = MR_DllObjectFactory::CreateObject( lId );
+         if( pPtr == NULL )
+         {
+            // The track references an object type this factory cannot build;
+            // there is no way to know how many bytes it would have consumed.
+            throw std::runtime_error( "unknown object type " + std::to_string( (int)lId.mDllId ) +
+                                      ":" + std::to_string( (int)lId.mClassId ) );
+         }
          pPtr->Serialize( pArchive );
       }
    }

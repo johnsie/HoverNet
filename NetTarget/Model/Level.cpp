@@ -22,8 +22,29 @@
 #include "StdAfx.h"
 
 #include "Level.h"
+#include <stdexcept>
 
 #define new DEBUG_NEW
+
+// Level loading deliberately survives a malformed section so the game can run
+// the rest of the track; this counter lets a validator tell "loaded cleanly"
+// from "loaded after swallowing an error".
+static int gsSerializationFaults = 0;
+
+static void NoteSerializationFault()
+{
+   gsSerializationFaults++;
+}
+
+int MR_Level::GetSerializationFaultCount()
+{
+   return gsSerializationFaults;
+}
+
+void MR_Level::ResetSerializationFaultCount()
+{
+   gsSerializationFaults = 0;
+}
 
 // MR_Level implementation
 MR_Level::MR_Level( BOOL pAllowRendering )
@@ -121,6 +142,11 @@ void MR_Level::Serialize( CArchive& pArchive )
             pArchive >> mStartingRoom[lPlayerNo];
             mStartingPosition[lPlayerNo].Serialize( pArchive );
             pArchive >> mStartingOrientation[lPlayerNo];
+
+            // Tracks may store a negative angle (e.g. -796). Every consumer indexes
+            // the 0..MR_2PI-1 sin/cos tables with it, so store the equivalent
+            // positive angle once, here, instead of in each caller.
+            mStartingOrientation[lPlayerNo] = MR_NORMALIZE_ANGLE( mStartingOrientation[lPlayerNo] );
          }
       }
 
@@ -164,6 +190,7 @@ void MR_Level::Serialize( CArchive& pArchive )
          }
          catch(...)
          {
+            NoteSerializationFault();
             // If one room fails, continue with next room
          }
       }   
@@ -176,6 +203,7 @@ void MR_Level::Serialize( CArchive& pArchive )
          }
          catch(...)
          {
+            NoteSerializationFault();
             // If one feature fails, continue with next feature
          }
       }   
@@ -215,6 +243,7 @@ void MR_Level::Serialize( CArchive& pArchive )
          }
          catch(...)
          {
+            NoteSerializationFault();
             // If room element list fails, continue
          }
       }   
@@ -230,6 +259,7 @@ void MR_Level::Serialize( CArchive& pArchive )
          }
          catch(...)
          {
+            NoteSerializationFault();
             // If surface logic state fails, continue
          }
       }   
@@ -242,12 +272,14 @@ void MR_Level::Serialize( CArchive& pArchive )
          }
          catch(...)
          {
+            NoteSerializationFault();
             // If feature logic state fails, continue
          }
       }   
    }
    catch(...)
    {
+      NoteSerializationFault();
       // Final catch-all for any remaining issues
       // Level will load with whatever data was successfully deserialized
    }
@@ -692,6 +724,14 @@ void MR_Level::Room::AudibleRoom::Serialize(  CArchive& pArchive )
       // Retrieve data
       pArchive >> mNbVertexSources;
 
+      // Some community tracks hold implausible counts here (e.g. 0x50000000);
+      // trusting them allocates gigabytes and then loops for minutes.
+      if( mNbVertexSources < 0 || mNbVertexSources > 4096 )
+      {
+         mNbVertexSources = 0;
+         throw std::runtime_error( "implausible audible-room vertex count" );
+      }
+
       mVertexList = new int[ mNbVertexSources ];
       mSoundCoefficient = new BYTE[ mNbVertexSources ];
 
@@ -709,7 +749,12 @@ int MR_Level::FindRoomForPoint( const MR_2DCoordinate& pPosition, int pStartingR
 {
    int lReturnValue = -1;
 
-
+   // Community tracks can carry neighbor links outside the room table, so
+   // neither the caller's room nor a neighbor may be trusted as an index.
+   if( pStartingRoom < 0 || pStartingRoom >= GetRoomCount() )
+   {
+      return -1;
+   }
 
    // Verify if the position is included in the current section
    if( MR_GetPolygonInclusion( SectionShape( &mRoomList[ pStartingRoom ] ),
@@ -724,7 +769,7 @@ int MR_Level::FindRoomForPoint( const MR_2DCoordinate& pPosition, int pStartingR
       {
          int lNeighbor = mRoomList[ pStartingRoom ].mNeighborList[ lCounter ];
 
-         if( lNeighbor != -1 )
+         if( lNeighbor >= 0 && lNeighbor < GetRoomCount() )
          {
             if( MR_GetPolygonInclusion( SectionShape( &mRoomList[ lNeighbor ] ),
                                         pPosition     ))
@@ -811,8 +856,10 @@ void MR_Level::Section::SerializeStructure( CArchive& pArchive )
          // Simple data
          pArchive >> mNbVertex;
          
-         // Safety: clamp vertex count to reasonable range
-         if( mNbVertex < 3 || mNbVertex > 10000 )
+         // Safety: reject an implausible vertex count. Degenerate sections with
+         // fewer than three vertices do occur in community tracks and must still
+         // be read at their true size, or every later field is misaligned.
+         if( mNbVertex < 0 || mNbVertex > 10000 )
             mNbVertex = 3;
          
          pArchive >> mFloorLevel
@@ -834,6 +881,7 @@ void MR_Level::Section::SerializeStructure( CArchive& pArchive )
       }
       catch(...)
       {
+         NoteSerializationFault();
          // If deserialization fails, initialize with minimal valid section
          if( mVertexList == NULL )
          {
@@ -865,6 +913,13 @@ void MR_Level::Section::SerializeStructure( CArchive& pArchive )
       if( !pArchive.IsStoring() )
       {
          mWallTexture = new MR_SurfaceElement*[ mNbVertex ];
+
+         // A failed read below is swallowed by the catch, so no entry may be
+         // left uninitialised for ~Section/SerializeLogicState to dereference.
+         for( lCounter = 0; lCounter < mNbVertex; lCounter++ )
+         {
+            mWallTexture[ lCounter ] = NULL;
+         }
       }
 
       for( lCounter = 0; lCounter < mNbVertex; lCounter++ )
@@ -874,6 +929,7 @@ void MR_Level::Section::SerializeStructure( CArchive& pArchive )
    }
    catch(...)
    {
+      NoteSerializationFault();
       // If texture serialization fails, create default wall textures
       if( mWallTexture == NULL && !pArchive.IsStoring() )
       {
@@ -1045,6 +1101,7 @@ void MR_Level::Room::SerializeStructure( CArchive& pArchive )
       }
       catch(...)
       {
+         NoteSerializationFault();
          // If deserialization fails, just initialize with empty data
          // This allows the game to continue even with corrupted/incompatible track files
          mNbChild = 0;
@@ -1169,6 +1226,7 @@ void MR_Level::FreeElement::SerializeList( CArchive& pArchive, FreeElement** pLi
       }
       catch(...)
       {
+         NoteSerializationFault();
          // If element list deserialization fails, just continue with empty list
          // This prevents corrupted track files from crashing the game
       }

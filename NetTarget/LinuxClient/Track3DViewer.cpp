@@ -3,6 +3,7 @@
 #include <afxtempl.h>
 #endif
 
+#include "TrackCatalog.h"
 #include "../GraphicsSDL2/SDL2Graphics.h"
 #include "../Game2/ClientSession.h"
 #ifdef HOVERNET_GAME2_PLAYER
@@ -10,6 +11,7 @@
 #include "../VideoServices/SoundServer.h"
 #include "RaceServerClient.h"
 #include "../ThirdParty/imgui/imgui.h"
+#include "../ThirdParty/imgui/imgui_internal.h"
 #include "../ThirdParty/imgui/backends/imgui_impl_sdl2.h"
 #include "../ThirdParty/imgui/backends/imgui_impl_sdlrenderer2.h"
 #endif
@@ -43,6 +45,7 @@
 #include <fstream>
 #include <string>
 #include <map>
+#include <sstream>
 #include <vector>
 
 namespace
@@ -400,10 +403,14 @@ MR_SpriteHandle* LoadUiFont()
 // (pFrameLimit < 0) this blocks indefinitely for a human, as a lobby screen should.
 // With it, an automated/headless run (e.g. under ctest, with no real keyboard input
 // ever arriving) can't hang here forever.
-// Tracks the server will actually accept (kept in sync with the whitelist in
-// ServerSocket.cpp's eRSMsgHostRace handler).
-const char* const kHostableTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River", "Tidal Causeway", "Metro Spiral"};
-constexpr int kHostableTrackCount = sizeof(kHostableTracks) / sizeof(kHostableTracks[0]);
+// The bundled (official) tracks, in the order players see them. They always sit
+// at the top of every track selector; community tracks follow (see TrackCatalog).
+const char* const kOfficialTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River", "Tidal Causeway", "Metro Spiral"};
+constexpr int kOfficialTrackCount = sizeof(kOfficialTracks) / sizeof(kOfficialTracks[0]);
+
+// The catalog of every track this install can play (defined after SourcePath and
+// ConfigDirPath, which it needs to find the track folders).
+TrackCatalog& Tracks();
 
 struct TrackGuide
 {
@@ -425,15 +432,69 @@ const TrackGuide kTrackGuides[] = {
     {"Water", "Intermediate", "A broad tidal circuit with offset chicanes, water gardens, and twin jumps.", 3},
     {"Technical", "Advanced", "A rotated skyline route with rapid direction changes and tactical pickup lines.", 3},
 };
-static_assert(sizeof(kTrackGuides) / sizeof(kTrackGuides[0]) == kHostableTrackCount,
-              "Every hostable track needs setup guidance");
+static_assert(sizeof(kTrackGuides) / sizeof(kTrackGuides[0]) == kOfficialTrackCount,
+              "Every official track needs setup guidance");
+
+// What the setup screens show under "Course briefing". Official tracks carry
+// hand-written guidance; community tracks get a generated one from the catalog.
+struct TrackBriefing
+{
+    std::string mCharacter;
+    std::string mDifficulty;
+    std::string mDescription;
+    int mSuggestedLaps = 3;
+    bool mFreePlay = false;
+};
+
+TrackBriefing BriefingFor(int index)
+{
+    TrackBriefing briefing;
+    const TrackEntry* entry = Tracks().Get(index);
+    if (entry == nullptr) return briefing;
+    if (entry->mOfficial && index < kOfficialTrackCount) {
+        const TrackGuide& guide = kTrackGuides[index];
+        briefing.mCharacter = guide.mCharacter;
+        briefing.mDifficulty = guide.mDifficulty;
+        briefing.mDescription = guide.mDescription;
+        briefing.mSuggestedLaps = guide.mSuggestedLaps;
+        return briefing;
+    }
+    briefing.mFreePlay = entry->mFreePlay;
+    briefing.mCharacter = entry->mFreePlay ? "Free play" : "Race";
+    briefing.mDifficulty = "Unrated";
+    briefing.mDescription = "A community-made track from the classic HoverRace library.";
+    if (entry->mFreePlay) {
+        briefing.mDescription += " It has no finish line, so there are no laps to complete: "
+                                 "drive, fight and explore for as long as you like.";
+    }
+    if (entry->mStarts > 0) {
+        briefing.mDescription += " Starts for " + std::to_string(entry->mStarts) + " players.";
+    }
+    return briefing;
+}
+
+// The server limits a race's display name to 32 bytes while track names may run
+// to 63, so a long track name is shortened for the race label (cut at a UTF-8
+// character boundary; the full name still travels separately as the track).
+std::string RaceNameForTrack(const std::string& trackName)
+{
+    const std::size_t kMaxRaceNameBytes = 32;
+    if (trackName.size() <= kMaxRaceNameBytes) return trackName;
+    std::size_t length = kMaxRaceNameBytes;
+    while (length > 0 && (static_cast<unsigned char>(trackName[length]) & 0xC0) == 0x80) --length;
+    return trackName.substr(0, length);
+}
 
 int FindHostableTrack(const std::string& trackName)
 {
-    for (int index = 0; index < kHostableTrackCount; ++index) {
-        if (trackName == kHostableTracks[index]) return index;
-    }
-    return -1;
+    return Tracks().Find(trackName);
+}
+
+// Name of the track at a catalog index (falls back to the first official track).
+std::string TrackNameAt(int index)
+{
+    const TrackEntry* entry = Tracks().Get(index);
+    return entry != nullptr ? entry->mName : std::string(kOfficialTracks[0]);
 }
 
 void HoverNetSectionHeading(const char* label);
@@ -454,7 +515,8 @@ TrackPreview LoadTrackPreview(SDL_Renderer* renderer, const char* trackName)
 
     try {
         MR_RecordFile track;
-        const std::string path = SourcePath((std::string("NetTarget/Tracks/") + trackName + ".trk").c_str());
+        const std::string path = Tracks().PathFor(trackName);
+        if (path.empty()) return preview;
         if (!track.OpenForRead(path.c_str()) || track.GetNbRecords() < 4) return preview;
 
         std::array<MR_UInt8, MR_NB_COLORS * 3> palette{};
@@ -601,6 +663,40 @@ std::string ConfigDirPath()
     return dir;
 }
 
+// The track folders a catalog searches. Official tracks ship with the game; the
+// community pack is a separate download, so it is looked for beside the game
+// (NetTarget/CommunityTracks) and in the per-user config folder.
+// HOVERNET_COMMUNITY_TRACKS_DIR and HOVERNET_COMMUNITY_MANIFEST can point at any
+// other folder / manifest (used by tests).
+TrackCatalog& Tracks()
+{
+    static TrackCatalog catalog;
+    static bool built = false;
+    if (!built) {
+        built = true;
+        auto directoryOf = [](const std::string& file) {
+            const std::size_t slash = file.find_last_of("/\\");
+            return slash == std::string::npos ? std::string("./") : file.substr(0, slash + 1);
+        };
+        TrackCatalogOptions options;
+        for (const char* name : kOfficialTracks) options.mOfficialNames.push_back(name);
+        options.mOfficialDirectories.push_back(directoryOf(SourcePath("NetTarget/Tracks/ClassicH.trk")));
+        options.mManifestPath = SourcePath("NetTarget/CommunityTracks.tsv");
+        const char* manifestOverride = std::getenv("HOVERNET_COMMUNITY_MANIFEST");
+        if (manifestOverride != nullptr && manifestOverride[0] != '\0') {
+            options.mManifestPath = manifestOverride;
+        }
+        const char* extra = std::getenv("HOVERNET_COMMUNITY_TRACKS_DIR");
+        if (extra != nullptr && extra[0] != '\0') {
+            options.mCommunityDirectories.push_back(std::string(extra) + "/");
+        }
+        options.mCommunityDirectories.push_back(directoryOf(options.mManifestPath) + "CommunityTracks/");
+        options.mCommunityDirectories.push_back(ConfigDirPath() + "/CommunityTracks/");
+        catalog.Build(options);
+    }
+    return catalog;
+}
+
 // One-time upgrade path: if oldDotfilePath (this setting's old location directly
 // in $HOME) exists but newPath (under ConfigDirPath()) doesn't yet, copy it over
 // so upgrading players don't silently lose settings the first time they run a
@@ -625,10 +721,50 @@ void MigrateLegacyDotfile(const std::string& oldDotfilePath, const std::string& 
 
 struct HostPrefs
 {
-    int mTrackIndex = 0;
+    int mTrackIndex = 0;   // index into the track catalog (official tracks first)
     int mLaps = 5;
     bool mWeapons = false;
 };
+
+// Remembered choices are stored by track NAME, not catalog position: the catalog
+// grows and reorders as the community pack is installed or updated, so an index
+// would silently point at a different track. Line 1 is the track name, line 2 is
+// "laps weapons". Older builds wrote "trackIndex laps weapons" on one line; that
+// index meant the old fixed list of official tracks, which is still the start of
+// the catalog, so it is read as-is.
+void ReadRacePrefsFile(const std::string& path, HostPrefs& prefs)
+{
+    std::ifstream in(path);
+    std::string first;
+    if (!std::getline(in, first)) return;
+    while (!first.empty() && (first.back() == '\r' || first.back() == '\n')) first.pop_back();
+
+    int track = -1, laps = 0, weapons = 0;
+    {
+        std::istringstream legacy(first);
+        std::string extra;
+        int legacyTrack = 0, legacyLaps = 0, legacyWeapons = 0;
+        if ((legacy >> legacyTrack >> legacyLaps >> legacyWeapons) && !(legacy >> extra)) {
+            if (legacyTrack >= 0 && legacyTrack < kOfficialTrackCount) { prefs.mTrackIndex = legacyTrack; }
+            if (legacyLaps >= 1 && legacyLaps <= 20) { prefs.mLaps = legacyLaps; }
+            prefs.mWeapons = legacyWeapons != 0;
+            return;
+        }
+    }
+    track = Tracks().Find(first);
+    if (track >= 0) { prefs.mTrackIndex = track; }
+    if (in >> laps >> weapons) {
+        if (laps >= 1 && laps <= 20) { prefs.mLaps = laps; }
+        prefs.mWeapons = weapons != 0;
+    }
+}
+
+void WriteRacePrefsFile(const std::string& path, const HostPrefs& prefs)
+{
+    std::ofstream out(path);
+    out << TrackNameAt(prefs.mTrackIndex) << '\n'
+        << prefs.mLaps << ' ' << (prefs.mWeapons ? 1 : 0) << '\n';
+}
 
 std::string HostPrefsPath()
 {
@@ -644,20 +780,13 @@ std::string HostPrefsPath()
 HostPrefs LoadHostPrefs()
 {
     HostPrefs prefs;
-    std::ifstream in(HostPrefsPath());
-    int track = 0, laps = 0, weapons = 0;
-    if (in >> track >> laps >> weapons) {
-        if (track >= 0 && track < kHostableTrackCount) { prefs.mTrackIndex = track; }
-        if (laps >= 1 && laps <= 20) { prefs.mLaps = laps; }
-        prefs.mWeapons = weapons != 0;
-    }
+    ReadRacePrefsFile(HostPrefsPath(), prefs);
     return prefs;
 }
 
 void SaveHostPrefs(const HostPrefs& prefs)
 {
-    std::ofstream out(HostPrefsPath());
-    out << prefs.mTrackIndex << ' ' << prefs.mLaps << ' ' << (prefs.mWeapons ? 1 : 0) << '\n';
+    WriteRacePrefsFile(HostPrefsPath(), prefs);
 }
 
 std::string LocalRacePrefsPath()
@@ -684,20 +813,134 @@ HostPrefs LoadLocalRacePrefs()
     HostPrefs prefs;
     prefs.mLaps = 1;
     prefs.mWeapons = true;
-    std::ifstream in(LocalRacePrefsPath());
-    int track = 0, laps = 0, weapons = 0;
-    if (in >> track >> laps >> weapons) {
-        if (track >= 0 && track < kHostableTrackCount) { prefs.mTrackIndex = track; }
-        if (laps >= 1 && laps <= 20) { prefs.mLaps = laps; }
-        prefs.mWeapons = weapons != 0;
-    }
+    ReadRacePrefsFile(LocalRacePrefsPath(), prefs);
     return prefs;
 }
 
 void SaveLocalRacePrefs(const HostPrefs& prefs)
 {
-    std::ofstream out(LocalRacePrefsPath());
-    out << prefs.mTrackIndex << ' ' << prefs.mLaps << ' ' << (prefs.mWeapons ? 1 : 0) << '\n';
+    WriteRacePrefsFile(LocalRacePrefsPath(), prefs);
+}
+
+
+// Test hook for headless UI regression runs: when HOVERNET_CAPTURE_FRAME names a
+// file, the last frame of a frame-limited screen is saved there as a BMP. Call it
+// after the draw data is rendered and before SDL_RenderPresent.
+void CaptureFrameIfRequested(SDL_Renderer* renderer, int framesShown, int frameLimit)
+{
+    const char* path = std::getenv("HOVERNET_CAPTURE_FRAME");
+    if (path == nullptr || path[0] == '\0' || renderer == nullptr || frameLimit < 0 ||
+        framesShown != frameLimit) {
+        return;
+    }
+    int width = 0, height = 0;
+    if (SDL_GetRendererOutputSize(renderer, &width, &height) != 0 || width <= 0 || height <= 0) return;
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (surface == nullptr) return;
+    if (SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888, surface->pixels, surface->pitch) == 0) {
+        SDL_SaveBMP(surface, path);
+    }
+    SDL_FreeSurface(surface);
+}
+
+bool ContainsIgnoreCase(const std::string& text, const std::string& needle)
+{
+    if (needle.empty()) return true;
+    auto lower = [](unsigned char c) { return static_cast<char>(std::tolower(c)); };
+    std::string haystack(text.size(), ' ');
+    std::string wanted(needle.size(), ' ');
+    for (std::size_t i = 0; i < text.size(); ++i) haystack[i] = lower(static_cast<unsigned char>(text[i]));
+    for (std::size_t i = 0; i < needle.size(); ++i) wanted[i] = lower(static_cast<unsigned char>(needle[i]));
+    return haystack.find(wanted) != std::string::npos;
+}
+
+// The track dropdown shared by every selector (local setup and the online host
+// dialog). Official tracks are always listed first under their own heading; the
+// community library follows under another, with a search box because it holds
+// over a thousand names. 'slot' keeps each selector's search text separate.
+// Returns true when the player picked a different track.
+bool TrackSelector(const char* id, int slot, int& index)
+{
+    static std::string searches[4];
+    std::string& search = searches[slot & 3];
+
+    const TrackCatalog& catalog = Tracks();
+    const TrackEntry* current = catalog.Get(index);
+    bool changed = false;
+
+    // Test hook: opens the dropdown on its first frame so a headless run can
+    // capture the popup (see CaptureFrameIfRequested). Never set in normal play.
+    static bool sOpenedForTest = false;
+    if (!sOpenedForTest && std::getenv("HOVERNET_TEST_OPEN_TRACK_DROPDOWN") != nullptr) {
+        sOpenedForTest = true;
+        ImGui::OpenPopupEx(ImHashStr("##ComboPopup", 0, ImGui::GetID(id)));
+    }
+
+    if (!ImGui::BeginCombo(id, current != nullptr ? current->mName.c_str() : "", ImGuiComboFlags_HeightLarge)) {
+        return false;
+    }
+
+    if (catalog.Count() > catalog.OfficialCount()) {
+        char buffer[64];
+        std::snprintf(buffer, sizeof(buffer), "%s", search.c_str());
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere();
+        }
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputTextWithHint("##tracksearch", "Search tracks...", buffer, sizeof(buffer))) {
+            search = buffer;
+        }
+    }
+
+    std::vector<int> official;
+    std::vector<int> community;
+    for (int i = 0; i < catalog.Count(); ++i) {
+        const TrackEntry& entry = catalog.Entries()[static_cast<std::size_t>(i)];
+        if (!ContainsIgnoreCase(entry.mName, search)) continue;
+        (entry.mOfficial ? official : community).push_back(i);
+    }
+
+    auto drawEntry = [&](int i) {
+        const TrackEntry& entry = catalog.Entries()[static_cast<std::size_t>(i)];
+        ImGui::PushID(i);
+        const bool selected = i == index;
+        if (ImGui::Selectable(entry.mName.c_str(), selected)) {
+            if (i != index) changed = true;
+            index = i;
+        }
+        if (selected && ImGui::IsWindowAppearing()) {
+            ImGui::SetItemDefaultFocus();
+        }
+        if (entry.mFreePlay) {
+            const float tagWidth = ImGui::CalcTextSize("free play").x;
+            ImGui::SameLine(std::max(ImGui::GetCursorPosX(),
+                                     ImGui::GetWindowContentRegionMax().x - tagWidth));
+            ImGui::TextDisabled("free play");
+        }
+        ImGui::PopID();
+    };
+
+    if (!official.empty()) {
+        HoverNetSectionHeading("Official tracks");
+        for (int i : official) drawEntry(i);
+    }
+    if (!community.empty()) {
+        ImGui::Spacing();
+        HoverNetSectionHeading("Community tracks");
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(community.size()));
+        while (clipper.Step()) {
+            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
+                drawEntry(community[static_cast<std::size_t>(row)]);
+            }
+        }
+    }
+    if (official.empty() && community.empty()) {
+        ImGui::TextDisabled("No tracks match \"%s\"", search.c_str());
+    }
+
+    ImGui::EndCombo();
+    return changed;
 }
 
 enum class LobbyPhase
@@ -1445,11 +1688,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
 
     HostPrefs hostPrefs = LoadHostPrefs();
     if (pAutoHostStart) {
-        hostPrefs.mTrackIndex = std::max(0, std::min(pAutoTrackIndex, kHostableTrackCount - 1));
+        hostPrefs.mTrackIndex = std::max(0, std::min(pAutoTrackIndex, Tracks().Count() - 1));
         hostPrefs.mLaps = 1;
         hostPrefs.mWeapons = true;
     }
-    std::array<TrackPreview, kHostableTrackCount> lobbyTrackPreviews{};
+    std::vector<TrackPreview> lobbyTrackPreviews(static_cast<std::size_t>(Tracks().Count()));
 
     auto refreshGames = [&]() {
         gamesBeingListed.clear();
@@ -1480,6 +1723,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         if (!games.empty() && selected >= 0 && selected < static_cast<int>(games.size()) &&
             !games[static_cast<std::size_t>(selected)].mStarted) {
             const RaceServerGameInfo& game = games[static_cast<std::size_t>(selected)];
+            if (FindHostableTrack(game.mTrack) < 0) {
+                statusText = "Track '" + game.mTrack + "' is not installed - install the community track pack to join";
+                return;
+            }
             if (client.JoinGameById(game.mRaceId)) {
                 outJoinedName = game.mName;
                 outTrackName = game.mTrack;
@@ -1495,11 +1742,12 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         // The race name is just the track name -- no reason to make the host type
         // one. Two people can host the same track at once (races are joined by id,
         // see JoinGameById), so this doesn't collide.
-        const std::string raceName = kHostableTracks[hostPrefs.mTrackIndex];
-        outTrackName = kHostableTracks[hostPrefs.mTrackIndex];
+        const std::string trackName = TrackNameAt(hostPrefs.mTrackIndex);
+        const std::string raceName = RaceNameForTrack(trackName);
+        outTrackName = trackName;
         outNumLaps = hostPrefs.mLaps;
         outWeapons = hostPrefs.mWeapons;
-        if (client.HostRace(raceName, kHostableTracks[hostPrefs.mTrackIndex],
+        if (client.HostRace(raceName, trackName,
                              hostPrefs.mLaps, hostPrefs.mWeapons)) {
             outJoinedName = raceName;
             phase = LobbyPhase::eWaitingRoom;
@@ -1942,8 +2190,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 if (trackIndex >= 0) {
                     TrackPreview& preview = lobbyTrackPreviews[trackIndex];
                     if (!preview.mLoaded) {
-                        preview = LoadTrackPreview(graphics.GetRenderer(),
-                                                   kHostableTracks[trackIndex]);
+                        preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(trackIndex).c_str());
                     }
                     ImGui::SameLine();
                     ImGui::BeginChild("SelectedRaceMap", ImVec2(0, 122.0f), false);
@@ -1985,12 +2232,17 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 }
             }
             else {
-                const bool canJoin = selectedGame != nullptr && !selectedGame->mStarted;
+                const bool trackInstalled = selectedGame == nullptr || FindHostableTrack(selectedGame->mTrack) >= 0;
+                const bool canJoin = selectedGame != nullptr && !selectedGame->mStarted && trackInstalled;
                 ImGui::BeginDisabled(!canJoin);
                 if (HoverNetButton("Join Game...", ImVec2(-FLT_MIN, 0))) {
                     joinSelected();
                 }
                 ImGui::EndDisabled();
+                if (!trackInstalled) {
+                    ImGui::TextWrapped("This race uses a community track you don't have. Install the community "
+                                       "track pack to join it.");
+                }
                 ImGui::Spacing();
                 if (HoverNetButton("Host Race...", ImVec2(-FLT_MIN, 0))) {
                     requestOpenHostPopup = true;
@@ -2074,28 +2326,33 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                               ImVec2(controlsWidth, sideBySide ? selectorHeight : 315.0f), false);
             ImGui::TextUnformatted("Track");
             ImGui::SetNextItemWidth(-1.0f);
-            ImGui::Combo("##HostTrack", &hostPrefs.mTrackIndex,
-                         kHostableTracks, kHostableTrackCount);
-            const TrackGuide& guide = kTrackGuides[hostPrefs.mTrackIndex];
+            TrackSelector("##HostTrack", 0, hostPrefs.mTrackIndex);
+            const TrackBriefing guide = BriefingFor(hostPrefs.mTrackIndex);
             ImGui::Spacing();
             HoverNetSectionHeading("Course briefing");
-            ImGui::Text("Style: %s", guide.mCharacter);
+            ImGui::Text("Style: %s", guide.mCharacter.c_str());
             ImGui::SameLine();
-            ImGui::TextDisabled("  Difficulty: %s", guide.mDifficulty);
-            ImGui::TextWrapped("%s", guide.mDescription);
+            ImGui::TextDisabled("  Difficulty: %s", guide.mDifficulty.c_str());
+            ImGui::TextWrapped("%s", guide.mDescription.c_str());
             ImGui::Spacing();
+            ImGui::BeginDisabled(guide.mFreePlay);
             ImGui::TextUnformatted("Laps");
             ImGui::SameLine();
-            ImGui::TextDisabled("Suggested: %d", guide.mSuggestedLaps);
+            if (guide.mFreePlay) {
+                ImGui::TextDisabled("Not used on a free-play track");
+            }
+            else {
+                ImGui::TextDisabled("Suggested: %d", guide.mSuggestedLaps);
+            }
             ImGui::SetNextItemWidth(-1.0f);
             ImGui::SliderInt("##HostLaps", &hostPrefs.mLaps, 1, 20);
+            ImGui::EndDisabled();
             ImGui::Checkbox("Weapons enabled", &hostPrefs.mWeapons);
             ImGui::EndChild();
 
             TrackPreview& preview = lobbyTrackPreviews[hostPrefs.mTrackIndex];
             if (!preview.mLoaded) {
-                preview = LoadTrackPreview(graphics.GetRenderer(),
-                                           kHostableTracks[hostPrefs.mTrackIndex]);
+                preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(hostPrefs.mTrackIndex).c_str());
             }
             if (sideBySide) {
                 ImGui::SameLine(0.0f, gap);
@@ -2651,7 +2908,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     bool running = true;
     bool cancelled = false;
     int framesShown = 0;
-    std::array<TrackPreview, kHostableTrackCount> trackPreviews{};
+    std::vector<TrackPreview> trackPreviews(static_cast<std::size_t>(Tracks().Count()));
 
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
@@ -2725,24 +2982,31 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         ImGui::PushItemWidth(-1.0f);
         ImGui::TextUnformatted("Track");
-        ImGui::Combo("##Track", &prefs.mTrackIndex, kHostableTracks, kHostableTrackCount);
+        TrackSelector("##Track", 1, prefs.mTrackIndex);
         ImGui::PopItemWidth();
 
-        const TrackGuide& guide = kTrackGuides[prefs.mTrackIndex];
+        const TrackBriefing guide = BriefingFor(prefs.mTrackIndex);
         ImGui::Spacing();
         HoverNetSectionHeading("Course briefing");
-        ImGui::Text("Style: %s", guide.mCharacter);
+        ImGui::Text("Style: %s", guide.mCharacter.c_str());
         ImGui::SameLine();
-        ImGui::TextDisabled("  Difficulty: %s", guide.mDifficulty);
-        ImGui::TextWrapped("%s", guide.mDescription);
+        ImGui::TextDisabled("  Difficulty: %s", guide.mDifficulty.c_str());
+        ImGui::TextWrapped("%s", guide.mDescription.c_str());
         ImGui::Spacing();
 
+        ImGui::BeginDisabled(guide.mFreePlay);
         ImGui::TextUnformatted("Laps");
         ImGui::SameLine();
-        ImGui::TextDisabled("Suggested: %d", guide.mSuggestedLaps);
+        if (guide.mFreePlay) {
+            ImGui::TextDisabled("Not used on a free-play track");
+        }
+        else {
+            ImGui::TextDisabled("Suggested: %d", guide.mSuggestedLaps);
+        }
         ImGui::PushItemWidth(-1.0f);
         ImGui::SliderInt("##Laps", &prefs.mLaps, 1, 20);
         ImGui::PopItemWidth();
+        ImGui::EndDisabled();
         ImGui::Spacing();
         ImGui::Checkbox("Weapons enabled", &prefs.mWeapons);
         ImGui::Spacing();
@@ -2760,7 +3024,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         TrackPreview& preview = trackPreviews[prefs.mTrackIndex];
         if (!preview.mLoaded) {
-            preview = LoadTrackPreview(graphics.GetRenderer(), kHostableTracks[prefs.mTrackIndex]);
+            preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(prefs.mTrackIndex).c_str());
         }
         if (sideBySide) {
             ImGui::SameLine(0.0f, gap);
@@ -2783,6 +3047,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        CaptureFrameIfRequested(renderer, framesShown, pFrameLimit);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         SDL_Delay(16);
@@ -2797,7 +3062,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
     LocalRaceSetup result;
     result.confirmed = !cancelled;
-    result.trackName = kHostableTracks[prefs.mTrackIndex];
+    result.trackName = TrackNameAt(prefs.mTrackIndex);
     result.laps = prefs.mLaps;
     result.weapons = prefs.mWeapons;
     if (result.confirmed) {
@@ -4041,8 +4306,13 @@ int RunClient(int argc, char** argv)
     // client deliberately waits until Local Play or the lobby selects a track.
     if (!playerMode) {
         MR_RecordFile* track = new MR_RecordFile;
+#ifdef HOVERNET_GAME2_PLAYER
+        const std::string trackPath = Tracks().PathFor(initialTrackName);
+#else
+        // The standalone viewer is a developer tool for the bundled tracks only.
         const std::string trackPath = SourcePath(("NetTarget/Tracks/" + initialTrackName + ".trk").c_str());
-        if (!track->OpenForRead(trackPath.c_str()) ||
+#endif
+        if (trackPath.empty() || !track->OpenForRead(trackPath.c_str()) ||
             !session.LoadNew(initialTrackName.c_str(), track, 1, allowWeapons, &buffer) ||
             session.GetCurrentLevel() == nullptr) {
             std::fprintf(stderr, "Could not load %s.trk\n", initialTrackName.c_str());
@@ -4220,8 +4490,8 @@ int RunClient(int argc, char** argv)
         raceWasOnline = false;
 
         MR_RecordFile* newTrackFile = new MR_RecordFile;
-        const std::string newTrackPath = SourcePath(("NetTarget/Tracks/" + newTrackName + ".trk").c_str());
-        if (!newTrackFile->OpenForRead(newTrackPath.c_str()) ||
+        const std::string newTrackPath = Tracks().PathFor(newTrackName);
+        if (newTrackPath.empty() || !newTrackFile->OpenForRead(newTrackPath.c_str()) ||
             !session.LoadNew(newTrackName.c_str(), newTrackFile, newLaps, newWeapons ? TRUE : FALSE, &buffer) ||
             session.GetCurrentLevel() == nullptr || !session.CreateMainCharacter()) {
             std::fprintf(stderr, "Could not load '%s' for local play\n", newTrackName.c_str());
@@ -4268,8 +4538,8 @@ int RunClient(int argc, char** argv)
         // too, and every stale remote craft from any earlier race dropped.
         if (!joinedTrack.empty()) {
             MR_RecordFile* joinedTrackFile = new MR_RecordFile;
-            const std::string joinedTrackPath = SourcePath(("NetTarget/Tracks/" + joinedTrack + ".trk").c_str());
-            if (!joinedTrackFile->OpenForRead(joinedTrackPath.c_str()) ||
+            const std::string joinedTrackPath = Tracks().PathFor(joinedTrack);
+            if (joinedTrackPath.empty() || !joinedTrackFile->OpenForRead(joinedTrackPath.c_str()) ||
                 !session.LoadNew(joinedTrack.c_str(), joinedTrackFile, joinedLaps, joinedWeapons ? TRUE : FALSE, &buffer) ||
                 session.GetCurrentLevel() == nullptr || !session.CreateMainCharacter()) {
                 std::fprintf(stderr, "Could not load '%s' for the joined race\n", joinedTrack.c_str());
@@ -4408,6 +4678,10 @@ int RunClient(int argc, char** argv)
             RunOnboardingScreen(graphics, frameLimit);
             g_QuitConfirmed = true;
         }
+        else if (HasArgument(argc, argv, "--local-setup-screen")) {
+            RunLocalRaceSetup(graphics, buffer, viewport, *menuFontHandle->GetSprite(), frameLimit);
+            g_QuitConfirmed = true;
+        }
         else if (frameLimit < 0 && !HasCompletedOnboarding()) {
             if (RunOnboardingScreen(graphics, frameLimit)) SaveOnboardingComplete();
         }
@@ -4493,6 +4767,10 @@ int RunClient(int argc, char** argv)
         // Menu-only bounded runs and a confirmed quit have no race to report or
         // enter. Returning here also prevents reads of race-only state after the
         // menu flow, which previously produced corrupted counters in real logs.
+#ifdef HOVERNET_GAME2_PLAYER
+        delete menuFontHandle;
+        observer->Delete();
+#endif
         return 0;
     }
     if (playerMode && (level == nullptr || mainCharacter == nullptr)) {
@@ -5007,6 +5285,9 @@ int RunClient(int argc, char** argv)
         }
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
         ++framesRendered;
+#ifdef HOVERNET_GAME2_PLAYER
+        CaptureFrameIfRequested(graphics.GetRenderer(), framesRendered, frameLimit);
+#endif
 
         if (!memoryReportPath.empty() && framesRendered % kMemoryReportSampleEvery == 0) {
             const Uint32 lNowTicks = SDL_GetTicks();

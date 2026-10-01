@@ -205,8 +205,8 @@ void MR_2DViewPort::DrawLine( int pX0, int pY0, int pX1, int pY1, MR_UInt8 pColo
       
 
 
-      int lDXDY   = ((pX1-pX0)<<8)/(pY1-pY0);
-      int lXS     = pX0<<8;
+      int lDXDY   = ((pX1-pX0)*256)/(pY1-pY0);
+      int lXS     = pX0*256;
       int lXE     = lXS + lDXDY/2;
       int lY      = pY0;
 

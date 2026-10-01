@@ -560,8 +560,10 @@ int main( int pArgCount, const char** pArgStrings )
 #endif
       
       
-      // Exit immediately to avoid the legacy destructor crash, while preserving
-      // compilation failures for scripts and CI.
+      // Release the cached factory DLLs explicitly, then exit immediately to
+      // avoid the legacy destructor crash, while preserving compilation
+      // failures for scripts and CI.
+      MR_DllObjectFactory::Clean( FALSE );
       exit( lError ? 1 : 0 );
       }
       catch( ... )
@@ -908,7 +910,7 @@ MR_UInt8* LoadBitmap( FILE* pFile )
          }
          lDestIndex += pYRes;
       }
-      delete lOldBuffer;
+      delete [] lOldBuffer;
    }
    return lReturnValue;
 }

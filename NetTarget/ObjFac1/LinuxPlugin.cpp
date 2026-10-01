@@ -221,6 +221,151 @@ private:
     int frame;
 };
 
+// Headless port of MR_TestElement (TestElement.cpp): the animated, pushable
+// actor (the "electro car" and "demo fighter" models) that classic community
+// tracks scatter around as moving obstacles. It falls under gravity, steps up
+// small ledges, is shoved by craft and missiles, and loops its animation.
+class HeadlessTestElement : public MR_FreeElement
+{
+    class Cylinder : public MR_CylinderShape
+    {
+    public:
+        MR_Int32 mRay = 0;
+        MR_3DCoordinate mPosition;
+
+        MR_Int32 ZMin() const override { return mPosition.mZ; }
+        MR_Int32 ZMax() const override { return mPosition.mZ + 1800; }
+        MR_Int32 AxisX() const override { return mPosition.mX; }
+        MR_Int32 AxisY() const override { return mPosition.mY; }
+        MR_Int32 RayLen() const override { return mRay; }
+    };
+
+public:
+    HeadlessTestElement(const MR_ObjectFromFactoryId& id, int actorResource)
+        : MR_FreeElement(id)
+    {
+        actor = resourceLib ? resourceLib->GetActor(actorResource) : nullptr;
+        collisionShape.mRay = 250;
+        contactShape.mRay = 300;
+        contactEffect.mWeight = 90;
+        contactEffectList.AddTail(&contactEffect);
+    }
+
+    void Render(MR_3DViewPort* destination, MR_SimulationTime) override
+    {
+        if (destination == nullptr || actor == nullptr || actor->GetSequenceCount() == 0) {
+            return;
+        }
+        MR_PositionMatrix matrix;
+        if (destination->ComputePositionMatrix(matrix, mPosition, mOrientation, 1000)) {
+            actor->Draw(destination, matrix, currentSequence, currentFrame);
+        }
+    }
+
+    int Simulate(MR_SimulationTime duration, MR_Level* level, int room) override
+    {
+        elapsedFrameTime += duration;
+        const int frameIncrement = elapsedFrameTime / 75;
+        if (frameIncrement > 0 && actor != nullptr && actor->GetSequenceCount() > 0) {
+            elapsedFrameTime %= 75;
+            currentFrame += frameIncrement;
+            if (currentFrame >= actor->GetFrameCount(currentSequence)) {
+                currentFrame = 0;
+                if (++currentSequence >= actor->GetSequenceCount()) {
+                    currentSequence = 0;
+                }
+            }
+        }
+
+        const MR_3DCoordinate translation((xSpeed * static_cast<int>(duration)) / 256,
+                                          (ySpeed * static_cast<int>(duration)) / 256,
+                                          (-2 * 256 * static_cast<int>(duration)) / 256);
+        MR_3DCoordinate newPosition = mPosition;
+        newPosition.mX += translation.mX;
+        newPosition.mY += translation.mY;
+        newPosition.mZ += translation.mZ;
+
+        Cylinder shape;
+        shape.mRay = collisionShape.mRay;
+        shape.mPosition = newPosition;
+
+        MR_ObstacleCollisionReport report;
+        report.GetContactWithObstacles(level, &shape, room, this);
+        if (report.IsInMaze()) {
+            if (!report.HaveContact()) {
+                mPosition = newPosition;
+                room = report.Room();
+            }
+            else if (report.SpaceToCeiling() > 0 && report.StepHeight() < 100) {
+                newPosition.mZ += report.StepHeight() + 1;
+                shape.mPosition = newPosition;
+                report.GetContactWithObstacles(level, &shape, room, this);
+                if (report.IsInMaze() && !report.HaveContact()) {
+                    mPosition = newPosition;
+                    room = report.Room();
+                }
+            }
+        }
+        return room;
+    }
+
+    const MR_ShapeInterface* GetObstacleShape() override
+    {
+        collisionShape.mPosition = mPosition;
+        return &collisionShape;
+    }
+
+    void ApplyEffect(const MR_ContactEffect* effect, MR_SimulationTime, MR_SimulationTime,
+                     BOOL validDirection, MR_Angle horizontalDirection, MR_Int32, MR_Int32,
+                     MR_Level*) override
+    {
+        const MR_PhysicalCollision* collision =
+            dynamic_cast<const MR_PhysicalCollision*>(effect);
+        if (collision != nullptr && validDirection) {
+            MR_InertialMoment moment;
+            moment.mWeight = 90;
+            moment.mXSpeed = xSpeed;
+            moment.mYSpeed = ySpeed;
+            moment.mZSpeed = 0;
+            moment.ComputeCollision(collision, horizontalDirection);
+            xSpeed = moment.mXSpeed;
+            ySpeed = moment.mYSpeed;
+        }
+    }
+
+    const MR_ContactEffectList* GetEffectList() override
+    {
+        contactEffect.mXSpeed = xSpeed;
+        contactEffect.mYSpeed = ySpeed;
+        contactEffect.mZSpeed = 0;
+        return &contactEffectList;
+    }
+
+    const MR_ShapeInterface* GetReceivingContactEffectShape() override
+    {
+        collisionShape.mPosition = mPosition;
+        return &collisionShape;
+    }
+
+    const MR_ShapeInterface* GetGivingContactEffectShape() override
+    {
+        contactShape.mPosition = mPosition;
+        return &contactShape;
+    }
+
+private:
+    const MR_ResActor* actor = nullptr;
+    int currentSequence = 0;
+    int currentFrame = 0;
+    MR_SimulationTime elapsedFrameTime = 0;
+    int xSpeed = 0;
+    int ySpeed = 0;
+    Cylinder collisionShape;
+    Cylinder contactShape;
+    MR_PhysicalCollision contactEffect;
+    MR_ContactEffectList contactEffectList;
+};
+
 class HeadlessPowerUp : public MR_FreeElement, protected MR_CylinderShape
 {
 public:
@@ -756,6 +901,9 @@ HOVERNET_PLUGIN_EXPORT CString MR_GetObjectFamily(MR_UInt16)
 
 HOVERNET_PLUGIN_EXPORT CString MR_GetObjectDescription(MR_UInt16 classId)
 {
+    if (classId >= 1 && classId <= 5) {
+        return "Classic surface";
+    }
     if (classId >= 50 && classId <= 73) {
         return "Headless track surface";
     }
@@ -790,6 +938,10 @@ HOVERNET_PLUGIN_EXPORT MR_ObjectFromFactory* MR_GetObject(MR_UInt16 classId)
 {
     const MR_ObjectFromFactoryId id = {1, classId};
     switch (classId) {
+    case 10:
+        return new HeadlessTestElement(id, MR_DEMO_FIGHTER);
+    case 13:
+        return new HeadlessTestElement(id, MR_ELECTRO_CAR);
     case 100:
         return new HeadlessHoverRenderer(id);
     case 152:
@@ -822,6 +974,20 @@ HOVERNET_PLUGIN_EXPORT MR_ObjectFromFactory* MR_GetObject(MR_UInt16 classId)
         return resourceLib ? new MR_SpriteHandle(id, resourceLib->GetSprite(MR_PWRUP_STAT)) : nullptr;
     default:
         break;
+    }
+
+    // Classic plain-texture surfaces (MR_DefaultSurface, MR_WoodSurface and the
+    // fire/brick bitmap surfaces in main.cpp's MR_GetObject). Community tracks
+    // built with HoverCad use them; they carry no per-instance state.
+    if (resourceLib) {
+        switch (classId) {
+        case 1: return new HeadlessBitmapSurface(id, resourceLib->GetBitmap(MR_ETALON));
+        case 2: return new HeadlessBitmapSurface(id, resourceLib->GetBitmap(MR_WOOD1));
+        case 3: return new HeadlessBitmapSurface(id, resourceLib->GetBitmap(MR_FIRE));
+        case 4: return new HeadlessBitmapSurface(id, resourceLib->GetBitmap(MR_BIG_BRICK));
+        case 5: return new HeadlessBitmapSurface(id, resourceLib->GetBitmap(MR_RED_BRICK));
+        default: break;
+        }
     }
 
     if (classId < 50 || classId > 73 || !resourceLib) {

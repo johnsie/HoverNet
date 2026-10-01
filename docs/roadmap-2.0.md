@@ -604,6 +604,13 @@ tests cover every bundled track.
 **Exit gate: Passed (29 September 2026).** All bundled tracks pass automated
 validation and the all-track two-client multiplayer playthrough.
 
+**Community track library (1 October 2026).** The game now also plays the
+roughly 1,000 community-made classic tracks, unmodified, as a separate pack
+listed below the official tracks in every selector. This needed engine fixes and
+a lenient `--community` validation level; see [Community tracks](community-tracks.md).
+Known gap: the 2.0 official/strict contract and the bundled tracks are unchanged,
+and the community pack's licensing is unrecorded.
+
 ## Phase 5 — Release engineering and beta
 
 **March–April 2027 · 4–6 weeks**
@@ -614,6 +621,18 @@ outputs. Repository-wide ignore rules cover those outputs at any depth, and the
 Linux CI entry point rejects any matching file that is accidentally committed.
 Smoke-test temporary configuration is written under the build tree instead of
 leaking into the source root.
+
+Linux compiler warnings and sanitizers are in place: `-DHOVERNET_WARNINGS=ON`
+(`-Wall -Wextra`, baseline 236 warnings, not yet `-Werror`) and
+`-DHOVERNET_SANITIZE=ON` (ASan + UBSan). The `build:game:linux:sanitizers`
+GitLab job runs the full 52-test suite under both. The first run found and fixed
+an out-of-bounds trig-table read from negative camera/object orientations, a
+`delete`/`delete[]` mismatch in MazeCompiler, 32-bit overflows in the wall
+renderer, a negative left shift in line drawing, and leaks on the client's quit
+path and in MazeCompiler's DLL cache. Remaining gap: the fixed-point triangle
+rasterizer (`3DViewportRendering.cpp`) still overflows 32-bit arithmetic on far
+off-screen geometry, so that one file is excluded from the signed-overflow check
+only; auditing it needs rendering regression captures first.
 
 - Remove generated binaries and build artefacts from source control; enforce this through `.gitignore` and CI.
 - Add compiler warnings and sanitizers on Linux.

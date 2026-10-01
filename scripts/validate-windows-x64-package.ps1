@@ -11,7 +11,8 @@ $required = @(
     "ObjFac1.dll",
     "SDL2.dll",
     "NetTarget\ObjFac1.dat",
-    "NetTarget\LinuxClient\assets\menu-hovercraft.bmp"
+    "NetTarget\LinuxClient\assets\menu-hovercraft.bmp",
+    "NetTarget\CommunityTracks.tsv"
 )
 
 if ($RequireVCRedist) {

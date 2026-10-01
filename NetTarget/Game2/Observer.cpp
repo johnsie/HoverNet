@@ -1289,6 +1289,12 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
          pTime = -pTime;
          sprintf( lMainLineBuffer, gCountdownStr, (pTime%60000)/1000, (pTime%1000)/10, pViewingCharacter->GetTotalLap() );
       }
+      else if( pSession->IsFreePlay() )
+      {
+         // No finish line or checkpoints: laps can never complete, so show the
+         // elapsed time only instead of a lap counter that would stay at 1.
+         sprintf( lMainLineBuffer, "Free play  %d:%02d.%02d", pTime/60000, (pTime%60000)/1000, (pTime%1000)/10 );
+      }
       else if( pViewingCharacter->GetTotalLap()<=pViewingCharacter->GetLap() )
       {
          MR_SimulationTime lTotalTime = pViewingCharacter->GetTotalTime();
@@ -1664,6 +1670,12 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
          pTime = -pTime;
          sprintf( lMainLineBuffer, gCountdownStr, (pTime%60000)/1000, (pTime%1000)/10, pViewingCharacter->GetTotalLap() );
       }
+      else if( pSession->IsFreePlay() )
+      {
+         // No finish line or checkpoints: laps can never complete, so show the
+         // elapsed time only instead of a lap counter that would stay at 1.
+         sprintf( lMainLineBuffer, "Free play  %d:%02d.%02d", pTime/60000, (pTime%60000)/1000, (pTime%1000)/10 );
+      }
       else if( pViewingCharacter->GetTotalLap()<=pViewingCharacter->GetLap() )
       {
          MR_SimulationTime lTotalTime = pViewingCharacter->GetTotalTime();
@@ -1717,7 +1729,7 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       }
       
       // Make the final lap impossible to confuse with an ordinary lap counter.
-      if( pTime >= 0 && pViewingCharacter->GetTotalLap() > 1 &&
+      if( pTime >= 0 && !pSession->IsFreePlay() && pViewingCharacter->GetTotalLap() > 1 &&
           pViewingCharacter->GetLap()+1 == pViewingCharacter->GetTotalLap() &&
           !pViewingCharacter->HasFinish() )
       {

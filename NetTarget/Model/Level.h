@@ -312,6 +312,11 @@ class MR_DllDeclare  MR_Level
 
       // Free element content interrogation and manipulation
       MR_FreeElementHandle          GetFirstFreeElement( int pRoom )const;
+      // Number of malformed sections skipped (not aborted) while deserialising
+      // since the last reset; non-zero means the level loaded only partially.
+      static int                    GetSerializationFaultCount();
+      static void                   ResetSerializationFaultCount();
+
       static MR_FreeElementHandle   GetNextFreeElement( MR_FreeElementHandle pHandle );
       static MR_FreeElement*        GetFreeElement( MR_FreeElementHandle     pHandle );
       MR_FreeElementHandle          GetPermanentElementHandle( int pElem )const;

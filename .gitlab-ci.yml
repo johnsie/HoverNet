@@ -29,6 +29,9 @@ lint:gitlab-ci:
     - test -f packaging/debian/hovernet-raceserver.service
     - test -x packaging/debian/build-game-deb.sh
     - test -x packaging/debian/hovernet-game
+    - test -f NetTarget/CommunityTracks.tsv
+    - test -x scripts/generate-community-manifest.sh
+    - test -x scripts/package-community-tracks.sh
 
 build:raceserver:linux:
   stage: build
@@ -54,6 +57,23 @@ build:game:linux:
     paths:
       - build/linux/HoverNetGame2Player
       - build/linux/ObjFac1.so
+
+build:game:linux:sanitizers:
+  stage: build
+  tags: ["$LINUX_RUNNER_TAG"]
+  variables:
+    ASAN_OPTIONS: "detect_leaks=1:halt_on_error=1"
+    UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
+  script:
+    - cmake -S . -B build/sanitize -DCMAKE_BUILD_TYPE=RelWithDebInfo -DHOVERNET_WARNINGS=ON -DHOVERNET_SANITIZE=ON
+    - cmake --build build/sanitize --parallel "$CMAKE_BUILD_PARALLEL_LEVEL" > build/sanitize/build.log 2>&1 || { tail -n 60 build/sanitize/build.log; exit 1; }
+    - 'echo "compiler warnings: $(grep -c "warning:" build/sanitize/build.log || true)"'
+    - ctest --test-dir build/sanitize --output-on-failure
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - build/sanitize/build.log
 
 package:raceserver:deb:
   stage: package
@@ -111,7 +131,7 @@ package:game:windows:shared-x64:
     - job: build:game:windows:shared-x64
       artifacts: true
   script:
-    - '$release = "build\windows-shared\Release"; New-Item -ItemType Directory -Force "$release\NetTarget\Tracks", "$release\NetTarget\LinuxClient\assets" | Out-Null; Copy-Item "NetTarget\ObjFac1.dat" "$release\NetTarget\ObjFac1.dat" -Force; Copy-Item "NetTarget\Tracks\*.trk" "$release\NetTarget\Tracks\" -Force; Copy-Item "NetTarget\LinuxClient\assets\menu-hovercraft.bmp" "$release\NetTarget\LinuxClient\assets\menu-hovercraft.bmp" -Force'
+    - '$release = "build\windows-shared\Release"; New-Item -ItemType Directory -Force "$release\NetTarget\Tracks", "$release\NetTarget\LinuxClient\assets" | Out-Null; Copy-Item "NetTarget\ObjFac1.dat" "$release\NetTarget\ObjFac1.dat" -Force; Copy-Item "NetTarget\Tracks\*.trk" "$release\NetTarget\Tracks\" -Force; Copy-Item "NetTarget\CommunityTracks.tsv" "$release\NetTarget\CommunityTracks.tsv" -Force; Copy-Item "NetTarget\LinuxClient\assets\menu-hovercraft.bmp" "$release\NetTarget\LinuxClient\assets\menu-hovercraft.bmp" -Force'
     - '$vcRedist = "build\windows-shared\Release\vc_redist.x64.exe"; Invoke-WebRequest "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile $vcRedist; $vcSignature = Get-AuthenticodeSignature $vcRedist; if ($vcSignature.Status -ne "Valid" -or $vcSignature.SignerCertificate.Subject -notmatch "Microsoft Corporation") { throw "Downloaded Visual C++ x64 Redistributable does not have a valid Microsoft signature" }'
     - '& "scripts\validate-windows-x64-package.ps1" -ReleaseDir "build\windows-shared\Release" -RequireVCRedist'
     - '$env:HOVERNET_VERSION = if ($env:CI_COMMIT_TAG) { $env:CI_COMMIT_TAG.TrimStart("v") } else { "0.0.0-$env:CI_COMMIT_SHORT_SHA" }; $env:HOVERNET_X64_RELEASE_DIR = (Resolve-Path "build\windows-shared\Release").Path; $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"; if (-not (Test-Path $iscc)) { throw "ISCC not found at $iscc" }; & $iscc packaging/windows/HoverNet-x64.iss; if ($LASTEXITCODE -ne 0) { throw "Shared x64 Inno Setup packaging failed" }'
@@ -179,6 +199,7 @@ package:raceserver:windows:
     - 'New-Item -ItemType Directory -Force -Path dist, stage/raceserver | Out-Null'
     - 'Copy-Item "NetTarget\RaceServer\Release\RaceServer.exe" "stage\raceserver\RaceServer.exe" -Force'
     - 'Copy-Item "NetTarget\RaceServer\config.xml" "stage\raceserver\config.xml" -Force'
+    - 'Copy-Item "NetTarget\CommunityTracks.tsv" "stage\raceserver\CommunityTracks.tsv" -Force'
     - "Compress-Archive -Path 'stage\\raceserver\\*' -DestinationPath \"dist\\hovernet-raceserver_${version}_win32.zip\" -Force"
   artifacts:
     name: "hovernet-raceserver-windows-${CI_COMMIT_REF_SLUG}"

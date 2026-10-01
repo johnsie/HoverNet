@@ -125,7 +125,9 @@ void MR_3DViewPort::SetupCameraPosition( const MR_3DCoordinate& pPosition,
                                          int                    pScroll      )
 {
    mPosition    = pPosition;
-   mOrientation = pOrientation;
+   // MR_Sin/MR_Cos are indexed 0..MR_2PI-1; callers (e.g. a track's starting
+   // orientation) may pass a negative angle, which read outside the tables.
+   mOrientation = MR_NORMALIZE_ANGLE( pOrientation );
    mScroll      = pScroll*mYRes/8;
 
    ComputeRotationMatrix();
@@ -275,11 +277,14 @@ BOOL MR_3DViewPort::ComputePositionMatrix( MR_PositionMatrix& pMatrix, const MR_
    {
       pMatrix.mDisplacement = pPosition;
 
-      pMatrix.mRotation[0][0] =  MR_Cos[ pOrientation ];
-      pMatrix.mRotation[0][1] = -MR_Sin[ pOrientation ];
+      // The tables are indexed 0..MR_2PI-1; see SetupCameraPosition.
+      const MR_Angle lOrientation = MR_NORMALIZE_ANGLE( pOrientation );
 
-      pMatrix.mRotation[1][0] =  MR_Sin[ pOrientation ];
-      pMatrix.mRotation[1][1] =  MR_Cos[ pOrientation ];
+      pMatrix.mRotation[0][0] =  MR_Cos[ lOrientation ];
+      pMatrix.mRotation[0][1] = -MR_Sin[ lOrientation ];
+
+      pMatrix.mRotation[1][0] =  MR_Sin[ lOrientation ];
+      pMatrix.mRotation[1][1] =  MR_Cos[ lOrientation ];
    }
 
    return lReturnValue;

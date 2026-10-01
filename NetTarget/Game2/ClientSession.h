@@ -64,6 +64,7 @@ class MR_ClientSession
       int               mHeightSprite;
 
       int               mNbLap;
+      mutable int       mFreePlayState;   // -1 = not computed yet for the loaded track
       BOOL              mAllowWeapons;
 
       void ReadLevelAttrib( MR_RecordFile* pFile, MR_VideoBuffer* pVideo );
@@ -109,6 +110,11 @@ class MR_ClientSession
       virtual void  GetHitResult( int pPosition, const char*& pPlayerName, int& pId, BOOL& pConnected, int& pNbHitOther, int& pNbHitHimself )const;
 
       virtual int   GetNbPlayers()const;
+
+      // TRUE when the loaded track lacks a finish line or either checkpoint, so
+      // no lap can ever be completed (classic battle, tag and sports arenas).
+      // The race then runs as open "free play" instead of counting laps.
+      BOOL          IsFreePlay()const;
       virtual int   GetRank( const MR_MainCharacter* pPlayer )const;
       void          GetRankRange( const MR_MainCharacter* pPlayer, int& pBestRank,
                                   int& pWorstRank )const;

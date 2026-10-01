@@ -14,6 +14,29 @@ if(WIN32)
     add_compile_definitions(_AFXDLL HOVERNET_STATIC NOMINMAX)
 endif()
 
+# Linux quality gates (off by default so ordinary and Windows builds are
+# unchanged). CI enables HOVERNET_WARNINGS on the Release build and
+# HOVERNET_SANITIZE on a dedicated RelWithDebInfo build; see docs/gitlab-ci.md.
+option(HOVERNET_WARNINGS "Compile with -Wall -Wextra (GCC/Clang)" OFF)
+option(HOVERNET_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer (GCC/Clang)" OFF)
+
+if(NOT MSVC)
+    if(HOVERNET_WARNINGS)
+        add_compile_options(-Wall -Wextra)
+    endif()
+    if(HOVERNET_SANITIZE)
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+        # The 1990s fixed-point software rasterizer (4096-scaled coordinates)
+        # relies on 32-bit wraparound when the clipper hands it far off-screen
+        # geometry. Auditing every site risks changing rendered output, so only
+        # this file skips the signed-overflow check; bounds, shift, alignment
+        # and memory checks stay on. Tracked in docs/roadmap-2.0.md.
+        set_source_files_properties(NetTarget/VideoServices/3DViewportRendering.cpp
+            PROPERTIES COMPILE_OPTIONS -fno-sanitize=signed-integer-overflow)
+    endif()
+endif()
+
 find_package(SDL2 REQUIRED)
 include(CTest)
 find_package(Threads REQUIRED)
@@ -356,6 +379,7 @@ target_link_libraries(HoverNetTrack3DViewer PRIVATE HoverNetClientSession HoverN
 
 add_executable(HoverNetGame2Player
     NetTarget/LinuxClient/Track3DViewer.cpp
+    NetTarget/LinuxClient/TrackCatalog.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
 )
 
@@ -386,6 +410,15 @@ if(BUILD_TESTING AND NOT WIN32)
         set_tests_properties(${target} PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     endfunction()
 
+    add_executable(HoverNetTrackCatalogSmoke
+        NetTarget/LinuxClient/TrackCatalogSmoke.cpp
+        NetTarget/LinuxClient/TrackCatalog.cpp
+    )
+    add_hovernet_root_test(HoverNetTrackCatalogSmoke)
+    add_test(NAME HoverNetCommunityTracks
+        COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-community-tracks.sh"
+                "${CMAKE_BINARY_DIR}" "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/community-tracks-test")
+    set_tests_properties(HoverNetCommunityTracks PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 600)
     add_hovernet_root_test(HoverNetRecordFileSmoke)
     add_hovernet_root_test(HoverNetModelCoreSmoke)
     add_hovernet_root_test(HoverNetLevelSmoke)

@@ -1,0 +1,12 @@
+Package: hovernet-community-tracks
+Version: 0.0.0
+Section: games
+Priority: optional
+Architecture: all
+Depends: hovernet-game
+Maintainer: HoverNet Team <devteam@outiva.com>
+Description: HoverNet community track library
+ About a thousand community-made tracks from the classic HoverRace library,
+ installed unchanged. They appear in HoverNet's track selectors below the
+ bundled official tracks. The tracks have no recorded licence; see
+ /usr/share/doc/hovernet-community-tracks/README.

@@ -398,7 +398,15 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
 
    MR_Int32 lBitmapXRes_BitmapWidth      = (lBitmapXRes*MR_PIXEL_FRACT)/pBitmap->GetWidth();
    MR_Int32 lNbBitmapInHeight_4096       = ((pUpperLeft.mZ-pLowerRight.mZ)*4096)/pBitmap->GetHeight();
-   MR_Int32 lNbBitmapInHeight_BitmapYRes = (lBitmapYRes*MR_PIXEL_FRACT*(pUpperLeft.mZ-pLowerRight.mZ))/pBitmap->GetHeight();
+   MR_Int32 lNbBitmapInHeight_BitmapYRes = static_cast<MR_Int32>((static_cast<MR_Int64>(lBitmapYRes)*MR_PIXEL_FRACT*(pUpperLeft.mZ-pLowerRight.mZ))/pBitmap->GetHeight());
+   if( lNbBitmapInHeight_4096 == 0 )
+   {
+      // A wall with no height (floor meets ceiling) leaves nothing to draw, and
+      // the bitmap-scale ratios below divide by this value. Community tracks
+      // contain such walls; dividing by zero raised SIGFPE and ended the race.
+      return;
+   }
+
    MR_Int32 lBitmapHeight_256            = MulDiv(lYBottom_4096-lYTop_4096, 256, lNbBitmapInHeight_4096 );
    MR_Int32 lBitmapHeightVar_256         = (lDYBottom_4096-lDYTop_4096)*256/lNbBitmapInHeight_4096;
 
@@ -569,7 +577,7 @@ void BltColumn()
    {
       lBuffer       = gsColumnBltParam.mBuffer[0]+gsColumnBltParam.mColumn;
       lZBuffer      = gsColumnBltParam.mZBuffer[0]+gsColumnBltParam.mColumn;
-      lBitmapOffset = (4096-gsColumnBltParam.mYScreenStart_4096)*gsColumnBltParam.mPixelStep/4096;      
+      lBitmapOffset = static_cast<int>(static_cast<MR_Int64>(4096-gsColumnBltParam.mYScreenStart_4096)*gsColumnBltParam.mPixelStep/4096);      
       lNbPoints     = 0;
 
    }

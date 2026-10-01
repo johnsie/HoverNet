@@ -403,12 +403,13 @@ BOOL MR_CylinderPolygonContact(  const MR_CylinderShape* pActor0, const MR_Polyg
       {
          int lP1 = (lCounter+1)%lVertexCount;
 
-         MR_Int32 lLeftDistance = -(pActor1->Y(lP1)-pActor1->Y(lCounter))*(pActor0->AxisX()-pActor1->X(lCounter))
-                                  +(pActor1->X(lP1)-pActor1->X(lCounter))*(pActor0->AxisY()-pActor1->Y(lCounter));
+         // 64-bit cross product: it overflows 32 bits in large community arenas.
+         const MR_Int64 lLeftCross = -static_cast<MR_Int64>(pActor1->Y(lP1)-pActor1->Y(lCounter))*(pActor0->AxisX()-pActor1->X(lCounter))
+                                     +static_cast<MR_Int64>(pActor1->X(lP1)-pActor1->X(lCounter))*(pActor0->AxisY()-pActor1->Y(lCounter));
 
-         if( lLeftDistance > 0 )
+         if( lLeftCross > 0 )
          {
-            lLeftDistance /= pActor1->SideLen( lCounter );
+            MR_Int32 lLeftDistance = static_cast<MR_Int32>( lLeftCross / pActor1->SideLen( lCounter ) );
 
             if( lLeftDistance > pActor0->RayLen() )
             {
@@ -465,8 +466,10 @@ BOOL MR_LinePolygonContact(      const MR_LineSegmentShape* pActor0, const MR_Po
 
       for( int lCounter = 0; lReturnValue && (lCounter<lVertexCount); lCounter++ )
       {
-         MR_Int32 lDistance = -lYLen*(pActor1->X(lCounter)-lX0)
-                              +lXLen*(pActor1->Y(lCounter)-lY0);
+         // 64-bit: the line and polygon coordinates can span a whole large arena.
+         const MR_Int64 lDistance64 = -static_cast<MR_Int64>(lYLen)*(pActor1->X(lCounter)-lX0)
+                                      +static_cast<MR_Int64>(lXLen)*(pActor1->Y(lCounter)-lY0);
+         const MR_Int32 lDistance = lDistance64 > 0 ? 1 : ( lDistance64 < 0 ? -1 : 0 );
 
          if( lDistance < 0 )
          {
@@ -528,10 +531,15 @@ void MR_CylinderRoomContact( const MR_CylinderShape* pActor, const MR_PolygonSha
    {
       int lP1 = (lCounter+1)%lVertexCount;
 
-      MR_Int32 lLeftDistance = -(pRoom->Y(lP1)-pRoom->Y(lCounter))*(pActor->AxisX()-pRoom->X(lCounter))
-                               +(pRoom->X(lP1)-pRoom->X(lCounter))*(pActor->AxisY()-pRoom->Y(lCounter));
+      // The cross product of a long wall and an offset overflows 32 bits in the
+      // large arenas some community tracks use (wrapping flipped the sign and let
+      // craft "leave" the room), so it is computed in 64 bits. The quotient is a
+      // distance and always fits back into 32 bits; results are unchanged
+      // wherever the old arithmetic did not overflow.
+      const MR_Int64 lLeftCross = -static_cast<MR_Int64>(pRoom->Y(lP1)-pRoom->Y(lCounter))*(pActor->AxisX()-pRoom->X(lCounter))
+                                  +static_cast<MR_Int64>(pRoom->X(lP1)-pRoom->X(lCounter))*(pActor->AxisY()-pRoom->Y(lCounter));
 
-      lLeftDistance /= pRoom->SideLen( lCounter );
+      MR_Int32 lLeftDistance = static_cast<MR_Int32>( lLeftCross / pRoom->SideLen( lCounter ) );
 
       if( lLeftDistance > 0 )
       {

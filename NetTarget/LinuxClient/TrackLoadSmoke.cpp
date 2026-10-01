@@ -9,15 +9,30 @@
 #include <string>
 #include <vector>
 
+// Strict mode is the 2.0 authoring contract for bundled tracks. --community is
+// the compatibility tier for third-party tracks made with the classic tools: it
+// only rejects a track the game cannot load or start a race on, and downgrades
+// everything else (missing race gates, disconnected rooms, odd geometry, ...) to
+// a warning, because the original game ran those tracks. A track without a
+// complete finish/checkpoint set is reported as "freeplay" rather than "race".
 int main(int argc, char** argv)
 {
-    if (argc < 2 || argc > 3) {
-        std::fprintf(stderr, "Usage: HoverNetTrackValidator TRACK.trk [TRACK_NAME]\n");
+    bool community = false;
+    bool manifest = false;
+    std::vector<const char*> positional;
+    for (int index = 1; index < argc; ++index) {
+        const std::string argument = argv[index];
+        if (argument == "--community") community = true;
+        else if (argument == "--manifest") manifest = true;
+        else positional.push_back(argv[index]);
+    }
+    if (positional.empty() || positional.size() > 2) {
+        std::fprintf(stderr, "Usage: HoverNetTrackValidator [--community] [--manifest] TRACK.trk [TRACK_NAME]\n");
         return 2;
     }
 
-    const char* trackPath = argv[1];
-    const char* trackName = argc > 2 ? argv[2] : argv[1];
+    const char* trackPath = positional[0];
+    const char* trackName = positional.size() > 1 ? positional[1] : positional[0];
     MR_DllObjectFactory::MR_DllObjectFactoryCleanup factoryCleanup;
     MR_RecordFile* track = new MR_RecordFile;
     if (!track->OpenForRead(trackPath)) {
@@ -27,6 +42,7 @@ int main(int argc, char** argv)
     }
 
     MR_GameSession session(FALSE);
+    MR_Level::ResetSerializationFaultCount();
     if (!session.LoadNew(trackName, track) || session.GetCurrentLevel() == nullptr) {
         std::fprintf(stderr, "ERROR %s: cannot load track into a game session\n", trackPath);
         return 1;
@@ -36,24 +52,41 @@ int main(int argc, char** argv)
     const int roomCount = level->GetRoomCount();
     const int playerCount = level->GetPlayerCount();
     int errors = 0;
+    int warnings = 0;
+    // Always an error: the track cannot be played.
     auto error = [&](const std::string& message) {
         std::fprintf(stderr, "ERROR %s: %s\n", trackPath, message.c_str());
         ++errors;
     };
+    // An error under the strict 2.0 contract, only a warning for community tracks.
+    auto strict = [&](const std::string& message) {
+        if (!community) {
+            error(message);
+            return;
+        }
+        std::fprintf(stderr, "WARN %s: %s\n", trackPath, message.c_str());
+        ++warnings;
+    };
+
+    if (MR_Level::GetSerializationFaultCount() != 0) {
+        error("track data is damaged or uses unsupported objects (" +
+              std::to_string(MR_Level::GetSerializationFaultCount()) + " sections could not be read)");
+    }
 
     if (roomCount <= 0) error("track has no rooms");
-    if (playerCount < 2) error("track needs at least two multiplayer starts");
+    if (playerCount < (community ? 1 : 2)) error("track needs at least " + std::string(community ? "one start" : "two multiplayer starts"));
+    else if (playerCount < 2) strict("track has a single start; extra players will share it");
     if (playerCount > MR_NB_MAX_PLAYER) error("track exceeds the supported player limit");
 
     std::vector<std::vector<int>> adjacency(static_cast<std::size_t>(std::max(0, roomCount)));
     for (int room = 0; room < roomCount; ++room) {
         const int vertices = level->GetRoomVertexCount(room);
         if (vertices < 3) {
-            error("room " + std::to_string(room) + " has fewer than three vertices");
+            strict("room " + std::to_string(room) + " has fewer than three vertices");
             continue;
         }
         if (level->GetRoomBottomLevel(room) >= level->GetRoomTopLevel(room)) {
-            error("room " + std::to_string(room) + " has no positive vertical clearance");
+            strict("room " + std::to_string(room) + " has no positive vertical clearance");
         }
         long long twiceArea = 0;
         for (int wall = 0; wall < vertices; ++wall) {
@@ -62,7 +95,7 @@ int main(int argc, char** argv)
             twiceArea += static_cast<long long>(first.mX) * second.mY -
                 static_cast<long long>(second.mX) * first.mY;
             if (first.mX == second.mX && first.mY == second.mY) {
-                error("room " + std::to_string(room) + " has a zero-length collision wall");
+                strict("room " + std::to_string(room) + " has a zero-length collision wall");
             }
             const int neighbor = level->GetNeighbor(room, wall);
             if (neighbor >= 0) {
@@ -76,14 +109,14 @@ int main(int argc, char** argv)
                         if (level->GetNeighbor(neighbor, otherWall) == room) reciprocal = true;
                     }
                     if (!reciprocal) {
-                        error("room " + std::to_string(room) + " has a one-way connection to room " +
-                              std::to_string(neighbor));
+                        strict("room " + std::to_string(room) + " has a one-way connection to room " +
+                               std::to_string(neighbor));
                     }
                 }
             }
         }
-        if (twiceArea >= 0) error("room " + std::to_string(room) + " is not clockwise");
-        if (twiceArea == 0) error("room " + std::to_string(room) + " has zero collision area");
+        if (twiceArea >= 0) strict("room " + std::to_string(room) + " is not clockwise");
+        if (twiceArea == 0) strict("room " + std::to_string(room) + " has zero collision area");
     }
 
     if (roomCount > 0) {
@@ -100,7 +133,7 @@ int main(int argc, char** argv)
         }
         for (int room = 0; room < roomCount; ++room) {
             if (!reached[static_cast<std::size_t>(room)]) {
-                error("room " + std::to_string(room) + " is disconnected from the race topology");
+                strict("room " + std::to_string(room) + " is disconnected from the race topology");
             }
         }
     }
@@ -114,7 +147,7 @@ int main(int argc, char** argv)
             continue;
         }
         if (!starts.insert({position.mX, position.mY}).second) {
-            error("start " + std::to_string(player) + " overlaps another start");
+            strict("start " + std::to_string(player) + " overlaps another start");
         }
         MR_2DCoordinate point; point.mX = position.mX; point.mY = position.mY;
         if (level->FindRoomForPoint(point, room) != room) {
@@ -122,7 +155,7 @@ int main(int argc, char** argv)
         }
         if (position.mZ < level->GetRoomBottomLevel(room) ||
             position.mZ >= level->GetRoomTopLevel(room)) {
-            error("start " + std::to_string(player) + " is outside room vertical bounds");
+            strict("start " + std::to_string(player) + " is outside room vertical bounds");
         }
     }
 
@@ -143,16 +176,22 @@ int main(int argc, char** argv)
             else if (classId == 204) ++checkpoint2Count;
         }
     }
-    if (finishCount < 1) error("track must contain a finish line");
-    if (checkpoint1Count < 1) error("track must contain checkpoint 1");
-    if (checkpoint2Count < 1) error("track must contain checkpoint 2");
+    const bool hasRaceGates = finishCount >= 1 && checkpoint1Count >= 1 && checkpoint2Count >= 1;
+    if (finishCount < 1) strict("track must contain a finish line");
+    if (checkpoint1Count < 1) strict("track must contain checkpoint 1");
+    if (checkpoint2Count < 1) strict("track must contain checkpoint 2");
 
     if (errors != 0) {
         std::fprintf(stderr, "FAILED %s: %d validation error(s)\n", trackPath, errors);
         return 1;
     }
-    std::printf("VALID %s rooms=%d starts=%d elements=%d race_gates=%d\n",
+    std::printf("VALID %s rooms=%d starts=%d elements=%d race_gates=%d mode=%s warnings=%d\n",
                 trackName, roomCount, playerCount, elementCount,
-                finishCount + checkpoint1Count + checkpoint2Count);
+                finishCount + checkpoint1Count + checkpoint2Count, hasRaceGates ? "race" : "freeplay",
+                warnings);
+    if (manifest) {
+        std::printf("MANIFEST\t%s\t%s\t%d\t%d\t%d\n", trackName, hasRaceGates ? "race" : "freeplay",
+                    playerCount, roomCount, warnings);
+    }
     return 0;
 }

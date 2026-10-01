@@ -25,6 +25,13 @@ Commit both the editable `.track.txt` source and compiled `.trk`. Register the
 display name in the shared client's `kHostableTracks`/`kTrackGuides` tables and
 the RaceServer host whitelist. Add it to the validation list in `CMakeLists.txt`.
 
+## Sharing a track with the community library
+
+Bundled (official) tracks must pass the strict validator above. Third-party
+tracks made with the classic tools (including HoverCad) are accepted through the
+more lenient `--community` level and the community manifest; see
+[Community tracks](community-tracks.md).
+
 ## Release requirements
 
 - Use clockwise room polygons with at least three distinct vertices and useful

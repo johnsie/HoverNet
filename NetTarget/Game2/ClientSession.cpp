@@ -33,6 +33,7 @@ MR_ClientSession::MR_ClientSession()
    mBackImage           = NULL;
    mMap                 = NULL;
    mNbLap               = 1;
+   mFreePlayState       = -1;
    mAllowWeapons        = TRUE;
 
   InitializeCriticalSection( &mChatMutex );
@@ -123,6 +124,42 @@ void MR_ClientSession::ReadLevelAttrib( MR_RecordFile* pRecordFile, MR_VideoBuff
 
 
 
+BOOL MR_ClientSession::IsFreePlay()const
+{
+   if( mFreePlayState < 0 )
+   {
+      // Race gates are the object-factory classes 202 (finish line), 203 and 204
+      // (checkpoints 1 and 2); a lap needs all three (see MR_MainCharacter).
+      const MR_Level* lLevel = const_cast<MR_ClientSession*>( this )->mSession.GetCurrentLevel();
+      bool lFinish = false, lCheck1 = false, lCheck2 = false;
+
+      if( lLevel != NULL )
+      {
+         for( int lRoom = -1; lRoom < lLevel->GetRoomCount(); ++lRoom )
+         {
+            for( MR_FreeElementHandle lHandle = lLevel->GetFirstFreeElement( lRoom );
+                 lHandle != NULL;
+                 lHandle = MR_Level::GetNextFreeElement( lHandle ) )
+            {
+               const MR_FreeElement* lElement = MR_Level::GetFreeElement( lHandle );
+               if( lElement == NULL )
+               {
+                  continue;
+               }
+               switch( lElement->GetTypeId().mClassId )
+               {
+                  case 202: lFinish = true; break;
+                  case 203: lCheck1 = true; break;
+                  case 204: lCheck2 = true; break;
+               }
+            }
+         }
+      }
+      mFreePlayState = ( lLevel != NULL && !( lFinish && lCheck1 && lCheck2 ) ) ? 1 : 0;
+   }
+   return mFreePlayState == 1;
+}
+
 BOOL MR_ClientSession::LoadNew( const char* pTitle, MR_RecordFile* pMazeFile, int pNbLap, BOOL pAllowWeapons, MR_VideoBuffer* pVideo )
 {
    BOOL lReturnValue;
@@ -130,6 +167,7 @@ BOOL MR_ClientSession::LoadNew( const char* pTitle, MR_RecordFile* pMazeFile, in
 
    mNbLap        = pNbLap;
    mAllowWeapons = pAllowWeapons;
+   mFreePlayState = -1;
 
    // A newly loaded track owns a completely new element graph. Clear every
    // cached character pointer before MR_GameSession deletes the old level.
@@ -479,8 +517,19 @@ const MR_Sprite* MR_ClientSession::GetMap()const
 
 void MR_ClientSession::ConvertMapCoordinate( int& pX, int& pY, int pRatio )const
 {
-   pX = ( pX-mX0Map )*mWidthSprite/ (mWidthMap*pRatio);
-   pY = (mHeightSprite-1-( pY-mY0Map )*mHeightSprite/mHeightMap)/pRatio;
+   // 64-bit intermediates: map coordinates times the sprite size overflow 32 bits
+   // on the large community arenas. A degenerate (zero-sized) map or ratio has
+   // nothing to convert, and used to divide by zero.
+   const MR_Int64 lWidthDivisor  = static_cast<MR_Int64>(mWidthMap)*pRatio;
+   const MR_Int64 lHeightDivisor = mHeightMap;
+   if( lWidthDivisor == 0 || lHeightDivisor == 0 || pRatio == 0 )
+   {
+      pX = 0;
+      pY = 0;
+      return;
+   }
+   pX = static_cast<int>( static_cast<MR_Int64>( pX-mX0Map )*mWidthSprite/lWidthDivisor );
+   pY = static_cast<int>( ( mHeightSprite-1-static_cast<MR_Int64>( pY-mY0Map )*mHeightSprite/lHeightDivisor )/pRatio );
 }
 
 const MR_MainCharacter* MR_ClientSession::GetPlayer( int pPlayerIndex )const

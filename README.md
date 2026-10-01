@@ -19,6 +19,13 @@ Downloads for both Windows and Linux are published on the [Releases page](../../
 - **Windows 64 bit**: Experimental cross-platform SDL2/IMGUI layout. Download and run the installer (`HoverNet-setup-64.exe`).
 - **Linux**: download the `.deb` package and install it (`sudo apt install ./hovernet-game_*.deb`), then launch it from your applications menu or run `hovernet` from a terminal.
 
+### Community tracks
+
+HoverNet lists seven official tracks and can also play about a thousand
+community-made ones from the classic HoverRace library. They are a separate
+download; see [Community tracks](docs/community-tracks.md) for installing them
+and for how they appear in the track selectors.
+
 ## Controls
 
 | Input | Action |

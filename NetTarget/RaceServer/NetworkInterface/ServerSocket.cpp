@@ -7,6 +7,10 @@
 #include "RaceManager.h"
 #include "ServerLogger.h"
 #include <string>
+#include <set>
+#include <vector>
+#include <fstream>
+#include <cstdlib>
 
 extern MR_ServerLogger g_Logger;
 
@@ -70,6 +74,53 @@ static bool IsValidProtocolText(const unsigned char* pText, std::size_t pLength,
         i += lContinuationCount + 1;
     }
     return true;
+}
+
+// Tracks a client may host. The bundled tracks are always allowed. Community
+// tracks are allowed only if they appear in the community manifest
+// (NetTarget/CommunityTracks.tsv: "name<TAB>race|freeplay<TAB>starts<TAB>rooms..."),
+// so an operator controls the list by editing one file and a client cannot make
+// the server relay races for arbitrary names. The server never needs the track
+// files themselves -- it only relays -- so just the manifest has to be present.
+// Searched in order: $HOVERNET_TRACK_MANIFEST, the system config and install
+// locations, then the working directory. With none found, only the bundled
+// tracks are allowed (the previous behaviour).
+static const std::set<std::string>& AllowedTracks()
+{
+    static const std::set<std::string> sTracks = []() {
+        std::set<std::string> lTracks = {"ClassicH", "Steeplechase", "Switchback", "The Alley2",
+                                         "The River", "Tidal Causeway", "Metro Spiral"};
+        std::vector<std::string> lCandidates;
+        const char* lEnv = getenv("HOVERNET_TRACK_MANIFEST");
+        if (lEnv != nullptr && lEnv[0] != '\0') lCandidates.push_back(lEnv);
+        lCandidates.push_back("/etc/hovernet/CommunityTracks.tsv");
+        lCandidates.push_back("/usr/share/games/hovernet/NetTarget/CommunityTracks.tsv");
+        lCandidates.push_back("NetTarget/CommunityTracks.tsv");
+        lCandidates.push_back("CommunityTracks.tsv");
+
+        for (const std::string& lPath : lCandidates) {
+            std::ifstream lFile(lPath.c_str());
+            if (!lFile.good()) continue;
+            std::string lLine;
+            std::size_t lLoaded = 0;
+            while (std::getline(lFile, lLine)) {
+                while (!lLine.empty() && (lLine.back() == '\r' || lLine.back() == '\n')) lLine.pop_back();
+                if (lLine.empty() || lLine[0] == '#') continue;
+                const std::size_t lTab = lLine.find('\t');
+                if (lTab == std::string::npos) continue;
+                const std::string lName = lLine.substr(0, lTab);
+                if (!IsValidProtocolText(reinterpret_cast<const unsigned char*>(lName.data()),
+                                         lName.size(), kMaxTrackNameBytes)) continue;
+                lTracks.insert(lName);
+                ++lLoaded;
+            }
+            g_Logger.Log(MR_LOG_INFO, "Track allowlist: %zu community track(s) from %s",
+                         lLoaded, lPath.c_str());
+            break;
+        }
+        return lTracks;
+    }();
+    return sTracks;
 }
 
 static bool IsServerToClientMessage(int pMessageType)
@@ -747,9 +798,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             memcpy(raceName, p, nameLen);
             raceName[nameLen] = '\0';
 
-            static const char* const kValidTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River", "Tidal Causeway", "Metro Spiral"};
-            bool trackOk = false;
-            for (const char* t : kValidTracks) { if (strcmp(t, trackName) == 0) { trackOk = true; break; } }
+            const bool trackOk = AllowedTracks().count(trackName) != 0;
 
             // Races are joined by id (eRSMsgJoinRaceById), not by name, so the name is
             // just a display label -- duplicates are fine and no longer rejected. The

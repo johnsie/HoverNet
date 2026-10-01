@@ -8,7 +8,7 @@
 struct GameState
 {
     // Race metadata
-    char mTrackName[33];
+    char mTrackName[64]; // protocol maximum is 63 bytes (kMaxTrackNameBytes)
     int mNumLaps;
     BOOL mWeaponsAllowed;
     time_t mStartTime;

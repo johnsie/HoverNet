@@ -18,6 +18,7 @@ test -x "$binary"
 test -f "$plugin"
 test -f NetTarget/ObjFac1.dat
 test -d NetTarget/Tracks
+test -f NetTarget/CommunityTracks.tsv
 
 rm -rf "$package_root"
 install -Dm755 "$binary" "$package_root/usr/lib/hovernet/HoverNetGame2Player"
@@ -30,6 +31,9 @@ install -Dm644 NetTarget/LinuxClient/assets/menu-hovercraft.bmp \
 for track in NetTarget/Tracks/*.trk; do
   install -Dm644 "$track" "$package_root/usr/share/games/hovernet/NetTarget/Tracks/$(basename "$track")"
 done
+# The manifest of community tracks the game may list. The tracks themselves are
+# a separate package (hovernet-community-tracks, see build-community-tracks-deb.sh).
+install -Dm644 NetTarget/CommunityTracks.tsv "$package_root/usr/share/games/hovernet/NetTarget/CommunityTracks.tsv"
 install -Dm644 packaging/debian/game-control "$package_root/DEBIAN/control"
 sed -i "s/^Version: .*/Version: ${version}/; s/^Architecture: .*/Architecture: ${architecture}/" "$package_root/DEBIAN/control"
 mkdir -p dist
