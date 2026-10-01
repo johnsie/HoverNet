@@ -62,6 +62,11 @@ ln -s "$source_dir/CHANGELOG.md" "$tree/CHANGELOG.md"
   packaging/debian/build-raceserver-deb.sh 2.0.0-beta.1 "$build_dir/RaceServer" >/dev/null
 )
 for deb in "$tree"/dist/hovernet-game_*.deb "$tree"/dist/hovernet-raceserver_*.deb; do
+  # GitHub rewrites "~" in asset names, which would break SHA256SUMS: no tilde in file names.
+  if [[ $(basename "$deb") == *"~"* ]]; then
+    echo "package file name contains a tilde: $(basename "$deb")" >&2
+    status=1
+  fi
   version=$(dpkg-deb -f "$deb" Version)
   if [[ $version == "2.0.0~beta.1" ]] && dpkg --compare-versions "$version" lt 2.0.0 \
      && dpkg --compare-versions "$version" gt 1.9.9; then

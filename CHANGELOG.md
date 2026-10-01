@@ -4,7 +4,17 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## 2.0.0-beta.1 - 2026-10-01
+## 2.0.0-beta.2 - 2026-10-01
+
+Replaces beta.1, whose `.deb` file names GitHub rewrote (`~` became `.`), so
+`SHA256SUMS` could not verify them.
+
+### Fixed
+- Debian package file names use the plain tag version (`hovernet-game_2.0.0-beta.2_amd64.deb`)
+  while the package's own version stays `2.0.0~beta.2`, so checksums verify and a
+  beta still sorts before the final release.
+
+## 2.0.0-beta.1 - 2026-10-01 (superseded by beta.2)
 
 First public beta of HoverNet 2.0, published as a GitHub *pre-release*. Everything
 in 0.4.x, now treated as the 2.0 feature set; see the

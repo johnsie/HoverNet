@@ -4,6 +4,9 @@ set -euo pipefail
 version="$1"
 # shellcheck source=packaging/debian/reproducible.sh
 source "$(dirname "$0")/reproducible.sh"
+# GitHub rewrites "~" in asset names, which would break SHA256SUMS; the file name
+# keeps the plain tag version while the package Version field uses the tilde form.
+file_version="$version"
 version="$(debian_version "$version")"
 binary="$2"
 package_root="${CI_PROJECT_DIR:-$(pwd)}/dist/debian/hovernet-raceserver_${version}_amd64"
@@ -27,4 +30,4 @@ install -Dm644 CHANGELOG.md "$package_root/usr/share/doc/hovernet-raceserver/CHA
 source "$(dirname "$0")/reproducible.sh"
 normalize_package_tree "$package_root"
 mkdir -p dist
-dpkg-deb --build --root-owner-group "$package_root" "dist/hovernet-raceserver_${version}_amd64.deb"
+dpkg-deb --build --root-owner-group "$package_root" "dist/hovernet-raceserver_${file_version}_amd64.deb"

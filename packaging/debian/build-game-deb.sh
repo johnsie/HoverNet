@@ -4,6 +4,9 @@ set -euo pipefail
 version="${1#v}"
 # shellcheck source=packaging/debian/reproducible.sh
 source "$(dirname "$0")/reproducible.sh"
+# GitHub rewrites "~" in asset names, which would break SHA256SUMS; the file name
+# keeps the plain tag version while the package Version field uses the tilde form.
+file_version="$version"
 version="$(debian_version "$version")"
 binary="${2:-build/linux/HoverNetGame2Player}"
 plugin="${3:-build/linux/ObjFac1.so}"
@@ -46,4 +49,4 @@ install -Dm644 CHANGELOG.md "$package_root/usr/share/doc/hovernet-game/CHANGELOG
 source "$(dirname "$0")/reproducible.sh"
 normalize_package_tree "$package_root"
 mkdir -p dist
-dpkg-deb --build --root-owner-group "$package_root" "dist/hovernet-game_${version}_${architecture}.deb"
+dpkg-deb --build --root-owner-group "$package_root" "dist/hovernet-game_${file_version}_${architecture}.deb"
