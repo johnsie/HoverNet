@@ -305,6 +305,11 @@ jobs:
                 }
               }
 
+              # Local race on every bundled track plus the community-track download
+              # path (curl.exe, gzip, SHA-256, atomic install) against a local server.
+              & "scripts\test-windows-client.ps1" -Exe "$installDir\HoverNet.exe" -DataDir $installDir
+              if ($LASTEXITCODE -ne 0) { throw "Installed shared x64 client acceptance failed" }
+
               $installedServer = Start-Process -FilePath "$x64Release\RaceServer.exe" `
                 -ArgumentList "19881", "$x64Release\installed-online-race-smoke.log", "--require-protocol-2" `
                 -PassThru

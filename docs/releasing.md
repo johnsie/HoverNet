@@ -76,6 +76,14 @@ against corruption and mirroring mistakes; they are not a signature, so get
 - If a bad release was published, mark it as a pre-release or delete it on GitHub,
   and cut a fixed version under a new tag. Do not move or reuse a published tag.
 
+## Cross-platform rehearsal
+
+Windows and Linux cannot share one CI job, so before a release candidate run
+`scripts/test-cross-platform-race.sh` from a Linux build tree against a Windows x64
+machine reachable over SSH (see its header for the arguments). It starts a Linux
+RaceServer and runs a Windows client and a Linux client in the same race, in both
+directions, and fails unless the server sees two players.
+
 ## Still manual
 
 The internal alpha, the two-week public beta, the release-candidate freeze, the

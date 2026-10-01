@@ -1219,7 +1219,7 @@ void MR_ServerSocket::FinishJoiningRace(ClientConnection* pConn, MR_RaceManager*
 
             HoverNetProtocol::WriteI32LE(&msg.data[0], otherId);
 
-            int nameLen = strlen(pOther->mPlayerName);
+            int nameLen = static_cast<int>(strlen(pOther->mPlayerName));
             memcpy(&msg.data[4], pOther->mPlayerName, nameLen);
             msg.dataLen = 4 + nameLen;
 
@@ -1239,7 +1239,7 @@ void MR_ServerSocket::FinishJoiningRace(ClientConnection* pConn, MR_RaceManager*
 
             HoverNetProtocol::WriteI32LE(&msg.data[0], pConn->mClientId);
 
-            int nameLen = strlen(pConn->mPlayerName);
+            int nameLen = static_cast<int>(strlen(pConn->mPlayerName));
             memcpy(&msg.data[4], pConn->mPlayerName, nameLen);
             msg.dataLen = 4 + nameLen;
 

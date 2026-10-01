@@ -48,11 +48,21 @@ exercised against each other on every test run, including all tracks.
 | `Model/MazeElement.cpp` | `memset` of a class object | assignment |
 | collision and map maths | 32-bit overflow on large arenas (see [Community tracks](community-tracks.md)) | 64-bit intermediates |
 
+## MSVC check (real Windows runner)
+
+The shared client and RaceServer were built for x64 with MSVC 14.44 at `/W4`. It
+reported **no pointer-truncation warnings** (`C4311`, `C4312`, `C4302`). The 147
+warnings were unused parameters/variables (`C4100`, `C4101`), deprecated CRT calls
+(`C4996`), narrowing conversions (`C4244`, 44, all between small ranges), three
+`size_t`-to-`int` conversions bounded by fixed buffers (now explicit casts), and the
+plug-in's `extern "C"` functions returning `CString` (`C4190`; the DLL and client are
+always built together by the same compiler, so this is harmless but is the reason
+those exports are not a stable plug-in ABI).
+
 ## Not covered
 
-- **MSVC itself.** No MSVC warnings (`C4311`/`C4312`/`C4302`) were run; this audit is
-  by LP64 proxy. The Windows x64 CI build compiles the shared client; enabling `/W3`
-  or `/W4` there and reviewing pointer-truncation warnings is the remaining step.
+- **Narrowing review.** The `C4244` conversions (e.g. `MainCharacter.cpp`,
+  `ResourceLib.cpp`) were not reviewed line by line.
 - **Third-party binaries and installers.** The x64 installer bundles x64 `SDL2.dll`
   and the x64 VC++ redistributable; the audit did not re-inspect the installer
   script beyond what the existing x64 package validation checks.

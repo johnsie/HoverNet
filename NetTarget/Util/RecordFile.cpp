@@ -544,7 +544,7 @@ DWORD ComputeSum( const char* pFileName )
 
    if( lFile != NULL )
    {
-      int lDataLen = fread( lBuffer, 1, sizeof( lBuffer ), lFile );
+      int lDataLen = static_cast<int>( fread( lBuffer, 1, sizeof( lBuffer ), lFile ) );
 
       if( lDataLen > 0 )
       {

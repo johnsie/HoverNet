@@ -654,6 +654,17 @@ fixed (an uninitialised loop condition, a missing virtual destructor, type-punne
 aliasing, bad format arguments). **Open:** run MSVC's pointer-truncation warnings
 in the Windows CI build; real-hardware x64 checks remain manual.
 
+Windows verification (1 October 2026, on the Windows x64 runner): the shared
+client builds clean for x64 at `/W4` with no pointer-truncation warnings;
+`scripts/test-windows-client.ps1` (now in both CI pipelines) races on every bundled
+track and exercises the community-track downloader (the `curl.exe` process spawn,
+gzip, SHA-256 verification, tamper and no-server cases), all passing on real
+Windows; and `scripts/test-cross-platform-race.sh` ran a Windows x64 client and a
+Linux client in one race through a Linux RaceServer, in both directions. **Open:**
+the cross-platform race needs two machines, so it is a release-rehearsal step and
+not a CI job; clean-install/upgrade/uninstall rehearsals and the Win32 retirement
+decision are still manual.
+
 - Remove generated binaries and build artefacts from source control; enforce this through `.gitignore` and CI.
 - Add compiler warnings and sanitizers on Linux.
 - Add Windows smoke tests beyond compilation.
