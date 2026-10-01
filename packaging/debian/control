@@ -4,6 +4,6 @@ Section: games
 Priority: optional
 Architecture: amd64
 Maintainer: HoverNet Team <devteam@outiva.com>
-Depends: libc6 (>= 2.31), adduser, systemd
+Depends: libc6 (>= 2.31), libstdc++6, libgcc-s1, adduser, systemd
 Description: HoverNet authoritative multiplayer race server
  Central TCP and UDP relay and race-session service for HoverNet clients.

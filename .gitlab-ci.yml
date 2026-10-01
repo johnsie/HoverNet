@@ -30,6 +30,9 @@ lint:gitlab-ci:
     - test -x packaging/debian/build-game-deb.sh
     - test -x packaging/debian/hovernet-game
     - test -f NetTarget/CommunityTracks.tsv
+    - test -f CHANGELOG.md
+    - test -f THIRD_PARTY_NOTICES.md
+    - test -x scripts/make-release-checksums.sh
     - test -x scripts/generate-community-manifest.sh
     - test -x scripts/package-community-tracks.sh
 
@@ -227,7 +230,8 @@ publish:github-release:
     - test -n "$GH_TOKEN" || { echo "GH_TOKEN CI/CD variable is not set (Settings > CI/CD > Variables, masked+protected)"; exit 1; }
     - export GH_TOKEN
     - ls -la dist/
-    - gh release create "$CI_COMMIT_TAG" dist/*.deb dist/*-win32-setup.exe dist/*-windows-x64-setup.exe dist/*.zip --repo johnsie/HoverNet --title "$CI_COMMIT_TAG" --notes "Automated release for $CI_COMMIT_TAG"
+    - scripts/make-release-checksums.sh dist
+    - gh release create "$CI_COMMIT_TAG" dist/SHA256SUMS dist/*.deb dist/*-win32-setup.exe dist/*-windows-x64-setup.exe dist/*.zip --repo johnsie/HoverNet --title "$CI_COMMIT_TAG" --notes "Automated release for $CI_COMMIT_TAG"
   rules:
     - if: '$CI_COMMIT_TAG'
 

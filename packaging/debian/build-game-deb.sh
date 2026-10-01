@@ -36,5 +36,11 @@ done
 install -Dm644 NetTarget/CommunityTracks.tsv "$package_root/usr/share/games/hovernet/NetTarget/CommunityTracks.tsv"
 install -Dm644 packaging/debian/game-control "$package_root/DEBIAN/control"
 sed -i "s/^Version: .*/Version: ${version}/; s/^Architecture: .*/Architecture: ${architecture}/" "$package_root/DEBIAN/control"
+# Licence inventory and release history travel with the package.
+install -Dm644 THIRD_PARTY_NOTICES.md "$package_root/usr/share/doc/hovernet-game/THIRD_PARTY_NOTICES.md"
+install -Dm644 CHANGELOG.md "$package_root/usr/share/doc/hovernet-game/CHANGELOG.md"
+# shellcheck source=packaging/debian/reproducible.sh
+source "$(dirname "$0")/reproducible.sh"
+normalize_package_tree "$package_root"
 mkdir -p dist
 dpkg-deb --build --root-owner-group "$package_root" "dist/hovernet-game_${version}_${architecture}.deb"

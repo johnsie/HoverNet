@@ -634,6 +634,18 @@ rasterizer (`3DViewportRendering.cpp`) still overflows 32-bit arithmetic on far
 off-screen geometry, so that one file is excluded from the signed-overflow check
 only; auditing it needs rendering regression captures first.
 
+Release engineering (1 October 2026): Debian packages are reproducible (pinned
+`SOURCE_DATE_EPOCH`; binaries were already identical across build directories),
+checked by `HoverNetReproduciblePackages`. Every release publishes a `SHA256SUMS`.
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) inventories third-party code
+and licences, and `HoverNetRuntimeDependencies` verifies the Linux runtime
+dependencies against it (it found that the server package did not declare
+`libstdc++6`/`libgcc-s1`; fixed). [CHANGELOG.md](../CHANGELOG.md) and
+[Releasing](releasing.md) cover the changelog, migration notes and rollback.
+**Open:** the HoverRace source-licence text is not in the repository (see the
+notices); Windows reproducibility and Windows dependency checks are not covered;
+the alpha, beta, release-candidate and production-rehearsal steps are manual.
+
 - Remove generated binaries and build artefacts from source control; enforce this through `.gitignore` and CI.
 - Add compiler warnings and sanitizers on Linux.
 - Add Windows smoke tests beyond compilation.

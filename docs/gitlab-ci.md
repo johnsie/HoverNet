@@ -27,6 +27,14 @@ the downloader (against a local `file://` host, so they need `curl` and `gzip` o
 the Linux runner), the selector, and online races including a joiner downloading
 the host's track.
 
+## Release engineering checks
+
+`HoverNetReproduciblePackages` builds each Debian package twice and fails if they
+differ; `HoverNetRuntimeDependencies` checks the shipped Linux binaries' shared
+libraries against `packaging/debian/runtime-dependencies.tsv` and the packages'
+`Depends`. Release jobs run `scripts/make-release-checksums.sh` to publish a
+`SHA256SUMS`. See [Releasing](releasing.md).
+
 ## Server setup
 
 On `192.168.10.181`, tag the registered system-mode runner with `race-server` and configure it to accept protected jobs. Install the root-owned deployment wrapper from `packaging/debian/hovernet-deploy`, then permit the runner account passwordless `sudo` only for that wrapper; do not give it unrestricted passwordless sudo. Open both TCP and UDP port `9600` in the host firewall.

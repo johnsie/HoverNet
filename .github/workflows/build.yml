@@ -397,6 +397,9 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Write SHA256SUMS
+        run: scripts/make-release-checksums.sh release-assets
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

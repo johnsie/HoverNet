@@ -1,0 +1,10 @@
+# Shared libraries the shipped Linux binaries may link against, and the Debian
+# package that provides each. scripts/check-runtime-dependencies.sh fails if a
+# binary needs a library not listed here (a new, undocumented dependency) or if
+# the package that provides it is missing from that package's Depends.
+# soname<TAB>Debian package<TAB>why
+libc.so.6	libc6	C library
+libm.so.6	libc6	C maths library
+libstdc++.so.6	libstdc++6	C++ runtime
+libgcc_s.so.1	libgcc-s1	compiler runtime (also pulled in by libstdc++6)
+libSDL2-2.0.so.0	libsdl2-2.0-0	window, input, audio and rendering (game client only)

@@ -14,5 +14,8 @@ done
 install -Dm644 docs/community-tracks-pack-readme.txt "$package_root/usr/share/doc/hovernet-community-tracks/README"
 install -Dm644 packaging/debian/community-tracks-control "$package_root/DEBIAN/control"
 sed -i "s/^Version: .*/Version: ${version}/" "$package_root/DEBIAN/control"
+# shellcheck source=packaging/debian/reproducible.sh
+source "$(dirname "$0")/reproducible.sh"
+normalize_package_tree "$package_root"
 mkdir -p "$out_dir"
 dpkg-deb --build --root-owner-group "$package_root" "$out_dir/hovernet-community-tracks_${version}_all.deb"
