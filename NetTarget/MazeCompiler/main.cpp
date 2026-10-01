@@ -802,7 +802,7 @@ BOOL AddBackgroundImage( FILE* pInputFile, CArchive& pDestination )
       if( lBackFile == NULL )
       {
          // Background file still not found - use a default/empty background instead of failing
-         printf( "WARNING: Background file not found (%s), using placeholder\n", lBackFileName );
+         printf( "WARNING: Background file not found (%s), using placeholder\n", (const char*)lBackFileName );
          // Write a minimal bitmap record
          pDestination << (int)MR_RAWBITMAP;
          // Write placeholder palette (all black)

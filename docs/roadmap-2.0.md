@@ -646,6 +646,14 @@ dependencies against it (it found that the server package did not declare
 notices); Windows reproducibility and Windows dependency checks are not covered;
 the alpha, beta, release-candidate and production-rehearsal steps are manual.
 
+x64 audit (1 October 2026, [Windows x64 readiness audit](x64-audit.md)): no
+truncating pointer casts exist in code the shared client builds from; the
+archive layer now rejects any field type whose size differs between Win32, x64 and
+Linux at compile time; the wire format was already explicit. Seven defects were
+fixed (an uninitialised loop condition, a missing virtual destructor, type-punned
+aliasing, bad format arguments). **Open:** run MSVC's pointer-truncation warnings
+in the Windows CI build; real-hardware x64 checks remain manual.
+
 - Remove generated binaries and build artefacts from source control; enforce this through `.gitignore` and CI.
 - Add compiler warnings and sanitizers on Linux.
 - Add Windows smoke tests beyond compilation.

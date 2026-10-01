@@ -26,6 +26,18 @@
 
 #define new DEBUG_NEW
 
+// Reads/writes a typed object pointer through MR_ObjectFromFactory::SerializePtr.
+// The old code cast the pointer *reference* to MR_ObjectFromFactory*&, which
+// aliases a T* as a different pointer type (undefined behaviour under strict
+// aliasing); a temporary base pointer keeps it well-defined.
+template<class T>
+static void SerializeObjectPtr( CArchive& pArchive, T*& pPtr )
+{
+   MR_ObjectFromFactory* lBase = pPtr;
+   MR_ObjectFromFactory::SerializePtr( pArchive, lBase );
+   pPtr = static_cast<T*>( lBase );
+}
+
 // Level loading deliberately survives a malformed section so the game can run
 // the rest of the track; this counter lets a validator tell "loaded cleanly"
 // from "loaded after swallowing an error".
@@ -907,8 +919,8 @@ void MR_Level::Section::SerializeStructure( CArchive& pArchive )
    // Serialize the textures
    try
    {
-      MR_ObjectFromFactory::SerializePtr( pArchive, (MR_ObjectFromFactory*&) mFloorTexture );
-      MR_ObjectFromFactory::SerializePtr( pArchive, (MR_ObjectFromFactory*&)mCeilingTexture );
+      SerializeObjectPtr( pArchive, mFloorTexture );
+      SerializeObjectPtr( pArchive, mCeilingTexture );
 
       if( !pArchive.IsStoring() )
       {
@@ -924,7 +936,7 @@ void MR_Level::Section::SerializeStructure( CArchive& pArchive )
 
       for( lCounter = 0; lCounter < mNbVertex; lCounter++ )
       {
-         MR_ObjectFromFactory::SerializePtr( pArchive, (MR_ObjectFromFactory*&)mWallTexture[ lCounter ] );
+         SerializeObjectPtr( pArchive, mWallTexture[ lCounter ] );
       }
    }
    catch(...)
@@ -1186,7 +1198,7 @@ void MR_Level::FreeElement::SerializeList( CArchive& pArchive, FreeElement** pLi
 
       while( lFreeElement )
       {
-         MR_ObjectFromFactory::SerializePtr( pArchive, (MR_ObjectFromFactory*&)lFreeElement->mElement );
+         SerializeObjectPtr( pArchive, lFreeElement->mElement );
 
          lFreeElement->mElement->mPosition.Serialize( pArchive );
          pArchive << lFreeElement->mElement->mOrientation;
@@ -1209,7 +1221,7 @@ void MR_Level::FreeElement::SerializeList( CArchive& pArchive, FreeElement** pLi
 
          do
          {
-            MR_ObjectFromFactory::SerializePtr( pArchive, (MR_ObjectFromFactory*&)lCurrentElement );
+            SerializeObjectPtr( pArchive, lCurrentElement );
 
             if( lCurrentElement != NULL )
             {

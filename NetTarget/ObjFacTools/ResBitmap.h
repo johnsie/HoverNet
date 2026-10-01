@@ -73,7 +73,7 @@ class MR_ResBitmap: public MR_Bitmap
 
    public:
       MR_DllDeclare MR_ResBitmap( int pResourceId );   // Only availlable for resourceLib and construction
-      MR_DllDeclare ~MR_ResBitmap();
+      MR_DllDeclare virtual ~MR_ResBitmap();
 
       MR_DllDeclare int  GetResourceId()const;
       MR_DllDeclare void Serialize( CArchive& pArchive );

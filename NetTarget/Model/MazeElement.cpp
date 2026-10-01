@@ -126,7 +126,7 @@ MR_FreeElement::MR_FreeElement( const MR_ObjectFromFactoryId& pId )
    // CRITICAL FIX: Initialize position and orientation to valid values
    // Previously, these were left uninitialized, causing heap corruption as garbage values
    // accumulated and corrupted adjacent memory over time
-   memset(&mPosition, 0, sizeof(mPosition));
+   mPosition = MR_3DCoordinate( 0, 0, 0 );
    mOrientation = 0;
 }
 

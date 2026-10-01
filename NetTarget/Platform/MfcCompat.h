@@ -10,6 +10,7 @@
 #include <dlfcn.h>
 #include <fstream>
 #include <list>
+#include <type_traits>
 #include <map>
 #include <limits>
 #include <mutex>
@@ -513,9 +514,30 @@ public:
     void Write(const void* buffer, UINT count) { mFile->Write(buffer, count); }
     void Close() {}
 
+    // The archive writes sizeof(T) raw bytes, and these files (tracks, resources)
+    // are shared between Win32, Windows x64 and Linux. Types whose size differs
+    // between those ABIs would silently change the file format, so they are
+    // rejected at compile time: write a fixed-width integer (std::int32_t,
+    // MR_Int32, ...) instead. (`long` is 4 bytes on Windows but 8 on Linux;
+    // pointers, size_t and wchar_t also differ.)
+    template<typename TValue>
+    struct IsPortableArchiveType
+    {
+        static constexpr bool value =
+            !std::is_pointer<TValue>::value &&
+            !std::is_same<typename std::remove_cv<TValue>::type, long>::value &&
+            !std::is_same<typename std::remove_cv<TValue>::type, unsigned long>::value &&
+            !std::is_same<typename std::remove_cv<TValue>::type, wchar_t>::value &&
+            !std::is_same<typename std::remove_cv<TValue>::type, long double>::value &&
+            !std::is_same<typename std::remove_cv<TValue>::type, std::size_t>::value &&
+            !std::is_same<typename std::remove_cv<TValue>::type, std::ptrdiff_t>::value;
+    };
+
     template<typename TValue>
     CArchive& operator<<(const TValue& value)
     {
+        static_assert(IsPortableArchiveType<TValue>::value,
+                      "archive field type is not the same size on every platform; use a fixed-width integer");
         Write(&value, sizeof(value));
         return *this;
     }
@@ -523,6 +545,8 @@ public:
     template<typename TValue>
     CArchive& operator>>(TValue& value)
     {
+        static_assert(IsPortableArchiveType<TValue>::value,
+                      "archive field type is not the same size on every platform; use a fixed-width integer");
         if (Read(&value, sizeof(value)) != sizeof(value)) {
             std::memset(&value, 0, sizeof(value));
         }

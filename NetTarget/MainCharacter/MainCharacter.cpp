@@ -666,11 +666,13 @@ void MR_MainCharacter::SetControlState( int pState, MR_SimulationTime pTime )
    // First verify transition states
    if( mAllowWeapons && !(mControlState & eSelectWeapon)&&(lState & eSelectWeapon) )
    {
-      (*(int*)&mCurrentWeapon)++;
-      if( mCurrentWeapon == eNotAWeapon )
+      // Step the enum through an int value, not a type-punned int* alias of it.
+      int lNextWeapon = static_cast<int>( mCurrentWeapon ) + 1;
+      if( lNextWeapon == static_cast<int>( eNotAWeapon ) )
       {
-         (*(int*)&mCurrentWeapon) = 0;
+         lNextWeapon = 0;
       }
+      mCurrentWeapon = static_cast<eWeapon>( lNextWeapon );
    }
    if( !(mControlState & eFire)&&(lState & eFire) )
    {

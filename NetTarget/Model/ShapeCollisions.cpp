@@ -199,16 +199,20 @@ BOOL MR_GetFeatureForceLongitude( const MR_ShapeInterface* pActor, const MR_Poly
 
    int lVertexCount = pFeature->VertexCount();
 
-   for( int lCounter = 0; lReturnValue && (lCounter<lVertexCount); lCounter++ )
+   // Every wall is examined. The loop used to also test lReturnValue, which is not
+   // assigned until after the loop (an uninitialised read: with a zero there the
+   // loop was skipped and no force direction was ever found).
+   for( int lCounter = 0; lCounter<lVertexCount; lCounter++ )
    {
       int lP1 = (lCounter+1)%lVertexCount;
 
-      MR_Int32 lLeftDistance = -(pFeature->Y(lP1)-pFeature->Y(lCounter))*(lXMassCenter-pFeature->X(lCounter))
-                               +(pFeature->X(lP1)-pFeature->X(lCounter))*(lYMassCenter-pFeature->Y(lCounter));
+      // 64-bit cross product (see MR_CylinderRoomContact); distances fit in 32 bits.
+      const MR_Int64 lLeftCross = -static_cast<MR_Int64>(pFeature->Y(lP1)-pFeature->Y(lCounter))*(lXMassCenter-pFeature->X(lCounter))
+                                  +static_cast<MR_Int64>(pFeature->X(lP1)-pFeature->X(lCounter))*(lYMassCenter-pFeature->Y(lCounter));
 
-      if( lLeftDistance > 0 )
+      if( lLeftCross > 0 )
       {
-         lLeftDistance /= pFeature->SideLen( lCounter );
+         MR_Int32 lLeftDistance = static_cast<MR_Int32>( lLeftCross / pFeature->SideLen( lCounter ) );
 
          if( lLeftDistance > lGreatestDistance )
          {

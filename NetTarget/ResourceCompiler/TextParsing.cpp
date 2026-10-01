@@ -50,7 +50,7 @@ BOOL MR_ReadPredefinedConstants( const char* pFileName )
             char lKey[100];
             char lValue[100];
              
-            if( sscanf( lLine, " #define %s %s ", lKey, &lValue ) != 2 )
+            if( sscanf( lLine, " #define %99s %99s ", lKey, lValue ) != 2 )
             {
                lReturnValue = FALSE;  
 
