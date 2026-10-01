@@ -14,10 +14,41 @@ by name and a search box at the top of the list. Tracks marked *free play* have
 no finish line, so no laps can be completed; the HUD shows the elapsed time
 instead of a lap counter and the laps setting is greyed out.
 
-Community tracks are a separate download (about 163 MB zipped) and are only
-listed when installed. A player without the pack just sees the official tracks.
+Community tracks are not bundled (the library is about 700 MB), but nothing
+needs installing: they are downloaded on demand.
 
-## Installing the pack
+## Getting tracks
+
+- **On demand (default).** Pick an uninstalled track (tagged *download*) and the
+  button becomes **Download & Start Race** (local), **Download & Create** (host) or
+  **Download & Join** (lobby). The game fetches that one track, verifies it and
+  carries on. A progress dialog with Cancel is shown; a failed or cancelled
+  download installs nothing.
+- **Everything.** Local Play shows **Download all community tracks**, or run
+  `hovernet --download-community-tracks --all`. Names can be given instead of
+  `--all`. `hovernet --track "NAME"` also fetches a missing track first.
+- **Offline pack.** `hovernet-community-tracks` `.deb`/`.zip` (see below) for
+  machines without internet.
+
+Downloads use the system's `curl` (or `wget`; `curl.exe` on Windows 10+), run
+without a shell. Each track is a gzip file named after its hash,
+`<base>/<shard>/<asset>.trk.gz`; the game unpacks it, checks its size and
+SHA-256 against the manifest, and only then moves it into
+`~/.config/hovernet/CommunityTracks` (`%APPDATA%\HoverNet\CommunityTracks`), so a
+corrupt, tampered or half-finished download never becomes a playable track.
+`HOVERNET_TRACK_DOWNLOAD_URL` overrides the base URL (default
+`https://github.com/johnsie/HoverNet/releases/download`).
+
+### Hosting the tracks (maintainers)
+
+`scripts/package-community-tracks.sh VERSION TRACK_DIR` writes
+`dist/community-tracks-hosting/<shard>/<asset>.trk.gz` plus `UPLOAD.txt` with the
+`gh release create` commands. Each shard (500 tracks) is the asset set of one
+GitHub release whose tag is the shard name, which keeps every release under
+GitHub's per-release asset limit. The files are immutable and hash-named, so
+re-uploading is safe. The manifest (committed) already holds every size and hash.
+
+## Installing the offline pack
 
 | Platform | How |
 | --- | --- |
@@ -27,15 +58,14 @@ listed when installed. A player without the pack just sees the official tracks.
 | Manual | unzip the `CommunityTracks` folder into `NetTarget` beside the game |
 
 The game searches, in order: `HOVERNET_COMMUNITY_TRACKS_DIR` (if set),
-`NetTarget/CommunityTracks` beside the game, and the per-user folder
-(`~/.config/hovernet/CommunityTracks` on Linux, `%APPDATA%\HoverNet\CommunityTracks`
-on Windows).
+`NetTarget/CommunityTracks` beside the game, and the per-user folder.
 
 ## Online races
 
-Everyone in a race needs the same track, so a player cannot join a race on a
-community track they have not installed: *Join* is disabled and the lobby says
-why. The race server must also allow the track. It reads the community
+Everyone in a race needs the same track. A player who lacks a community track
+sees **Download & Join** and gets it automatically; a track this version of the
+game does not know at all (a newer manifest) disables Join and says to update.
+The race server must also allow the track. It reads the community
 manifest (`CommunityTracks.tsv`) and relays races only for names it lists, plus
 the official seven. It searches `$HOVERNET_TRACK_MANIFEST`,
 `/etc/hovernet/CommunityTracks.tsv` (installed by the server package, and
@@ -47,9 +77,9 @@ needs the `.trk` files.
 ## The manifest
 
 `NetTarget/CommunityTracks.tsv` is committed to the repository (the tracks are
-not). Each line is `name<TAB>race|freeplay<TAB>starts<TAB>rooms<TAB>warnings`.
-A track is listed only if it is in the manifest **and** its file is present, and
-names only ever reach the filesystem through this catalog, so a hostile track
+not). Each line is `name<TAB>race|freeplay<TAB>starts<TAB>rooms<TAB>warnings<TAB>bytes<TAB>sha256<TAB>shard<TAB>asset<TAB>gzip bytes`
+(older five-column lines still work, but such a track is only listed if its
+file is already installed). Names only ever reach the filesystem through the catalog, so a hostile track
 name sent by a remote host cannot escape the track folders.
 
 To add or refresh tracks, put the `.trk` files in a folder and run:

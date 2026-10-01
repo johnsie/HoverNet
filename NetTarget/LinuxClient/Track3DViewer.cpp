@@ -4,6 +4,7 @@
 #endif
 
 #include "TrackCatalog.h"
+#include "TrackDownloader.h"
 #include "../GraphicsSDL2/SDL2Graphics.h"
 #include "../Game2/ClientSession.h"
 #ifdef HOVERNET_GAME2_PLAYER
@@ -411,6 +412,7 @@ constexpr int kOfficialTrackCount = sizeof(kOfficialTracks) / sizeof(kOfficialTr
 // The catalog of every track this install can play (defined after SourcePath and
 // ConfigDirPath, which it needs to find the track folders).
 TrackCatalog& Tracks();
+TrackDownloadSettings CommunityDownloadSettings();
 
 struct TrackGuide
 {
@@ -498,6 +500,7 @@ std::string TrackNameAt(int index)
 }
 
 void HoverNetSectionHeading(const char* label);
+bool HoverNetButton(const char* label, const ImVec2& size);
 
 struct TrackPreview
 {
@@ -505,6 +508,7 @@ struct TrackPreview
     int mWidth = 0;
     int mHeight = 0;
     bool mLoaded = false;
+    bool mWaitingForDownload = false; // the track is not on this computer yet
 };
 
 TrackPreview LoadTrackPreview(SDL_Renderer* renderer, const char* trackName)
@@ -512,6 +516,16 @@ TrackPreview LoadTrackPreview(SDL_Renderer* renderer, const char* trackName)
     TrackPreview preview;
     preview.mLoaded = true;
     if (renderer == nullptr || trackName == nullptr) return preview;
+    {
+        // A downloadable track that is not installed yet gets its map once it is
+        // (mLoaded stays false so the caller asks again after the download).
+        const TrackEntry* entry = Tracks().Get(Tracks().Find(trackName));
+        if (entry != nullptr && !entry->mInstalled) {
+            preview.mLoaded = false;
+            preview.mWaitingForDownload = true;
+            return preview;
+        }
+    }
 
     try {
         MR_RecordFile track;
@@ -617,7 +631,8 @@ void DrawTrackPreview(const TrackPreview& preview, float minimumHeight = 180.0f,
                        ImVec2(imageMin.x + imageSize.x, imageMin.y + imageSize.y));
     }
     else {
-        const char* unavailable = "Map preview unavailable";
+        const char* unavailable = preview.mWaitingForDownload ? "Map appears after the track is downloaded"
+                                                              : "Map preview unavailable";
         const ImVec2 textSize = ImGui::CalcTextSize(unavailable);
         draw->AddText(ImVec2(frameMin.x + (frameSize.x - textSize.x) * 0.5f,
                              frameMin.y + (frameSize.y - textSize.y) * 0.5f),
@@ -692,9 +707,28 @@ TrackCatalog& Tracks()
         }
         options.mCommunityDirectories.push_back(directoryOf(options.mManifestPath) + "CommunityTracks/");
         options.mCommunityDirectories.push_back(ConfigDirPath() + "/CommunityTracks/");
+        // Downloads go to the per-user folder (writable without administrator
+        // rights); tests can redirect them with HOVERNET_COMMUNITY_TRACKS_DIR.
+        options.mDownloadDirectory = (extra != nullptr && extra[0] != '\0')
+            ? std::string(extra) + "/"
+            : ConfigDirPath() + "/CommunityTracks/";
         catalog.Build(options);
     }
     return catalog;
+}
+
+TrackDownloadSettings CommunityDownloadSettings()
+{
+    TrackDownloadSettings settings;
+    settings.mBaseUrl = DefaultTrackDownloadBaseUrl();
+    // The first community directory is HOVERNET_COMMUNITY_TRACKS_DIR when set,
+    // otherwise the per-user folder under NetTarget/.. -- but the install folder
+    // may be read-only, so prefer the per-user folder unless overridden.
+    const char* override = std::getenv("HOVERNET_COMMUNITY_TRACKS_DIR");
+    settings.mDestination = (override != nullptr && override[0] != '\0')
+        ? std::string(override) + "/"
+        : ConfigDirPath() + "/CommunityTracks/";
+    return settings;
 }
 
 // One-time upgrade path: if oldDotfilePath (this setting's old location directly
@@ -843,6 +877,116 @@ void CaptureFrameIfRequested(SDL_Renderer* renderer, int framesShown, int frameL
     SDL_FreeSurface(surface);
 }
 
+// A download size for display ("114 KB", "2.4 MB", "151 MB").
+std::string FormatMegabytes(long long bytes)
+{
+    char buffer[32];
+    const double megabytes = static_cast<double>(bytes) / (1024.0 * 1024.0);
+    if (megabytes < 1.0) {
+        std::snprintf(buffer, sizeof(buffer), "%lld KB", std::max<long long>(1, (bytes + 512) / 1024));
+    }
+    else {
+        std::snprintf(buffer, sizeof(buffer), megabytes < 10.0 ? "%.1f MB" : "%.0f MB", megabytes);
+    }
+    return buffer;
+}
+
+// Wrapped note in the accent colour (used for "downloads when you start").
+void AccentNote(const std::string& text);
+
+// The "Downloading..." dialog shared by every screen that can fetch tracks. A
+// screen calls Begin() with what it needs, then Draw() every frame in the same
+// ImGui scope (scope 0 = the screen's window, 1 = inside the host dialog).
+// Draw() reports the moment a download finishes so the screen can carry on with
+// what the player asked for (start the race, host it, join it).
+class DownloadUi
+{
+public:
+    enum class State { eIdle, eRunning, eDone, eFailed };
+
+    bool Active() const { return mJob != nullptr; }
+
+    void Begin(const std::vector<TrackEntry>& tracks, int scope)
+    {
+        if (tracks.empty() || mJob) return;
+        mJob.reset(new TrackDownloadJob(CommunityDownloadSettings(), tracks));
+        mScope = scope;
+        mOpenRequested = true;
+        mJob->Start();
+    }
+
+    State Draw(int scope)
+    {
+        if (!mJob || mScope != scope) return State::eIdle;
+        if (mOpenRequested) {
+            ImGui::OpenPopup("Downloading tracks");
+            mOpenRequested = false;
+        }
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(ImVec2(viewport->GetCenter()), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        State result = State::eRunning;
+        if (ImGui::BeginPopupModal("Downloading tracks", nullptr,
+                                   ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+            if (!mJob->Finished()) {
+                const int total = mJob->TotalTracks();
+                const int done = std::min(mJob->CompletedTracks() + 1, total);
+                if (total > 1) {
+                    ImGui::Text("Downloading track %d of %d", done, total);
+                    ImGui::TextDisabled("%s", mJob->CurrentName().c_str());
+                }
+                else {
+                    ImGui::TextUnformatted("Downloading track");
+                    ImGui::TextDisabled("%s", mJob->CurrentName().c_str());
+                }
+                const long long totalBytes = std::max<long long>(1, mJob->TotalBytes());
+                const float fraction = std::min(1.0f, static_cast<float>(mJob->BytesDone()) /
+                                                          static_cast<float>(totalBytes));
+                ImGui::ProgressBar(fraction, ImVec2(380.0f, 0.0f));
+                ImGui::TextDisabled("%s of %s", FormatMegabytes(mJob->BytesDone()).c_str(),
+                                    FormatMegabytes(totalBytes).c_str());
+                ImGui::Spacing();
+                if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, 0))) {
+                    mJob->Cancel();
+                }
+            }
+            else {
+                Tracks().Refresh();
+                if (mJob->Succeeded()) {
+                    ImGui::CloseCurrentPopup();
+                    ImGui::EndPopup();
+                    mJob.reset();
+                    return State::eDone;
+                }
+                if (mJob->Cancelled() && mJob->Error().empty()) {
+                    ImGui::CloseCurrentPopup();
+                    ImGui::EndPopup();
+                    mJob.reset();
+                    return State::eFailed;
+                }
+                ImGui::TextUnformatted("The download did not finish");
+                ImGui::Spacing();
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 380.0f);
+                ImGui::TextWrapped("%s", mJob->Error().c_str());
+                ImGui::PopTextWrapPos();
+                ImGui::Spacing();
+                if (HoverNetButton("OK", ImVec2(-FLT_MIN, 0))) {
+                    ImGui::CloseCurrentPopup();
+                    ImGui::EndPopup();
+                    mJob.reset();
+                    return State::eFailed;
+                }
+            }
+            ImGui::EndPopup();
+        }
+        return result;
+    }
+
+private:
+    std::unique_ptr<TrackDownloadJob> mJob;
+    int mScope = 0;
+    bool mOpenRequested = false;
+};
+
 bool ContainsIgnoreCase(const std::string& text, const std::string& needle)
 {
     if (needle.empty()) return true;
@@ -911,11 +1055,14 @@ bool TrackSelector(const char* id, int slot, int& index)
         if (selected && ImGui::IsWindowAppearing()) {
             ImGui::SetItemDefaultFocus();
         }
-        if (entry.mFreePlay) {
-            const float tagWidth = ImGui::CalcTextSize("free play").x;
+        std::string tag;
+        if (entry.mFreePlay) tag = "free play";
+        if (!entry.mInstalled) tag += std::string(tag.empty() ? "" : "  ") + "download";
+        if (!tag.empty()) {
+            const float tagWidth = ImGui::CalcTextSize(tag.c_str()).x;
             ImGui::SameLine(std::max(ImGui::GetCursorPosX(),
                                      ImGui::GetWindowContentRegionMax().x - tagWidth));
-            ImGui::TextDisabled("free play");
+            ImGui::TextDisabled("%s", tag.c_str());
         }
         ImGui::PopID();
     };
@@ -1465,6 +1612,13 @@ bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
 // Section titles ("Game list", "Chat section", ...) in a coral accent, legible on
 // the dark panel background, distinguishing them from ordinary body text without
 // another loud color block.
+void AccentNote(const std::string& text)
+{
+    ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
+    ImGui::TextWrapped("%s", text.c_str());
+    ImGui::PopStyleColor();
+}
+
 void HoverNetSectionHeading(const char* label)
 {
     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
@@ -1719,12 +1873,29 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         }
         return true;
     };
+    DownloadUi download;
+    bool hostAfterDownload = false;
+    bool joinAfterDownload = false;
     auto joinSelected = [&]() {
         if (!games.empty() && selected >= 0 && selected < static_cast<int>(games.size()) &&
             !games[static_cast<std::size_t>(selected)].mStarted) {
             const RaceServerGameInfo& game = games[static_cast<std::size_t>(selected)];
-            if (FindHostableTrack(game.mTrack) < 0) {
-                statusText = "Track '" + game.mTrack + "' is not installed - install the community track pack to join";
+            const int joinTrackIndex = FindHostableTrack(game.mTrack);
+            if (joinTrackIndex < 0) {
+                statusText = "This race uses a track this version of HoverNet does not know ('" + game.mTrack +
+                             "') - update the game to join it";
+                return;
+            }
+            const TrackEntry* joinTrack = Tracks().Get(joinTrackIndex);
+            if (joinTrack != nullptr && !joinTrack->mInstalled) {
+                if (!joinTrack->mHasDownload) {
+                    statusText = "Track '" + game.mTrack + "' is not installed and cannot be downloaded";
+                    return;
+                }
+                if (!download.Active()) {
+                    download.Begin({*joinTrack}, 0);
+                    joinAfterDownload = true;
+                }
                 return;
             }
             if (client.JoinGameById(game.mRaceId)) {
@@ -2232,16 +2403,25 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 }
             }
             else {
-                const bool trackInstalled = selectedGame == nullptr || FindHostableTrack(selectedGame->mTrack) >= 0;
-                const bool canJoin = selectedGame != nullptr && !selectedGame->mStarted && trackInstalled;
+                const int selectedTrackIndex = selectedGame == nullptr ? -1 : FindHostableTrack(selectedGame->mTrack);
+                const TrackEntry* selectedTrack = Tracks().Get(selectedTrackIndex);
+                const bool trackKnown = selectedGame == nullptr || selectedTrack != nullptr;
+                const bool trackNeedsDownload = selectedTrack != nullptr && !selectedTrack->mInstalled;
+                const bool trackDownloadable = trackNeedsDownload && selectedTrack->mHasDownload;
+                const bool canJoin = selectedGame != nullptr && !selectedGame->mStarted && trackKnown &&
+                                     (!trackNeedsDownload || trackDownloadable);
                 ImGui::BeginDisabled(!canJoin);
-                if (HoverNetButton("Join Game...", ImVec2(-FLT_MIN, 0))) {
+                if (HoverNetButton(trackNeedsDownload ? "Download & Join..." : "Join Game...", ImVec2(-FLT_MIN, 0))) {
                     joinSelected();
                 }
                 ImGui::EndDisabled();
-                if (!trackInstalled) {
-                    ImGui::TextWrapped("This race uses a community track you don't have. Install the community "
-                                       "track pack to join it.");
+                if (!trackKnown) {
+                    ImGui::TextWrapped("This race uses a track this version of HoverNet does not have. "
+                                       "Update the game to join it.");
+                }
+                else if (trackNeedsDownload) {
+                    ImGui::TextWrapped("You don't have this community track yet (%s). It downloads when you join.",
+                                       FormatMegabytes(selectedTrack->mDownloadBytes).c_str());
                 }
                 ImGui::Spacing();
                 if (HoverNetButton("Host Race...", ImVec2(-FLT_MIN, 0))) {
@@ -2328,12 +2508,18 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             ImGui::SetNextItemWidth(-1.0f);
             TrackSelector("##HostTrack", 0, hostPrefs.mTrackIndex);
             const TrackBriefing guide = BriefingFor(hostPrefs.mTrackIndex);
+            const TrackEntry* hostTrack = Tracks().Get(hostPrefs.mTrackIndex);
+            const bool hostNeedsDownload = hostTrack != nullptr && !hostTrack->mInstalled;
             ImGui::Spacing();
             HoverNetSectionHeading("Course briefing");
             ImGui::Text("Style: %s", guide.mCharacter.c_str());
             ImGui::SameLine();
             ImGui::TextDisabled("  Difficulty: %s", guide.mDifficulty.c_str());
             ImGui::TextWrapped("%s", guide.mDescription.c_str());
+            if (hostNeedsDownload) {
+                AccentNote("Not on this computer yet - it downloads (" + FormatMegabytes(hostTrack->mDownloadBytes) +
+                           ") when you create the race.");
+            }
             ImGui::Spacing();
             ImGui::BeginDisabled(guide.mFreePlay);
             ImGui::TextUnformatted("Laps");
@@ -2367,17 +2553,47 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 ImGui::EndChild();
             }
 
-            if (HoverNetButton("Create Race", ImVec2(160, 36))) {
-                hostRaceNow();
-                hostPopupOpen = false;
-                ImGui::CloseCurrentPopup();
+            if (HoverNetButton(hostNeedsDownload ? "Download & Create" : "Create Race", ImVec2(160, 36)) &&
+                !download.Active()) {
+                if (hostNeedsDownload) {
+                    download.Begin({*hostTrack}, 1);
+                    hostAfterDownload = true;
+                }
+                else {
+                    hostRaceNow();
+                    hostPopupOpen = false;
+                    ImGui::CloseCurrentPopup();
+                }
             }
             ImGui::SameLine();
-            if (HoverNetButton("Cancel", ImVec2(120, 36))) {
+            if (HoverNetButton("Cancel", ImVec2(120, 36)) && !download.Active()) {
                 hostPopupOpen = false;
                 ImGui::CloseCurrentPopup();
             }
+            {
+                const DownloadUi::State downloadState = download.Draw(1);
+                if (downloadState == DownloadUi::State::eDone && hostAfterDownload) {
+                    hostAfterDownload = false;
+                    hostRaceNow();
+                    hostPopupOpen = false;
+                    ImGui::CloseCurrentPopup();
+                }
+                else if (downloadState == DownloadUi::State::eFailed) {
+                    hostAfterDownload = false;
+                }
+            }
             ImGui::EndPopup();
+        }
+
+        {
+            const DownloadUi::State downloadState = download.Draw(0);
+            if (downloadState == DownloadUi::State::eDone && joinAfterDownload) {
+                joinAfterDownload = false;
+                joinSelected();
+            }
+            else if (downloadState == DownloadUi::State::eFailed) {
+                joinAfterDownload = false;
+            }
         }
 
         ImGui::End();
@@ -2909,6 +3125,10 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     bool cancelled = false;
     int framesShown = 0;
     std::vector<TrackPreview> trackPreviews(static_cast<std::size_t>(Tracks().Count()));
+    DownloadUi download;
+    bool startAfterDownload = false;
+    // Test hook: behave as if Start Race was pressed on the first frame.
+    bool autoStartForTest = std::getenv("HOVERNET_TEST_AUTO_START") != nullptr;
 
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
@@ -2986,12 +3206,18 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::PopItemWidth();
 
         const TrackBriefing guide = BriefingFor(prefs.mTrackIndex);
+        const TrackEntry* selectedTrack = Tracks().Get(prefs.mTrackIndex);
+        const bool needsDownload = selectedTrack != nullptr && !selectedTrack->mInstalled;
         ImGui::Spacing();
         HoverNetSectionHeading("Course briefing");
         ImGui::Text("Style: %s", guide.mCharacter.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("  Difficulty: %s", guide.mDifficulty.c_str());
         ImGui::TextWrapped("%s", guide.mDescription.c_str());
+        if (needsDownload) {
+            AccentNote("Not on this computer yet - it downloads (" + FormatMegabytes(selectedTrack->mDownloadBytes) +
+                       ") when you start.");
+        }
         ImGui::Spacing();
 
         ImGui::BeginDisabled(guide.mFreePlay);
@@ -3012,13 +3238,36 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Spacing();
         ImGui::Spacing();
 
-        if (HoverNetButton("Start Race", ImVec2(-FLT_MIN, 40))) {
-            running = false;
+        const bool startPressed =
+            HoverNetButton(needsDownload ? "Download & Start Race" : "Start Race", ImVec2(-FLT_MIN, 40)) ||
+            (autoStartForTest && framesShown == 1);
+        if (startPressed && !download.Active()) {
+            if (needsDownload) {
+                download.Begin({*selectedTrack}, 0);
+                startAfterDownload = true;
+            }
+            else {
+                running = false;
+            }
         }
         ImGui::Spacing();
         if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, 36))) {
             cancelled = true;
             running = false;
+        }
+        const std::vector<TrackEntry> missing = Tracks().MissingDownloads();
+        if (!missing.empty()) {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            char label[96];
+            std::snprintf(label, sizeof(label), "Download all %d community tracks (%s)",
+                          static_cast<int>(missing.size()),
+                          FormatMegabytes(Tracks().MissingDownloadBytes()).c_str());
+            if (HoverNetButton(label, ImVec2(-FLT_MIN, 0)) && !download.Active()) {
+                download.Begin(missing, 0);
+                startAfterDownload = false;
+            }
         }
         ImGui::EndChild();
 
@@ -3040,6 +3289,16 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
 
         ImGui::EndChild();
+        {
+            const DownloadUi::State downloadState = download.Draw(0);
+            if (downloadState == DownloadUi::State::eDone && startAfterDownload) {
+                startAfterDownload = false;
+                running = false;
+            }
+            else if (downloadState == DownloadUi::State::eFailed) {
+                startAfterDownload = false;
+            }
+        }
         ImGui::End();
 
         ImGui::Render();
@@ -4225,9 +4484,89 @@ bool IsPlayerMode(int argc, char** argv)
 }
 }
 
+#ifdef HOVERNET_GAME2_PLAYER
+// Downloads one community track now, if it is listed, not installed, and
+// downloadable (used by --track NAME so a missing track just works). Returns
+// false only if a download was needed and failed.
+bool EnsureTrackInstalledBlocking(const std::string& trackName)
+{
+    const TrackEntry* entry = Tracks().Get(Tracks().Find(trackName));
+    if (entry == nullptr || entry->mInstalled || !entry->mHasDownload) return true;
+    std::printf("Downloading community track '%s' (%s)...\n", entry->mName.c_str(),
+                FormatMegabytes(entry->mDownloadBytes).c_str());
+    std::fflush(stdout);
+    TrackDownloadJob job(CommunityDownloadSettings(), {*entry});
+    job.RunBlocking();
+    Tracks().Refresh();
+    if (!job.Succeeded()) {
+        std::fprintf(stderr, "Download failed: %s\n", job.Error().c_str());
+        return false;
+    }
+    return true;
+}
+
+// "hovernet --download-community-tracks --all" or "... NAME [NAME...]": fetches
+// community tracks without opening the game, for scripts and for players who
+// prefer a terminal. Prints progress; exits 0 only if everything requested is
+// installed afterwards.
+int RunDownloadCommand(int argc, char** argv)
+{
+    std::vector<TrackEntry> wanted;
+    bool all = false;
+    for (int index = 1; index < argc; ++index) {
+        const std::string argument = argv[index];
+        if (argument == "--download-community-tracks") continue;
+        if (argument == "--all") { all = true; continue; }
+        if (argument.compare(0, 2, "--") == 0) continue;
+        const int found = Tracks().Find(argument);
+        const TrackEntry* entry = Tracks().Get(found);
+        if (entry == nullptr) {
+            std::fprintf(stderr, "Unknown track '%s'\n", argument.c_str());
+            return 1;
+        }
+        if (!entry->mInstalled) wanted.push_back(*entry);
+    }
+    if (all) wanted = Tracks().MissingDownloads();
+    if (wanted.empty()) {
+        std::printf("Nothing to download: the requested tracks are already installed.\n");
+        return 0;
+    }
+
+    long long totalBytes = 0;
+    for (const TrackEntry& entry : wanted) totalBytes += entry.mDownloadBytes;
+    std::printf("Downloading %zu community track(s), %s...\n", wanted.size(), FormatMegabytes(totalBytes).c_str());
+    std::fflush(stdout);
+
+    TrackDownloadJob job(CommunityDownloadSettings(), wanted);
+    job.Start();
+    int reported = 0;
+    while (!job.Finished()) {
+        SDL_Delay(100);
+        while (reported < job.CompletedTracks()) {
+            ++reported;
+            if (wanted.size() <= 20 || reported % 50 == 0 || reported == static_cast<int>(wanted.size())) {
+                std::printf("  %d/%zu installed\n", reported, wanted.size());
+                std::fflush(stdout);
+            }
+        }
+    }
+    Tracks().Refresh();
+    if (!job.Succeeded()) {
+        std::fprintf(stderr, "Download failed: %s\n", job.Error().c_str());
+        return 1;
+    }
+    std::printf("Done: %d track(s) installed in %s\n", job.CompletedTracks(),
+                CommunityDownloadSettings().mDestination.c_str());
+    return 0;
+}
+#endif
+
 int RunClient(int argc, char** argv)
 {
 #ifdef HOVERNET_GAME2_PLAYER
+    if (HasArgument(argc, argv, "--download-community-tracks")) {
+        return RunDownloadCommand(argc, argv);
+    }
     if (HasArgument(argc, argv, "--print-config-paths")) {
         std::fprintf(stderr, "CONFIG_DIR=%s\n", ConfigDirPath().c_str());
         std::fprintf(stderr, "HOST_PREFS=%s\n", HostPrefsPath().c_str());
@@ -4241,6 +4580,11 @@ int RunClient(int argc, char** argv)
         std::fprintf(stderr, "CONTROLLER_BINDINGS=%s\n", ControllerBindingsPath().c_str());
         std::fprintf(stderr, "ONBOARDING_COMPLETE=%s\n", OnboardingCompletePath().c_str());
         return 0;
+    }
+#endif
+#ifdef HOVERNET_GAME2_PLAYER
+    if (HasArgument(argc, argv, "--track") && !EnsureTrackInstalledBlocking(ParseTrackArg(argc, argv))) {
+        return 1;
     }
 #endif
     MR_InitTrigoTables();

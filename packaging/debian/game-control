@@ -5,5 +5,6 @@ Priority: optional
 Architecture: amd64
 Maintainer: HoverNet Team <devteam@outiva.com>
 Depends: libc6, libstdc++6, libsdl2-2.0-0
+Recommends: curl | wget
 Description: HoverNet multiplayer racing game client
  HoverNet game client with its object resources and all bundled race tracks.

@@ -46,6 +46,14 @@ for number, raw in enumerate(open(sys.argv[1], encoding="utf-8"), 1):
         sys.exit(f"manifest line {number}: bad numbers")
     if not name or name.startswith(".") or any(c in name for c in '/\\:') or any(ord(c) < 32 for c in name):
         sys.exit(f"manifest line {number}: unsafe name {name!r}")
+    if len(fields) >= 10:
+        import re
+        _, _, _, _, _, size, sha, shard, asset, gz = fields[:10]
+        if not (re.fullmatch(r"[0-9a-f]{64}", sha) and re.fullmatch(r"[0-9a-f]{16,64}", asset)
+                and re.fullmatch(r"[A-Za-z0-9._-]{1,64}", shard) and int(size) > 0 and int(gz) > 0):
+            sys.exit(f"manifest line {number}: bad download columns")
+        if not sha.startswith(asset):
+            sys.exit(f"manifest line {number}: asset name is not derived from the hash")
     if len(name.encode("utf-8")) > 63:
         sys.exit(f"manifest line {number}: name over 63 bytes")
     key = name.lower()
@@ -146,6 +154,78 @@ run_online_race() {
 run_online_race "Zz Test Arena" ok
 run_online_race "$long_name" ok
 echo "online community races ok"
+
+# ---- 2c. downloading tracks on demand (needs curl and gzip; served over file://) --
+if command -v curl >/dev/null 2>&1 && command -v gzip >/dev/null 2>&1; then
+  hosting="$work_dir/hosting/test-shard"; mkdir -p "$hosting"
+  dl_manifest="$work_dir/dl-manifest.tsv"
+  : >"$dl_manifest"
+  for name in "Zz Test Arena" "Aa Test Sprint" "$long_name"; do
+    file="$pack/$name.trk"
+    sha=$(sha256sum "$file" | cut -d' ' -f1)
+    gzip -n -9 -c "$file" >"$hosting/${sha:0:16}.trk.gz"
+    printf '%s\trace\t10\t12\t0\t%s\t%s\ttest-shard\t%s\t%s\n' \
+      "$name" "$(stat -c %s "$file")" "$sha" "${sha:0:16}" "$(stat -c %s "$hosting/${sha:0:16}.trk.gz")" >>"$dl_manifest"
+  done
+  export HOVERNET_TRACK_DOWNLOAD_URL="file://$work_dir/hosting"
+  export HOVERNET_COMMUNITY_MANIFEST="$dl_manifest" HOVERNET_TRACK_MANIFEST="$dl_manifest"
+
+  # Command line: everything missing is downloaded, verified and byte-identical.
+  d1="$work_dir/dl1"
+  HOVERNET_COMMUNITY_TRACKS_DIR="$d1" "$game" --play --download-community-tracks --all >"$work_dir/dl1.log" 2>&1 \
+    || { cat "$work_dir/dl1.log"; fail "--download-community-tracks --all failed"; }
+  for name in "Zz Test Arena" "Aa Test Sprint" "$long_name"; do
+    cmp -s "$d1/$name.trk" "$pack/$name.trk" || fail "downloaded '$name' differs from the original"
+  done
+  [[ -z $(find "$d1" -name '*.part' -o -name '*.tmp') ]] || fail "download left temporary files behind"
+  HOVERNET_COMMUNITY_TRACKS_DIR="$d1" "$game" --play --download-community-tracks --all 2>&1 | grep -q "Nothing to download" \
+    || fail "a second --all run should find nothing to do"
+
+  # --track NAME fetches a missing track by itself and then plays it.
+  d2="$work_dir/dl2"
+  HOVERNET_COMMUNITY_TRACKS_DIR="$d2" "$game" --play --autoplay --track "Zz Test Arena" --frames 20 >"$work_dir/dl2.log" 2>&1 \
+    || { cat "$work_dir/dl2.log"; fail "--track did not download and load a missing community track"; }
+  [[ -f "$d2/Zz Test Arena.trk" ]] || fail "--track did not install the track"
+
+  # The local setup screen's "Download & Start Race" installs the track and confirms.
+  d3="$work_dir/dl3"
+  printf 'Zz Test Arena\n4 1\n' >"$prefs"
+  HOVERNET_COMMUNITY_TRACKS_DIR="$d3" HOVERNET_TEST_AUTO_START=1 "$game" --play --local-setup-screen --frames 600 \
+    >"$work_dir/dl3.log" 2>&1 || { cat "$work_dir/dl3.log"; fail "Download & Start Race failed"; }
+  [[ -f "$d3/Zz Test Arena.trk" ]] || fail "Download & Start Race did not install the track"
+
+  # A track that does not match its recorded hash is refused and nothing is installed.
+  bad_manifest="$work_dir/bad-manifest.tsv"
+  sed -E 's/\t[0-9a-f]{64}\t/\t0000000000000000000000000000000000000000000000000000000000000000\t/' "$dl_manifest" >"$bad_manifest"
+  d4="$work_dir/dl4"
+  if HOVERNET_COMMUNITY_MANIFEST="$bad_manifest" HOVERNET_COMMUNITY_TRACKS_DIR="$d4" \
+       "$game" --play --download-community-tracks "Zz Test Arena" >"$work_dir/dl4.log" 2>&1; then
+    fail "a download that fails verification must not succeed"
+  fi
+  [[ ! -e "$d4/Zz Test Arena.trk" ]] || fail "a tampered download was installed"
+
+  # Online: the host has the track, the joiner does not. The joiner downloads it
+  # when joining and then plays the same race.
+  joiner_dir="$work_dir/joiner"
+  "$build_dir/RaceServer" 19960 "$work_dir/server-19960.log" --require-protocol-2 >/dev/null 2>&1 &
+  server_pid=$!
+  sleep 0.5
+  HOVERNET_COMMUNITY_TRACKS_DIR="$pack" timeout 60 "$game" --lobby 127.0.0.1 19960 --track "Zz Test Arena" \
+    --online-race-host-smoke --frames 80 >"$work_dir/host-19960.log" 2>&1 &
+  host_pid=$!
+  sleep 0.5
+  join_rc=0
+  HOVERNET_COMMUNITY_TRACKS_DIR="$joiner_dir" timeout 60 "$game" --lobby 127.0.0.1 19960 \
+    --online-race-join-smoke --frames 80 >"$work_dir/join-19960.log" 2>&1 || join_rc=$?
+  host_rc=0; wait "$host_pid" || host_rc=$?
+  kill -TERM "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true
+  [[ $join_rc -eq 0 && $host_rc -eq 0 ]] || { tail -n 20 "$work_dir/host-19960.log" "$work_dir/join-19960.log" >&2; fail "joiner without the track could not download and join"; }
+  [[ -f "$joiner_dir/Zz Test Arena.trk" ]] || fail "the joiner did not download the host's track"
+  echo "on-demand downloads ok"
+  unset HOVERNET_TRACK_DOWNLOAD_URL
+else
+  echo "curl/gzip not available; skipped the download checks"
+fi
 
 # ---- 3. the real pack, if installed -----------------------------------------
 unset HOVERNET_COMMUNITY_MANIFEST

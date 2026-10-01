@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <set>
+#include <vector>
 
 namespace {
 
@@ -60,6 +61,27 @@ int ToInt(const std::string& pText)
     return static_cast<int>(std::strtol(pText.c_str(), nullptr, 10));
 }
 
+bool IsHexString(const std::string& pText, std::size_t pMin, std::size_t pMax = 0)
+{
+    if (pMax == 0) pMax = pMin;
+    if (pText.size() < pMin || pText.size() > pMax) return false;
+    for (char lChar : pText) {
+        if (!((lChar >= '0' && lChar <= '9') || (lChar >= 'a' && lChar <= 'f'))) return false;
+    }
+    return true;
+}
+
+bool IsSafeShardName(const std::string& pText)
+{
+    if (pText.empty() || pText.size() > 64 || pText[0] == '.') return false;
+    for (char lChar : pText) {
+        const bool lOk = (lChar >= 'a' && lChar <= 'z') || (lChar >= 'A' && lChar <= 'Z') ||
+                         (lChar >= '0' && lChar <= '9') || lChar == '-' || lChar == '_' || lChar == '.';
+        if (!lOk) return false;
+    }
+    return true;
+}
+
 } // namespace
 
 bool TrackCatalog::IsSafeTrackName(const std::string& pName)
@@ -98,11 +120,27 @@ bool TrackCatalog::ParseManifestLine(const std::string& pLine, TrackEntry& pOut)
     pOut.mFreePlay = lFields[1] == "freeplay";
     pOut.mStarts = ToInt(lFields[2]);
     pOut.mRooms = ToInt(lFields[3]);
+
+    // Optional download columns: bytes, sha256, shard, asset, gzip bytes.
+    if (lFields.size() >= 10) {
+        const std::string& lSha = lFields[6];
+        const std::string& lShard = lFields[7];
+        const std::string& lAsset = lFields[8];
+        if (IsHexString(lSha, 64) && IsHexString(lAsset, 16, 64) && IsSafeShardName(lShard)) {
+            pOut.mHasDownload = true;
+            pOut.mBytes = std::strtoll(lFields[5].c_str(), nullptr, 10);
+            pOut.mSha256 = lSha;
+            pOut.mShard = lShard;
+            pOut.mAsset = lAsset;
+            pOut.mDownloadBytes = std::strtoll(lFields[9].c_str(), nullptr, 10);
+        }
+    }
     return true;
 }
 
 void TrackCatalog::Build(const TrackCatalogOptions& pOptions)
 {
+    mOptions = pOptions;
     mEntries.clear();
 
     std::set<std::string> lTaken;
@@ -133,8 +171,13 @@ void TrackCatalog::Build(const TrackCatalogOptions& pOptions)
             continue; // duplicate of an official or earlier community track
         }
         lEntry.mPath = FindTrackFile(pOptions.mCommunityDirectories, lEntry.mName);
-        if (lEntry.mPath.empty()) {
-            continue; // the community pack isn't installed (or lacks this track)
+        lEntry.mInstalled = !lEntry.mPath.empty();
+        if (!lEntry.mInstalled) {
+            if (!lEntry.mHasDownload) {
+                continue; // not installed and nowhere to get it from
+            }
+            // Listed so the player can pick it; it is downloaded when needed.
+            lEntry.mPath = pOptions.mDownloadDirectory + lEntry.mName + ".trk";
         }
         lCommunity.push_back(lEntry);
     }
@@ -163,6 +206,40 @@ int TrackCatalog::Find(const std::string& pName) const
     return -1;
 }
 
+void TrackCatalog::Refresh()
+{
+    for (TrackEntry& lEntry : mEntries) {
+        if (lEntry.mOfficial) {
+            continue;
+        }
+        const std::string lPath = FindTrackFile(mOptions.mCommunityDirectories, lEntry.mName);
+        lEntry.mInstalled = !lPath.empty();
+        if (lEntry.mInstalled) {
+            lEntry.mPath = lPath;
+        }
+    }
+}
+
+std::vector<TrackEntry> TrackCatalog::MissingDownloads() const
+{
+    std::vector<TrackEntry> lMissing;
+    for (const TrackEntry& lEntry : mEntries) {
+        if (!lEntry.mOfficial && !lEntry.mInstalled && lEntry.mHasDownload) {
+            lMissing.push_back(lEntry);
+        }
+    }
+    return lMissing;
+}
+
+long long TrackCatalog::MissingDownloadBytes() const
+{
+    long long lTotal = 0;
+    for (const TrackEntry& lEntry : MissingDownloads()) {
+        lTotal += lEntry.mDownloadBytes;
+    }
+    return lTotal;
+}
+
 const TrackEntry* TrackCatalog::Get(int pIndex) const
 {
     if (pIndex < 0 || pIndex >= Count()) {
@@ -174,5 +251,8 @@ const TrackEntry* TrackCatalog::Get(int pIndex) const
 std::string TrackCatalog::PathFor(const std::string& pName) const
 {
     const int lIndex = Find(pName);
-    return lIndex < 0 ? std::string() : mEntries[lIndex].mPath;
+    if (lIndex < 0 || !mEntries[lIndex].mInstalled) {
+        return std::string();
+    }
+    return mEntries[lIndex].mPath;
 }

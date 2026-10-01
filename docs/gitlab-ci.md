@@ -15,14 +15,17 @@ Mark the `race-server` runner and the production environment as protected. The d
 
 `build:game:linux:sanitizers` configures a RelWithDebInfo build with `-DHOVERNET_WARNINGS=ON` (`-Wall -Wextra`) and `-DHOVERNET_SANITIZE=ON` (AddressSanitizer and UndefinedBehaviorSanitizer), then runs the whole ctest suite with sanitizer errors fatal. The compiler output is kept as the `build/sanitize/build.log` artifact so warning counts can be tracked. Both options are off by default; use them locally with the same CMake flags.
 
-The community track pack is deliberately not built by CI: it is about 700 MB of
-third-party files that are not in the repository. Only its small manifest
-(`NetTarget/CommunityTracks.tsv`) is, and every package that needs it (game
-`.deb`, RaceServer `.deb`, Windows installer, Windows RaceServer zip) includes
-the manifest. `HoverNetCommunityTracks` in the ctest suite checks the manifest,
-the selector, and an online race on community tracks with a throw-away pack. To
-publish the pack itself, run `scripts/package-community-tracks.sh` locally and
-attach the zip/`.deb` to the release.
+The community tracks are deliberately not built by CI: they are about 700 MB of
+third-party files that are not in the repository. Only their small manifest
+(`NetTarget/CommunityTracks.tsv`, which also holds each track's size and SHA-256)
+is, and every package that needs it (game `.deb`, RaceServer `.deb`, Windows
+installer, Windows RaceServer zip) includes the manifest. The game downloads
+tracks on demand from GitHub releases; `scripts/package-community-tracks.sh`
+builds the files to upload (see [Community tracks](community-tracks.md)). The
+`HoverNetTrackDownloadSmoke` and `HoverNetCommunityTracks` ctest targets cover
+the downloader (against a local `file://` host, so they need `curl` and `gzip` on
+the Linux runner), the selector, and online races including a joiner downloading
+the host's track.
 
 ## Server setup
 

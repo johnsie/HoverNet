@@ -26,6 +26,19 @@ struct TrackEntry
     bool mFreePlay = false;     // no complete finish/checkpoint set: there are no laps to complete
     int mStarts = 0;            // number of start slots (0 = not known)
     int mRooms = 0;
+
+    // Whether the .trk file is on this machine. Official tracks always are; a
+    // community track that can be downloaded is listed even when it is not.
+    bool mInstalled = true;
+
+    // Download details from the manifest (see TrackDownloader.h). All empty/zero
+    // for tracks that cannot be downloaded.
+    bool mHasDownload = false;
+    std::string mShard;         // release the file is hosted in
+    std::string mAsset;         // hash-based file name (without .trk.gz)
+    std::string mSha256;        // of the decompressed .trk
+    long long mBytes = 0;       // size of the decompressed .trk
+    long long mDownloadBytes = 0; // size of the .trk.gz
 };
 
 struct TrackCatalogOptions
@@ -34,6 +47,8 @@ struct TrackCatalogOptions
     std::vector<std::string> mOfficialDirectories;  // searched in order, each ending in '/'
     std::string mManifestPath;                      // community manifest (may be missing)
     std::vector<std::string> mCommunityDirectories; // searched in order, each ending in '/'
+    // Where downloaded tracks are saved (ending in '/'); also searched for tracks.
+    std::string mDownloadDirectory;
 };
 
 class TrackCatalog
@@ -45,10 +60,18 @@ public:
     int Count() const { return static_cast<int>(mEntries.size()); }
     int OfficialCount() const { return mOfficialCount; }
 
+    // Re-checks which tracks are on disk (after a download). Order and indexes do
+    // not change.
+    void Refresh();
+    // Community tracks that can be downloaded but are not installed yet.
+    std::vector<TrackEntry> MissingDownloads() const;
+    long long MissingDownloadBytes() const;
+
     // Index of the track called pName, or -1. Exact match, then case-insensitive.
     int Find(const std::string& pName) const;
     const TrackEntry* Get(int pIndex) const;
-    // File for pName, or an empty string if the catalog doesn't know it.
+    // File for pName, or an empty string if the catalog doesn't know it or it is
+    // not installed (a downloadable track must be downloaded first).
     std::string PathFor(const std::string& pName) const;
 
     // Parses one manifest line ("name<TAB>mode<TAB>starts<TAB>rooms[<TAB>...]").
@@ -61,6 +84,7 @@ public:
 private:
     std::vector<TrackEntry> mEntries;
     int mOfficialCount = 0;
+    TrackCatalogOptions mOptions;
 };
 
 #endif

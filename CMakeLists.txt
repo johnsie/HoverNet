@@ -380,6 +380,9 @@ target_link_libraries(HoverNetTrack3DViewer PRIVATE HoverNetClientSession HoverN
 add_executable(HoverNetGame2Player
     NetTarget/LinuxClient/Track3DViewer.cpp
     NetTarget/LinuxClient/TrackCatalog.cpp
+    NetTarget/LinuxClient/TrackDownloader.cpp
+    NetTarget/LinuxClient/Gunzip.cpp
+    NetTarget/LinuxClient/Sha256.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
 )
 
@@ -415,6 +418,15 @@ if(BUILD_TESTING AND NOT WIN32)
         NetTarget/LinuxClient/TrackCatalog.cpp
     )
     add_hovernet_root_test(HoverNetTrackCatalogSmoke)
+    add_executable(HoverNetTrackDownloadSmoke
+        NetTarget/LinuxClient/TrackDownloadSmoke.cpp
+        NetTarget/LinuxClient/TrackDownloader.cpp
+        NetTarget/LinuxClient/TrackCatalog.cpp
+        NetTarget/LinuxClient/Gunzip.cpp
+        NetTarget/LinuxClient/Sha256.cpp
+    )
+    target_link_libraries(HoverNetTrackDownloadSmoke PRIVATE Threads::Threads)
+    add_hovernet_root_test(HoverNetTrackDownloadSmoke)
     add_test(NAME HoverNetCommunityTracks
         COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-community-tracks.sh"
                 "${CMAKE_BINARY_DIR}" "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/community-tracks-test")
