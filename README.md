@@ -23,8 +23,34 @@ Downloads for both Windows and Linux are published on the [Releases page](../../
 
 HoverNet lists seven official tracks and can also play about a thousand
 community-made ones from the classic HoverRace library. They are a separate
-download; see [Community tracks](docs/community-tracks.md) for installing them
-and for how they appear in the track selectors.
+download (about 163 MB), so the game only shows the official tracks until you
+install them. The community tracks then appear under a "Community tracks"
+heading below the official ones, with a search box, in both the Local Play setup
+and the online Host race dialog.
+
+**Getting them working on Linux**
+
+1. Install the game as above (the `hovernet-game` `.deb`).
+2. Download the community track pack from the release page. It comes as either
+   `hovernet-community-tracks_*.zip` or `hovernet-community-tracks_*_all.deb`.
+3. Install it with whichever you downloaded:
+   - **`.deb`** (system-wide, needs `sudo`):
+     `sudo apt install ./hovernet-community-tracks_*_all.deb`
+   - **`.zip`** (just for you, no `sudo`): unzip it, then from a copy of this
+     repository run `scripts/install-community-tracks.sh hovernet-community-tracks_*.zip`.
+     This copies the tracks to `~/.config/hovernet/CommunityTracks`. You can also
+     copy the `.trk` files there yourself.
+4. Start HoverNet and open Local Play. The track dropdown now lists the community
+   tracks after the official ones. If you only see the seven official tracks, the
+   files are not in one of the folders above.
+
+To play a community track online, everyone in the race needs the pack installed,
+and the race server must allow the track (servers running this version of
+HoverNet do). If you are missing a track someone else hosted, the lobby disables
+Join and tells you why.
+
+See [Community tracks](docs/community-tracks.md) for Windows, running a server,
+and how the tracks were made to work.
 
 ## Controls
 
