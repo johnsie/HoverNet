@@ -4,6 +4,25 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 0.4.1 - 2026-10-01
+
+### Fixed
+- Windows x64 readiness audit: an uninitialised loop condition in collision force
+  maths, a missing virtual destructor on bitmap resources, type-punned pointer and
+  enum access, bad `printf`/`sscanf` arguments, and a `memset` of a class object.
+  Track data loads identically (all 1,009 community tracks and the 7 bundled ones).
+- File archives now reject, at compile time, any field type whose size differs
+  between Win32, Windows x64 and Linux, so shared file formats cannot silently
+  diverge.
+
+### Added
+- Windows client acceptance in both CI pipelines: a local race on every bundled
+  track and the community-track downloader (verified on a real Windows x64 runner).
+- `scripts/test-cross-platform-race.sh`: Windows x64 <-> Linux races through a Linux
+  race server, both directions (release rehearsal).
+- [x64 audit](docs/x64-audit.md): method, MSVC `/W4` results (no pointer-truncation
+  warnings) and what is not covered.
+
 ## 0.4.0 - 2026-10-01
 
 ### Added
