@@ -45,21 +45,34 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 # Shown in the Linux client's window title (see SDL2Graphics.cpp). Matches the
 # vX.Y.Z tags CI builds releases from (see .gitlab-ci.yml's PACKAGE_VERSION);
 # an untagged dev build instead gets the nearest tag plus commit count/hash
-# (or just the hash with no tags yet), and "dev" if git isn't available at all
-# (e.g. building from a source tarball with no .git directory).
+# (or just the hash with no tags yet), "+local" is added when the files differ from
+# that commit, and "dev" is used if git isn't available at all (e.g. building from a
+# source tarball with no .git directory).
 find_package(Git QUIET)
 set(HOVERNET_VERSION "dev")
 if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
     execute_process(
-        COMMAND ${GIT_EXECUTABLE} describe --tags --always --dirty
+        COMMAND ${GIT_EXECUTABLE} describe --tags --always
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         OUTPUT_VARIABLE HOVERNET_VERSION_OUTPUT
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
         RESULT_VARIABLE HOVERNET_GIT_DESCRIBE_RESULT
     )
+    # A build made from files that differ from the commit says so with "+local"
+    # (e.g. v2.0.0+local), so nobody mistakes it for the published release.
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} status --porcelain --untracked-files=no
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE HOVERNET_GIT_CHANGES
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
     if(HOVERNET_GIT_DESCRIBE_RESULT EQUAL 0 AND NOT HOVERNET_VERSION_OUTPUT STREQUAL "")
         set(HOVERNET_VERSION "${HOVERNET_VERSION_OUTPUT}")
+        if(NOT HOVERNET_GIT_CHANGES STREQUAL "")
+            set(HOVERNET_VERSION "${HOVERNET_VERSION}+local")
+        endif()
     endif()
 endif()
 message(STATUS "HoverNet version: ${HOVERNET_VERSION}")

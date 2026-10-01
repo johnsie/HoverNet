@@ -17,10 +17,10 @@
 
 ---
 
-> ### &#127937; 2.0 BETA IS LIVE
-> HoverNet 2.0 is in **public beta**. It is ready to play and we want your feedback.
-> On the [Releases page](../../releases), look for the entries marked **Pre-release**.
-> Found a bug? [Tell us here](../../issues). It takes a minute and helps a lot.
+> ### &#127937; HOVERNET 2.0 IS OUT
+> Grab it from the [Releases page](../../releases). It is the one marked **Latest**.
+> **We still want your feedback.** Found a bug, or have an idea? [Open an issue](../../issues).
+> It takes a minute and helps a lot.
 
 **HoverNet is a fast-paced hovercraft racing game.** Pick a track, floor it, hop the
 ramps, and blast your rivals with missiles on the way round. It is a modern remake of

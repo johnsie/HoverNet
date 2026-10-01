@@ -415,5 +415,9 @@ jobs:
           args=(--generate-notes --verify-tag)
           if [[ "$RELEASE_TAG" == *-* ]]; then
             args+=(--prerelease --notes-file docs/beta-release-notes.md)
+          else
+            # A stable release starts with its notes, including the invitation to keep
+            # opening GitHub issues with feedback.
+            args+=(--notes-file docs/release-notes.md)
           fi
           gh release create "$RELEASE_TAG" release-assets/* "${args[@]}"

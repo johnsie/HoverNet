@@ -4,6 +4,25 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.0 - 2026-10-02
+
+HoverNet 2.0, the first stable release of the 2.0 line (it follows the public beta).
+See the [release notes](docs/release-notes.md).
+
+### Changed
+- The redesigned lobby: no header bar; the Users list now includes you and everyone
+  else in the lobby; the game details show the map, track, laps, weapons, players,
+  style and status; the waiting room shows all eight players without scrolling; the
+  chat keeps 200 lines, scrolls, and stays on the newest message; only the main
+  action is a red button.
+- A build made from files that differ from its commit now shows `+local` after the
+  version (for example `v2.0.0+local`).
+- Stable tags publish with `docs/release-notes.md`, which invites feedback through
+  GitHub issues.
+
+### Known
+- The 24-hour race-server soak test is still running for this build.
+
 ## 2.0.0-beta.2 - 2026-10-01
 
 Replaces beta.1, whose `.deb` file names GitHub rewrote (`~` became `.`), so

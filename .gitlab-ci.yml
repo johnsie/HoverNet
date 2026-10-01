@@ -234,9 +234,13 @@ publish:github-release:
     - scripts/make-release-checksums.sh dist
     - |
       # A tag with a hyphen (v2.0.0-beta.1) is a pre-release: marked as one (so it never
-      # becomes "latest") and starting with the beta notes.
+      # becomes "latest") and starting with the beta notes. A stable tag starts with
+      # docs/release-notes.md (which invites feedback via GitHub issues).
       prerelease=""
-      case "$CI_COMMIT_TAG" in *-*) prerelease="--prerelease --notes-file docs/beta-release-notes.md";; esac
+      case "$CI_COMMIT_TAG" in
+        *-*) prerelease="--prerelease --notes-file docs/beta-release-notes.md";;
+        *) prerelease="--notes-file docs/release-notes.md";;
+      esac
       gh release create "$CI_COMMIT_TAG" $prerelease dist/SHA256SUMS dist/*.deb dist/*-win32-setup.exe dist/*-windows-x64-setup.exe dist/*.zip --repo johnsie/HoverNet --title "$CI_COMMIT_TAG" --notes "Automated release for $CI_COMMIT_TAG"
   rules:
     - if: '$CI_COMMIT_TAG'

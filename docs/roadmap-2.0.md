@@ -665,6 +665,11 @@ the cross-platform race needs two machines, so it is a release-rehearsal step an
 not a CI job; clean-install/upgrade/uninstall rehearsals and the Win32 retirement
 decision are still manual.
 
+**Release (2 October 2026).** `v2.0.0` was published as the stable 2.0 release. The
+24-hour server soak (a listed release criterion) was started the same day and is
+still running; its result is recorded in `docs/phase2-verification.md` when it
+finishes.
+
 **Beta (1 October 2026).** `v2.0.0-beta.1` is the first public beta, published as a
 GitHub pre-release; the process is in the [beta test plan](beta-test-plan.md).
 **Decision:** the 32-bit Windows client is *not* retired for 2.0. It ships beside the
