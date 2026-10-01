@@ -1,61 +1,159 @@
-# HoverNet
+<p align="center">
+  <img src="docs/images/hovercraft.png" alt="The red number 1 HoverNet hovercraft with twin jet engines" width="380">
+</p>
 
-HoverNet is a fast-paced hovercraft racing game: pick a track, race other hovercraft around tight, ramp-filled circuits, and use missiles to take out the competition. It's a modernization of the original HoverRace, created by GrokkSoft in 1996, with a native Windows client, a Linux client, and an online multiplayer lobby so you can race against other players over the internet.
+<h1 align="center">HOVERNET</h1>
 
-## Playing online
+<p align="center"><b>Fast hovercraft. Tight tracks. Missiles. Race the world.</b></p>
 
-Launch the game and open the multiplayer lobby to see races other players have open, or host your own. The first time you connect you'll be asked to pick a username, so other players can see who's racing. From the lobby you can:
+<p align="center">
+  <a href="../../releases"><b>&#9654; GET THE GAME</b></a> &nbsp;&middot;&nbsp;
+  <a href="#-quick-start">Quick start</a> &nbsp;&middot;&nbsp;
+  <a href="#-controls">Controls</a> &nbsp;&middot;&nbsp;
+  <a href="#-choose-your-track">Tracks</a> &nbsp;&middot;&nbsp;
+  <a href="#-race-online">Online</a> &nbsp;&middot;&nbsp;
+  <a href="#-need-help">Help</a>
+</p>
 
-- See a live list of open races and who else is currently in the lobby.
-- Host a race on any track, choosing lap count and whether weapons are allowed.
-- Join a race in progress or waiting to start.
-- Chat with other players while you wait.
+---
 
-## Getting the game
+> ### &#127937; 2.0 BETA IS LIVE
+> HoverNet 2.0 is in **public beta**. It is ready to play and we want your feedback.
+> On the [Releases page](../../releases), look for the entries marked **Pre-release**.
+> Found a bug? [Tell us here](../../issues). It takes a minute and helps a lot.
 
-Downloads for both Windows and Linux are published on the [Releases page](../../releases).
+**HoverNet is a fast-paced hovercraft racing game.** Pick a track, floor it, hop the
+ramps, and blast your rivals with missiles on the way round. It is a modern remake of
+the classic **HoverRace** (GrokkSoft, 1996) that runs on **Windows and Linux** and lets
+you race other players **online**.
 
-- **Windows 32 bit**: Classic MFC forums layout. Download and run the installer (`HoverNet-setup-32.exe`).
-- **Windows 64 bit**: Experimental cross-platform SDL2/IMGUI layout. Download and run the installer (`HoverNet-setup-64.exe`).
-- **Linux**: download the `.deb` package and install it (`sudo apt install ./hovernet-game_*.deb`), then launch it from your applications menu or run `hovernet` from a terminal.
+```
+  +--------------------------------------------------------------+
+  |  RACE 0:42.10                                      LAP 2 / 3 |
+  |                                                              |
+  |                     ( >>> GO GO GO <<< )                     |
+  |                                                              |
+  |   SPEED  |||||||||||.....     FUEL  ||||||||||||||..         |
+  |   Missile ready                                              |
+  +--------------------------------------------------------------+
+```
 
-### Community tracks
+## &#127918; Quick start
 
-HoverNet has seven official tracks and about a thousand community-made ones from
-the classic HoverRace library. You don't need to install anything: open the
-track dropdown (Local Play, or Host race online) and the community tracks are
-listed below the official ones, with a search box. Pick one and press
-**Download & Start Race**; HoverNet downloads that single track (usually under
-a megabyte), checks it, and starts the race. Joining someone else's race on a
-community track you don't have works the same way: **Download & Join**.
+**1. Download it** from the [Releases page](../../releases):
 
-- **Download everything:** Local Play has a **Download all community tracks**
-  button (about 150 MB), or from a terminal:
-  `hovernet --download-community-tracks --all` (or give track names instead of `--all`).
-- **Needs:** an internet connection and `curl` (or `wget`) on Linux. Windows 10
-  and later already include `curl.exe`. If it's missing the game tells you what to
-  install: `sudo apt install curl`.
-- **Where they go:** `~/.config/hovernet/CommunityTracks` on Linux
-  (`%APPDATA%\HoverNet\CommunityTracks` on Windows). Delete files there to free space.
-- **Offline:** download the full community pack from the release page and install it
-  with `scripts/install-community-tracks.sh` (see
-  [Community tracks](docs/community-tracks.md)), or install the
-  `hovernet-community-tracks` `.deb`.
+| You have | Download | Then |
+| --- | --- | --- |
+| **Windows (64-bit)**, recommended | `HoverNet-<version>-windows-x64-setup.exe` | double-click it and press Next |
+| **Linux** (Ubuntu, Debian) | `hovernet-game_<version>_amd64.deb` | `sudo apt install ./hovernet-game_*.deb`, then run `hovernet` |
+| **Windows (32-bit)** or an older PC | `HoverNet-<version>-win32-setup.exe` | the classic version, kept for compatibility |
 
-## Controls
+**2. Press START.** The first time, a short tutorial shows you the controls.
+
+**3. Pick a mode.**
+
+| Mode | What it is |
+| --- | --- |
+| **Local Play** | Race on your own. Choose a track, how many laps, and weapons on or off. |
+| **Online Lobby** | See open races, host your own, join friends, and chat while you wait. |
+
+That is all there is to it. No accounts, no setup, no extra downloads to start.
+
+## &#127918; Controls
+
+You can change every key in **Settings**, and game controllers work too.
 
 | Input | Action |
 | --- | --- |
-| Left Shift / Right Shift | Accelerate |
-| Left / Right | Steer; select hovercraft during the countdown |
-| Up | Jump |
-| Down | Brake / reverse |
-| Left Ctrl or Right Ctrl | Fire missile |
-| Tab | Select weapon |
-| F3 | Following camera |
-| F4 | Cockpit camera |
-| Escape | Open the in-race menu; leave an online race or quit |
+| **Left / Right Shift** | Accelerate |
+| **Left / Right** | Steer (and pick your hovercraft during the countdown) |
+| **Up** | Jump |
+| **Down** | Brake / reverse |
+| **Left / Right Ctrl** | Fire a missile |
+| **Tab** | Change weapon |
+| **F3** / **F4** | Following camera / cockpit camera |
+| **Esc** | Pause menu (leave the race or quit) |
 
-## Building from source and technical documentation
+> **Tip:** jump the gaps and water, grab the power-ups, keep an eye on your fuel gauge,
+> and save your missiles for the straights.
 
-If you want to build HoverNet yourself, or you're interested in how the client, race server, and CI pipelines work, see the [technical overview](docs/technical.md).
+## &#127937; Choose your track
+
+Seven **official tracks** come with the game:
+
+| Track | Style | Level |
+| --- | --- | --- |
+| **ClassicH** | The classic all-round circuit. Start here. | Beginner |
+| **Steeplechase** | Obstacles and controlled jumps | Intermediate |
+| **Switchback** | A long, twisting route | Intermediate |
+| **The River** | Fast and flowing, along the water | Intermediate |
+| **Tidal Causeway** | Broad tidal circuit, chicanes and twin jumps | Intermediate |
+| **The Alley2** | Tight corridors for quick reactions | Advanced |
+| **Metro Spiral** | Rotated skyline with rapid direction changes | Advanced |
+
+### &#127757; And about a thousand more
+
+HoverNet can also play about **1,000 community-made tracks** from the classic HoverRace
+library: races, battle arenas, tag, hockey, and some stranger things.
+
+- Open the track list in **Local Play** or **Host race**. The community tracks are
+  below the official ones, and there is a **search box**.
+- Pick one and press **Download & Start Race**. HoverNet fetches just that track
+  (usually under a megabyte), checks it, and drops you in.
+- Tracks marked **free play** have no finish line: no laps, just drive, fight and
+  explore for as long as you like.
+- Want them all? Press **Download all community tracks** in Local Play (about 150 MB).
+
+<details>
+<summary><b>Community track details</b></summary>
+
+- You need an internet connection, plus `curl` (or `wget`) on Linux. Windows 10 and
+  later already have it. If it is missing the game tells you what to install:
+  `sudo apt install curl`.
+- Tracks are saved in `~/.config/hovernet/CommunityTracks` (Linux) or
+  `%APPDATA%\HoverNet\CommunityTracks` (Windows). Delete files there to free space.
+- From a terminal: `hovernet --download-community-tracks --all`.
+- No internet? Install the offline pack. See [Community tracks](docs/community-tracks.md).
+- These tracks were made by many people over many years and are played exactly as
+  published, so some are rough or start you facing a wall. That is part of the fun.
+
+</details>
+
+## &#127760; Race online
+
+1. Choose **Online Lobby** from the main menu. The first time, pick a **username**.
+2. You will see **open races** and **who is in the lobby**.
+3. **Join** a race that is waiting, or **Host** your own: pick the track, laps and
+   weapons, then press **Create Race**.
+4. **Chat** while you wait, then the host presses **Start**.
+
+Windows and Linux players can race **together** in the same race. If someone picks a
+community track you do not have, press **Download & Join** and the game fetches it for you.
+
+Want your own server? Install the `hovernet-raceserver` package (Linux) or use the
+`hovernet-raceserver_*_win32.zip` (Windows), then point **Settings** at it.
+
+## &#10067; Need help?
+
+| Problem | Try this |
+| --- | --- |
+| **Can't connect to the lobby** | Check your internet connection. If the server is down, host your own (see above) or play **Local Play**. |
+| **"Could not download" a community track** | You need internet, and `curl` or `wget` on Linux. The message tells you what is missing. |
+| **The window is too small or too big** | **Settings** has display mode, resolution and UI scale. |
+| **I can't read the text** | **Settings** also has high contrast, large HUD text and reduced motion. |
+| **Controls feel wrong** | Remap everything in **Settings**, or plug in a controller. |
+| **I found a bug** | [Open an issue](../../issues) and tell us your version, your system, and what you did. |
+
+Your settings are kept when you update or uninstall, so you can safely try a new version.
+
+## &#128295; For developers and server operators
+
+- Build from source, CI and the race server: [technical overview](docs/technical.md)
+- Making tracks: [track authoring guide](docs/track-authoring.md)
+- Release history: [changelog](CHANGELOG.md), and how releases work: [releasing](docs/releasing.md)
+- Joining the beta: [beta test plan](docs/beta-test-plan.md)
+- Third-party code and licences: [notices](THIRD_PARTY_NOTICES.md)
+
+---
+
+<p align="center"><i>HoverNet is based on <b>HoverRace</b> by GrokkSoft (1996). See you on the track!</i></p>
