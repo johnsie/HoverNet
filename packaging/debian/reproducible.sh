@@ -11,6 +11,14 @@ if [[ -z ${SOURCE_DATE_EPOCH:-} ]]; then
 fi
 export SOURCE_DATE_EPOCH
 
+# Debian orders "2.0.0-beta.1" AFTER "2.0.0" (a hyphen starts the revision), so a
+# beta would shadow the final release on upgrade. A tilde sorts before anything, so
+# the first hyphen of a pre-release tag (v2.0.0-beta.1) becomes "~" in the package
+# version (2.0.0~beta.1 < 2.0.0). Plain versions pass through unchanged.
+debian_version() {
+  printf '%s' "${1/-/\~}"
+}
+
 # Gives every file and directory under $1 the pinned time, so nothing depends on
 # when the package was staged.
 normalize_package_tree() {

@@ -665,6 +665,12 @@ the cross-platform race needs two machines, so it is a release-rehearsal step an
 not a CI job; clean-install/upgrade/uninstall rehearsals and the Win32 retirement
 decision are still manual.
 
+**Beta (1 October 2026).** `v2.0.0-beta.1` is the first public beta, published as a
+GitHub pre-release; the process is in the [beta test plan](beta-test-plan.md).
+**Decision:** the 32-bit Windows client is *not* retired for 2.0. It ships beside the
+x64 client as the compatibility fallback, and its removal is revisited for 2.1, so
+the Win32 build and install jobs stay in CI.
+
 - Remove generated binaries and build artefacts from source control; enforce this through `.gitignore` and CI.
 - Add compiler warnings and sanitizers on Linux.
 - Add Windows smoke tests beyond compilation.

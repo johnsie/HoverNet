@@ -2,6 +2,9 @@
 set -euo pipefail
 
 version="$1"
+# shellcheck source=packaging/debian/reproducible.sh
+source "$(dirname "$0")/reproducible.sh"
+version="$(debian_version "$version")"
 binary="$2"
 package_root="${CI_PROJECT_DIR:-$(pwd)}/dist/debian/hovernet-raceserver_${version}_amd64"
 

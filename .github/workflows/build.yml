@@ -409,4 +409,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" release-assets/* --generate-notes --verify-tag
+        run: |
+          # A tag with a hyphen (v2.0.0-beta.1) is a pre-release: it is marked as one
+          # (so it never becomes "latest") and starts with the beta notes.
+          args=(--generate-notes --verify-tag)
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            args+=(--prerelease --notes-file docs/beta-release-notes.md)
+          fi
+          gh release create "$RELEASE_TAG" release-assets/* "${args[@]}"

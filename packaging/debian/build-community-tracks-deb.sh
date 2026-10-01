@@ -2,6 +2,9 @@
 set -euo pipefail
 
 version="${1#v}"
+# shellcheck source=packaging/debian/reproducible.sh
+source "$(dirname "$0")/reproducible.sh"
+version="$(debian_version "$version")"
 tracks="${2:?directory of .trk files required}"
 out_dir="${3:-dist}"
 package_root="$(mktemp -d)/hovernet-community-tracks_${version}_all"

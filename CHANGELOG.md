@@ -4,6 +4,18 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.0-beta.1 - 2026-10-01
+
+First public beta of HoverNet 2.0, published as a GitHub *pre-release*. Everything
+in 0.4.x, now treated as the 2.0 feature set; see the
+[beta notes](docs/beta-release-notes.md) and [test plan](docs/beta-test-plan.md).
+
+### Changed
+- Pre-release tags (`vX.Y.Z-beta.N`) are published as GitHub pre-releases, and the
+  Debian packages use `X.Y.Z~beta.N`, so a beta always sorts before the final
+  release on upgrade.
+- Decision: the 32-bit Windows client stays in 2.0 as the compatibility fallback.
+
 ## 0.4.1 - 2026-10-01
 
 ### Fixed

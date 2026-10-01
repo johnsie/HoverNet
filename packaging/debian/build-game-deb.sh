@@ -2,6 +2,9 @@
 set -euo pipefail
 
 version="${1#v}"
+# shellcheck source=packaging/debian/reproducible.sh
+source "$(dirname "$0")/reproducible.sh"
+version="$(debian_version "$version")"
 binary="${2:-build/linux/HoverNetGame2Player}"
 plugin="${3:-build/linux/ObjFac1.so}"
 architecture="$(dpkg --print-architecture)"
