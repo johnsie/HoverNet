@@ -4,7 +4,7 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## Unreleased
+## 0.4.0 - 2026-10-01
 
 ### Added
 - Community tracks download on demand: pick one in any track selector and press
