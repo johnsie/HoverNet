@@ -1,192 +1,331 @@
 # HoverNet 3.0 Roadmap
 
-HoverNet 3.0 begins only after HoverNet 2.0 has shipped and its release criteria remain healthy in production. Its purpose is to replace the remaining 1990s-era technical constraints with a modern, authoritative, extensible racing platform while preserving HoverRace's fast handling, compact tracks, weapons, and visual identity.
+*Draft for review, 2 October 2026. Revised after HoverNet 2.0 shipped.*
 
-HoverNet 3.0 also completes the client convergence begun in 2.0. It has one
-shared Windows/Linux client codebase; operating-system-specific code is limited
-to narrow integration layers such as packaging, filesystem locations, window
-and controller discovery, signing, and installers. The legacy Win32/MFC client
-may be retained as part of the installable 2.0 legacy release, but it is not a
-3.0 runtime, fallback, or second feature implementation.
+HoverNet 3.0 replaces the 1990s-era technical constraints that 2.0 deliberately left
+alone, with a deterministic, server-authoritative racing platform, while keeping what
+players love: fast handling, compact tracks, weapons, and the visual identity. It also
+turns the community track library and the tooling built in 2.0 into a proper creator
+ecosystem.
 
-This is approximately an 18-to-24-month programme for a small team. Dates should be assigned only after 2.0 is complete; durations below are relative to the 3.0 kickoff.
+3.0 starts only after 2.0 has run in production without incident and its release
+criteria still hold. Durations below are relative to kickoff and are estimates, not
+commitments: about 16 to 22 months for a small team. The 2.0 foundations (a single
+cross-platform client, a hardened server, release engineering, and a lot of automated
+checking) remove several stages of work the first draft of this roadmap assumed.
+
+## Where 2.0 leaves us
+
+### What 2.0 delivered, and 3.0 builds on
+
+| Area | State at the end of 2.0 |
+| --- | --- |
+| Client | One shared SDL2/ImGui client for Windows x64 and Linux: menus, settings, remapping, controllers, display and audio options, accessibility options, onboarding. The legacy Win32/MFC client still ships as a compatibility fallback. |
+| Network | Versioned protocol 2.0 with explicit field encoding (no native struct layouts), negotiation, rate limits, input validation, fuzzing, lifecycle tests, and cross-platform races verified Windows to Linux in both directions. The server is a relay; clients run physics locally. |
+| Content | Seven validated bundled tracks, about 1,000 community tracks played unmodified, a command-line compiler and validator, a manifest with sizes and SHA-256 hashes, and a verified on-demand downloader. |
+| Quality gates | Sanitizer builds (ASan, UBSan), a headless screenshot-test pattern for UI, Windows acceptance in CI, a compile-time guard that stops platform-dependent types in file formats, an x64 audit, and a runtime-dependency check. |
+| Release engineering | Reproducible packages, `SHA256SUMS`, pre-release handling, changelog, third-party notices, and written upgrade and rollback procedures. |
+
+### What 2.0 deliberately left, and 3.0 must address
+
+- **Simulation is client-side and relayed.** Nothing is authoritative; the server
+  cannot verify a result. The server-side simulation scaffolding in the repository is
+  unfinished and unused.
+- **Determinism is unproven.** The physics is fixed-point integer maths, which helps,
+  but 2.0's sanitizer work found real signed-overflow and undefined behaviour that only
+  worked by accident, and one file (the software rasterizer) is still exempt from the
+  overflow check. Whether two platforms stay bit-identical over a long race has never
+  been measured.
+- **Rendering and gameplay are entangled,** and the renderer is a 1990s software
+  rasterizer with 4096-scaled coordinates.
+- **File formats are unversioned.** Tracks and resources are serialized archives with no
+  version number, plus a plug-in model (`ObjFac1`) built on dynamically loaded C++ classes.
+- **No replays, spectating, accounts or ratings,** and HoverCad is a legacy tool.
+- **Open operational items from 2.0:** the 24-hour server soak (started 2 October 2026,
+  still running), the production-server migration rehearsal, Windows reproducibility and
+  dependency checks, and a line-by-line review of the MSVC narrowing warnings.
+- **The Win32 client is retained,** which means two clients exist until a retirement
+  decision is made with evidence.
 
 ## Product goals
 
 HoverNet 3.0 should deliver:
 
 - deterministic, server-authoritative online racing;
-- a modern cross-platform client architecture;
-- secure accounts, matchmaking, rankings, and moderation;
-- first-class replays, spectating, tournaments, and community tracks;
-- a supported visual track editor and modern content pipeline;
-- compatibility with classic tracks through conversion or an isolated legacy mode;
+- a modern renderer and UI on the shared client, with no legacy client at runtime;
+- first-class replays, spectating, and time trials;
+- a supported visual track editor and a versioned content pipeline, with every classic
+  track converted or explained;
+- safe, minimal social features at launch (names, private lobbies, mute and report),
+  with ratings and tournaments following once the foundations are proven;
 - sustainable automated testing, observability, and live operations.
 
-It should not become a generic game engine. Every technical investment must support racing, content creation, multiplayer integrity, or maintainability.
+It should not become a generic game engine. Every investment must serve racing, content
+creation, multiplayer integrity, or maintainability.
 
-## Stage 0 — Discovery and technical prototypes
+## Principles carried over from 2.0
 
-**Months 0–3**
+These are what made 2.0 work; keep them.
 
-- Measure 2.0 gameplay, network behaviour, player retention, popular modes, hardware, and failure rates.
-- Record a physics reference suite from 2.0: acceleration, steering, jumping, collisions, weapons, pickups, and representative full races.
-- Specify the 3.0 simulation, protocol, replay, asset, and track formats before production implementation.
-- Prototype deterministic simulation across Windows and Linux.
-- Prototype client prediction, server reconciliation, interpolation, and lag compensation under artificial loss, latency, and jitter.
-- Evaluate the rendering and platform layer with a narrow criterion: preserve gameplay while reducing platform-specific code.
-- Decide whether to evolve the existing C++ codebase or build a new client around a reusable simulation core.
-- Inventory every feature still exclusive to the legacy Win32/MFC client and
-  assign it one of three outcomes: migrate to shared code, replace with a shared
-  design, or explicitly retire it.
-- Produce migration plans for classic tracks, resources, settings, player identities, and hosted servers.
+1. **Measure before claiming.** Every "it works" has a test or a captured result. Exit
+   gates below are numbers and commands, not intentions.
+2. **Sanitizers and fuzzing are part of the definition of done,** and exemptions (like
+   the rasterizer's) are tracked and removed, not forgotten.
+3. **Verify UI changes visually.** Headless screenshot tests catch what reasoning misses.
+4. **Real machines in the loop.** Cross-platform behaviour is tested on real Windows and
+   Linux, and that rehearsal is automated wherever possible.
+5. **Release hygiene is not optional:** reproducible builds, checksums, a changelog, and
+   rehearsed rollback for every release.
+6. **Honest scope.** Unproven foundations are never hidden behind features.
 
-**Exit gate:** A two-player prototype produces matching simulation hashes across platforms and remains playable at the agreed network latency target.
+## Stage 0: Prove the foundations
 
-## Stage 1 — Shared deterministic simulation core
+**Months 0 to 3**
 
-**Months 3–7**
+Run the experiments that decide the architecture before building on it.
 
-- Separate gameplay state from rendering, audio, UI, input, and networking.
-- Implement fixed-step deterministic simulation with explicit numeric and randomness rules.
-- Port hovercraft movement, collisions, checkpoints, lap counting, weapons, pickups, and race rules into the shared core.
-- Add versioned state snapshots and deterministic input streams.
-- Build golden tests comparing important 2.0 behaviours against 3.0.
-- Add simulation hashes, divergence reports, property tests, fuzz tests, and long replay tests.
-- Run the same core in the client, dedicated server, replay viewer, and headless test runner.
+- **Cross-platform determinism experiment (first task).** Record the inputs of full races
+  (all seven bundled tracks plus a sample of community tracks), hash the whole game state
+  every frame, and replay the same inputs on Linux, Windows x64, and Win32. Report the
+  first frame where any hash differs. Audit the likely causes: platform maths-library
+  results in table construction, floating-point use in the simulation, uninitialised
+  state, and signed overflow.
+- **Remove the rasterizer's sanitizer exemption** and make the simulation free of
+  undefined behaviour under UBSan across the whole corpus of 1,009 community tracks.
+- **Golden physics suite.** Capture reference behaviour from 2.0: acceleration, steering,
+  jumps, collisions, weapons, pickups, and full races, as inputs plus expected hashes.
+- **Netcode prototype** under artificial latency, loss, jitter and reordering:
+  prediction, reconciliation, interpolation, and lag compensation for weapons.
+- **Architecture decision (an ADR),** based on the data above: evolve the existing C++
+  code behind a clean simulation boundary, or build a new simulation core. Decide how the
+  renderer is handled separately.
+- **Win32 inventory.** List every feature only the Win32 client has, and assign each to
+  migrate, replace, or retire, so its retirement is a dated decision.
+- **Format and protocol specifications** for the simulation state, replay, track, and
+  network protocol 3.0 (versioned, explicit, portable).
+- **Agree the targets** that later gates use. Proposal to confirm: playable at 120 ms round
+  trip with 2% loss, and stable at 250 ms with 5%; eight players per race.
 
-**Exit gate:** Representative races replay identically on supported platforms, and gameplay differences from 2.0 are either fixed or documented design decisions.
+**Exit gate:** a two-player prototype produces identical state hashes across all supported
+platforms for the recorded races, or the divergences are fully explained with a fix plan;
+the architecture decision is written down; and the simulation is clean under UBSan.
 
-## Stage 2 — Authoritative networking and dedicated server
+## Stage 1: Shared deterministic simulation core
 
-**Months 6–11**
+**Months 3 to 7**
 
-- Design and implement a versioned 3.0 protocol independent of native C++ memory layouts.
-- Use authenticated encryption and secure session establishment.
-- Make the server authoritative for starts, movement, collisions, weapons, pickups, laps, finishes, and results.
-- Implement prediction, reconciliation, interpolation, reconnect, and spectator snapshots.
-- Add bandwidth budgets, packet prioritisation, compression, rate limiting, and denial-of-service protections.
-- Support regional server pools and private dedicated servers.
-- Build network simulation into tests for latency, loss, duplication, reordering, and disconnects.
-- Provide server health, metrics, tracing, crash reporting, configuration validation, and rolling deployment support.
+- Separate gameplay state from rendering, audio, UI, input, and networking. The 2.0 library
+  split (model, main character, video, resources) is the starting seam.
+- Fixed-step simulation with explicit numeric and randomness rules, and no platform maths
+  in the simulation path (integer or fixed-point tables generated once and committed).
+- Port movement, collisions, checkpoints, laps, weapons, pickups, and race rules into the
+  shared core, with versioned state snapshots and deterministic input streams.
+- Golden tests against 2.0 behaviour; every difference is fixed or recorded as a design
+  decision.
+- Divergence reports, property tests, fuzz tests, and long-replay tests in CI on every
+  supported platform.
+- The same core runs in the client, the dedicated server, the replay viewer, and the
+  headless test runner.
 
-**Exit gate:** Eight-player races remain stable and fair at the defined latency and packet-loss targets, with no client able to authoritatively alter race results.
+**Exit gate:** representative races, including every bundled track and a fixed sample of
+community tracks, replay bit-identically on all supported platforms in CI, and remaining
+differences from 2.0 are documented design decisions.
 
-## Stage 3 — Modern client and presentation
+## Stage 2: Authoritative networking and dedicated server
 
-**Months 7–13**
+**Months 6 to 11**
 
-- Replace remaining Win32/MFC-specific runtime paths with a shared cross-platform application layer.
-- Make the shared client the only 3.0 desktop runtime; Windows and Linux must use
-  the same menu, HUD, settings, input, rendering, audio, and networking feature
-  implementations, with platform adapters kept narrow and independently tested.
-- Remove the legacy Windows client from 3.0 packages after migration coverage
-  proves all supported player flows and settings have a shared equivalent.
-- Introduce a maintainable renderer with widescreen, high-DPI, windowed, borderless, and fullscreen support.
-- Preserve a classic visual preset while adding modern lighting, particles, effects, and scalable quality options.
-- Build a unified UI system for menus, HUD, lobby, settings, results, replays, and editor workflows.
-- Add robust controller support, rebinding, input glyphs, vibration, and multiple controller layouts.
-- Add accessibility options including scalable UI, colour-safe indicators, reduced flashing, camera controls, and configurable assists.
-- Establish performance budgets and automated frame captures for visual regression testing.
+- A versioned protocol 3.0 independent of native memory layouts, building on 2.0's explicit
+  encoding, with authenticated encryption and secure session establishment.
+- The server is authoritative for starts, movement, collisions, weapons, pickups, laps,
+  finishes, and results. Prediction, reconciliation, interpolation, reconnect, and
+  spectator snapshots on the client.
+- Bandwidth budgets, packet prioritisation, compression, rate limiting, and abuse
+  protection (extending 2.0's limits and fuzzing).
+- Regional server pools and private dedicated servers; **server observability** (health,
+  metrics, tracing, crash reports) and rolling deployment.
+- A network-condition test harness (latency, loss, duplication, reordering, disconnects)
+  in CI, plus **automated soak and load tests** replacing 2.0's manual 24-hour run.
+- Protocol compatibility policy and a negotiated fallback path: 3.0 clients can still talk
+  to a 2.0 relay for a defined period, and the reverse is refused with a clear message.
 
-**Exit gate:** The client completes all core game flows on every supported platform without legacy platform-specific UI dependencies.
+**Exit gate:** eight-player races stay stable and fair at the Stage 0 latency and loss
+targets over a multi-day soak, no client can alter a result, and a game-state tampering
+suite fails to change any official outcome.
 
-## Stage 4 — Identity, matchmaking, rankings, and moderation
+## Stage 3: Modern client and presentation
 
-**Months 10–15**
+**Months 7 to 13**
 
-- Introduce optional accounts while retaining a low-friction guest path where practical.
-- Implement secure identity, display names, sessions, privacy controls, and account recovery.
-- Add parties, invitations, public and private lobbies, matchmaking regions, and skill-aware queues.
-- Add seasonal and permanent leaderboards with auditable race-result ingestion.
-- Implement reports, blocks, mutes, moderator actions, sanctions, and appeal records.
-- Define retention and deletion policies for personal data, chat, telemetry, and reports.
-- Add administrative tools with least-privilege access and complete audit logs.
+2.0 already converged on one shared client; this stage modernises it and removes the legacy
+one.
 
-**Exit gate:** Players can reliably find appropriate races, and every moderation or ranking change is authenticated and auditable.
+- A maintainable renderer for widescreen and high-DPI, with a classic visual preset
+  that matches 2.0 output (verified by automated frame captures) and optional modern
+  lighting, particles and quality tiers. Replace the software rasterizer behind the
+  simulation boundary, so rendering can change without touching gameplay.
+- A unified UI toolkit for menus, HUD, lobby, replays, and editor, using the visual test
+  pattern from 2.0, and full controller navigation and glyphs.
+- Accessibility carried forward and extended: colour-safe indicators, reduced flashing,
+  camera controls, configurable assists, scalable text.
+- Performance budgets with automated frame-time and frame-capture regression tests.
+- **Win32 client retirement,** per the Stage 0 inventory: migrate or retire each exclusive
+  feature, run a deprecation period with a visible notice, and remove it from 3.0
+  packages. The final 2.x release stays downloadable as the legacy build.
 
-## Stage 5 — Replays, spectating, competition, and social play
+**Exit gate:** every supported flow works on every supported platform with no legacy UI
+dependency, the classic preset matches 2.0 captures within an agreed tolerance, and
+frame-time budgets hold on the reference hardware list.
 
-**Months 12–17**
+## Stage 4: Content pipeline and the HoverCad successor
 
-- Store compact deterministic replays based on versioned inputs, events, and periodic snapshots.
-- Add replay seeking, camera controls, timeline markers, and export-friendly playback.
-- Add delayed live spectating to protect competitive integrity.
-- Support tournament brackets, qualifying, heats, seeded grids, custom rules, and race administration.
-- Add ghosts, time trials, personal bests, and track leaderboards.
-- Provide shareable race and replay identifiers.
+**Months 4 to 14, in parallel with the networking stages**
 
-**Exit gate:** A completed competitive event can be administered, spectated, replayed, and independently verified from stored race data.
+Content is HoverNet's strength: there are already about a thousand community tracks. This
+stage makes them durable and makes new ones easy.
 
-## Stage 6 — Content pipeline and HoverCad successor
+- **Versioned, portable formats** for tracks, materials, meshes, sounds, spawn points,
+  checkpoints, and gameplay objects, replacing the unversioned archive, with a documented
+  migration path and a compile-time guard against platform-dependent fields (carried over
+  from 2.0).
+- **Deterministic importers** for classic `.trk` files. The 1,009-track library is the
+  conversion test corpus: every track converts, or is listed with the exact reason it
+  cannot.
+- A supported **visual editor**: validation as you work, undo and redo, preview, object
+  placement, checkpoint tooling, and one-click playtesting. Free-play tracks (no finish
+  line) become a first-class mode, not an accident of missing objects.
+- Automated checks for topology, collision, checkpoint order, spawn safety, missing assets,
+  and performance, building on 2.0's validator and its strict and community levels.
+- **Content distribution on 2.0's foundations:** packages with metadata, licence, author,
+  dependencies, hashes, and format version; the verified downloader and manifest become a
+  signed catalogue with review, reporting, revocation, and server allowlists. Record
+  authorship and licence for every new track (the 2.0 library has none).
+- Authoring documentation and example content under clear licences.
 
-**Months 11–18**
+**Exit gate:** a creator can build, validate, package, share, and play a new track without
+touching the source tree; all bundled tracks and at least 95% of the community library
+convert, with every failure explained.
 
-- Define versioned, portable formats for tracks, materials, meshes, sounds, spawn points, checkpoints, and gameplay objects.
-- Build deterministic importers for classic `.trk` files and supported legacy resources.
-- Create a supported visual editor with validation, undo/redo, preview, object placement, checkpoint tooling, and one-click playtesting.
-- Add automated checks for topology, collision, checkpoint order, spawn safety, missing assets, and performance budgets.
-- Package community tracks with metadata, licence, dependencies, hashes, and format version.
-- Design a curated distribution path with review, reporting, revocation, and server allowlists.
-- Publish authoring documentation and example content under clear licences.
+## Stage 5: Replays, spectating, and time trials
 
-**Exit gate:** A creator can build, validate, package, share, and play a new track without modifying the source tree or using unsupported tools.
+**Months 10 to 16**
 
-## Stage 7 — Migration, compatibility, and ecosystem beta
+Depends on Stage 1's determinism.
 
-**Months 17–21**
+- Compact deterministic replays (versioned inputs, events, periodic snapshots) that
+  re-verify against the server's recorded result.
+- Seeking, camera controls, timeline markers, and export-friendly playback.
+- Delayed live spectating (protects competitive integrity) using the server's spectator
+  snapshots.
+- Ghosts, time trials, personal bests, track leaderboards, and shareable replay identifiers.
 
-- Ship conversion tools and reports for all bundled 2.0 tracks.
-- Preserve 2.0 as an installable legacy release and keep its servers visibly separate from 3.0.
-- Provide clear handling for content that cannot be converted exactly.
-- Publish dedicated-server images, configuration schemas, upgrade guidance, and compatibility policy.
-- Run creator, server-operator, competitive-player, and accessibility betas.
-- Test account migration, rollback, server-region failover, and protocol-version retirement.
-- Freeze formats and public interfaces before release candidate builds.
+**Exit gate:** a race can be saved, shared, replayed, and independently verified from the
+stored data, on every supported platform.
 
-**Exit gate:** Bundled content is migrated, community workflows are documented, and beta participants can operate without developer intervention.
+## Stage 6: Online services, in two steps
 
-## Stage 8 — Launch readiness
+**Months 11 to 18 (6a), after the foundations are proven (6b)**
 
-**Months 21–24**
+2.0 intentionally has no accounts, rankings or moderation, and these carry the heaviest
+operational and legal load. They are split so the launch is not held up by them.
 
-- Run large-scale load, soak, security, recovery, and abuse-response exercises.
-- Complete an independent security review of clients, services, updater, account flows, content ingestion, and administrative tools.
-- Exercise database restoration, regional failover, compromised-key rotation, rollback, and emergency protocol shutdown.
-- Complete platform packaging, signing, automatic updates, crash reporting, support documentation, and release notes.
-- Establish service-level objectives and on-call procedures for launch.
-- Release to staged cohorts before general availability.
+**6a, in 3.0:** safe basics.
+- Display names, optional sign-in, privacy controls, and a guest path.
+- Parties, invitations, private and public lobbies, and region selection.
+- Mute, block, and report with a minimal moderator workflow and an audit log.
+- Retention and deletion policy for personal data, chat, and telemetry.
 
-**Exit gate:** Production launch, rollback, recovery, and incident-response procedures have all been exercised successfully.
+**6b, 3.1 unless staffing and a business case justify pulling it in:**
+skill-aware matchmaking, seasonal and permanent ratings with auditable result ingestion,
+sanctions and appeals, tournaments (brackets, heats, seeded grids, race administration),
+and administrative tooling with least privilege.
+
+**Exit gate (6a):** a player can find and join an appropriate race, and every moderation
+action is authenticated and auditable. **6b** has its own review.
+
+## Stage 7: Migration, compatibility, and ecosystem beta
+
+**Months 16 to 20**
+
+- Conversion tools and reports for every bundled and community track (Stage 4).
+- Preserve 2.x as an installable legacy release; keep its servers visibly separate.
+- Dedicated-server images, configuration schemas, and upgrade guidance, using the packaging
+  and rollback process already proven in 2.0.
+- Public beta cycles for creators, server operators, competitive players, and accessibility,
+  run with 2.0's beta plan (entry and exit criteria, severity triage) as the template.
+- Test rollback, regional failover, protocol-version retirement, and account migration.
+- Freeze formats and public interfaces before release candidates.
+
+**Exit gate:** bundled and community content is migrated, creator and operator workflows are
+documented, and beta participants operate without developer help.
+
+## Stage 8: Launch readiness
+
+**Months 19 to 22**
+
+- Large-scale load, soak, security, recovery, and abuse-response exercises (automated, and
+  repeated for every release candidate).
+- An independent security review of the client, services, updater, content ingestion, and
+  administrative tools.
+- Restore, failover, key-rotation, rollback, and emergency protocol-shutdown drills.
+- Signed packages and a signed auto-updater (2.0 has checksums but no signatures), crash
+  reporting, support documentation, and release notes.
+- Service-level objectives and on-call procedures; staged cohort release before general
+  availability.
+
+**Exit gate:** launch, rollback, recovery, and incident response have all been exercised
+successfully, and the soak and load results are published.
 
 ## HoverNet 3.0 release criteria
 
 Ship 3.0 only when:
 
-- the shared simulation is deterministic on every supported platform;
-- the server is authoritative for every result-affecting action;
-- the eight-player network target passes latency, loss, soak, and adversarial tests;
-- the complete game is playable without MFC or other legacy UI dependencies;
-- accounts, matchmaking, rankings, moderation, and privacy workflows are production-ready;
-- replays reproduce official race results and remain readable across supported patch versions;
-- every bundled track has been converted and validated;
-- creators can produce and distribute content through supported tools;
-- dedicated-server operators have stable packages, documentation, and observability;
-- accessibility, performance, security, recovery, and rollback gates have passed.
+- the simulation is bit-identical on every supported platform, proven by CI replays and by
+  a clean UBSan run with no exemptions;
+- the server is authoritative for every result-affecting action, backed by a tampering suite;
+- the eight-player target passes latency, loss, multi-day soak, and adversarial tests;
+- the complete game runs without the legacy client or any legacy UI dependency;
+- replays reproduce official results and remain readable across supported patch versions;
+- every bundled track is converted and validated, and at least 95% of the community library
+  converts, with each failure explained;
+- creators can produce and distribute content through supported tools, with authorship and
+  licence recorded;
+- the 6a online services are production-ready (6b is not required for launch);
+- dedicated-server operators have stable, signed packages, documentation, and observability;
+- accessibility, performance, security, recovery, and rollback gates have all passed.
 
 ## Scope controls
 
-The following should remain outside 3.0 unless additional staffing and a separate business case justify them:
+Outside 3.0 unless additional staffing and a separate business case justify them:
 
 - an open-ended general-purpose engine;
-- user-supplied native-code plugins;
-- peer-to-peer authoritative multiplayer;
+- user-supplied native-code plug-ins (the 2.0 `ObjFac1` model is closed and retired, not extended);
+- peer-to-peer authoritative multiplayer (traffic keeps routing through servers);
 - pay-to-win progression or gameplay-affecting purchases;
-- virtual-reality support;
-- mobile and console releases before the desktop architecture and operations are stable;
+- virtual reality, and mobile or console releases before desktop operations are stable;
 - procedurally generated tracks at the expense of the supported editor;
-- unlimited backward compatibility inside the new simulation.
+- unlimited backward compatibility inside the new simulation;
+- ratings, matchmaking, tournaments, and sanctions (Stage 6b), unless pulled in deliberately.
 
-## Programme checkpoints
+## Programme checkpoints and risks
 
-At the end of Stages 0, 2, 4, and 7, conduct a formal continue, revise, or stop review. The critical path is deterministic simulation followed by authoritative networking. Identity services, visual upgrades, content distribution, and competitive features must not conceal failure to prove those foundations.
+At the end of Stages 0, 2, 4, and 7, hold a formal continue, revise, or stop review. The
+critical path is determinism, then authoritative networking. Identity, visual upgrades,
+content distribution, and competitive features must not hide a failure to prove those
+foundations.
+
+| Risk | Mitigation |
+| --- | --- |
+| The 1990s simulation cannot be made deterministic cheaply | Stage 0 measures it first; the ADR allows a new simulation core |
+| Prediction feels worse than the relay model | prototype under real network conditions in Stage 0; keep the relay path until Stage 2 passes |
+| Scope creep from social and competitive features | Stage 6 split; 6b gated by a review |
+| Community content cannot all be converted | a defined 95% target with explained failures, and a legacy mode for the rest |
+| Unknown licensing of community content | record authorship and licence for all new content; legal review before wider distribution of the old library |
+| Small-team capacity | parallel Stage 4 (editor) from month 4; each stage's gate must pass before the next depends on it |
+
+## Decisions to make before kickoff
+
+- Confirm the latency and loss targets and the eight-player limit.
+- Decide who owns operations (on-call, moderation) before Stage 6a starts.
+- Choose the licence and authorship policy for community content.
+- Agree the Win32 deprecation timeline once the Stage 0 inventory exists.
