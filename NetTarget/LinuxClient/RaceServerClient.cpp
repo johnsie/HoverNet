@@ -517,6 +517,17 @@ bool RaceServerClient::ParseGameInfo(const RaceServerMessage& pMessage, RaceServ
         return false;
     }
     pOut.mTrack.assign(lData + lOffset, lData + lOffset + lTrackLen);
+    lOffset += lTrackLen;
+
+    pOut.mWeapons = true;  // Protocol-2 servers before 2.0 omitted this optional trailer.
+    if (lOffset < lLen)
+    {
+        if (lOffset + 1 != lLen || lData[lOffset] > 1)
+        {
+            return false;
+        }
+        pOut.mWeapons = lData[lOffset] != 0;
+    }
 
     return true;
 }

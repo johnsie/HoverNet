@@ -13,6 +13,7 @@ struct RaceSummary
     int mNumLaps;
     int mNumPlayers;
     BOOL mStarted;
+    BOOL mWeaponsAllowed;
 };
 
 class MR_RaceManager

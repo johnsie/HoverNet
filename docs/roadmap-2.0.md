@@ -579,6 +579,20 @@ race in which one installed client hosts and the other discovers and joins it.
 
 **February–March 2027 · 4–6 weeks**
 
+**Implementation status: Complete (29 September 2026).** All seven bundled
+tracks pass the CI command-line validator, including start containment, race
+gates, collision geometry, room connectivity, and reciprocal multiplayer room
+links. Switchback's five invalid starts were corrected. Tidal Causeway and
+Metro Spiral add two release-quality courses with distinct water-heavy and
+technical layouts. The compiler now rejects excess or incomplete starts and
+elements instead of writing outside its arrays or forcibly reporting success.
+The maintained text-source workflow and balance envelope are documented in
+[Track authoring](track-authoring.md), with Tidal Causeway as the example;
+HoverCad is explicitly legacy. Race listings now carry the weapons setting to
+joining clients, and weapons-off consistently blocks selection and firing of
+missiles, mines, and power-ups. Automated toolchain and two-client playthrough
+tests cover every bundled track.
+
 - Validate every bundled track for starts, checkpoints, finish detection, collision, and multiplayer consistency.
 - Add at least two release-quality tracks.
 - Balance hovercraft, missiles, mines, pickups, and weapon-enabled versus weapon-disabled races.
@@ -587,11 +601,19 @@ race in which one installed client hosts and the other discovers and joins it.
 - Publish a minimal track-authoring guide and example project.
 - Decide whether HoverCad is supported, experimental, or explicitly legacy.
 
-**Exit gate:** All bundled tracks pass automated validation and a complete multiplayer playthrough.
+**Exit gate: Passed (29 September 2026).** All bundled tracks pass automated
+validation and the all-track two-client multiplayer playthrough.
 
 ## Phase 5 — Release engineering and beta
 
 **March–April 2027 · 4–6 weeks**
+
+**Implementation status: In progress (1 October 2026).** The repository no
+longer tracks generated compiler, linker, CMake, executable, library, or package
+outputs. Repository-wide ignore rules cover those outputs at any depth, and the
+Linux CI entry point rejects any matching file that is accidentally committed.
+Smoke-test temporary configuration is written under the build tree instead of
+leaking into the source root.
 
 - Remove generated binaries and build artefacts from source control; enforce this through `.gitignore` and CI.
 - Add compiler warnings and sanitizers on Linux.

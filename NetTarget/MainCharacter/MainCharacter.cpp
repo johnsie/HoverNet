@@ -664,7 +664,7 @@ void MR_MainCharacter::SetControlState( int pState, MR_SimulationTime pTime )
    }
 
    // First verify transition states
-   if( !(mControlState & eSelectWeapon)&&(lState & eSelectWeapon) )
+   if( mAllowWeapons && !(mControlState & eSelectWeapon)&&(lState & eSelectWeapon) )
    {
       (*(int*)&mCurrentWeapon)++;
       if( mCurrentWeapon == eNotAWeapon )
@@ -884,7 +884,7 @@ int MR_MainCharacter::Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, i
                }
             }
          }
-         else if( mCurrentWeapon == eMine )
+         else if( mAllowWeapons && mCurrentWeapon == eMine )
          {
             if( !mMineList.IsEmpty() )
             {
@@ -894,7 +894,7 @@ int MR_MainCharacter::Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, i
                mMineList.Remove();
             }
          }
-         else if( mCurrentWeapon == ePowerUp )
+         else if( mAllowWeapons && mCurrentWeapon == ePowerUp )
          {
             if( !mPowerUpList.IsEmpty() )
             {

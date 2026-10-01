@@ -48,7 +48,7 @@ int main(int argc, char** argv)
     // or upgraded from a template that never had it) must still load every other
     // setting instead of falling back to 100% hardcoded defaults.
     {
-        const std::string lNoInternetRoomPath = "no-internetroom-config.xml";
+        const std::string lNoInternetRoomPath = std::string(argv[2]) + ".no-internetroom.xml";
         FILE* lFile = std::fopen(lNoInternetRoomPath.c_str(), "w");
         if (lFile == nullptr) {
             std::fprintf(stderr, "Could not write the no-<internetroom> test config\n");

@@ -32,6 +32,16 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Reject tracked build artifacts
+        shell: bash
+        run: |
+          tracked_artifacts=$(git ls-files | grep -Ei "(^|/)(Debug|Release|build|dist)(/|$)|\\.(exe|dll|obj|pdb|ilk|lib|exp|iobj|ipdb|pch|res|tlog|lastbuildstate|recipe|deb|zip|msi)$" || true)
+          if [[ -n "$tracked_artifacts" ]]; then
+            echo "Generated build artifacts are tracked:"
+            echo "$tracked_artifacts"
+            exit 1
+          fi
+
       - name: Install build dependencies
         run: |
           sudo apt-get update

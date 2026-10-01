@@ -393,11 +393,13 @@ int main( int pArgCount, const char** pArgStrings )
                {
                   printf( "EXCEPTION during level serialize: %s\n", e.what() );
                   fflush( stdout );
+                  lError = TRUE;
                }
                catch( ... )
                {
                   printf( "UNKNOWN EXCEPTION during level serialize\n" );
                   fflush( stdout );
+                  lError = TRUE;
                }
             }
          }
@@ -558,8 +560,9 @@ int main( int pArgCount, const char** pArgStrings )
 #endif
       
       
-      // Exit immediately with success code to avoid destructor crash
-      exit( 0 );
+      // Exit immediately to avoid the legacy destructor crash, while preserving
+      // compilation failures for scripts and CI.
+      exit( lError ? 1 : 0 );
       }
       catch( ... )
       {

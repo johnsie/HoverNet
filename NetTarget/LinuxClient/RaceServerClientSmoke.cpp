@@ -822,9 +822,9 @@ namespace
         {
             if (lGame.mName == "configured-race") { lConfigured = &lGame; }
         }
-        if (lConfigured == nullptr || lConfigured->mTrack != "Switchback" || lConfigured->mNumLaps != 7)
+        if (lConfigured == nullptr || lConfigured->mTrack != "Switchback" || lConfigured->mNumLaps != 7 || !lConfigured->mWeapons)
         {
-            std::fprintf(stderr, "Configured race's track/laps didn't reach the lobby listing\n");
+            std::fprintf(stderr, "Configured race settings didn.t reach the lobby listing\n");
             return false;
         }
         std::printf("HostRace with explicit track/laps/weapons works\n");

@@ -455,49 +455,49 @@ wall=-118.655, -57.052, 1, 58
 
 [Initial_Position]
 Section=1
-Position=2.411, -5.678, 0.000
+Position=5.000, -5.000, 0.000
 Orientation=0.000
 Team=1
 
 [Initial_Position]
 Section=1
-Position=5.989, 1.478, 0.000
+Position=8.000, 1.000, 0.000
 Orientation=0.000
 Team=2
 
 [Initial_Position]
 Section=1
-Position=-2.061, -3.442, 0.000
+Position=10.000, -9.000, 0.000
 Orientation=0.000
 Team=3
 
 [Initial_Position]
 Section=1
-Position=1.517, 3.714, 0.000
+Position=13.000, -3.000, 0.000
 Orientation=0.000
 Team=4
 
 [Initial_Position]
 Section=1
-Position=-6.533, -1.206, 0.000
+Position=15.000, -13.000, 0.000
 Orientation=0.000
 Team=5
 
 [Initial_Position]
 Section=1
-Position=-2.955, 5.950, 0.000
+Position=18.000, -7.000, 0.000
 Orientation=0.000
 Team=6
 
 [Initial_Position]
 Section=1
-Position=-11.005, 1.030, 0.000
+Position=20.000, -17.000, 0.000
 Orientation=0.000
 Team=7
 
 [Initial_Position]
 Section=1
-Position=-7.428, 8.186, 0.000
+Position=23.000, -11.000, 0.000
 Orientation=0.000
 Team=8
 

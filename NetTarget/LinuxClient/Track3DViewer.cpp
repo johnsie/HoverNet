@@ -402,7 +402,7 @@ MR_SpriteHandle* LoadUiFont()
 // ever arriving) can't hang here forever.
 // Tracks the server will actually accept (kept in sync with the whitelist in
 // ServerSocket.cpp's eRSMsgHostRace handler).
-const char* const kHostableTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River"};
+const char* const kHostableTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River", "Tidal Causeway", "Metro Spiral"};
 constexpr int kHostableTrackCount = sizeof(kHostableTracks) / sizeof(kHostableTracks[0]);
 
 struct TrackGuide
@@ -422,6 +422,8 @@ const TrackGuide kTrackGuides[] = {
     {"Winding", "Intermediate", "A long, twisting route with jumps and water features breaking up its straights.", 3},
     {"Technical", "Advanced", "A compact corridor course that rewards precise steering and quick reactions.", 5},
     {"Fast", "Intermediate", "A flowing waterside course suited to sustained speed and close racing.", 4},
+    {"Water", "Intermediate", "A broad tidal circuit with offset chicanes, water gardens, and twin jumps.", 3},
+    {"Technical", "Advanced", "A rotated skyline route with rapid direction changes and tactical pickup lines.", 3},
 };
 static_assert(sizeof(kTrackGuides) / sizeof(kTrackGuides[0]) == kHostableTrackCount,
               "Every hostable track needs setup guidance");
@@ -1307,9 +1309,10 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit);
 // just this function the way it could when all it did was browse/chat.
 bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                     const MR_Sprite& font, RaceServerClient& pClient, std::string& host, unsigned& port,
-                    std::string& outJoinedName, std::string& outTrackName, int& outNumLaps,
+                    std::string& outJoinedName, std::string& outTrackName, int& outNumLaps, bool& outWeapons,
                     int& outLocalClientId, std::vector<RaceServerPeer>& outPeers, int pFrameLimit,
-                    bool pAutoHostStart = false, bool pAutoJoin = false, bool pWaitForPeer = false)
+                    bool pAutoHostStart = false, bool pAutoJoin = false, bool pWaitForPeer = false,
+                    int pAutoTrackIndex = 0)
 {
     // The lobby screen renders through Dear ImGui directly against the SDL_Renderer
     // graphics already owns, not the paletted MR_VideoBuffer the 3D game view uses --
@@ -1442,7 +1445,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
 
     HostPrefs hostPrefs = LoadHostPrefs();
     if (pAutoHostStart) {
-        hostPrefs.mTrackIndex = 0;
+        hostPrefs.mTrackIndex = std::max(0, std::min(pAutoTrackIndex, kHostableTrackCount - 1));
         hostPrefs.mLaps = 1;
         hostPrefs.mWeapons = true;
     }
@@ -1481,6 +1484,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 outJoinedName = game.mName;
                 outTrackName = game.mTrack;
                 outNumLaps = std::max(1, game.mNumLaps);
+                outWeapons = game.mWeapons;
                 phase = LobbyPhase::eWaitingRoom;
                 raceMembers.clear();
                 statusText = "Joined - waiting for the race to start";
@@ -1494,6 +1498,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         const std::string raceName = kHostableTracks[hostPrefs.mTrackIndex];
         outTrackName = kHostableTracks[hostPrefs.mTrackIndex];
         outNumLaps = hostPrefs.mLaps;
+        outWeapons = hostPrefs.mWeapons;
         if (client.HostRace(raceName, kHostableTracks[hostPrefs.mTrackIndex],
                              hostPrefs.mLaps, hostPrefs.mWeapons)) {
             outJoinedName = raceName;
@@ -4242,12 +4247,13 @@ int RunClient(int argc, char** argv)
         std::string joinedRace;
         std::string joinedTrack;
         int joinedLaps = 1;
+        bool joinedWeapons = true;
         std::vector<RaceServerPeer> knownPeers;
         localClientId = -1;
         if (menuFontHandle == nullptr ||
             !RunLobbyScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(), onlineClient,
-                            lobbyHost, lobbyPort, joinedRace, joinedTrack, joinedLaps, localClientId,
-                            knownPeers, frameLimit, autoHostStart, autoJoin, waitForPeer)) {
+                            lobbyHost, lobbyPort, joinedRace, joinedTrack, joinedLaps, joinedWeapons, localClientId,
+                            knownPeers, frameLimit, autoHostStart, autoJoin, waitForPeer, FindHostableTrack(initialTrackName))) {
             onlineClient.Disconnect();
             return false;
         }
@@ -4264,7 +4270,7 @@ int RunClient(int argc, char** argv)
             MR_RecordFile* joinedTrackFile = new MR_RecordFile;
             const std::string joinedTrackPath = SourcePath(("NetTarget/Tracks/" + joinedTrack + ".trk").c_str());
             if (!joinedTrackFile->OpenForRead(joinedTrackPath.c_str()) ||
-                !session.LoadNew(joinedTrack.c_str(), joinedTrackFile, joinedLaps, allowWeapons, &buffer) ||
+                !session.LoadNew(joinedTrack.c_str(), joinedTrackFile, joinedLaps, joinedWeapons ? TRUE : FALSE, &buffer) ||
                 session.GetCurrentLevel() == nullptr || !session.CreateMainCharacter()) {
                 std::fprintf(stderr, "Could not load '%s' for the joined race\n", joinedTrack.c_str());
                 onlineClient.Disconnect();

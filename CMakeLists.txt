@@ -221,12 +221,12 @@ add_executable(HoverNetObserverSmoke
 add_dependencies(HoverNetObserverSmoke HoverNetHeadlessObjFac1)
 target_link_libraries(HoverNetObserverSmoke PRIVATE HoverNetObserver)
 
-add_executable(HoverNetTrackLoadSmoke
+add_executable(HoverNetTrackValidator
     NetTarget/LinuxClient/TrackLoadSmoke.cpp
 )
 
-add_dependencies(HoverNetTrackLoadSmoke HoverNetHeadlessObjFac1)
-target_link_libraries(HoverNetTrackLoadSmoke PRIVATE HoverNetModelCore HoverNetPortableUtil)
+add_dependencies(HoverNetTrackValidator HoverNetHeadlessObjFac1)
+target_link_libraries(HoverNetTrackValidator PRIVATE HoverNetModelCore HoverNetPortableUtil)
 
 add_executable(HoverNetFactorySmoke
     NetTarget/LinuxClient/FactorySmoke.cpp
@@ -390,10 +390,28 @@ if(BUILD_TESTING AND NOT WIN32)
     add_hovernet_root_test(HoverNetModelCoreSmoke)
     add_hovernet_root_test(HoverNetLevelSmoke)
     add_hovernet_root_test(HoverNetGameSessionSmoke)
-    add_hovernet_root_test(HoverNetTrackLoadSmoke)
-    add_test(NAME HoverNetSwitchbackTrackLoadSmoke
-        COMMAND HoverNetTrackLoadSmoke "NetTarget/Tracks/Switchback.trk" "Switchback")
-    set_tests_properties(HoverNetSwitchbackTrackLoadSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    function(add_hovernet_track_validation track_id track_name)
+        add_test(NAME "HoverNetTrackValidation_${track_id}"
+            COMMAND HoverNetTrackValidator "NetTarget/Tracks/${track_name}.trk" "${track_name}")
+        set_tests_properties("HoverNetTrackValidation_${track_id}"
+            PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endfunction()
+    add_hovernet_track_validation(ClassicH ClassicH)
+    add_hovernet_track_validation(Steeplechase Steeplechase)
+    add_hovernet_track_validation(Switchback Switchback)
+    add_hovernet_track_validation(The_Alley2 "The Alley2")
+    add_hovernet_track_validation(The_River "The River")
+    add_hovernet_track_validation(Tidal_Causeway "Tidal Causeway")
+    add_hovernet_track_validation(Metro_Spiral "Metro Spiral")
+    add_test(NAME HoverNetTrackToolchain
+        COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-track-toolchain.sh"
+            "${CMAKE_BINARY_DIR}" "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/track-toolchain-test")
+    set_tests_properties(HoverNetTrackToolchain PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    add_test(NAME HoverNetAllTracksMultiplayer
+        COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-all-tracks-multiplayer.sh"
+            "${CMAKE_BINARY_DIR}" "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/all-tracks-multiplayer")
+    set_tests_properties(HoverNetAllTracksMultiplayer PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 240)
     add_hovernet_root_test(HoverNetFactorySmoke)
     add_hovernet_root_test(HoverNetResourceSmoke)
     add_hovernet_root_test(HoverNetViewportSmoke)

@@ -58,6 +58,7 @@ struct RaceServerGameInfo
     int mNumPlayers = 0;
     bool mStarted = false;
     int mNumLaps = 0;
+    bool mWeapons = true;
     std::string mName;
     std::string mTrack;
 };

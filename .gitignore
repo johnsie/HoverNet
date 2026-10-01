@@ -4,8 +4,29 @@
 NetTarget/**/Release/*.pdb
 NetTarget/**/Debug/*.pdb
 
-# CMake build output
+# Generated build and package output (at any repository depth)
 build/
+[Dd]ebug/
+[Rr]elease/
+dist/
+*.obj
+*.pch
+*.ilk
+*.exp
+*.lib
+*.iobj
+*.ipdb
+*.tlog
+*.lastbuildstate
+*.recipe
+*.res
+*.exe
+*.dll
+*.so
+*.a
+*.deb
+*.msi
+*.zip
 
 # Debug logs
 *.log

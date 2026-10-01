@@ -688,6 +688,20 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
       
       while( lReturnValue && (lParser.GetNextClass( "Initial_Position" ) != NULL) )
       {
+         if( lNbStartingPosition >= MR_NB_MAX_PLAYER )
+         {
+            printf( "Too many Initial_Position blocks (maximum %d)\n", MR_NB_MAX_PLAYER );
+            lReturnValue = FALSE;
+            break;
+         }
+         mStartingRoom[lNbStartingPosition] = -1;
+         mStartingPosition[lNbStartingPosition].mX = 0;
+         mStartingPosition[lNbStartingPosition].mY = 0;
+         mStartingPosition[lNbStartingPosition].mZ = 0;
+         mStartingOrientation[lNbStartingPosition] = 0;
+         mPlayerTeam[lNbStartingPosition] = 0;
+         BOOL lHasStartSection = FALSE;
+         BOOL lHasStartPosition = FALSE;
          const char* lAttrib;
 
          while( (lAttrib = lParser.GetNextAttrib()) != NULL )
@@ -695,6 +709,7 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
             if( !stricmp( lAttrib, "Section" ) )
             {
                int lRoomId = (int)lParser.GetNextNumParam();
+               lHasStartSection = TRUE;
 
                if( !lRoomList.Lookup( lRoomId, mStartingRoom[ lNbStartingPosition ] ) )
                {
@@ -704,6 +719,7 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
             }
             else if( !stricmp( lAttrib, "Position" ) )
             {
+               lHasStartPosition = TRUE;
                mStartingPosition[ lNbStartingPosition ].mX = (MR_Int32)(lParser.GetNextNumParam()*1000.0);
                mStartingPosition[ lNbStartingPosition ].mY = (MR_Int32)(lParser.GetNextNumParam()*1000.0);
                mStartingPosition[ lNbStartingPosition ].mZ = (MR_Int32)(lParser.GetNextNumParam()*1000.0);
@@ -716,10 +732,11 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
             {
                mPlayerTeam[ lNbStartingPosition ] = (int)lParser.GetNextNumParam();
             }
-
-            // Do some validation
-
-            // TODO
+         }
+         if( !lHasStartSection || !lHasStartPosition )
+         {
+            printf( "Initial_Position on line %d requires Section and Position\n", lParser.GetErrorLine() );
+            lReturnValue = FALSE;
          }
          lNbStartingPosition++;
       }
@@ -749,10 +766,13 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
 
    while( lReturnValue && (lParser.GetNextClass( "Free_Element" ) != NULL) )
    {
-      int                    lRoomIndex;
-      MR_3DCoordinate        lPosition;
-      MR_Angle               lOrientation;
-      MR_ObjectFromFactoryId lElementType;
+      int                    lRoomIndex = -1;
+      MR_3DCoordinate        lPosition = { 0, 0, 0 };
+      MR_Angle               lOrientation = 0;
+      MR_ObjectFromFactoryId lElementType = { 0, 0 };
+      BOOL lHasElementSection = FALSE;
+      BOOL lHasElementPosition = FALSE;
+      BOOL lHasElementType = FALSE;
 
       lFreeElementCount++;
 
@@ -765,6 +785,7 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
          if( !stricmp( lAttrib, "Section" ) )
          {
             int lRoomId = (int)lParser.GetNextNumParam();
+            lHasElementSection = TRUE;
 
             if( !lRoomList.Lookup( lRoomId, lRoomIndex ) )
             {
@@ -774,6 +795,7 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
          }
          else if( !stricmp( lAttrib, "Position" ) )
          {
+            lHasElementPosition = TRUE;
             lPosition.mX = (MR_Int32)(lParser.GetNextNumParam()*1000.0);
             lPosition.mY = (MR_Int32)(lParser.GetNextNumParam()*1000.0);
             lPosition.mZ = (MR_Int32)(lParser.GetNextNumParam()*1000.0);
@@ -784,11 +806,18 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
          }
          else if( !stricmp( lAttrib, "Element_Type" ) )
          {
+            lHasElementType = TRUE;
             lElementType.mDllId   = (MR_UInt16)lParser.GetNextNumParam();
             lElementType.mClassId = (MR_UInt16)lParser.GetNextNumParam();
          }
       }
 
+
+      if( !lHasElementSection || !lHasElementPosition || !lHasElementType )
+      {
+         printf( "Free_Element on line %d requires Section, Position, and Element_Type\n", lParser.GetErrorLine() );
+         lReturnValue = FALSE;
+      }
 
       if( lReturnValue )
       {
@@ -828,10 +857,6 @@ BOOL MR_LevelBuilder::Parse( FILE* pFile )
          mNbPlayer
       );
    }
-
-
-   // Force success for testing
-   lReturnValue = TRUE;
 
    }  // End of try block
    catch( ... )

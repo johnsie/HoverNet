@@ -99,6 +99,7 @@ void MR_RaceManager::ListRaces(std::vector<RaceSummary>& outRaces) const
         summary.mNumLaps = state.mNumLaps;
         summary.mNumPlayers = pRace->GetActivePlayerCount();
         summary.mStarted = pRace->mRaceStarted;
+        summary.mWeaponsAllowed = state.mWeaponsAllowed;
         outRaces.push_back(summary);
     }
 }

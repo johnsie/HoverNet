@@ -747,7 +747,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
             memcpy(raceName, p, nameLen);
             raceName[nameLen] = '\0';
 
-            static const char* const kValidTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River"};
+            static const char* const kValidTracks[] = {"ClassicH", "Steeplechase", "Switchback", "The Alley2", "The River", "Tidal Causeway", "Metro Spiral"};
             bool trackOk = false;
             for (const char* t : kValidTracks) { if (strcmp(t, trackName) == 0) { trackOk = true; break; } }
 
@@ -1062,6 +1062,7 @@ void MR_ServerSocket::ReceiveFromClient(ClientConnection* pConn, MR_RaceManager*
                 *p++ = trackLen;
                 memcpy(p, race.mTrack.data(), trackLen);
                 p += trackLen;
+                *p++ = race.mWeaponsAllowed ? 1 : 0;
 
                 msg.dataLen = static_cast<unsigned char>(p - msg.data);
                 const int msgSize = 3 + msg.dataLen;
