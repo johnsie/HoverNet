@@ -263,6 +263,7 @@ jobs:
             "$x64Release\NetTarget\LinuxClient\assets" | Out-Null
           Copy-Item "NetTarget\ObjFac1.dat" "$x64Release\NetTarget\ObjFac1.dat" -Force
           Copy-Item "NetTarget\Tracks\*.trk" "$x64Release\NetTarget\Tracks\" -Force
+          Copy-Item "NetTarget\CommunityTracks.tsv" "$x64Release\NetTarget\CommunityTracks.tsv" -Force
           Copy-Item "NetTarget\LinuxClient\assets\menu-hovercraft.bmp" `
             "$x64Release\NetTarget\LinuxClient\assets\menu-hovercraft.bmp" -Force
           & "scripts\validate-windows-x64-package.ps1" -ReleaseDir $x64Release -RequireVCRedist
@@ -363,6 +364,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "stage\raceserver" | Out-Null
           Copy-Item "NetTarget\RaceServer\Release\RaceServer.exe" "stage\raceserver\RaceServer.exe" -Force
           Copy-Item "NetTarget\RaceServer\config.xml" "stage\raceserver\config.xml" -Force
+          Copy-Item "NetTarget\CommunityTracks.tsv" "stage\raceserver\CommunityTracks.tsv" -Force
           Compress-Archive -Path "stage\raceserver\*" -DestinationPath "hovernet-raceserver_${version}_win32.zip" -Force
 
       - name: Upload Windows race server
