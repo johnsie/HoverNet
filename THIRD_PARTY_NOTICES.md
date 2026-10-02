@@ -3,26 +3,58 @@
 What HoverNet contains or links, where it is used, and under which licence. This
 is an inventory, not legal advice.
 
-## Known gap: the HoverRace licence text is not in this repository
+## HoverRace-derived code and resources
 
-About 160 source files carry a header saying they are *"Licensed under GrokkSoft
-HoverRace SourceCode License v1.0 ... A copy of the license should have been
-attached to the package"*, but no copy of that licence is in this repository, and
-there is no top-level `LICENSE`. Until the project owner adds the licence text (or
-re-licenses the code), the terms for the original HoverRace source, its game
-resources and its bundled tracks are not documented here. The same is true of the
-legacy `GrokkSoft.url` / `Registration.url` shortcuts under `NetTarget/`.
+HoverNet is derived from the original HoverRace source code. The repository now
+includes the **GrokkSoft HoverRace SourceCode License v1.0 (November 29, 2008)**
+as the top-level [`LICENSE`](LICENSE). Source files that identify themselves as
+licensed under that licence remain subject to its terms.
+
+The GrokkSoft licence permits redistribution and use in source and binary forms,
+with or without modification, subject to its conditions. Among those conditions:
+
+- source redistributions must retain the copyright notice, licence conditions and
+  disclaimer;
+- binary redistributions must reproduce the copyright notice, licence conditions
+  and disclaimer in the documentation and/or other materials supplied with the
+  distribution;
+- Richard Langlois and GrokkSoft inc. may not be used to endorse or promote a
+  derived product without prior written permission;
+- the software or its derivatives may not be used for commercial activities
+  without prior written permission from the copyright holders; and
+- modified files must carry prominent notices stating that they were changed and
+  the date of the change.
+
+The complete licence text in [`LICENSE`](LICENSE), rather than this summary,
+governs the HoverRace-derived portions of the project.
+
+### Licensing boundaries
+
+The top-level `LICENSE` documents the licence inherited from HoverRace. It should
+**not** be read as a claim that every independently authored or third-party file in
+this repository was originally published by GrokkSoft under that licence.
+
+Original HoverRace code and original HoverRace resources included with HoverNet,
+including `ObjFac1.dat`, `NetTarget/Sounds`, `NetTarget/bitmaps`, and the seven
+bundled legacy tracks, are treated by this project as HoverRace-derived material.
+This inventory does not independently establish the copyright provenance of every
+individual resource; where a resource has uncertain provenance it is called out
+below.
+
+New HoverNet code and other material may contain its own copyright or licence
+notices. Third-party components retain their respective licences as listed in this
+file. Nothing in HoverNet's top-level `LICENSE` overrides those third-party terms.
 
 ## Source included in the repository
 
 | Component | Version | Licence | Used for | In the packages |
 | --- | --- | --- | --- | --- |
+| Original HoverRace-derived source and resources (`ObjFac1.dat`, `NetTarget/Sounds`, `NetTarget/bitmaps`) and the seven bundled legacy tracks | 1.x | GrokkSoft HoverRace SourceCode License v1.0; see [`LICENSE`](LICENSE) and provenance note above | the game itself | yes |
 | [Dear ImGui](https://github.com/ocornut/imgui) (`NetTarget/ThirdParty/imgui`, licence in `LICENSE.txt`) | 1.90.9 | MIT | in-game menus, lobby, settings | compiled into the client |
 | `imstb_rectpack.h`, `imstb_textedit.h`, `imstb_truetype.h` (stb, bundled with ImGui) | as bundled | public domain / MIT | font and text editing for ImGui | compiled into the client |
 | ImGui's built-in default font (ProggyClean) | as bundled | MIT-style, see ImGui's `LICENSE.txt` | menu text | compiled into the client |
 | OpenAL API headers (`OpenAL/AL`) | 1.1-era | GNU LGPL (headers state the Library GPL) | Win32 legacy client audio API shape; the implementations (`alstub*.cpp`) are HoverNet's own | legacy Win32 client only |
-| Original HoverRace code, resources (`ObjFac1.dat`, `NetTarget/Sounds`, `NetTarget/bitmaps`) and the seven bundled tracks | 1.x | **see the known gap above** | the game itself | yes |
-| Menu artwork `menu-hovercraft.bmp` | n/a | origin not recorded | main menu | yes |
+| Menu artwork `menu-hovercraft.bmp` | n/a | origin not recorded; rights/provenance need confirmation | main menu | yes |
 
 ## Libraries linked at build or run time (not in the repository)
 
@@ -47,6 +79,27 @@ game packages). They were mirrored from the old OpenHover site; **no licence or
 authorship was recorded**, so redistribution rights are unknown. See
 [Community tracks](docs/community-tracks.md).
 
+Their availability from a historical community archive should not be interpreted
+as a grant of redistribution rights. Keep them separate from release packages
+unless their licensing/provenance is established.
+
+## Distribution and commercial use
+
+The GrokkSoft HoverRace SourceCode License v1.0 expressly requires prior written
+permission from the copyright holders for commercial activities involving the
+software or its derivatives. Distribution through a commercial platform should
+therefore be reviewed against that restriction and any written permission obtained
+from the copyright holders before release. This file does not assert that such
+permission has been obtained.
+
+## Modified-file requirement
+
+The GrokkSoft licence requires modified files to carry prominent notices stating
+that they were changed and the date of the change. Because HoverNet has extensively
+modified the historical codebase, release preparation should include an audit of
+HoverRace-derived source files to verify compliance with this requirement. The
+presence of the top-level `LICENSE` alone does not satisfy that separate condition.
+
 ## Keeping this accurate
 
 `scripts/check-runtime-dependencies.sh` (the `HoverNetRuntimeDependencies` test)
@@ -54,3 +107,7 @@ fails if a shipped Linux binary links a shared library that is not listed in
 `packaging/debian/runtime-dependencies.tsv`, or if the package providing it is
 missing from the package's `Depends`. Update this file and that list together
 whenever a dependency is added.
+
+When adding code, artwork, audio, tracks, fonts or other assets, record their
+origin and licence here (or in a linked licence file) so that release packages can
+be audited without reconstructing provenance later.
