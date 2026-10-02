@@ -146,6 +146,18 @@ Want your own server? Install the `hovernet-raceserver` package (Linux) or use t
 
 Your settings are kept when you update or uninstall, so you can safely try a new version.
 
+## &#127793; Also in the works: OpenHover
+
+HoverNet keeps the classic HoverRace game alive. I'm also working on a **fully open
+clone** of the game, built from scratch with original code and assets, so that nobody
+needs a special licence to play, fork or build on it.
+
+**[OpenHover](https://github.com/johnsie/OpenHover)** is an independent, clean-room
+hovercraft racer in C++ with SDL2 and OpenGL. It is dual-licensed MIT / Apache-2.0
+(assets CC BY 4.0), and it is still early: you can already drive a hovercraft around a
+3D arena with lap timing and checkpoints. HoverNet and OpenHover are separate projects,
+and OpenHover does not reuse any HoverRace code or assets.
+
 ## &#128295; For developers and server operators
 
 - Build from source, CI and the race server: [technical overview](docs/technical.md)
