@@ -58,7 +58,8 @@ HoverNet 3.0 should deliver:
   track converted or explained;
 - safe, minimal social features at launch (names, private lobbies, mute and report),
   with ratings and tournaments following once the foundations are proven;
-- sustainable automated testing, observability, and live operations.
+- sustainable automated testing, observability, and live operations;
+- a first-class browser/WebAssembly client that races on the same servers as native clients and maintains continuous feature and user-experience parity with the shared SDL2 client.
 
 It should not become a generic game engine. Every investment must serve racing, content
 creation, multiplayer integrity, or maintainability.
@@ -77,6 +78,16 @@ These are what made 2.0 work; keep them.
 5. **Release hygiene is not optional:** reproducible builds, checksums, a changelog, and
    rehearsed rollback for every release.
 6. **Honest scope.** Unproven foundations are never hidden behind features.
+7. **Browser parity is mandatory.** The web client is another target of the shared client,
+   not a reduced edition. Every player-facing feature added to the SDL2 client must ship
+   in the browser in the same release unless an explicit, documented browser-platform
+   limitation makes it impossible. Conversely, browser-only gameplay features are avoided.
+   A release with unexplained SDL2/web feature drift fails its release gate.
+8. **SDL2 is the UI reference.** The web UI must look and behave as close to the shared
+   SDL2/ImGui client as practical: same information architecture, screens, controls,
+   terminology, ordering, HUD, menus, dialogs, states and interaction flows. Browser-native
+   differences are limited to things the platform requires, such as permission prompts,
+   fullscreen behaviour, downloads, storage and connection errors.
 
 ## Stage 0: Prove the foundations
 
@@ -103,12 +114,22 @@ Run the experiments that decide the architecture before building on it.
   migrate, replace, or retire, so its retirement is a dated decision.
 - **Format and protocol specifications** for the simulation state, replay, track, and
   network protocol 3.0 (versioned, explicit, portable).
+- **Browser transport proof.** Prove browser -> secure WebSocket -> RaceServer using the
+  existing protocol framing. The proof must negotiate protocol 2, enter the lobby, list,
+  host and join races, while native clients continue using the same server.
+- **WebAssembly compile and determinism proof.** Build the portable C++ simulation with
+  Emscripten, inventory browser-incompatible dependencies, and add WASM to recorded-input
+  state-hash comparisons. Do not reimplement physics or race rules in JavaScript.
+- **UI parity baseline.** Capture the SDL2 client screen inventory and reference screenshots
+  for every player-facing state. Create a parity matrix covering navigation, lobby, race
+  setup, loading, HUD, pause/settings, results, chat, errors, controls, accessibility and
+  content flows. This matrix becomes a maintained test/release artifact.
 - **Agree the targets** that later gates use. Proposal to confirm: playable at 120 ms round
   trip with 2% loss, and stable at 250 ms with 5%; eight players per race.
 
 **Exit gate:** a two-player prototype produces identical state hashes across all supported
 platforms for the recorded races, or the divergences are fully explained with a fix plan;
-the architecture decision is written down; and the simulation is clean under UBSan.
+the architecture decision is written down; the simulation is clean under UBSan; browser protocol/WASM feasibility is demonstrated; and the SDL2/web parity baseline exists.
 
 ## Stage 1: Shared deterministic simulation core
 
@@ -124,8 +145,12 @@ the architecture decision is written down; and the simulation is clean under UBS
   decision.
 - Divergence reports, property tests, fuzz tests, and long-replay tests in CI on every
   supported platform.
-- The same core runs in the client, the dedicated server, the replay viewer, and the
-  headless test runner.
+- The same core runs in the SDL2 client, browser/WASM client, dedicated server, replay
+  viewer, and headless test runner.
+- Shared presentation/view-model code supplies UI state and commands to both SDL2 and web
+  targets wherever practical, preventing business rules and screen behaviour from drifting.
+  Platform adapters handle only genuinely platform-specific input, networking, storage,
+  audio, rendering and lifecycle behaviour.
 
 **Exit gate:** representative races, including every bundled track and a fixed sample of
 community tracks, replay bit-identically on all supported platforms in CI, and remaining
@@ -148,10 +173,15 @@ differences from 2.0 are documented design decisions.
   in CI, plus **automated soak and load tests** replacing 2.0's manual 24-hour run.
 - Protocol compatibility policy and a negotiated fallback path: 3.0 clients can still talk
   to a 2.0 relay for a defined period, and the reverse is refused with a clear message.
+- **WebSocket transport** is a first-class RaceServer transport. Secure WebSocket frames
+  terminate in a thin adapter feeding the same validated protocol/session layer as native
+  clients. There is no browser-specific race protocol.
+- Mixed SDL2/browser tests cover lobby, host/join, race start, gameplay, reconnect,
+  malformed traffic, slow clients, protocol mismatch and race completion.
 
 **Exit gate:** eight-player races stay stable and fair at the Stage 0 latency and loss
 targets over a multi-day soak, no client can alter a result, and a game-state tampering
-suite fails to change any official outcome.
+suite fails to change any official outcome. Mixed SDL2/browser races must pass the same gate.
 
 ## Stage 3: Modern client and presentation
 
@@ -173,9 +203,66 @@ one.
   feature, run a deprecation period with a visible notice, and remove it from 3.0
   packages. The final 2.x release stays downloadable as the legacy build.
 
+### Browser client and SDL2 parity
+
+The browser client is a supported target of the shared HoverNet client. It must never
+become a cut-down "web edition".
+
+- Compile the shared deterministic C++ simulation and reusable resource/content code to
+  WebAssembly with Emscripten. JavaScript/TypeScript is browser integration glue, not a
+  second implementation of HoverNet.
+- Add browser adapters for secure WebSocket networking, keyboard, Gamepad API, pointer,
+  Web Audio, persistent settings, timers, focus/visibility, fullscreen, high-DPI,
+  downloads/content cache and lifecycle/error handling.
+- Bootstrap rendering may present the existing indexed/paletted framebuffer through
+  Canvas/WebGL to get a playable client early. The eventual renderer remains shared in
+  visual intent with SDL2 and must preserve the same race presentation.
+- **SDL2 visual fidelity is the default.** For every screen, maintain reference SDL2
+  screenshots and compare browser captures at agreed viewport sizes. Fonts, spacing,
+  panels, button order, labels, icons, colours/palette, HUD placement, dialogs, loading
+  states and results presentation should match within defined tolerances. Responsive
+  adaptation may rearrange only where viewport constraints require it.
+- **Interaction parity is equally important.** Keyboard/controller navigation order,
+  default focus, escape/back behaviour, confirmations, validation, disabled states,
+  tooltips/help, settings semantics and error flows must correspond between SDL2 and web.
+- Maintain a machine-readable or reviewable **feature-parity matrix**. Each player-facing
+  feature has SDL2 and Web status plus automated/manual parity tests. New features are not
+  considered complete until both targets are complete.
+- PRs that alter SDL2 UI or player-facing behaviour must update the web target in the same
+  change or carry an explicitly approved temporary parity exception with an owner, reason
+  and expiry release. CI reports outstanding exceptions. Stable releases require zero
+  unexplained exceptions.
+- Add automated browser screenshot tests corresponding to the SDL2 screenshot suite and
+  behavioural tests that drive equivalent user journeys on both targets. CI flags visual
+  and functional drift.
+- Test the complete equivalent flow: launch, identity/onboarding, settings, lobby,
+  host/join, track/options, content acquisition, loading, race HUD/gameplay, pause,
+  chat/social controls, results, reconnect, replay/spectating and accessibility as those
+  features become available.
+- Native-only concepts such as filesystem pickers are represented with the closest browser
+  equivalent without changing the surrounding HoverNet workflow. Required differences are
+  documented in the parity matrix.
+- Browser suspension/background throttling, refresh, lost focus and network interruption
+  must fail/reconnect cleanly without leaving ghost race sessions.
+- Establish budgets for WASM download/startup, track load, memory, frame time, input
+  latency and network processing. Test cold and warm caches.
+- CI builds and serves the web client, runs supported browser engines, executes golden
+  deterministic replays, runs mixed native/web races and captures parity screenshots.
+- Web content is data only; the browser never downloads and executes community native
+  plug-ins. Apply CSP, origin controls, bounded parsers, dependency auditing and normal
+  web supply-chain protections.
+
+**Parity rule:** if a player can do it in the current supported SDL2 client, they can do
+it in the supported web client, with substantially the same UI and flow. If a feature
+cannot meet that rule because of a genuine browser restriction, it must be documented,
+tested and explicitly accepted rather than silently omitted.
+
 **Exit gate:** every supported flow works on every supported platform with no legacy UI
 dependency, the classic preset matches 2.0 captures within an agreed tolerance, and
-frame-time budgets hold on the reference hardware list.
+frame-time budgets hold. A clean browser profile can open HoverNet, use the SDL2-equivalent
+UI, join the same server, race native players and complete the same post-race flow. The
+feature-parity matrix has no unexplained gaps and the SDL2/web visual regression suite
+passes.
 
 ## Stage 4: Content pipeline and the HoverCad successor
 
@@ -196,6 +283,10 @@ stage makes them durable and makes new ones easy.
   line) become a first-class mode, not an accident of missing objects.
 - Automated checks for topology, collision, checkpoint order, spawn safety, missing assets,
   and performance, building on 2.0's validator and its strict and community levels.
+- **Browser-safe content parity.** Native and web clients consume the same logical tracks,
+  meshes, gameplay objects and metadata and verify the same hashes/validation rules.
+  Legacy native-code plug-ins are converted to safe data-driven equivalents or explicitly
+  handled by the compatibility plan; they are never silently missing from web races.
 - **Content distribution on 2.0's foundations:** packages with metadata, licence, author,
   dependencies, hashes, and format version; the verified downloader and manifest become a
   signed catalogue with review, reporting, revocation, and server allowlists. Record
@@ -255,6 +346,10 @@ action is authenticated and auditable. **6b** has its own review.
   run with 2.0's beta plan (entry and exit criteria, severity triage) as the template.
 - Test rollback, regional failover, protocol-version retirement, and account migration.
 - Freeze formats and public interfaces before release candidates.
+- Run a browser deployment/rollback rehearsal covering HTTPS, WebSocket routing, caching,
+  old open tabs, bundle versioning and rollback without disrupting native clients.
+- Beta triage treats SDL2/web visual or functional parity regressions as product defects,
+  not optional browser polish.
 
 **Exit gate:** bundled and community content is migrated, creator and operator workflows are
 documented, and beta participants operate without developer help.
@@ -265,8 +360,7 @@ documented, and beta participants operate without developer help.
 
 - Large-scale load, soak, security, recovery, and abuse-response exercises (automated, and
   repeated for every release candidate).
-- An independent security review of the client, services, updater, content ingestion, and
-  administrative tools.
+- An independent security review of the native client, web client/WebSocket endpoint, services, updater, content ingestion, and administrative tools.
 - Restore, failover, key-rotation, rollback, and emergency protocol-shutdown drills.
 - Signed packages and a signed auto-updater (2.0 has checksums but no signatures), crash
   reporting, support documentation, and release notes.
@@ -292,7 +386,11 @@ Ship 3.0 only when:
   licence recorded;
 - the 6a online services are production-ready (6b is not required for launch);
 - dedicated-server operators have stable, signed packages, documentation, and observability;
-- accessibility, performance, security, recovery, and rollback gates have all passed.
+- accessibility, performance, security, recovery, and rollback gates have all passed;
+- the browser client passes mixed-client races, WASM determinism tests and web security
+  review;
+- the SDL2/web feature-parity matrix contains no unexplained gaps and automated visual and
+  behavioural parity tests pass.
 
 ## Scope controls
 
@@ -321,7 +419,11 @@ foundations.
 | Scope creep from social and competitive features | Stage 6 split; 6b gated by a review |
 | Community content cannot all be converted | a defined 95% target with explained failures, and a legacy mode for the rest |
 | Unknown licensing of community content | record authorship and licence for all new content; legal review before wider distribution of the old library |
-| Small-team capacity | parallel Stage 4 (editor) from month 4; each stage's gate must pass before the next depends on it |
+| Browser/WASM simulation diverges | WASM is in Stage 0 determinism and every golden replay gate; never maintain separate browser physics |
+| SDL2 and web UI drift | SDL2 reference screenshots, shared presentation state, parity matrix, paired journey tests and zero unexplained gaps at release |
+| Web becomes a reduced client | definition of done requires both targets; temporary exceptions are explicit, owned and expire |
+| WebSocket becomes a second protocol | thin transport adapter feeds the same validated server protocol/session layer |
+| Small-team capacity | stage browser work from protocol/WASM proof to full UI; each stage gate must pass before dependent work expands |
 
 ## Decisions to make before kickoff
 
@@ -329,3 +431,6 @@ foundations.
 - Decide who owns operations (on-call, moderation) before Stage 6a starts.
 - Choose the licence and authorship policy for community content.
 - Agree the Win32 deprecation timeline once the Stage 0 inventory exists.
+- Confirm SDL2 as the canonical UI/UX reference for browser parity and define screenshot
+  tolerances/viewports for the visual regression suite.
+- Confirm the browser support matrix and the production secure-WebSocket deployment model.
