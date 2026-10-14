@@ -3951,24 +3951,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
     const char* titles[] = {
         "CHOOSE A RACE", "DRIVE YOUR HOVERCRAFT", "READ THE RACE", "MAKE IT YOURS"
     };
-    const char* bodies[] = {
-        "Local Play lets you choose a track, lap count, and whether weapons are enabled. "
-        "Online Lobby connects to the shared RaceServer, where you can join an open race "
-        "or host one for other players.",
-        "Use Left/Right to steer, Shift to accelerate, Down to brake or reverse, and Up "
-        "to jump. Ctrl fires, Tab selects a weapon, and Escape opens the pause menu. "
-        "A standard controller uses the left stick, triggers, A, X, Y, and Start.",
-        "The top HUD shows elapsed time and lap progress. The status line reports speed, "
-        "fuel, weapon readiness, and network latency. The minimap tracks racers. Open "
-        "Controls from the main or pause menu whenever you need to review or remap inputs.",
-        "Settings controls your display name, RaceServer, sound, window mode, resolution, "
-        "UI scale, and accessibility options. Large HUD text keeps race information and "
-        "chat readable; Reduced motion and High contrast adjust the menus. Changes preview "
-        "live, Save keeps them, and Cancel restores your previous setup."
-    };
     constexpr int pageCount = sizeof(titles) / sizeof(titles[0]);
-    static_assert(pageCount == sizeof(bodies) / sizeof(bodies[0]),
-                  "Every onboarding title needs body text");
     int page = std::max(0, std::min(pStartPage, pageCount - 1));
     int framesShown = 0;
     bool completed = false;
@@ -4002,36 +3985,131 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
 
         DrawHoverNetScreenBackdrop(viewport);
 
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
-        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(1.35f);
-        ImGui::TextUnformatted("WELCOME TO HOVERNET");
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
+        HoverNetScreenHeading("DRIVER BRIEFING", "HOW TO PLAY", "Everything you need before the lights go green");
+        ImGui::Spacing();
 
-        const float panelWidth = std::min(680.0f, ImGui::GetContentRegionAvail().x);
+        const float panelWidth = std::min(900.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
-        ImGui::BeginChild("OnboardingPanel", ImVec2(panelWidth, -60.0f), true);
-        ImGui::Text("STEP %d OF %d", page + 1, pageCount);
-        HoverNetSectionHeading(titles[page]);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetSurface);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
+        ImGui::BeginChild("OnboardingPanel", ImVec2(panelWidth, -20.0f), true);
+
+        const float progressWidth = ImGui::GetContentRegionAvail().x;
+        const float segmentGap = 8.0f;
+        const float segmentWidth = (progressWidth - segmentGap * (pageCount - 1)) / pageCount;
+        ImDrawList* panelDraw = ImGui::GetWindowDrawList();
+        ImVec2 progressPos = ImGui::GetCursorScreenPos();
+        for (int step = 0; step < pageCount; ++step) {
+            const ImU32 color = step <= page ? IM_COL32(220, 50, 70, 255) : IM_COL32(58, 62, 78, 255);
+            panelDraw->AddRectFilled(
+                ImVec2(progressPos.x + step * (segmentWidth + segmentGap), progressPos.y),
+                ImVec2(progressPos.x + step * (segmentWidth + segmentGap) + segmentWidth, progressPos.y + 5.0f),
+                color, 3.0f);
+        }
+        ImGui::Dummy(ImVec2(0, 14.0f));
+        ImGui::TextColored(kHoverNetCoral, "BRIEFING %02d / %02d", page + 1, pageCount);
+        ImGui::SetWindowFontScale(1.45f);
+        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+        ImGui::TextUnformatted(titles[page]);
+        ImGui::PopStyleColor();
+        ImGui::SetWindowFontScale(1.0f);
         ImGui::Spacing();
-        ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextUnformatted(bodies[page]);
-        ImGui::PopTextWrapPos();
-        ImGui::Spacing();
+
+        const float contentHeight = std::max(300.0f, ImGui::GetContentRegionAvail().y - 72.0f);
+        ImGui::BeginChild("BriefingContent", ImVec2(0, contentHeight), false);
+        if (page == 0) {
+            const float gap = 18.0f;
+            const float cardWidth = (ImGui::GetContentRegionAvail().x - gap) * 0.5f;
+            auto modeCard = [&](const char* number, const char* heading, const char* copy, bool primary) {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, primary ? ImVec4(0.20f, 0.055f, 0.085f, 1.0f)
+                                                                : ImVec4(0.065f, 0.075f, 0.105f, 1.0f));
+                ImGui::BeginChild(heading, ImVec2(cardWidth, 245.0f), true);
+                ImGui::TextColored(kHoverNetCoral, "%s", number);
+                ImGui::SetWindowFontScale(1.25f);
+                ImGui::TextUnformatted(heading);
+                ImGui::SetWindowFontScale(1.0f);
+                ImGui::Spacing();
+                ImGui::TextWrapped("%s", copy);
+                ImGui::Spacing();
+                ImGui::TextDisabled("%s", primary ? "RACE WITH THE WORLD" : "RACE ON YOUR TERMS");
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+            };
+            modeCard("01", "LOCAL RACE", "Choose a track, set the laps and decide whether weapons are enabled.", false);
+            ImGui::SameLine(0.0f, gap);
+            modeCard("02", "ONLINE MULTIPLAYER", "Join an open race or host a new event in the shared HoverNet lobby.", true);
+            ImGui::Spacing();
+            AccentNote("Start with Local Race to learn a track, then take your hovercraft online.");
+        }
+        else if (page == 1) {
+            auto keyCap = [&](const char* key, const char* action) {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.09f, 1.0f));
+                ImGui::BeginChild(key, ImVec2(190.0f, 72.0f), true);
+                ImGui::TextColored(kHoverNetCoral, "%s", key);
+                ImGui::SameLine(72.0f);
+                ImGui::TextUnformatted(action);
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+            };
+            keyCap("SHIFT", "Accelerate"); ImGui::SameLine(); keyCap("DOWN", "Brake / reverse");
+            keyCap("LEFT / RIGHT", "Steer"); ImGui::SameLine(); keyCap("UP", "Jump");
+            keyCap("CTRL", "Fire weapon"); ImGui::SameLine(); keyCap("TAB", "Select weapon");
+            ImGui::Spacing();
+            HoverNetSectionHeading("CONTROLLER");
+            ImGui::TextWrapped("Left stick steers. Triggers accelerate and brake. A jumps, X fires, Y selects a weapon, and Start pauses.");
+            ImGui::TextDisabled("All bindings can be reviewed and remapped from Controls.");
+        }
+        else if (page == 2) {
+            const ImVec2 diagramPos = ImGui::GetCursorScreenPos();
+            const ImVec2 diagramSize(ImGui::GetContentRegionAvail().x, 265.0f);
+            ImGui::InvisibleButton("RaceScreenDiagram", diagramSize);
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+            draw->AddRectFilled(diagramPos, ImVec2(diagramPos.x + diagramSize.x, diagramPos.y + diagramSize.y),
+                                IM_COL32(8, 12, 20, 255), 10.0f);
+            draw->AddRect(diagramPos, ImVec2(diagramPos.x + diagramSize.x, diagramPos.y + diagramSize.y),
+                          IM_COL32(78, 84, 105, 255), 10.0f, 0, 1.5f);
+            draw->AddText(ImVec2(diagramPos.x + 18, diagramPos.y + 16), IM_COL32(255, 112, 122, 255), "TIME  01:24.38");
+            draw->AddText(ImVec2(diagramPos.x + diagramSize.x - 150, diagramPos.y + 16), IM_COL32(255, 255, 255, 255), "LAP  2 / 4");
+            draw->AddRectFilled(ImVec2(diagramPos.x + 18, diagramPos.y + diagramSize.y - 52),
+                                ImVec2(diagramPos.x + 285, diagramPos.y + diagramSize.y - 18), IM_COL32(25, 31, 46, 245), 6.0f);
+            draw->AddText(ImVec2(diagramPos.x + 30, diagramPos.y + diagramSize.y - 43), IM_COL32(230, 232, 239, 255), "SPEED  |  FUEL  |  WEAPON  |  PING");
+            const ImVec2 mapCenter(diagramPos.x + diagramSize.x - 78, diagramPos.y + diagramSize.y - 74);
+            draw->AddCircle(mapCenter, 46.0f, IM_COL32(220, 50, 70, 220), 32, 2.0f);
+            draw->AddCircleFilled(ImVec2(mapCenter.x - 12, mapCenter.y + 8), 4.0f, IM_COL32(255, 255, 255, 255));
+            draw->AddCircleFilled(ImVec2(mapCenter.x + 18, mapCenter.y - 15), 4.0f, IM_COL32(255, 90, 108, 255));
+            draw->AddText(ImVec2(mapCenter.x - 32, mapCenter.y + 52), IM_COL32(160, 166, 184, 255), "MINIMAP");
+            ImGui::Spacing();
+            ImGui::TextWrapped("Time and lap progress stay at the top. Speed, fuel, weapon readiness and network latency sit in the status line. The minimap tracks every racer.");
+        }
+        else {
+            const char* features[][2] = {
+                {"IDENTITY", "Set your display name and RaceServer."},
+                {"DISPLAY", "Choose window mode, resolution and UI scale."},
+                {"ACCESSIBILITY", "Enable large HUD text, reduced motion and high contrast."},
+                {"AUDIO", "Adjust volume or mute the game."}
+            };
+            for (int feature = 0; feature < 4; ++feature) {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.09f, 1.0f));
+                ImGui::BeginChild(features[feature][0], ImVec2(0, 68.0f), true);
+                ImGui::TextColored(kHoverNetCoral, "%s", features[feature][0]);
+                ImGui::SameLine(180.0f);
+                ImGui::TextUnformatted(features[feature][1]);
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+            }
+            ImGui::TextDisabled("Settings preview live. Save keeps them; Cancel restores the previous setup.");
+        }
+        ImGui::EndChild();
+
         ImGui::Separator();
         ImGui::Spacing();
         if (page > 0) {
-            if (HoverNetButton("Back", ImVec2(130, 40))) --page;
+            if (HoverNetQuietButton("BACK", ImVec2(130, 44))) --page;
             ImGui::SameLine();
         }
-        const char* nextLabel = page == pageCount - 1 ? "Finish" : "Next";
-        if (HoverNetButton(nextLabel, ImVec2(130, 40))) {
+        const char* nextLabel = page == pageCount - 1 ? "FINISH BRIEFING" : "NEXT BRIEFING";
+        const float nextWidth = page == pageCount - 1 ? 190.0f : 175.0f;
+        if (HoverNetButton(nextLabel, ImVec2(nextWidth, 44))) {
             if (page == pageCount - 1) {
                 completed = true;
                 running = false;
@@ -4041,6 +4119,8 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
             }
         }
         ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
         ImGui::End();
 
         ImGui::Render();
