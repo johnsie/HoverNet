@@ -10,8 +10,10 @@ var hoverNetSync = function(populate, done) {
 };
 Module.preRun = Module.preRun || [];
 Module.preRun.push(function() {
-  FS.mkdir('/home');
-  FS.mkdir('/home/web');
+  // Emscripten creates /home and /home/web_user as default directories.
+  // Recreating /home here throws EEXIST and prevents main() from starting.
+  if (!FS.analyzePath('/home').exists) FS.mkdir('/home');
+  if (!FS.analyzePath('/home/web').exists) FS.mkdir('/home/web');
   FS.mount(IDBFS, {}, '/home/web');
   addRunDependency('hovernet-idbfs');
   hoverNetSync(true, function() { removeRunDependency('hovernet-idbfs'); });
