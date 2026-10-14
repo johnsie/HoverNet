@@ -1528,6 +1528,7 @@ constexpr ImVec4 kHoverNetRedHover{0.95f, 0.32f, 0.38f, 1.00f};
 constexpr ImVec4 kHoverNetRedActive{0.70f, 0.12f, 0.18f, 1.00f};
 constexpr ImVec4 kHoverNetCoral{0.98f, 0.45f, 0.48f, 1.00f};
 constexpr ImVec4 kHoverNetWhite{1.00f, 1.00f, 1.00f, 1.00f};
+constexpr ImVec4 kHoverNetSurface{0.075f, 0.080f, 0.105f, 0.98f};
 
 void ApplyHoverNetLobbyStyle(float scale, bool highContrast)
 {
@@ -1535,18 +1536,18 @@ void ApplyHoverNetLobbyStyle(float scale, bool highContrast)
     style = ImGuiStyle();
     ImGui::StyleColorsDark(&style);
 
-    style.WindowPadding = ImVec2(16.0f, 16.0f);
-    style.FramePadding = ImVec2(10.0f, 6.0f);
-    style.ItemSpacing = ImVec2(10.0f, 10.0f);
+    style.WindowPadding = ImVec2(20.0f, 18.0f);
+    style.FramePadding = ImVec2(12.0f, 8.0f);
+    style.ItemSpacing = ImVec2(12.0f, 11.0f);
     style.ItemInnerSpacing = ImVec2(8.0f, 6.0f);
     style.IndentSpacing = 18.0f;
     style.ScrollbarSize = 14.0f;
     style.WindowRounding = 0.0f;
-    style.ChildRounding = 8.0f;
-    style.FrameRounding = 6.0f;
-    style.GrabRounding = 6.0f;
-    style.ScrollbarRounding = 8.0f;
-    style.PopupRounding = 8.0f;
+    style.ChildRounding = 12.0f;
+    style.FrameRounding = 8.0f;
+    style.GrabRounding = 8.0f;
+    style.ScrollbarRounding = 10.0f;
+    style.PopupRounding = 12.0f;
     style.WindowBorderSize = 0.0f;
     style.ChildBorderSize = 1.0f;
     style.PopupBorderSize = 1.0f;
@@ -1556,17 +1557,17 @@ void ApplyHoverNetLobbyStyle(float scale, bool highContrast)
     // darker, secondary text and borders brighter, and action red darker under
     // white labels. The standard palette retains its softer layered appearance.
     const ImVec4 windowBg = highContrast ? ImVec4(0.01f, 0.01f, 0.01f, 1.00f)
-                                         : ImVec4(0.09f, 0.09f, 0.11f, 1.00f);
+                                        : ImVec4(0.035f, 0.040f, 0.060f, 1.00f);
     const ImVec4 panelBg = highContrast ? ImVec4(0.045f, 0.045f, 0.055f, 1.00f)
-                                        : ImVec4(0.14f, 0.14f, 0.17f, 1.00f);
+                                        : kHoverNetSurface;
     const ImVec4 fieldBg = highContrast ? ImVec4(0.00f, 0.00f, 0.00f, 1.00f)
-                                        : ImVec4(0.11f, 0.11f, 0.13f, 1.00f);
+                                        : ImVec4(0.045f, 0.050f, 0.070f, 1.00f);
     const ImVec4 softBorder = highContrast ? ImVec4(0.82f, 0.82f, 0.86f, 1.00f)
-                                           : ImVec4(0.24f, 0.24f, 0.28f, 1.00f);
+                                           : ImVec4(0.20f, 0.22f, 0.29f, 1.00f);
     const ImVec4 text = highContrast ? ImVec4(1.00f, 1.00f, 1.00f, 1.00f)
                                      : ImVec4(0.93f, 0.93f, 0.95f, 1.00f);
     const ImVec4 textMuted = highContrast ? ImVec4(0.82f, 0.82f, 0.86f, 1.00f)
-                                          : ImVec4(0.56f, 0.56f, 0.60f, 1.00f);
+                                          : ImVec4(0.62f, 0.65f, 0.72f, 1.00f);
     const ImVec4 actionRed = highContrast ? ImVec4(0.58f, 0.03f, 0.10f, 1.00f) : kHoverNetRed;
     const ImVec4 actionHover = highContrast ? ImVec4(0.78f, 0.08f, 0.16f, 1.00f) : kHoverNetRedHover;
     const ImVec4 actionActive = highContrast ? ImVec4(0.42f, 0.01f, 0.06f, 1.00f) : kHoverNetRedActive;
@@ -1592,6 +1593,8 @@ void ApplyHoverNetLobbyStyle(float scale, bool highContrast)
     colors[ImGuiCol_Header] = selection;
     colors[ImGuiCol_HeaderHovered] = ImVec4(0.86f, 0.20f, 0.27f, 0.55f);
     colors[ImGuiCol_HeaderActive] = ImVec4(0.86f, 0.20f, 0.27f, 0.75f);
+    colors[ImGuiCol_NavHighlight] = kHoverNetCoral;
+    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.01f, 0.01f, 0.02f, 0.78f);
     colors[ImGuiCol_Separator] = softBorder;
     colors[ImGuiCol_SeparatorHovered] = actionHover;
     colors[ImGuiCol_SeparatorActive] = actionActive;
@@ -1623,11 +1626,14 @@ bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
 // the thing to press.
 bool HoverNetQuietButton(const char* label, const ImVec2& size = ImVec2(0, 0))
 {
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.24f, 0.30f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.33f, 0.33f, 0.41f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.18f, 0.23f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.11f, 0.15f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.12f, 0.16f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.28f, 0.10f, 0.15f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.31f, 0.33f, 0.41f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
     const bool pressed = HoverNetButton(label, size);
-    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(4);
     return pressed;
 }
 
@@ -1643,10 +1649,50 @@ void AccentNote(const std::string& text)
 
 void HoverNetSectionHeading(const char* label)
 {
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const float height = ImGui::GetTextLineHeight();
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        cursor, ImVec2(cursor.x + 4.0f, cursor.y + height),
+        ImGui::ColorConvertFloat4ToU32(kHoverNetRed), 2.0f);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 12.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
     ImGui::TextUnformatted(label);
     ImGui::PopStyleColor();
-    ImGui::Separator();
+}
+
+void DrawHoverNetScreenBackdrop(const ImGuiViewport* viewport)
+{
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const ImVec2 start = viewport->WorkPos;
+    const ImVec2 end(start.x + viewport->WorkSize.x, start.y + viewport->WorkSize.y);
+    draw->AddRectFilledMultiColor(start, end,
+        IM_COL32(9, 12, 22, 255), IM_COL32(31, 10, 22, 255),
+        IM_COL32(5, 8, 15, 255), IM_COL32(13, 7, 15, 255));
+    const float horizon = start.y + viewport->WorkSize.y * 0.72f;
+    const ImVec2 vanish(start.x + viewport->WorkSize.x * 0.50f, horizon);
+    for (int line = -8; line <= 8; ++line) {
+        const float x = start.x + viewport->WorkSize.x * (0.5f + line * 0.14f);
+        draw->AddLine(vanish, ImVec2(x, end.y), IM_COL32(224, 42, 67, 34), 1.0f);
+    }
+    for (int row = 1; row <= 4; ++row) {
+        const float amount = static_cast<float>(row * row) / 16.0f;
+        const float y = horizon + (end.y - horizon) * amount;
+        draw->AddLine(ImVec2(start.x, y), ImVec2(end.x, y), IM_COL32(224, 42, 67, 28), 1.0f);
+    }
+}
+
+void HoverNetScreenHeading(const char* eyebrow, const char* title, const char* detail)
+{
+    ImGui::TextColored(kHoverNetCoral, "%s", eyebrow);
+    ImGui::SetWindowFontScale(1.55f);
+    ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+    ImGui::TextUnformatted(title);
+    ImGui::PopStyleColor();
+    ImGui::SetWindowFontScale(1.0f);
+    if (detail != nullptr && detail[0] != '\0') {
+        ImGui::SameLine();
+        ImGui::TextDisabled("  %s", detail);
+    }
 }
 
 // A one-line coral-accented note (e.g. inline field validation) without the
@@ -2295,6 +2341,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                       ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
 
+        DrawHoverNetScreenBackdrop(mainViewport);
+        HoverNetScreenHeading("ONLINE MULTIPLAYER", "RACE CONTROL", statusText.c_str());
+        ImGui::Spacing();
+
         if (!client.IsConnected()) {
             const float panelWidth = std::min(520.0f, ImGui::GetContentRegionAvail().x);
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
@@ -2319,9 +2369,19 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             ImGui::EndChild();
         }
         else if (phase == LobbyPhase::eEnteringName) {
+            const float cardWidth = std::min(560.0f, ImGui::GetContentRegionAvail().x);
+            const float cardHeight = 230.0f;
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - cardWidth) * 0.5f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() +
+                std::max(20.0f, (ImGui::GetContentRegionAvail().y - cardHeight) * 0.36f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetSurface);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
+            ImGui::BeginChild("ChooseRacerName", ImVec2(cardWidth, cardHeight), true);
+            HoverNetSectionHeading("WELCOME, RACER");
             ImGui::Spacing();
-            ImGui::TextUnformatted("Welcome to HoverNet -- enter a username:");
-            ImGui::SetNextItemWidth(320);
+            ImGui::TextDisabled("Choose the name other drivers will see in the lobby.");
+            ImGui::Spacing();
+            ImGui::SetNextItemWidth(-1.0f);
             if (focusUsernameInput) {
                 SDL_StartTextInput();
                 ImGui::SetKeyboardFocusHere();
@@ -2329,8 +2389,8 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             }
             const bool submitted = ImGui::InputText("##username", usernameBuf, sizeof(usernameBuf),
                                                      ImGuiInputTextFlags_EnterReturnsTrue);
-            ImGui::SameLine();
-            const bool clicked = HoverNetButton("Continue");
+            ImGui::Spacing();
+            const bool clicked = HoverNetButton("ENTER THE LOBBY", ImVec2(-FLT_MIN, 46.0f));
             if ((submitted || clicked) && usernameBuf[0] != '\0') {
                 username = usernameBuf;
                 SaveUsername(username);
@@ -2339,6 +2399,9 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 phase = LobbyPhase::eBrowsing;
                 statusText = "Connected to the shared HoverNet lobby.";
             }
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
         }
         else {
             // Panel grid (after the Windows client's IDD_INTERNET_MEETING dialog): race
@@ -2540,7 +2603,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 }
                 ImGui::PopTextWrapPos();
                 ImGui::Spacing();
-                if (HoverNetQuietButton("Host Race...", ImVec2(-FLT_MIN, 0))) {
+                if (HoverNetButton("HOST A RACE", ImVec2(-FLT_MIN, 44.0f))) {
                     requestOpenHostPopup = true;
                 }
             }
@@ -3343,6 +3406,8 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                       ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
 
+        DrawHoverNetScreenBackdrop(mainViewport);
+
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
         ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
@@ -3641,6 +3706,8 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                       ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
 
+        DrawHoverNetScreenBackdrop(mainViewport);
+
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
         ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
@@ -3933,6 +4000,8 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings);
 
+        DrawHoverNetScreenBackdrop(mainViewport);
+
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
         ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
@@ -4096,6 +4165,8 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         ImGui::Begin("HoverNet Controls", nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+
+        DrawHoverNetScreenBackdrop(mainViewport);
 
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
