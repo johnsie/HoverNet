@@ -7,10 +7,17 @@
   <title>HoverNet</title>
   <style>
     html, body { width: 100%; height: 100%; margin: 0; background: #080c14; color: #e8eef8; font: 16px system-ui, sans-serif; }
-    body { display: grid; grid-template-rows: auto 1fr; }
-    #status { padding: .55rem 1rem; color: #b7c6da; }
+    body { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    #status { position: fixed; inset: 0 auto auto 0; padding: .55rem 1rem; color: #b7c6da; }
     #status.error { color: #ff9b9b; }
-    #canvas { display: block; width: 100%; height: 100%; min-height: 0; outline: none; object-fit: contain; }
+    #canvas {
+      display: block;
+      width: min(100vw, calc(100vh * 4 / 3));
+      height: min(100vh, calc(100vw * 3 / 4));
+      aspect-ratio: 4 / 3;
+      flex: none;
+      outline: none;
+    }
     body.running #status { display: none; }
   </style>
 </head>
