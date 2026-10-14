@@ -6,6 +6,7 @@ workflow:
 
 stages:
   - validate
+  - web
   - build
   - package
   - publish
@@ -69,7 +70,7 @@ build:game:linux:
       - build/linux/ObjFac1.so
 
 build:game:web:
-  stage: build
+  stage: web
   tags: ["$WEB_RUNNER_TAG"]
   script:
     - |
