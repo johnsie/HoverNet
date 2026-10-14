@@ -79,7 +79,7 @@ build:game:web:
         export EMSDK
         EMSDK_BOOTSTRAP=1
       fi
-      if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ]; then
+      if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ] || [ ! -f "$EMSDK/.hovernet-installed" ]; then
         if [ "$EMSDK_BOOTSTRAP" -ne 1 ]; then
           echo "Configured EMSDK does not contain emcmake: $EMSDK" >&2
           exit 1
@@ -87,12 +87,13 @@ build:game:web:
         mkdir -p "$(dirname "$EMSDK")"
         (
           flock -x 9
-          if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ]; then
+          if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ] || [ ! -f "$EMSDK/.hovernet-installed" ]; then
             INSTALLING="${EMSDK}.installing"
             rm -rf "$INSTALLING" "$EMSDK"
             git clone --depth 1 --branch "$WEB_EMSDK_VERSION" https://github.com/emscripten-core/emsdk.git "$INSTALLING"
             mv "$INSTALLING" "$EMSDK"
             "$EMSDK/emsdk" install "$WEB_EMSDK_VERSION"
+            touch "$EMSDK/.hovernet-installed"
           fi
         ) 9>"${EMSDK}.install.lock"
       fi
