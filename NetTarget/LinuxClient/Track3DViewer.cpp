@@ -1529,6 +1529,35 @@ constexpr ImVec4 kHoverNetRedActive{0.70f, 0.12f, 0.18f, 1.00f};
 constexpr ImVec4 kHoverNetCoral{0.98f, 0.45f, 0.48f, 1.00f};
 constexpr ImVec4 kHoverNetWhite{1.00f, 1.00f, 1.00f, 1.00f};
 constexpr ImVec4 kHoverNetSurface{0.075f, 0.080f, 0.105f, 0.98f};
+ImFont* gHoverNetDisplayFont = nullptr;
+
+void LoadHoverNetMenuFonts(ImGuiIO& io)
+{
+    gHoverNetDisplayFont = nullptr;
+
+    ImFontConfig bodyConfig;
+    bodyConfig.SizePixels = 19.0f;
+    bodyConfig.OversampleH = 2;
+    bodyConfig.OversampleV = 2;
+    bodyConfig.RasterizerMultiply = 1.08f;
+    const std::string bodyPath = SourcePath("NetTarget/LinuxClient/assets/Inter-Variable.ttf");
+    ImFont* bodyFont = io.Fonts->AddFontFromFileTTF(bodyPath.c_str(), bodyConfig.SizePixels, &bodyConfig);
+    if (bodyFont == nullptr) {
+        io.Fonts->AddFontDefault(&bodyConfig);
+    }
+
+    ImFontConfig displayConfig;
+    displayConfig.SizePixels = 25.0f;
+    displayConfig.OversampleH = 2;
+    displayConfig.OversampleV = 2;
+    displayConfig.RasterizerMultiply = 1.10f;
+    const std::string displayPath = SourcePath("NetTarget/LinuxClient/assets/Oxanium-Variable.ttf");
+    gHoverNetDisplayFont = io.Fonts->AddFontFromFileTTF(
+        displayPath.c_str(), displayConfig.SizePixels, &displayConfig);
+    if (gHoverNetDisplayFont == nullptr) {
+        gHoverNetDisplayFont = bodyFont;
+    }
+}
 
 void ApplyHoverNetLobbyStyle(float scale, bool highContrast)
 {
@@ -1656,7 +1685,9 @@ void HoverNetSectionHeading(const char* label)
         ImGui::ColorConvertFloat4ToU32(kHoverNetRed), 2.0f);
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 12.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
+    if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
     ImGui::TextUnformatted(label);
+    if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
     ImGui::PopStyleColor();
 }
 
@@ -1684,11 +1715,11 @@ void DrawHoverNetScreenBackdrop(const ImGuiViewport* viewport)
 void HoverNetScreenHeading(const char* eyebrow, const char* title, const char* detail)
 {
     ImGui::TextColored(kHoverNetCoral, "%s", eyebrow);
-    ImGui::SetWindowFontScale(1.55f);
     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+    if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
     ImGui::TextUnformatted(title);
+    if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
     ImGui::PopStyleColor();
-    ImGui::SetWindowFontScale(1.0f);
     if (detail != nullptr && detail[0] != '\0') {
         ImGui::SameLine();
         ImGui::TextDisabled("  %s", detail);
@@ -2043,12 +2074,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     // an imgui.ini behind in whatever directory the game happens to run from.
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-    // ImGui's default font renders at 13px, which looks cramped blown up across a
-    // 1024x768 screen -- build the atlas at a larger fixed size instead of scaling
-    // the default bitmap font (which just blurs it).
-    ImFontConfig fontConfig;
-    fontConfig.SizePixels = 19.0f;
-    io.Fonts->AddFontDefault(&fontConfig);
+    LoadHoverNetMenuFonts(io);
     ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -2884,9 +2910,7 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-        ImFontConfig fontConfig;
-        fontConfig.SizePixels = 19.0f;
-        io.Fonts->AddFontDefault(&fontConfig);
+        LoadHoverNetMenuFonts(io);
         ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -3005,9 +3029,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-        ImFontConfig fontConfig;
-        fontConfig.SizePixels = 19.0f;
-        io.Fonts->AddFontDefault(&fontConfig);
+        LoadHoverNetMenuFonts(io);
         ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -3081,9 +3103,9 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         ImGui::SetCursorPos(ImVec2(54.0f, 64.0f));
         ImGui::BeginGroup();
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(2.1f);
+        if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
         ImGui::TextUnformatted("GAME PAUSED");
-        ImGui::SetWindowFontScale(1.0f);
+        if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
         ImGui::PopStyleColor();
         ImGui::TextColored(kHoverNetCoral, "%s", pIsOnline ? "ONLINE RACE" : "LOCAL RACE");
         ImGui::Spacing();
@@ -3159,9 +3181,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-        ImFontConfig fontConfig;
-        fontConfig.SizePixels = 19.0f;
-        io.Fonts->AddFontDefault(&fontConfig);
+        LoadHoverNetMenuFonts(io);
         ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -3344,9 +3364,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-    ImFontConfig fontConfig;
-    fontConfig.SizePixels = 19.0f;
-    io.Fonts->AddFontDefault(&fontConfig);
+    LoadHoverNetMenuFonts(io);
     ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -3644,9 +3662,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-        ImFontConfig fontConfig;
-        fontConfig.SizePixels = 19.0f;
-        io.Fonts->AddFontDefault(&fontConfig);
+        LoadHoverNetMenuFonts(io);
         ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -3941,9 +3957,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-    ImFontConfig fontConfig;
-    fontConfig.SizePixels = 19.0f;
-    io.Fonts->AddFontDefault(&fontConfig);
+    LoadHoverNetMenuFonts(io);
     ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -4146,9 +4160,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-        ImFontConfig fontConfig;
-        fontConfig.SizePixels = 19.0f;
-        io.Fonts->AddFontDefault(&fontConfig);
+        LoadHoverNetMenuFonts(io);
         ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -4433,9 +4445,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-    ImFontConfig fontConfig;
-    fontConfig.SizePixels = 19.0f;
-    io.Fonts->AddFontDefault(&fontConfig);
+    LoadHoverNetMenuFonts(io);
     ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -4579,9 +4589,11 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         ImGui::SetCursorPos(ImVec2(48.0f, 48.0f));
         ImGui::BeginGroup();
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(2.35f);
+        if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
+        ImGui::SetWindowFontScale(1.45f);
         ImGui::TextUnformatted("HOVERNET");
         ImGui::SetWindowFontScale(1.0f);
+        if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
         ImGui::TextColored(kHoverNetCoral, "HIGH-SPEED COMBAT RACING");
         ImGui::Spacing();
         ImGui::TextDisabled("RACE THE LINE.  OWN THE TRACK.");

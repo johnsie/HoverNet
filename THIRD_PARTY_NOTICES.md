@@ -19,7 +19,8 @@ legacy `GrokkSoft.url` / `Registration.url` shortcuts under `NetTarget/`.
 | --- | --- | --- | --- | --- |
 | [Dear ImGui](https://github.com/ocornut/imgui) (`NetTarget/ThirdParty/imgui`, licence in `LICENSE.txt`) | 1.90.9 | MIT | in-game menus, lobby, settings | compiled into the client |
 | `imstb_rectpack.h`, `imstb_textedit.h`, `imstb_truetype.h` (stb, bundled with ImGui) | as bundled | public domain / MIT | font and text editing for ImGui | compiled into the client |
-| ImGui's built-in default font (ProggyClean) | as bundled | MIT-style, see ImGui's `LICENSE.txt` | menu text | compiled into the client |
+| [Inter](https://github.com/rsms/inter) | variable font from Google Fonts | SIL Open Font License 1.1; see `NetTarget/LinuxClient/assets/Inter-OFL.txt` | menu and interface text | yes |
+| [Oxanium](https://github.com/sevmeyer/oxanium) | variable font from Google Fonts | SIL Open Font License 1.1; see `NetTarget/LinuxClient/assets/Oxanium-OFL.txt` | interface headings | yes |
 | OpenAL API headers (`OpenAL/AL`) | 1.1-era | GNU LGPL (headers state the Library GPL) | Win32 legacy client audio API shape; the implementations (`alstub*.cpp`) are HoverNet's own | legacy Win32 client only |
 | Original HoverRace code, resources (`ObjFac1.dat`, `NetTarget/Sounds`, `NetTarget/bitmaps`) and the seven bundled tracks | 1.x | **see the known gap above** | the game itself | yes |
 | Menu artwork `menu-hovercraft.bmp` | n/a | origin not recorded | main menu | yes |

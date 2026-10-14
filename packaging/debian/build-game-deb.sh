@@ -34,6 +34,10 @@ install -Dm644 packaging/debian/hovernet-game.desktop "$package_root/usr/share/a
 install -Dm644 NetTarget/ObjFac1.dat "$package_root/usr/share/games/hovernet/NetTarget/ObjFac1.dat"
 install -Dm644 NetTarget/LinuxClient/assets/menu-hovercraft.bmp \
   "$package_root/usr/share/games/hovernet/NetTarget/LinuxClient/assets/menu-hovercraft.bmp"
+for asset in NetTarget/LinuxClient/assets/*.ttf NetTarget/LinuxClient/assets/*-OFL.txt; do
+  install -Dm644 "$asset" \
+    "$package_root/usr/share/games/hovernet/NetTarget/LinuxClient/assets/$(basename "$asset")"
+done
 for track in NetTarget/Tracks/*.trk; do
   install -Dm644 "$track" "$package_root/usr/share/games/hovernet/NetTarget/Tracks/$(basename "$track")"
 done
