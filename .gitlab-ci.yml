@@ -89,11 +89,10 @@ build:game:web:
           flock -x 9
           if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ]; then
             INSTALLING="${EMSDK}.installing"
-            rm -rf "$INSTALLING"
+            rm -rf "$INSTALLING" "$EMSDK"
             git clone --depth 1 --branch "$WEB_EMSDK_VERSION" https://github.com/emscripten-core/emsdk.git "$INSTALLING"
-            "$INSTALLING/emsdk" install "$WEB_EMSDK_VERSION"
-            rm -rf "$EMSDK"
             mv "$INSTALLING" "$EMSDK"
+            "$EMSDK/emsdk" install "$WEB_EMSDK_VERSION"
           fi
         ) 9>"${EMSDK}.install.lock"
       fi
