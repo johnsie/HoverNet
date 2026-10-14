@@ -79,7 +79,8 @@ build:game:web:
         export EMSDK
         EMSDK_BOOTSTRAP=1
       fi
-      if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ] || [ ! -f "$EMSDK/.hovernet-installed" ]; then
+      EMSDK_MARKER="$EMSDK/.hovernet-installed-${WEB_EMSDK_VERSION}"
+      if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ] || { [ "$EMSDK_BOOTSTRAP" -eq 1 ] && [ ! -f "$EMSDK_MARKER" ]; }; then
         if [ "$EMSDK_BOOTSTRAP" -ne 1 ]; then
           echo "Configured EMSDK does not contain emcmake: $EMSDK" >&2
           exit 1
@@ -87,17 +88,19 @@ build:game:web:
         mkdir -p "$(dirname "$EMSDK")"
         (
           flock -x 9
-          if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ] || [ ! -f "$EMSDK/.hovernet-installed" ]; then
+          if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ] || [ ! -f "$EMSDK_MARKER" ]; then
             INSTALLING="${EMSDK}.installing"
             rm -rf "$INSTALLING" "$EMSDK"
             git clone --depth 1 --branch "$WEB_EMSDK_VERSION" https://github.com/emscripten-core/emsdk.git "$INSTALLING"
             mv "$INSTALLING" "$EMSDK"
             "$EMSDK/emsdk" install "$WEB_EMSDK_VERSION"
-            touch "$EMSDK/.hovernet-installed"
+            "$EMSDK/emsdk" activate "$WEB_EMSDK_VERSION"
+            touch "$EMSDK_MARKER"
           fi
         ) 9>"${EMSDK}.install.lock"
       fi
       . "$EMSDK/emsdk_env.sh"
+      command -v emcc
       emcc --version | grep -F "$WEB_EMSDK_VERSION"
     - emcmake cmake -S . -B build/web -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
     - cmake --build build/web --target HoverNetGame2Player --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
