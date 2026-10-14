@@ -4065,22 +4065,41 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
             AccentNote("Start with Local Race to learn a track, then take your hovercraft online.");
         }
         else if (page == 1) {
-            auto keyCap = [&](const char* key, const char* action) {
+            const float cardGap = 14.0f;
+            const float cardWidth = (ImGui::GetContentRegionAvail().x - cardGap * 2.0f) / 3.0f;
+            auto keyCap = [&](const char* id, const char* key, const char* action) {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.09f, 1.0f));
-                ImGui::BeginChild(key, ImVec2(190.0f, 72.0f), true);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
+                ImGui::BeginChild(id, ImVec2(cardWidth, 98.0f), true);
+                if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
                 ImGui::TextColored(kHoverNetCoral, "%s", key);
-                ImGui::SameLine(72.0f);
+                if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
+                ImGui::Spacing();
                 ImGui::TextUnformatted(action);
                 ImGui::EndChild();
+                ImGui::PopStyleVar();
                 ImGui::PopStyleColor();
             };
-            keyCap("SHIFT", "Accelerate"); ImGui::SameLine(); keyCap("DOWN", "Brake / reverse");
-            keyCap("LEFT / RIGHT", "Steer"); ImGui::SameLine(); keyCap("UP", "Jump");
-            keyCap("CTRL", "Fire weapon"); ImGui::SameLine(); keyCap("TAB", "Select weapon");
+            keyCap("KeyboardAccelerate", "SHIFT", "Accelerate");
+            ImGui::SameLine(0.0f, cardGap);
+            keyCap("KeyboardBrake", "DOWN", "Brake / reverse");
+            ImGui::SameLine(0.0f, cardGap);
+            keyCap("KeyboardSteer", "LEFT / RIGHT", "Steer");
+            keyCap("KeyboardJump", "UP", "Jump");
+            ImGui::SameLine(0.0f, cardGap);
+            keyCap("KeyboardFire", "CTRL", "Fire weapon");
+            ImGui::SameLine(0.0f, cardGap);
+            keyCap("KeyboardWeapon", "TAB", "Select weapon");
             ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.085f, 0.055f, 0.075f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
+            ImGui::BeginChild("ControllerSummary", ImVec2(0.0f, 112.0f), true);
             HoverNetSectionHeading("CONTROLLER");
-            ImGui::TextWrapped("Left stick steers. Triggers accelerate and brake. A jumps, X fires, Y selects a weapon, and Start pauses.");
-            ImGui::TextDisabled("All bindings can be reviewed and remapped from Controls.");
+            ImGui::TextWrapped("LEFT STICK  Steer    |    TRIGGERS  Accelerate / brake    |    A  Jump    |    X  Fire    |    Y  Select weapon");
+            ImGui::TextDisabled("Review and remap every binding from Controls.");
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
         }
         else if (page == 2) {
             const ImVec2 diagramPos = ImGui::GetCursorScreenPos();
