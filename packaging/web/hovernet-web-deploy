@@ -66,6 +66,9 @@ def main():
         if extracted != REQUIRED:
             raise SystemExit("archive is missing one or more required browser files")
 
+        # mkdtemp creates mode 0700 by default; Apache must be able to traverse
+        # each immutable release directory to serve its static files.
+        staging.chmod(0o755)
         staging.rename(release)
         next_link = WEB_ROOT / ".current-next"
         try:
