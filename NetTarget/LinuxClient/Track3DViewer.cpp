@@ -1848,6 +1848,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     // player has to notice and click the chat box before Enter does anything --
     // easy to read as "chat is broken". Focus it by default instead.
     bool focusChatInput = true;
+    // The browser canvas owns keyboard input, but a newly displayed ImGui text
+    // box isn't active until it receives focus. Focus the first-run username
+    // field as soon as it appears so SDL_TEXTINPUT reaches it without requiring
+    // a precisely positioned mouse click first.
+    bool focusUsernameInput = username.empty();
     // The chat log follows the newest message unless the player scrolled up to read
     // older ones (see the ChatLog child); sending a message always jumps back down.
     bool chatForcePin = true;
@@ -2317,6 +2322,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             ImGui::Spacing();
             ImGui::TextUnformatted("Welcome to HoverNet -- enter a username:");
             ImGui::SetNextItemWidth(320);
+            if (focusUsernameInput) {
+                SDL_StartTextInput();
+                ImGui::SetKeyboardFocusHere();
+                focusUsernameInput = false;
+            }
             const bool submitted = ImGui::InputText("##username", usernameBuf, sizeof(usernameBuf),
                                                      ImGuiInputTextFlags_EnterReturnsTrue);
             ImGui::SameLine();
