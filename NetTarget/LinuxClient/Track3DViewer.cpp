@@ -3962,6 +3962,15 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
+    SDL_Texture* tutorialRaceTexture = nullptr;
+    const std::string tutorialRacePath =
+        SourcePath("NetTarget/LinuxClient/assets/tutorial-race.bmp");
+    if (SDL_Surface* tutorialRaceSurface = SDL_LoadBMP(tutorialRacePath.c_str())) {
+        tutorialRaceTexture = SDL_CreateTextureFromSurface(
+            graphics.GetRenderer(), tutorialRaceSurface);
+        SDL_FreeSurface(tutorialRaceSurface);
+    }
+
     const char* titles[] = {
         "CHOOSE A RACE", "DRIVE YOUR HOVERCRAFT", "READ THE RACE", "MAKE IT YOURS"
     };
@@ -4076,24 +4085,17 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
         else if (page == 2) {
             const ImVec2 diagramPos = ImGui::GetCursorScreenPos();
             const ImVec2 diagramSize(ImGui::GetContentRegionAvail().x, 265.0f);
-            ImGui::InvisibleButton("RaceScreenDiagram", diagramSize);
-            ImDrawList* draw = ImGui::GetWindowDrawList();
-            draw->AddRectFilled(diagramPos, ImVec2(diagramPos.x + diagramSize.x, diagramPos.y + diagramSize.y),
-                                IM_COL32(8, 12, 20, 255), 10.0f);
-            draw->AddRect(diagramPos, ImVec2(diagramPos.x + diagramSize.x, diagramPos.y + diagramSize.y),
-                          IM_COL32(78, 84, 105, 255), 10.0f, 0, 1.5f);
-            draw->AddText(ImVec2(diagramPos.x + 18, diagramPos.y + 16), IM_COL32(255, 112, 122, 255), "TIME  01:24.38");
-            draw->AddText(ImVec2(diagramPos.x + diagramSize.x - 150, diagramPos.y + 16), IM_COL32(255, 255, 255, 255), "LAP  2 / 4");
-            draw->AddRectFilled(ImVec2(diagramPos.x + 18, diagramPos.y + diagramSize.y - 52),
-                                ImVec2(diagramPos.x + 285, diagramPos.y + diagramSize.y - 18), IM_COL32(25, 31, 46, 245), 6.0f);
-            draw->AddText(ImVec2(diagramPos.x + 30, diagramPos.y + diagramSize.y - 43), IM_COL32(230, 232, 239, 255), "SPEED  |  FUEL  |  WEAPON  |  PING");
-            const ImVec2 mapCenter(diagramPos.x + diagramSize.x - 78, diagramPos.y + diagramSize.y - 74);
-            draw->AddCircle(mapCenter, 46.0f, IM_COL32(220, 50, 70, 220), 32, 2.0f);
-            draw->AddCircleFilled(ImVec2(mapCenter.x - 12, mapCenter.y + 8), 4.0f, IM_COL32(255, 255, 255, 255));
-            draw->AddCircleFilled(ImVec2(mapCenter.x + 18, mapCenter.y - 15), 4.0f, IM_COL32(255, 90, 108, 255));
-            draw->AddText(ImVec2(mapCenter.x - 32, mapCenter.y + 52), IM_COL32(160, 166, 184, 255), "MINIMAP");
+            if (tutorialRaceTexture != nullptr) {
+                ImGui::Image(reinterpret_cast<ImTextureID>(tutorialRaceTexture), diagramSize);
+            }
+            else {
+                ImGui::InvisibleButton("RaceScreenPreview", diagramSize);
+                ImGui::GetWindowDrawList()->AddText(
+                    ImVec2(diagramPos.x + 20.0f, diagramPos.y + 20.0f),
+                    IM_COL32(255, 112, 122, 255), "RACE PREVIEW UNAVAILABLE");
+            }
             ImGui::Spacing();
-            ImGui::TextWrapped("Time and lap progress stay at the top. Speed, fuel, weapon readiness and network latency sit in the status line. The minimap tracks every racer.");
+            ImGui::TextWrapped("The race view keeps your position, speed, fuel and weapon state across the top. The course and rival craft remain visible ahead of you.");
         }
         else {
             const char* features[][2] = {
@@ -4146,6 +4148,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
         SDL_Delay(16);
     }
 
+    if (tutorialRaceTexture != nullptr) SDL_DestroyTexture(tutorialRaceTexture);
     ImGui_ImplSDLRenderer2_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
