@@ -1,4 +1,6 @@
-#ifdef _WIN32
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#elif defined(_WIN32)
 // Keep the shared client independent of the legacy MFC precompiled header.
 // winsock2 must precede windows.h in any translation unit that later includes it.
 #include <winsock2.h>
@@ -60,7 +62,11 @@ namespace
 }
 
 RaceServerClient::RaceServerClient()
-    : mSocket(-1), mPingToken(0), mPendingPingToken(0), mLastPingMs(-1)
+    :
+#ifdef __EMSCRIPTEN__
+      mWebSocket(0), mWebSocketOpen(false), mWebSocketFailed(false),
+#endif
+      mSocket(-1), mPingToken(0), mPendingPingToken(0), mLastPingMs(-1)
 {
 #ifdef _WIN32
     WSADATA lWsaData;
@@ -88,7 +94,44 @@ bool RaceServerClient::ConnectWithProtocolVersion(
 {
     Disconnect();
     mProtocolError.clear();
-#ifdef _WIN32
+#ifdef __EMSCRIPTEN__
+#ifndef HOVERNET_WEB_SOCKET_URL
+#define HOVERNET_WEB_SOCKET_URL "wss://hovernet.outiva.com/race/"
+#endif
+    (void)pPort; // The HTTPS site terminates TLS on 443; the gateway forwards to RaceServer:9600.
+    std::string webSocketUrl = HOVERNET_WEB_SOCKET_URL;
+    if (pHost != "hovernet.outiva.com") {
+        const std::string::size_type schemeEnd = webSocketUrl.find("://");
+        if (schemeEnd == std::string::npos || pHost.find_first_of("/\\?# \t") != std::string::npos) {
+            mProtocolError = "The browser server address is invalid";
+            return false;
+        }
+        webSocketUrl = webSocketUrl.substr(0, schemeEnd + 3) + pHost + "/race/";
+    }
+    EmscriptenWebSocketCreateAttributes attributes;
+    emscripten_websocket_init_create_attributes(&attributes);
+    attributes.url = webSocketUrl.c_str();
+    attributes.protocols = nullptr;
+    attributes.createOnMainThread = EM_TRUE;
+    mWebSocket = emscripten_websocket_new(&attributes);
+    if (mWebSocket <= 0) {
+        mProtocolError = "Could not create browser WebSocket";
+        mWebSocket = 0;
+        return false;
+    }
+    emscripten_websocket_set_onopen_callback(mWebSocket, this, WebSocketOpened);
+    emscripten_websocket_set_onclose_callback(mWebSocket, this, WebSocketClosed);
+    emscripten_websocket_set_onerror_callback(mWebSocket, this, WebSocketError);
+    emscripten_websocket_set_onmessage_callback(mWebSocket, this, WebSocketMessage);
+    for (int elapsed = 0; elapsed < 500 && !mWebSocketOpen && !mWebSocketFailed; elapsed += 10) {
+        emscripten_sleep(10);
+    }
+    if (!mWebSocketOpen) {
+        mProtocolError = "Could not connect to the browser WebSocket gateway";
+        Disconnect();
+        return false;
+    }
+#elif defined(_WIN32)
     SOCKADDR_IN lAddr;
     std::memset(&lAddr, 0, sizeof(lAddr));
     lAddr.sin_family = AF_INET;
@@ -156,6 +199,17 @@ bool RaceServerClient::ConnectWithProtocolVersion(
 
 void RaceServerClient::Disconnect()
 {
+#ifdef __EMSCRIPTEN__
+    if (mWebSocket > 0) {
+        const EMSCRIPTEN_WEBSOCKET_T socket = mWebSocket;
+        mWebSocket = 0;
+        mWebSocketOpen = false;
+        mWebSocketFailed = true;
+        emscripten_websocket_close(socket, 1000, "client disconnect");
+        emscripten_websocket_delete(socket);
+    }
+#endif
+#ifndef __EMSCRIPTEN__
     if (mSocket >= 0)
     {
 #ifdef _WIN32
@@ -165,6 +219,7 @@ void RaceServerClient::Disconnect()
 #endif
         mSocket = -1;
     }
+#endif
     mReceiveBuffer.clear();
     mPendingPingToken = 0;
     mLastPingMs = -1;
@@ -172,7 +227,11 @@ void RaceServerClient::Disconnect()
 
 bool RaceServerClient::IsConnected() const
 {
+#ifdef __EMSCRIPTEN__
+    return mWebSocket > 0 && mWebSocketOpen;
+#else
     return mSocket >= 0;
+#endif
 }
 
 const std::string& RaceServerClient::GetProtocolError() const
@@ -190,7 +249,7 @@ std::intptr_t RaceServerClient::ReleaseSocket()
 
 bool RaceServerClient::SendMessage(int pMessageType, const void* pData, std::size_t pLen)
 {
-    if (mSocket < 0 || pLen > 255)
+    if (pLen > 255)
     {
         return false;
     }
@@ -207,6 +266,15 @@ bool RaceServerClient::SendMessage(int pMessageType, const void* pData, std::siz
         lBuffer.insert(lBuffer.end(), lSrc, lSrc + pLen);
     }
 
+#ifdef __EMSCRIPTEN__
+    if (mWebSocket <= 0 || !mWebSocketOpen ||
+        emscripten_websocket_send_binary(mWebSocket, lBuffer.data(), lBuffer.size()) != EMSCRIPTEN_RESULT_SUCCESS) {
+        Disconnect();
+        return false;
+    }
+    return true;
+#else
+    if (mSocket < 0) return false;
     std::size_t lSent = 0;
     while (lSent < lBuffer.size())
     {
@@ -228,6 +296,7 @@ bool RaceServerClient::SendMessage(int pMessageType, const void* pData, std::siz
         lSent += static_cast<std::size_t>(lCount);
     }
     return true;
+#endif
 }
 
 bool RaceServerClient::JoinGame(const std::string& pGameName)
@@ -321,6 +390,19 @@ bool RaceServerClient::HostRace(const std::string& pRaceName, const std::string&
 
 bool RaceServerClient::PollMessage(RaceServerMessage& pOut, int pTimeoutMs)
 {
+#ifdef __EMSCRIPTEN__
+    if (mWebSocket <= 0 || !mWebSocketOpen) return false;
+    if (TryExtractMessage(mReceiveBuffer, pOut)) return true;
+    const int timeout = pTimeoutMs > 0 ? pTimeoutMs : 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
+    do {
+        if (mWebSocketFailed || mWebSocket <= 0 || !mWebSocketOpen) return false;
+        if (timeout == 0) return false;
+        emscripten_sleep(10);
+        if (TryExtractMessage(mReceiveBuffer, pOut)) return true;
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+#else
     if (mSocket < 0)
     {
         return false;
@@ -379,6 +461,7 @@ bool RaceServerClient::PollMessage(RaceServerMessage& pOut, int pTimeoutMs)
 
     mReceiveBuffer.insert(mReceiveBuffer.end(), lIncoming, lIncoming + lCount);
     return TryExtractMessage(mReceiveBuffer, pOut);
+#endif
 }
 
 bool RaceServerClient::ParsePeer(const RaceServerMessage& pMessage, RaceServerPeer& pOut)
@@ -634,3 +717,41 @@ bool RaceServerClient::ParseAutoElement(const RaceServerMessage& pMessage, int& 
     pOutStateLen = pMessage.mData.size() - 6;
     return true;
 }
+
+#ifdef __EMSCRIPTEN__
+bool RaceServerClient::WebSocketOpened(int, const EmscriptenWebSocketOpenEvent*, void* userData)
+{
+    RaceServerClient* client = static_cast<RaceServerClient*>(userData);
+    client->mWebSocketOpen = true;
+    client->mWebSocketFailed = false;
+    return true;
+}
+
+bool RaceServerClient::WebSocketClosed(int, const EmscriptenWebSocketCloseEvent*, void* userData)
+{
+    RaceServerClient* client = static_cast<RaceServerClient*>(userData);
+    client->mWebSocketOpen = false;
+    client->mWebSocketFailed = true;
+    return true;
+}
+
+bool RaceServerClient::WebSocketError(int, const EmscriptenWebSocketErrorEvent*, void* userData)
+{
+    RaceServerClient* client = static_cast<RaceServerClient*>(userData);
+    client->mWebSocketFailed = true;
+    return true;
+}
+
+bool RaceServerClient::WebSocketMessage(int, const EmscriptenWebSocketMessageEvent* event, void* userData)
+{
+    RaceServerClient* client = static_cast<RaceServerClient*>(userData);
+    if (event->isText || event->numBytes > 65536 ||
+        client->mReceiveBuffer.size() > 65536 - event->numBytes) {
+        client->mWebSocketFailed = true;
+        return true;
+    }
+    const std::uint8_t* bytes = static_cast<const std::uint8_t*>(event->data);
+    client->mReceiveBuffer.insert(client->mReceiveBuffer.end(), bytes, bytes + event->numBytes);
+    return true;
+}
+#endif

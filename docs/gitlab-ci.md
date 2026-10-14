@@ -8,8 +8,20 @@ Configure protected runners with these tags, or override the CI variables in Git
 
 - `race-server`: C++14 compiler, `dpkg-deb`, Bash, and narrowly scoped deployment privileges. It builds/packages the server and deploys tagged releases.
 - `windows`: PowerShell, Visual Studio MSBuild with the **C++ CMake tools for Windows** component, all client dependencies, and Inno Setup (`iscc` on `PATH`).
+- `race-server` also runs the browser build. If `EMSDK` is unset, the web job installs the pinned SDK under the runner user's cache and reuses it on later builds.
 
-Mark the `race-server` runner and the production environment as protected. The deploy job is manual and runs only for a protected Git tag.
+Mark the `race-server` runner and production environments as protected. The RaceServer deploy remains manual and tag-only. The web deploy runs automatically from the protected default branch and remains manual for tags.
+
+The browser client is built by `build:game:web` and packaged as a standalone
+static artifact. `deploy:web` runs from the default branch after the web build
+and has its own `production-web` resource group. Tagged web deployments remain
+manual. On `192.168.10.181`, install
+`packaging/web/hovernet-web-deploy` as the root-owned
+`/usr/local/sbin/hovernet-web-deploy` wrapper and permit the `gitlab-runner`
+account to invoke only that wrapper with passwordless sudo. The wrapper
+validates/extracts the artifact and atomically switches the Apache release
+symlink. It does not enable Apache sites or install the WebSocket gateway;
+those server components must be configured before enabling the deploy job.
 
 ## Linux quality gates
 

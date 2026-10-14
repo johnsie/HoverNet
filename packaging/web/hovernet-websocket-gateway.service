@@ -1,0 +1,24 @@
+[Unit]
+Description=HoverNet browser WebSocket gateway
+After=network-online.target hovernet-raceserver.service
+Wants=network-online.target
+Requires=hovernet-raceserver.service
+
+[Service]
+Type=simple
+User=hovernet
+Group=hovernet
+Environment=HOVERNET_WS_HOST=127.0.0.1
+Environment=HOVERNET_WS_PORT=9601
+Environment=HOVERNET_WS_ORIGIN=https://hovernet.outiva.com
+ExecStart=/usr/bin/python3 /usr/lib/hovernet/websocket_gateway.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

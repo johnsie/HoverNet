@@ -17,6 +17,10 @@
 #include <string>
 #include <vector>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/websocket.h>
+#endif
+
 // Message type values as assigned by NetTarget/RaceServer/NetworkInterface/ServerSocket.cpp
 // and MessageDispatcher.cpp. Only the subset the server actually acts on today is listed.
 enum MR_RaceServerMessageType
@@ -236,6 +240,15 @@ public:
                                  std::size_t& pOutStateLen);
 
 private:
+#ifdef __EMSCRIPTEN__
+    static bool WebSocketOpened(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData);
+    static bool WebSocketClosed(int eventType, const EmscriptenWebSocketCloseEvent* event, void* userData);
+    static bool WebSocketError(int eventType, const EmscriptenWebSocketErrorEvent* event, void* userData);
+    static bool WebSocketMessage(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData);
+    EMSCRIPTEN_WEBSOCKET_T mWebSocket;
+    bool mWebSocketOpen;
+    bool mWebSocketFailed;
+#endif
     std::intptr_t mSocket;
     std::vector<std::uint8_t> mReceiveBuffer;
     std::string mProtocolError;

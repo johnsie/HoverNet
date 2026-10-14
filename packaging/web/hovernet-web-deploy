@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""Install one validated, immutable HoverNet web build and switch current."""
+
+import os
+import fcntl
+from pathlib import Path, PurePosixPath
+import re
+import shutil
+import sys
+import tarfile
+import tempfile
+
+RUNNER_BUILDS = Path("/home/gitlab-runner/builds").resolve()
+WEB_ROOT = Path("/var/www/hovernet.outiva.com")
+REQUIRED = {"index.html", "HoverNet.js", "HoverNet.wasm", "HoverNet.data"}
+ARCHIVE_NAME = re.compile(r"^hovernet-web-([A-Za-z0-9._+-]{1,100})\.tar\.gz$")
+MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
+MAX_FILE_BYTES = 256 * 1024 * 1024
+
+
+def main():
+    if os.geteuid() != 0:
+        raise SystemExit("must run as root through the scoped sudo rule")
+    if len(sys.argv) != 2:
+        raise SystemExit("usage: hovernet-web-deploy dist/hovernet-web-VERSION.tar.gz")
+
+    archive = Path(sys.argv[1]).resolve(strict=True)
+    try:
+        archive.relative_to(RUNNER_BUILDS)
+    except ValueError:
+        raise SystemExit("artifact must be inside the GitLab runner builds directory")
+    match = ARCHIVE_NAME.fullmatch(archive.name)
+    if not match or not archive.is_file():
+        raise SystemExit("artifact name must be hovernet-web-VERSION.tar.gz")
+    if archive.stat().st_size > MAX_ARCHIVE_BYTES:
+        raise SystemExit("artifact is too large")
+
+    lock = open("/var/lock/hovernet-web-deploy.lock", "a")
+    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    WEB_ROOT.mkdir(mode=0o755, parents=True, exist_ok=True)
+    releases = WEB_ROOT / "releases"
+    releases.mkdir(mode=0o755, exist_ok=True)
+    release = releases / match.group(1)
+    if release.exists():
+        raise SystemExit("this version is already deployed; use a new version for a new release")
+
+    staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=str(releases)))
+    try:
+        extracted = set()
+        with tarfile.open(str(archive), "r:gz") as bundle:
+            for item in bundle.getmembers():
+                name = item.name.removeprefix("./")
+                path = PurePosixPath(name)
+                if (not item.isfile() or path.is_absolute() or len(path.parts) != 1 or
+                        path.name in ("", ".", "..") or path.name not in REQUIRED or
+                        path.name in extracted or item.size > MAX_FILE_BYTES):
+                    raise SystemExit("archive contains an unexpected or unsafe entry")
+                source = bundle.extractfile(item)
+                if source is None:
+                    raise SystemExit("archive entry could not be read")
+                destination = staging / path.name
+                with source, destination.open("xb") as target:
+                    shutil.copyfileobj(source, target)
+                destination.chmod(0o644)
+                extracted.add(path.name)
+        if extracted != REQUIRED:
+            raise SystemExit("archive is missing one or more required browser files")
+
+        staging.rename(release)
+        next_link = WEB_ROOT / ".current-next"
+        try:
+            next_link.unlink()
+        except FileNotFoundError:
+            pass
+        next_link.symlink_to(release)
+        os.replace(str(next_link), str(WEB_ROOT / "current"))
+        old_releases = sorted(
+            (entry for entry in releases.iterdir() if entry.is_dir() and not entry.name.startswith(".staging-")),
+            key=lambda entry: entry.stat().st_mtime,
+            reverse=True,
+        )
+        for old_release in old_releases[5:]:
+            if old_release != release:
+                shutil.rmtree(old_release)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+    print("deployed HoverNet web build", match.group(1))
+
+
+if __name__ == "__main__":
+    main()

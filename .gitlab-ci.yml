@@ -14,6 +14,8 @@ stages:
 variables:
   GIT_DEPTH: "20"
   LINUX_RUNNER_TAG: "race-server"
+  WEB_RUNNER_TAG: "race-server"
+  WEB_EMSDK_VERSION: "3.1.74"
   WINDOWS_RUNNER_TAG: "windows"
   SERVER_RUNNER_TAG: "race-server"
   CMAKE_BUILD_PARALLEL_LEVEL: "2"
@@ -35,6 +37,11 @@ lint:gitlab-ci:
     - test -x scripts/make-release-checksums.sh
     - test -x scripts/generate-community-manifest.sh
     - test -x scripts/package-community-tracks.sh
+    - test -f packaging/web/shell.html
+    - test -f packaging/web/web-pre.js
+    - test -f packaging/web/websocket_gateway.py
+    - test -f packaging/web/hovernet-websocket-gateway.service
+    - test -x packaging/web/hovernet-web-deploy
 
 build:raceserver:linux:
   stage: build
@@ -60,6 +67,53 @@ build:game:linux:
     paths:
       - build/linux/HoverNetGame2Player
       - build/linux/ObjFac1.so
+
+build:game:web:
+  stage: build
+  tags: ["$WEB_RUNNER_TAG"]
+  script:
+    - |
+      EMSDK_BOOTSTRAP=0
+      if [ -z "${EMSDK:-}" ]; then
+        EMSDK="${HOME}/.cache/emsdk/${WEB_EMSDK_VERSION}"
+        export EMSDK
+        EMSDK_BOOTSTRAP=1
+      fi
+      if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ]; then
+        if [ "$EMSDK_BOOTSTRAP" -ne 1 ]; then
+          echo "Configured EMSDK does not contain emcmake: $EMSDK" >&2
+          exit 1
+        fi
+        mkdir -p "$(dirname "$EMSDK")"
+        (
+          flock -x 9
+          if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ]; then
+            INSTALLING="${EMSDK}.installing"
+            rm -rf "$INSTALLING"
+            git clone --depth 1 --branch "$WEB_EMSDK_VERSION" https://github.com/emscripten-core/emsdk.git "$INSTALLING"
+            "$INSTALLING/emsdk" install "$WEB_EMSDK_VERSION"
+            rm -rf "$EMSDK"
+            mv "$INSTALLING" "$EMSDK"
+          fi
+        ) 9>"${EMSDK}.install.lock"
+      fi
+      . "$EMSDK/emsdk_env.sh"
+      emcc --version | grep -F "$WEB_EMSDK_VERSION"
+    - emcmake cmake -S . -B build/web -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+    - cmake --build build/web --target HoverNetGame2Player --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+    - mkdir -p dist/web
+    - cp build/web/HoverNet.html dist/web/index.html
+    - cp build/web/HoverNet.js build/web/HoverNet.wasm build/web/HoverNet.data dist/web/
+    - tar -czf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web index.html HoverNet.js HoverNet.wasm HoverNet.data
+  artifacts:
+    name: "hovernet-web-${CI_COMMIT_REF_SLUG}"
+    expire_in: 30 days
+    paths:
+      - dist/hovernet-web-*.tar.gz
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
 
 build:game:linux:sanitizers:
   stage: build
@@ -258,6 +312,24 @@ deploy:raceserver:
   script:
     - sudo /usr/local/sbin/hovernet-deploy dist/hovernet-raceserver_*.deb
   rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+      allow_failure: false
+
+deploy:web:
+  stage: deploy
+  tags: ["$SERVER_RUNNER_TAG"]
+  needs:
+    - job: build:game:web
+      artifacts: true
+  resource_group: production-web
+  environment:
+    name: production-web
+    deployment_tier: production
+  script:
+    - sudo /usr/local/sbin/hovernet-web-deploy "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
     - if: '$CI_COMMIT_TAG'
       when: manual
       allow_failure: false

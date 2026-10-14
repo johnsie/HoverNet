@@ -49,6 +49,11 @@
 #include <sstream>
 #include <vector>
 
+#ifdef HOVERNET_WEB
+void HoverNetInitializeWebFactory();
+void HoverNetCleanWebFactory();
+#endif
+
 namespace
 {
 constexpr int kWidth = 1024;
@@ -71,7 +76,11 @@ bool g_QuitConfirmed = false;
 
 #ifdef HOVERNET_GAME2_PLAYER
 // The public production RaceServer. --lobby overrides this.
+#ifdef HOVERNET_WEB
+constexpr const char* kDefaultLobbyHost = "hovernet.outiva.com";
+#else
 constexpr const char* kDefaultLobbyHost = "outiva.com";
+#endif
 constexpr unsigned kDefaultLobbyPort = 9600;
 #endif
 
@@ -4737,9 +4746,18 @@ int RunClient(int argc, char** argv)
 #endif
     MR_InitTrigoTables();
     MR_MainCharacter::RegisterFactory();
+#ifdef HOVERNET_WEB
+    HoverNetInitializeWebFactory();
+#endif
     struct FactoryCleanup
     {
-        ~FactoryCleanup() { MR_DllObjectFactory::Clean(FALSE); }
+        ~FactoryCleanup()
+        {
+            MR_DllObjectFactory::Clean(FALSE);
+#ifdef HOVERNET_WEB
+            HoverNetCleanWebFactory();
+#endif
+        }
     } factoryCleanup;
 #ifdef HOVERNET_GAME2_PLAYER
     MR_SoundServer::Init(nullptr);
@@ -5862,6 +5880,12 @@ int RunClient(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
+#ifdef HOVERNET_WEB
+    // Emscripten's virtual filesystem is backed by IDBFS (mounted in the HTML
+    // preRun hook) so the shared client's existing XDG settings stay persistent.
+    setenv("HOME", "/home/web", 1);
+    setenv("XDG_CONFIG_HOME", "/home/web/.config", 1);
+#endif
     try {
         return RunClient(argc, argv);
     }

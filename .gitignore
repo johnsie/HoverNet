@@ -10,6 +10,7 @@ NetTarget/CommunityTracks/
 
 # Generated build and package output (at any repository depth)
 build/
+.tools/emsdk/
 [Dd]ebug/
 [Rr]elease/
 dist/
