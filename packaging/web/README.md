@@ -79,6 +79,16 @@ The wrapper deliberately does not alter Apache sites, certificates, system
 packages, or services. Configure the gateway and virtual host separately
 before enabling production deployment.
 
+## Repair the browser multiplayer gateway
+
+On Python 3.10 or later, Debian's `websockets 9.1` package passes a removed
+`loop` argument to asyncio APIs, so browser WebSocket connections fail. To
+install the compatibility fix and restart the gateway on `.181`, run:
+
+```sh
+sudo bash packaging/web/fix-websocket-gateway.sh
+```
+
 ## Configure the host
 
 The public TLS certificate terminates on the HAProxy server. Apache still

@@ -5,9 +5,41 @@ import asyncio
 import logging
 import os
 import signal
+import sys
 
 import websockets
 from websockets.exceptions import ConnectionClosed
+
+# Debian's websockets 9.1 passes ``loop=None`` to several asyncio APIs, but
+# Python 3.10 removed that argument. Keep the packaged gateway working on
+# hosts that still provide the old distro module.
+if sys.version_info >= (3, 10):
+    _AsyncioLock = asyncio.Lock
+    _asyncio_sleep = asyncio.sleep
+    _asyncio_wait = asyncio.wait
+    _asyncio_wait_for = asyncio.wait_for
+
+    class _CompatibleAsyncioLock(_AsyncioLock):
+        def __init__(self, *args, **kwargs):
+            kwargs.pop("loop", None)
+            super().__init__(*args, **kwargs)
+
+    async def _compatible_asyncio_sleep(*args, **kwargs):
+        kwargs.pop("loop", None)
+        return await _asyncio_sleep(*args, **kwargs)
+
+    async def _compatible_asyncio_wait(*args, **kwargs):
+        kwargs.pop("loop", None)
+        return await _asyncio_wait(*args, **kwargs)
+
+    async def _compatible_asyncio_wait_for(*args, **kwargs):
+        kwargs.pop("loop", None)
+        return await _asyncio_wait_for(*args, **kwargs)
+
+    asyncio.Lock = _CompatibleAsyncioLock
+    asyncio.sleep = _compatible_asyncio_sleep
+    asyncio.wait = _compatible_asyncio_wait
+    asyncio.wait_for = _compatible_asyncio_wait_for
 
 LOG = logging.getLogger("hovernet-websocket-gateway")
 MAX_FRAME_SIZE = 3 + 255
