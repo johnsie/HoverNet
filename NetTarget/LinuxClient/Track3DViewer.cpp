@@ -123,6 +123,26 @@ extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_text_key(int key)
 
 namespace
 {
+// End-of-frame pause shared by every menu and race loop. Natively it is the original fixed
+// 16 ms sleep. In the browser a fixed sleep stacks on top of the (software) render and canvas
+// copy, so a slow frame took 16 ms longer than it needed to; sleep only what is left of a
+// 16 ms frame budget (always yielding once so the page can process input and paint).
+inline void HoverNetFrameDelay()
+{
+#ifdef HOVERNET_WEB
+    static Uint32 frameStart = 0;
+    const Uint32 now = SDL_GetTicks();
+    const Uint32 spent = now - frameStart;
+    emscripten_sleep(spent < 16 ? 16 - spent : 0);
+    frameStart = SDL_GetTicks();
+#else
+    SDL_Delay(16);
+#endif
+}
+}
+
+namespace
+{
 constexpr int kWidth = 1024;
 constexpr int kHeight = 768;
 
@@ -2954,7 +2974,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 reconnectToServer();
             }
         }
-        SDL_Delay(16);
+        HoverNetFrameDelay();
     }
     SDL_StopTextInput();
 
@@ -3075,7 +3095,7 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
-        SDL_Delay(16);
+        HoverNetFrameDelay();
     }
 
     if (ownsImGuiContext) {
@@ -3225,7 +3245,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
-        SDL_Delay(16);
+        HoverNetFrameDelay();
     }
 
     if (ownsImGuiContext) {
@@ -3393,7 +3413,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
-        SDL_Delay(16);
+        HoverNetFrameDelay();
     }
 
     if (ownsImGuiContext) {
@@ -3633,7 +3653,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         CaptureFrameIfRequested(renderer, framesShown, pFrameLimit);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
-        SDL_Delay(16);
+        HoverNetFrameDelay();
     }
 
     for (TrackPreview& preview : trackPreviews) {
@@ -3982,7 +4002,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             ApplyHoverNetLobbyStyle(uiScalePercent / 100.0f, highContrast);
             applyUiScale = false;
         }
-        SDL_Delay(16);
+        HoverNetFrameDelay();
     }
 
     if (!textInputWasActive) {
@@ -4238,7 +4258,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
-        SDL_Delay(16);
+        HoverNetFrameDelay();
     }
 
     if (tutorialRaceTexture != nullptr) SDL_DestroyTexture(tutorialRaceTexture);
@@ -4513,7 +4533,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
-        SDL_Delay(16);
+        HoverNetFrameDelay();
     }
 
     if (ownsImGuiContext) {
@@ -4752,7 +4772,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
-        SDL_Delay(16);
+        HoverNetFrameDelay();
     }
 
     if (menuHovercraftTexture != nullptr) {
@@ -6094,7 +6114,7 @@ int RunClient(int argc, char** argv)
             }
         }
 
-        SDL_Delay(16);
+        HoverNetFrameDelay();
     }
 
     if (memoryReport.is_open()) {
