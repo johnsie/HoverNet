@@ -60,6 +60,9 @@ void HoverNetCleanWebFactory();
 EM_JS(int, hovernet_js_min_viewport, (), {
     return Math.min(window.innerWidth, window.innerHeight);
 });
+EM_JS(int, hovernet_js_is_touch, (), {
+    return (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 1 : 0;
+});
 
 // Bitmask of on-screen touch controls currently held, written by the page's
 // touch pad (packaging/web/shell.html) and OR-ed into the same control state
@@ -137,6 +140,17 @@ extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_text_key(int key)
 
 namespace
 {
+// True on phones/tablets (browser build only): screens show on-screen touch controls, not keys.
+inline bool HoverNetIsTouchDevice()
+{
+#ifdef HOVERNET_WEB
+    static const bool touch = hovernet_js_is_touch() != 0;
+    return touch;
+#else
+    return false;
+#endif
+}
+
 // End-of-frame pause shared by every menu and race loop. Natively it is the original fixed
 // 16 ms sleep. In the browser a fixed sleep stacks on top of the (software) render and canvas
 // copy, so a slow frame took 16 ms longer than it needed to; sleep only what is left of a
@@ -2056,6 +2070,8 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     // older ones (see the ChatLog child); sending a message always jumps back down.
     bool chatForcePin = true;
     bool chatWasPinned = true;
+    // Phones: the panel grid becomes tabs (0 games/race, 1 chat, 2 users) -- see the lobby layout.
+    int lobbyTab = std::getenv("HOVERNET_TEST_LOBBY_TAB") != nullptr ? std::atoi(std::getenv("HOVERNET_TEST_LOBBY_TAB")) : 0;
     // Test hooks (screenshots only): HOVERNET_TEST_LOBBY_DEMO=browse|waiting fills the
     // lobby with sample races, users and chat once connected.
     const char* demoMode = std::getenv("HOVERNET_TEST_LOBBY_DEMO");
@@ -2490,7 +2506,9 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
 
         DrawHoverNetScreenBackdrop(mainViewport);
-        HoverNetScreenHeading("ONLINE MULTIPLAYER", "INTERNET MEETING ROOM", statusText.c_str());
+        // The status line is repeated in the actions panel, so drop it from the heading on narrow screens.
+        HoverNetScreenHeading("ONLINE MULTIPLAYER", "INTERNET MEETING ROOM",
+                              ImGui::GetMainViewport()->WorkSize.x < 640.0f ? "" : statusText.c_str());
         ImGui::Spacing();
 
         if (!client.IsConnected()) {
@@ -2559,15 +2577,42 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             const float spacing = ImGui::GetStyle().ItemSpacing.x;
             const bool inWaitingRoomEarly = (phase == LobbyPhase::eWaitingRoom);
             const float availWidth = ImGui::GetContentRegionAvail().x;
+            // Small screens cannot hold the three-column grid: show one panel group at a time behind a
+            // tab bar. Narrow (portrait) screens also stack the race list, details and actions.
+            const bool tabbed = availWidth < 640.0f || ImGui::GetContentRegionAvail().y < 560.0f;
+            const bool stacked = availWidth < 640.0f;
+            if (tabbed) {
+                const char* tabNames[3] = {inWaitingRoomEarly ? "RACE" : "GAMES", "CHAT", "USERS"};
+                const int tabCount = inWaitingRoomEarly ? 2 : 3;
+                if (lobbyTab >= tabCount) lobbyTab = 0;
+                const float tabWidth = (availWidth - spacing * (tabCount - 1)) / tabCount;
+                for (int tab = 0; tab < tabCount; ++tab) {
+                    if (tab > 0) ImGui::SameLine();
+                    const bool active = lobbyTab == tab;
+                    const bool clicked = active ? HoverNetButton(tabNames[tab], ImVec2(tabWidth, 40.0f))
+                                                : HoverNetQuietButton(tabNames[tab], ImVec2(tabWidth, 40.0f));
+                    if (clicked) lobbyTab = tab;
+                }
+            }
             const float availHeight = ImGui::GetContentRegionAvail().y;
             // The top row needs about 250 px to show a race and its players without
             // scrolling; the chat keeps at least ~260 px (around ten lines) and is
             // scrollable beyond that. Anything in between is split evenly.
             // Browsing needs less (no player list); a waiting room has to fit all eight
             // players beside the race info without scrolling.
-            const float topHeight = inWaitingRoomEarly
+            const float topHeight = tabbed ? availHeight
+                : inWaitingRoomEarly
                 ? std::max(305.0f, std::min(availHeight * 0.44f, availHeight - 250.0f))
                 : std::max(298.0f, std::min(availHeight * 0.43f, availHeight - 260.0f));
+            // Portrait stack: each panel gets a share of the height and the full width.
+            const float stackGap = ImGui::GetStyle().ItemSpacing.y;
+            const float listHeight = stacked ? (inWaitingRoomEarly ? 0.0f : std::max(96.0f, availHeight * 0.24f))
+                                             : topHeight;
+            const float detailsHeight = stacked ? std::max(150.0f, availHeight * (inWaitingRoomEarly ? 0.60f : 0.42f))
+                                                : topHeight;
+            const float actionsHeight = stacked
+                ? std::max(120.0f, availHeight - listHeight - detailsHeight - stackGap * (inWaitingRoomEarly ? 1.0f : 2.0f))
+                : topHeight;
             const float actionsWidth = std::max(176.0f, availWidth * 0.17f);
             const float leftColWidth = availWidth * 0.29f;
             const bool inWaitingRoom = (phase == LobbyPhase::eWaitingRoom);
@@ -2582,8 +2627,9 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     ? &games[static_cast<std::size_t>(selected)]
                     : nullptr;
 
+            if (!tabbed || lobbyTab == 0) {
             if (!inWaitingRoom) {
-                ImGui::BeginChild("GameListPanel", ImVec2(leftColWidth, topHeight), true);
+                ImGui::BeginChild("GameListPanel", ImVec2(stacked ? 0.0f : leftColWidth, listHeight), true);
                 HoverNetSectionHeading("Game list");
                 if (ImGui::BeginListBox("##races", ImVec2(-FLT_MIN, -FLT_MIN))) {
                     if (games.empty()) {
@@ -2607,10 +2653,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     ImGui::EndListBox();
                 }
                 ImGui::EndChild();
-                ImGui::SameLine();
+                if (!stacked) ImGui::SameLine();
             }
 
-            ImGui::BeginChild("GameDetailsPanel", ImVec2(detailsColWidth, topHeight), true,
+            ImGui::BeginChild("GameDetailsPanel", ImVec2(stacked ? 0.0f : detailsColWidth, detailsHeight), true,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             HoverNetSectionHeading(inWaitingRoom ? "Your race" : "Game details");
             // One consistent "label  value" row style for both modes (labels dimmed).
@@ -2626,7 +2672,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 // Race info on the left, the whole player list on the right at full
                 // height, so all eight players are visible without scrolling.
                 const float infoWidth = std::max(250.0f, ImGui::GetContentRegionAvail().x * 0.46f);
-                ImGui::BeginChild("RaceInfoColumn", ImVec2(infoWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
+                // Narrow screens: race info on top, the player list underneath at full width.
+                ImGui::BeginChild("RaceInfoColumn",
+                                  stacked ? ImVec2(0.0f, ImGui::GetContentRegionAvail().y * 0.44f) : ImVec2(infoWidth, 0),
+                                  false, ImGuiWindowFlags_NoScrollbar);
                 const int waitingTrackIndex = FindHostableTrack(outTrackName);
                 const TrackBriefing waitingBriefing = BriefingFor(waitingTrackIndex);
                 infoRow("Track:", outTrackName.empty() ? "-" : outTrackName);
@@ -2646,7 +2695,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     ImGui::EndChild();
                 }
                 ImGui::EndChild();
-                ImGui::SameLine();
+                if (!stacked) ImGui::SameLine();
                 ImGui::BeginChild("PlayersColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
                 ImGui::Text("Players (%d / %d)", 1 + static_cast<int>(raceMembers.size()), kMaxPlayersPerRace);
                 ImGui::BeginChild("PlayersListBox", ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y), true);
@@ -2707,8 +2756,8 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             }
             ImGui::EndChild();
 
-            ImGui::SameLine();
-            ImGui::BeginChild("ActionsPanel", ImVec2(0, topHeight), true);
+            if (!stacked) ImGui::SameLine();
+            ImGui::BeginChild("ActionsPanel", ImVec2(0, actionsHeight), true);
             if (inWaitingRoom) {
                 if (isHost) {
                     // The one primary action: the only filled red button on the screen.
@@ -2766,14 +2815,17 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 ImGui::PopStyleColor();
             }
             // Leaving the lobby sits apart at the bottom so it is not hit by mistake.
-            ImGui::SetCursorPosY(topHeight - ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().WindowPadding.y);
+            ImGui::SetCursorPosY(std::max(ImGui::GetCursorPosY(),
+                actionsHeight - ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().WindowPadding.y));
             if (HoverNetQuietButton("Back to Menu", ImVec2(-FLT_MIN, 0))) {
                 running = false;
             }
             ImGui::EndChild();
+            }
 
             // ---- bottom row: who is here, and the chat ----
-            ImGui::BeginChild("UsersListPanel", ImVec2(leftColWidth, 0), true);
+            if (!tabbed || lobbyTab == 2) {
+            ImGui::BeginChild("UsersListPanel", ImVec2(tabbed ? 0.0f : leftColWidth, 0), true);
             // You are always in the list, then everyone else who is in the lobby (the
             // server announces only the *other* users, so you have to add yourself).
             std::vector<std::string> otherUsers;
@@ -2802,8 +2854,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             ImGui::PopStyleVar();
             ImGui::EndChild();
             ImGui::EndChild();
+            }
 
-            ImGui::SameLine();
+            if (!tabbed) ImGui::SameLine();
+            if (!tabbed || lobbyTab == 1) {
             ImGui::BeginChild("ChatPanel", ImVec2(0, 0), true);
             HoverNetSectionHeading("Chat");
             const float chatInputRow = ImGui::GetFrameHeightWithSpacing();
@@ -2853,6 +2907,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 ImGui::SetKeyboardFocusHere(-1);
             }
             ImGui::EndChild();
+            }
         }
 
         // OpenPopup/BeginPopupModal must be called at the same ID-stack depth --
@@ -4130,14 +4185,21 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
 
         DrawHoverNetScreenBackdrop(viewport);
 
-        HoverNetScreenHeading("DRIVER BRIEFING", "HOW TO PLAY", "Everything you need before the lights go green");
-        ImGui::Spacing();
+        // Phones: small and/or short screens drop the fixed desktop sizes so each page fits
+        // without scrolling (ImGui child windows cannot be touch-dragged).
+        const bool compact = viewport->WorkSize.x < 760.0f || viewport->WorkSize.y < 560.0f;
+        const bool narrow = viewport->WorkSize.x < 560.0f;
+        const bool touchControls = HoverNetIsTouchDevice();
+
+        HoverNetScreenHeading("DRIVER BRIEFING", "HOW TO PLAY",
+                              compact ? nullptr : "Everything you need before the lights go green");
+        if (!compact) ImGui::Spacing();
 
         const float panelWidth = std::min(900.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetSurface);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
-        ImGui::BeginChild("OnboardingPanel", ImVec2(panelWidth, -20.0f), true);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, compact ? ImVec2(14.0f, 10.0f) : ImVec2(28.0f, 24.0f));
+        ImGui::BeginChild("OnboardingPanel", ImVec2(panelWidth, compact ? -6.0f : -20.0f), true);
 
         const float progressWidth = ImGui::GetContentRegionAvail().x;
         const float segmentGap = 8.0f;
@@ -4151,24 +4213,33 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
                 ImVec2(progressPos.x + step * (segmentWidth + segmentGap) + segmentWidth, progressPos.y + 5.0f),
                 color, 3.0f);
         }
-        ImGui::Dummy(ImVec2(0, 14.0f));
+        ImGui::Dummy(ImVec2(0, compact ? 6.0f : 14.0f));
         ImGui::TextColored(kHoverNetCoral, "BRIEFING %02d / %02d", page + 1, pageCount);
-        ImGui::SetWindowFontScale(1.45f);
+        // Short landscape screens: page label and title share one line to save height.
+        if (viewport->WorkSize.y < 460.0f) ImGui::SameLine(0.0f, 14.0f);
+        ImGui::SetWindowFontScale(compact ? 1.2f : 1.45f);
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
         ImGui::TextUnformatted(titles[page]);
         ImGui::PopStyleColor();
         ImGui::SetWindowFontScale(1.0f);
         ImGui::Spacing();
 
-        const float contentHeight = std::max(300.0f, ImGui::GetContentRegionAvail().y - 72.0f);
+        const float contentHeight = std::max(compact ? 90.0f : 300.0f,
+                                             ImGui::GetContentRegionAvail().y - (compact ? 76.0f : 72.0f));
+        // Compact cards size themselves to their text (no clipping or scrollbars); desktop keeps fixed sizes.
+        const ImGuiChildFlags cardFlags = compact ? (ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY)
+                                                  : ImGuiChildFlags_Border;
+        const float contentAvailHeight = contentHeight;
         ImGui::BeginChild("BriefingContent", ImVec2(0, contentHeight), false);
         if (page == 0) {
-            const float gap = 18.0f;
-            const float cardWidth = (ImGui::GetContentRegionAvail().x - gap) * 0.5f;
+            const float gap = compact ? 10.0f : 18.0f;
+            const float cardWidth = narrow ? ImGui::GetContentRegionAvail().x
+                                           : (ImGui::GetContentRegionAvail().x - gap) * 0.5f;
+            const float cardHeight = compact ? 0.0f : 245.0f;
             auto modeCard = [&](const char* number, const char* heading, const char* copy, bool primary) {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, primary ? ImVec4(0.20f, 0.055f, 0.085f, 1.0f)
                                                                 : ImVec4(0.065f, 0.075f, 0.105f, 1.0f));
-                ImGui::BeginChild(heading, ImVec2(cardWidth, 245.0f), true);
+                ImGui::BeginChild(heading, ImVec2(cardWidth, cardHeight), cardFlags, ImGuiWindowFlags_NoScrollbar);
                 ImGui::TextColored(kHoverNetCoral, "%s", number);
                 ImGui::SetWindowFontScale(1.25f);
                 ImGui::TextUnformatted(heading);
@@ -4181,51 +4252,78 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
                 ImGui::PopStyleColor();
             };
             modeCard("01", "LOCAL RACE", "Choose a track, set the laps and decide whether weapons are enabled.", false);
-            ImGui::SameLine(0.0f, gap);
+            if (!narrow) ImGui::SameLine(0.0f, gap);
             modeCard("02", "ONLINE MULTIPLAYER", "Join an open race or host a new event in the shared HoverNet lobby.", true);
             ImGui::Spacing();
-            AccentNote("Start with Local Race to learn a track, then take your hovercraft online.");
+            if (!compact || contentAvailHeight > 200.0f)
+                AccentNote("Start with Local Race to learn a track, then take your hovercraft online.");
         }
-        else if (page == 1) {
-            const float cardGap = 14.0f;
-            const float cardWidth = (ImGui::GetContentRegionAvail().x - cardGap * 2.0f) / 3.0f;
-            auto keyCap = [&](const char* id, const char* key, const char* action) {
+        else if (page == 1 && touchControls) {
+            // On a phone the race uses the on-screen buttons, so describe those instead of keys.
+            const float cardGap = 8.0f;
+            const int columns = narrow ? 2 : 4;
+            const float cardWidth = (ImGui::GetContentRegionAvail().x - cardGap * (columns - 1)) / columns;
+            const float cardHeight = compact ? 0.0f : 98.0f;
+            const char* touchPads[][2] = {
+                {"< >", "Steer"}, {"GO", "Accelerate"}, {"BRAKE", "Brake / reverse"}, {"FIRE", "Fire weapon"},
+                {"JUMP", "Jump"}, {"WEAPON", "Select weapon"}, {"MENU", "Pause"}, {"CONTROLS", "Hide / show pad"}
+            };
+            for (int pad = 0; pad < 8; ++pad) {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.09f, 1.0f));
-                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
-                ImGui::BeginChild(id, ImVec2(cardWidth, 98.0f), true);
-                if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
-                ImGui::TextColored(kHoverNetCoral, "%s", key);
-                if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
-                ImGui::Spacing();
-                ImGui::TextUnformatted(action);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 6.0f));
+                ImGui::BeginChild(touchPads[pad][0], ImVec2(cardWidth, cardHeight), cardFlags, ImGuiWindowFlags_NoScrollbar);
+                ImGui::TextColored(kHoverNetCoral, "%s", touchPads[pad][0]);
+                ImGui::TextUnformatted(touchPads[pad][1]);
                 ImGui::EndChild();
                 ImGui::PopStyleVar();
                 ImGui::PopStyleColor();
+                if ((pad + 1) % columns != 0) ImGui::SameLine(0.0f, cardGap);
+            }
+            if (!compact || contentAvailHeight > 230.0f)
+                ImGui::TextDisabled("Hold buttons to drive. Tap the gamepad icon to hide the pad.");
+        }
+        else if (page == 1) {
+            const float cardGap = compact ? 8.0f : 14.0f;
+            const int columns = narrow ? 2 : 3;
+            const float cardWidth = (ImGui::GetContentRegionAvail().x - cardGap * (columns - 1)) / columns;
+            const char* keys[][2] = {
+                {"SHIFT", "Accelerate"}, {"DOWN", "Brake / reverse"}, {"LEFT / RIGHT", "Steer"},
+                {"UP", "Jump"}, {"CTRL", "Fire weapon"}, {"TAB", "Select weapon"}
             };
-            keyCap("KeyboardAccelerate", "SHIFT", "Accelerate");
-            ImGui::SameLine(0.0f, cardGap);
-            keyCap("KeyboardBrake", "DOWN", "Brake / reverse");
-            ImGui::SameLine(0.0f, cardGap);
-            keyCap("KeyboardSteer", "LEFT / RIGHT", "Steer");
-            keyCap("KeyboardJump", "UP", "Jump");
-            ImGui::SameLine(0.0f, cardGap);
-            keyCap("KeyboardFire", "CTRL", "Fire weapon");
-            ImGui::SameLine(0.0f, cardGap);
-            keyCap("KeyboardWeapon", "TAB", "Select weapon");
+            for (int key = 0; key < 6; ++key) {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.09f, 1.0f));
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, compact ? ImVec2(10.0f, 6.0f) : ImVec2(18.0f, 14.0f));
+                ImGui::BeginChild(keys[key][0], ImVec2(cardWidth, compact ? 0.0f : 98.0f), cardFlags, ImGuiWindowFlags_NoScrollbar);
+                if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
+                ImGui::TextColored(kHoverNetCoral, "%s", keys[key][0]);
+                if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
+                if (!compact) ImGui::Spacing();
+                ImGui::TextUnformatted(keys[key][1]);
+                ImGui::EndChild();
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor();
+                if ((key + 1) % columns != 0) ImGui::SameLine(0.0f, cardGap);
+            }
             ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.085f, 0.055f, 0.075f, 1.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
-            ImGui::BeginChild("ControllerSummary", ImVec2(0.0f, 112.0f), true);
-            HoverNetSectionHeading("CONTROLLER");
-            ImGui::TextWrapped("LEFT STICK  Steer    |    TRIGGERS  Accelerate / brake    |    A  Jump    |    X  Fire    |    Y  Select weapon");
-            ImGui::TextDisabled("Review and remap every binding from Controls.");
-            ImGui::EndChild();
-            ImGui::PopStyleVar();
-            ImGui::PopStyleColor();
+            if (compact && contentAvailHeight < 260.0f) {
+                // No room for the controller card on a short screen (it is listed under Controls).
+            }
+            else {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.085f, 0.055f, 0.075f, 1.0f));
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
+                ImGui::BeginChild("ControllerSummary", ImVec2(0.0f, compact ? 0.0f : 112.0f), cardFlags, ImGuiWindowFlags_NoScrollbar);
+                HoverNetSectionHeading("CONTROLLER");
+                ImGui::TextWrapped("LEFT STICK  Steer    |    TRIGGERS  Accelerate / brake    |    A  Jump    |    X  Fire    |    Y  Select weapon");
+                ImGui::TextDisabled("Review and remap every binding from Controls.");
+                ImGui::EndChild();
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor();
+            }
         }
         else if (page == 2) {
             const ImVec2 diagramPos = ImGui::GetCursorScreenPos();
-            const ImVec2 diagramSize(ImGui::GetContentRegionAvail().x, 265.0f);
+            const ImVec2 diagramSize(ImGui::GetContentRegionAvail().x,
+                                     compact ? std::min(265.0f, std::max(90.0f, contentAvailHeight - 70.0f)) : 265.0f);
             if (tutorialRaceTexture != nullptr) {
                 ImGui::Image(reinterpret_cast<ImTextureID>(tutorialRaceTexture), diagramSize);
             }
@@ -4245,27 +4343,38 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
                 {"ACCESSIBILITY", "Enable large HUD text, reduced motion and high contrast."},
                 {"AUDIO", "Adjust volume or mute the game."}
             };
+            const int featureColumns = (compact && !narrow) ? 2 : 1;
+            const float featureGap = 10.0f;
+            const float featureWidth = (ImGui::GetContentRegionAvail().x - featureGap * (featureColumns - 1)) / featureColumns;
             for (int feature = 0; feature < 4; ++feature) {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.09f, 1.0f));
-                ImGui::BeginChild(features[feature][0], ImVec2(0, 68.0f), true);
+                ImGui::BeginChild(features[feature][0], ImVec2(featureColumns > 1 ? featureWidth : 0.0f, compact ? 0.0f : 68.0f),
+                                  cardFlags, ImGuiWindowFlags_NoScrollbar);
                 ImGui::TextColored(kHoverNetCoral, "%s", features[feature][0]);
-                ImGui::SameLine(180.0f);
-                ImGui::TextUnformatted(features[feature][1]);
+                if (narrow || featureColumns > 1) {
+                    ImGui::TextWrapped("%s", features[feature][1]);
+                }
+                else {
+                    ImGui::SameLine(compact ? 150.0f : 180.0f);
+                    ImGui::TextUnformatted(features[feature][1]);
+                }
                 ImGui::EndChild();
                 ImGui::PopStyleColor();
+                if (featureColumns > 1 && feature % 2 == 0) ImGui::SameLine(0.0f, featureGap);
             }
-            ImGui::TextDisabled("Settings preview live. Save keeps them; Cancel restores the previous setup.");
+            if (!compact) ImGui::TextDisabled("Settings preview live. Save keeps them; Cancel restores the previous setup.");
         }
         ImGui::EndChild();
 
         ImGui::Separator();
         ImGui::Spacing();
         if (page > 0) {
-            if (HoverNetQuietButton("BACK", ImVec2(130, 44))) --page;
+            if (HoverNetQuietButton("BACK", ImVec2(compact ? 96.0f : 130.0f, 44))) --page;
             ImGui::SameLine();
         }
-        const char* nextLabel = page == pageCount - 1 ? "FINISH BRIEFING" : "NEXT BRIEFING";
-        const float nextWidth = page == pageCount - 1 ? 190.0f : 175.0f;
+        const char* nextLabel = compact ? (page == pageCount - 1 ? "FINISH" : "NEXT")
+                                        : (page == pageCount - 1 ? "FINISH BRIEFING" : "NEXT BRIEFING");
+        const float nextWidth = compact ? 130.0f : (page == pageCount - 1 ? 190.0f : 175.0f);
         if (HoverNetButton(nextLabel, ImVec2(nextWidth, 44))) {
             if (page == pageCount - 1) {
                 completed = true;
@@ -4284,6 +4393,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        CaptureFrameIfRequested(renderer, framesShown, pFrameLimit);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         HoverNetFrameDelay();
@@ -5224,6 +5334,14 @@ int RunClient(int argc, char** argv)
     else {
         SDL_SetWindowFullscreen(graphics.GetWindow(), SDL_WINDOW_FULLSCREEN_DESKTOP);
     }
+    // Screenshot tests: HOVERNET_TEST_WINDOW=WIDTHxHEIGHT opens any screen at that size (e.g. a phone).
+    {
+        int testW = 0, testH = 0;
+        if (const char* testSize = std::getenv("HOVERNET_TEST_WINDOW");
+            testSize != nullptr && std::sscanf(testSize, "%dx%d", &testW, &testH) == 2 && testW > 0 && testH > 0) {
+            SDL_SetWindowSize(graphics.GetWindow(), testW, testH);
+        }
+    }
 #endif
     auto applyPalette = [&]() {
         std::array<MR_UInt8, MR_NB_COLORS * 3> palette{};
@@ -5502,7 +5620,14 @@ int RunClient(int argc, char** argv)
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--onboarding")) {
-            RunOnboardingScreen(graphics, frameLimit);
+            // HOVERNET_ONBOARDING_PAGE lets screenshot tests open a later briefing page.
+            const char* startPage = std::getenv("HOVERNET_ONBOARDING_PAGE");
+            int testW = 0, testH = 0;
+            if (const char* testSize = std::getenv("HOVERNET_TEST_WINDOW");
+                testSize != nullptr && std::sscanf(testSize, "%dx%d", &testW, &testH) == 2) {
+                SDL_SetWindowSize(graphics.GetWindow(), testW, testH);
+            }
+            RunOnboardingScreen(graphics, frameLimit, startPage != nullptr ? std::atoi(startPage) : 0);
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--local-setup-screen")) {
