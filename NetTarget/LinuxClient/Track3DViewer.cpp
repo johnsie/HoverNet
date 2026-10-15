@@ -3603,11 +3603,13 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         DrawHoverNetScreenBackdrop(mainViewport);
 
+        // Phones (narrow or short windows): slim header bar and no wasted vertical space.
+        const bool phoneLayout = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneLayout ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
+        ImGui::BeginChild("HeaderBar", ImVec2(0, phoneLayout ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(1.35f);
+        ImGui::SetWindowFontScale(phoneLayout ? 1.1f : 1.35f);
         ImGui::TextUnformatted("LOCAL RACE SETUP");
         ImGui::SetWindowFontScale(1.0f);
         ImGui::PopStyleColor();
@@ -3615,7 +3617,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::PopStyleVar();
         ImGui::PopStyleColor();
         ImGui::Spacing();
-        ImGui::Spacing();
+        if (!phoneLayout) ImGui::Spacing();
 
         const float panelWidth = std::min(900.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
@@ -3625,7 +3627,13 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         const bool sideBySide = contentWidth >= 610.0f;
         const float gap = ImGui::GetStyle().ItemSpacing.x;
         const float controlsWidth = sideBySide ? contentWidth * 0.52f : contentWidth;
-        ImGui::BeginChild("RaceOptions", ImVec2(controlsWidth, sideBySide ? 0.0f : 390.0f), false);
+        // Stacked (narrow) layout: size the options to their content so Cancel is never clipped.
+        ImGui::BeginChild("RaceOptions", ImVec2(controlsWidth, sideBySide ? 0.0f : 0.0f),
+                          sideBySide ? ImGuiChildFlags_None : ImGuiChildFlags_AutoResizeY,
+                          sideBySide ? ImGuiWindowFlags_None : ImGuiWindowFlags_NoScrollbar);
+        // Short landscape: keep Start Race and Cancel on screen by dropping the course-briefing
+        // heading and description (the style and difficulty line stays).
+        const bool tightHeight = phoneLayout && sideBySide;
 
         ImGui::PushItemWidth(-1.0f);
         ImGui::TextUnformatted("Track");
@@ -3636,11 +3644,11 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         const TrackEntry* selectedTrack = Tracks().Get(prefs.mTrackIndex);
         const bool needsDownload = selectedTrack != nullptr && !selectedTrack->mInstalled;
         ImGui::Spacing();
-        HoverNetSectionHeading("Course briefing");
+        if (!tightHeight) HoverNetSectionHeading("Course briefing");
         ImGui::Text("Style: %s", guide.mCharacter.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("  Difficulty: %s", guide.mDifficulty.c_str());
-        ImGui::TextWrapped("%s", guide.mDescription.c_str());
+        if (!tightHeight) ImGui::TextWrapped("%s", guide.mDescription.c_str());
         if (needsDownload) {
             AccentNote("Not on this computer yet - it downloads (" + FormatMegabytes(selectedTrack->mDownloadBytes) +
                        ") when you start.");
@@ -3665,8 +3673,10 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Spacing();
         ImGui::Spacing();
 
+        const float halfButton = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
         const bool startPressed =
-            HoverNetButton(needsDownload ? "Download & Start Race" : "Start Race", ImVec2(-FLT_MIN, 40)) ||
+            HoverNetButton(needsDownload ? "Download & Start Race" : "Start Race",
+                           ImVec2(tightHeight ? halfButton : -FLT_MIN, 40)) ||
             (autoStartForTest && framesShown == 1);
         if (startPressed && !download.Active()) {
             if (needsDownload) {
@@ -3677,8 +3687,8 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                 running = false;
             }
         }
-        ImGui::Spacing();
-        if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, 36))) {
+        if (tightHeight) ImGui::SameLine(); else ImGui::Spacing();
+        if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, tightHeight ? 40.0f : 36.0f))) {
             cancelled = true;
             running = false;
         }
@@ -3710,7 +3720,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         else {
             ImGui::Spacing();
-            ImGui::BeginChild("TrackPreview", ImVec2(0, 240.0f), false);
+            ImGui::BeginChild("TrackPreview", ImVec2(0, phoneLayout ? 200.0f : 240.0f), false);
             DrawTrackPreview(preview);
             ImGui::EndChild();
         }
