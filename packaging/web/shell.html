@@ -207,6 +207,7 @@
         if (frames >= 2 || (frames < 0 && Date.now() - started > 4000) || Date.now() - started > 60000) {
           document.body.classList.add('running');
           Module.canvas.focus();
+          if (store.get('hn-gamesize')) applyGameSize();  // restore the chosen game size (desktop)
           return;
         }
         var waited = Date.now() - started;
@@ -235,15 +236,15 @@
     // SDL sizes its window when main() runs and only follows the canvas's CSS size on a window
     // resize event, so on load the 1024x768 backbuffer would be stretched to fill the page. Nudge
     // SDL until the backbuffer matches the displayed size (it then keeps following real resizes).
-    var resizeNudges = 0;
+    var resizeNudges = 0, lastClient = '';
     window.setInterval(function() {
       var c = Module.canvas;
-      if (!document.body.classList.contains('running') || resizeNudges > 40) return;
-      if (c.clientWidth && (c.width !== c.clientWidth || c.height !== c.clientHeight)) {
-        resizeNudges++;
+      if (!document.body.classList.contains('running') || !c.clientWidth) return;
+      var client = c.clientWidth + 'x' + c.clientHeight;
+      if (client !== lastClient) { lastClient = client; resizeNudges = 0; }  // page size changed: allow fresh nudges
+      if ((c.width !== c.clientWidth || c.height !== c.clientHeight) && resizeNudges < 4) {
+        resizeNudges++;  // a few nudges only: every resize clears the canvas
         window.dispatchEvent(new Event('resize'));
-      } else {
-        resizeNudges = 0;
       }
     }, 250);
 
@@ -280,24 +281,33 @@
       });
     }
 
-    // Track the *visual* viewport: on iOS the keyboard shrinks it without resizing the window,
-    // which would leave the focused field hidden behind the keyboard. Resize the page to the
-    // visible area and tell SDL (it listens for window resize) so menus re-lay out above the keyboard.
-    var lastVV = '';
+    // Track the *visual* viewport, but only while the on-screen keyboard is open: it shrinks the
+    // visual viewport without resizing the window, hiding the focused field. Resizing the page to
+    // the visible area (and telling SDL via a resize event) keeps it in view. When the keyboard is
+    // closed the CSS viewport units are left alone: iOS also changes the visual viewport as its
+    // toolbars slide in and out, and resizing the canvas for that clears it (visible flicker).
+    var keyboardFit = false, fitTimer = 0;
     function fitViewport() {
       var vv = window.visualViewport;
+      if (!vv) return;
+      var keyboardOpen = vv.height < window.innerHeight - 140;
       var root = document.documentElement.style;
-      if (vv) {
+      if (keyboardOpen) {
         root.setProperty('--vh', Math.round(vv.height) + 'px');
         root.setProperty('--vt', Math.round(vv.offsetTop) + 'px');
+      } else if (keyboardFit) {
+        root.removeProperty('--vh');
+        root.removeProperty('--vt');
+      } else {
+        return;  // nothing to change
       }
-      var key = vv ? vv.width + 'x' + vv.height + '@' + vv.offsetTop : '';
-      if (key !== lastVV) { lastVV = key; window.dispatchEvent(new Event('resize')); }
+      keyboardFit = keyboardOpen;
+      clearTimeout(fitTimer);
+      fitTimer = setTimeout(function() { window.dispatchEvent(new Event('resize')); }, 120);
     }
     if (isTouch && window.visualViewport) {
       visualViewport.addEventListener('resize', fitViewport);
-      visualViewport.addEventListener('scroll', function() { window.scrollTo(0, 0); fitViewport(); });
-      fitViewport();
+      visualViewport.addEventListener('scroll', function() { if (keyboardFit) { window.scrollTo(0, 0); fitViewport(); } });
     }
 
     // ---- Soft keyboard bridge (see hovernet_wants_text in Track3DViewer.cpp) ----
@@ -350,6 +360,34 @@
       document.body.classList.toggle('in-race', !!Module.ccall('hovernet_in_race', 'number', [], []));
       if (document.activeElement === textNode && Date.now() - textFocusedAt > 600 && !gameWantsText()) textNode.blur();
     }, 200);
+
+    // ---- Game size (desktop) ----
+    // The page owns the canvas size and SDL follows it on resize events. "Fit" fills the window;
+    // a fixed size is a smaller, centred area (never larger than the window), so the player can
+    // resize the gameplay without resizing the browser. Chosen from Settings in the game.
+    function applyGameSize() {
+      var c = Module.canvas, m = /^(\d+)x(\d+)$/.exec(store.get('hn-gamesize') || '');
+      if (m && !isTouch) {
+        c.style.width = Math.min(+m[1], window.innerWidth) + 'px';
+        c.style.height = Math.min(+m[2], window.innerHeight) + 'px';
+      } else {
+        c.style.width = '';
+        c.style.height = '';
+      }
+      window.dispatchEvent(new Event('resize'));
+    }
+    window.hnSetGameSize = function(w, h) {
+      store.set('hn-gamesize', w > 0 && h > 0 ? w + 'x' + h : '');
+      applyGameSize();
+    };
+    // A saved size that no longer fits (smaller window) is clamped by applyGameSize; reapply on resize.
+    window.addEventListener('resize', function() {
+      var m = /^(\d+)x(\d+)$/.exec(store.get('hn-gamesize') || '');
+      if (m && !isTouch) {
+        var c = Module.canvas, w = Math.min(+m[1], window.innerWidth), h = Math.min(+m[2], window.innerHeight);
+        if (c.style.width !== w + 'px' || c.style.height !== h + 'px') { c.style.width = w + 'px'; c.style.height = h + 'px'; }
+      }
+    });
 
     // Held on-screen buttons are published to the game as a bitmask, so the game
     // combines them with keyboard/gamepad input and remapped keys are irrelevant.

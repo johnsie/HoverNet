@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <cfloat>
 #include <cstdio>
 #include <cstdlib>
@@ -60,8 +61,36 @@ void HoverNetCleanWebFactory();
 EM_JS(int, hovernet_js_min_viewport, (), {
     return Math.min(window.innerWidth, window.innerHeight);
 });
+// Game size (desktop): packed (width << 16 | height), 0 = fit the browser window. The page owns
+// the canvas size (shell.html hnSetGameSize); SDL follows its resize events.
+EM_JS(int, hovernet_js_get_game_size, (), {
+    var m = /^(\d+)x(\d+)$/.exec((function() { try { return localStorage.getItem('hn-gamesize') || ''; } catch (e) { return ''; } })());
+    return m ? ((parseInt(m[1], 10) << 16) | parseInt(m[2], 10)) : 0;
+});
+EM_JS(void, hovernet_js_set_game_size, (int w, int h), {
+    if (window.hnSetGameSize) window.hnSetGameSize(w, h);
+});
+EM_JS(int, hovernet_js_window_size, (), {
+    return (window.innerWidth << 16) | window.innerHeight;
+});
 EM_JS(int, hovernet_js_is_touch, (), {
     return (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 1 : 0;
+});
+// Long side / short side of the screen times 1000, whatever the current orientation (the game is
+// played in landscape, but may start while the phone is still in portrait).
+EM_JS(int, hovernet_js_landscape_aspect_x1000, (), {
+    var w = Math.max(window.innerWidth, window.innerHeight), h = Math.max(1, Math.min(window.innerWidth, window.innerHeight));
+    return Math.round(1000 * w / h);
+});
+// Resume on the next display frame (or after 100 ms if the tab is hidden and rAF is paused, so
+// network polling keeps running). Pacing the loop to the display avoids tearing and flicker.
+EM_ASYNC_JS(void, hovernet_js_wait_frame, (), {
+    await new Promise(function(resolve) {
+        var done = false;
+        function finish() { if (!done) { done = true; resolve(); } }
+        requestAnimationFrame(finish);
+        setTimeout(finish, 100);
+    });
 });
 
 // Bitmask of on-screen touch controls currently held, written by the page's
@@ -159,14 +188,11 @@ inline void HoverNetFrameDelay()
 {
 #ifdef HOVERNET_WEB
     ++gHoverNetFrames;
-    static Uint32 frameStart = 0;
-    const Uint32 now = SDL_GetTicks();
-    const Uint32 spent = now - frameStart;
-    // Browser mouse/touch events are pushed into SDL while we sleep here. Loops restore the
-    // renderer's 1024x768 logical size before this call, and SDL rescales every event queued while
-    // a logical size is set -- but the ImGui menus draw 1:1 in real window pixels, so clicks and
-    // slider drags landed in the wrong place unless the window was exactly 1024x768. Keep the
-    // logical size off while events can arrive; put it back before the next frame polls.
+    // Browser mouse/touch events are pushed into SDL while we wait here. Loops restore the
+    // renderer's logical size before this call, and SDL rescales every event queued while a
+    // logical size is set -- but the ImGui menus draw 1:1 in real window pixels, so clicks and
+    // slider drags landed in the wrong place unless the window was exactly the logical size. Keep
+    // the logical size off while events can arrive; put it back before the next frame polls.
     SDL_Window* const window = SDL_GetWindowFromID(1);
     SDL_Renderer* const renderer = window != nullptr ? SDL_GetRenderer(window) : nullptr;
     int logicalW = 0, logicalH = 0;
@@ -174,9 +200,8 @@ inline void HoverNetFrameDelay()
         SDL_RenderGetLogicalSize(renderer, &logicalW, &logicalH);
         SDL_RenderSetLogicalSize(renderer, 0, 0);
     }
-    emscripten_sleep(spent < 16 ? 16 - spent : 0);
+    hovernet_js_wait_frame();
     if (renderer != nullptr) SDL_RenderSetLogicalSize(renderer, logicalW, logicalH);
-    frameStart = SDL_GetTicks();
 #else
     SDL_Delay(16);
 #endif
@@ -185,8 +210,31 @@ inline void HoverNetFrameDelay()
 
 namespace
 {
-constexpr int kWidth = 1024;
-constexpr int kHeight = 768;
+// Game framebuffer size. 1024x768 everywhere except phones in the browser, which use a widescreen
+// size matching the screen so the race fills it instead of being letterboxed (see below).
+int kWidth = 1024;
+int kHeight = 768;
+
+void ConfigureGameResolution()
+{
+    int testW = 0, testH = 0;
+    if (const char* testRes = std::getenv("HOVERNET_TEST_RES");
+        testRes != nullptr && std::sscanf(testRes, "%dx%d", &testW, &testH) == 2 && testW >= 320 && testH >= 240) {
+        kWidth = testW & ~1;
+        kHeight = testH & ~1;
+        return;
+    }
+#ifdef HOVERNET_WEB
+    if (HoverNetIsTouchDevice()) {
+        // Phones are about 2.2:1 in landscape. Keep the width modest (the CPU rasteriser's cost
+        // scales with pixels, and this is fewer than 1024x768) and match the screen's shape,
+        // clamped between 4:3 and 2.4:1.
+        const double aspect = std::max(4.0 / 3.0, std::min(2.4, hovernet_js_landscape_aspect_x1000() / 1000.0));
+        kWidth = 960;
+        kHeight = static_cast<int>(kWidth / aspect + 0.5) & ~1;
+    }
+#endif
+}
 
 // Every interactive menu now renders 1:1 in real window coordinates through
 // ImGui. The renderer's fixed 1024x768 logical size is used only for the game
@@ -3826,6 +3874,9 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     }
     const int currentWindowWidth = windowWidth;
     const int currentWindowHeight = windowHeight;
+#ifdef HOVERNET_WEB
+    const int entryGameSize = hovernet_js_get_game_size();  // restored on Cancel
+#endif
     struct ResolutionOption { int width; int height; };
     constexpr ResolutionOption resolutions[] = {
         {1024, 768}, {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}
@@ -4002,6 +4053,34 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Separator();
         ImGui::Spacing();
 
+#ifdef HOVERNET_WEB
+        // Browser: size the gameplay area inside the page (the browser window itself is not resized).
+        if (!HoverNetIsTouchDevice()) {
+            struct GameSizeOption { int width; int height; const char* label; };
+            static const GameSizeOption gameSizes[] = {
+                {0, 0, "Fit browser window"}, {800, 600, "800 x 600"}, {1024, 768, "1024 x 768"},
+                {1280, 720, "1280 x 720"}, {1600, 900, "1600 x 900"}, {1920, 1080, "1920 x 1080"}
+            };
+            const int browserWindow = hovernet_js_window_size();
+            const int browserW = browserWindow >> 16, browserH = browserWindow & 0xffff;
+            const int currentSize = hovernet_js_get_game_size();
+            char sizeLabel[32] = "Fit browser window";
+            if (currentSize != 0) std::snprintf(sizeLabel, sizeof(sizeLabel), "%d x %d", currentSize >> 16, currentSize & 0xffff);
+            ImGui::TextUnformatted("Game Size");
+            ImGui::PushItemWidth(-1.0f);
+            if (ImGui::BeginCombo("##GameSize", sizeLabel)) {
+                for (const GameSizeOption& option : gameSizes) {
+                    if (option.width > browserW || option.height > browserH) continue;  // would not fit
+                    const bool selected = (option.width << 16 | option.height) == currentSize;
+                    if (ImGui::Selectable(option.label, selected)) hovernet_js_set_game_size(option.width, option.height);
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopItemWidth();
+            ImGui::TextDisabled("Sizes only the game area; the browser window stays as it is.");
+        }
+#else
         ImGui::TextUnformatted("Window Resolution");
         char resolutionLabel[32];
         std::snprintf(resolutionLabel, sizeof(resolutionLabel), "%d x %d", windowWidth, windowHeight);
@@ -4026,6 +4105,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             ImGui::EndCombo();
         }
         ImGui::PopItemWidth();
+#endif
         ImGui::Spacing();
 
         // Applied live, same as Volume above. The fixed-resolution framebuffer
@@ -4056,6 +4136,9 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             windowWidth = resolutions[0].width;
             windowHeight = resolutions[0].height;
             fullscreen = false;
+#ifdef HOVERNET_WEB
+            hovernet_js_set_game_size(0, 0);
+#endif
 
             // Defaults are a live preview, just like changing these controls
             // individually. Cancel below still restores the exact entry state.
@@ -4112,6 +4195,9 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         // restores the exact mode, window size, and volume from entry.
         MR_SoundServer::SetMasterVolume(currentMuted ? 0.0 : currentVolume);
         SDL_SetWindowFullscreen(graphics.GetWindow(), currentFullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+#ifdef HOVERNET_WEB
+        hovernet_js_set_game_size(entryGameSize >> 16, entryGameSize & 0xffff);
+#endif
         if (!currentFullscreen) {
             SDL_SetWindowSize(graphics.GetWindow(), currentWindowWidth, currentWindowHeight);
             SDL_SetWindowPosition(graphics.GetWindow(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
@@ -5248,6 +5334,7 @@ int RunClient(int argc, char** argv)
     gKeyboardBindings = LoadKeyboardBindings();
     gControllerBindings = LoadControllerBindings();
 #endif
+    ConfigureGameResolution();
     MR_VideoBuffer buffer(nullptr, 1.0, 0.5, 0.5);
     if (!buffer.SetVideoMode(kWidth, kHeight) || !buffer.Lock()) {
         return FatalClientError("Could not create the 3D framebuffer.");
@@ -5271,6 +5358,8 @@ int RunClient(int argc, char** argv)
     MR_ResourceLib resources(resourcePath.c_str());
 
     MR_3DViewPort viewport;
+    // Aperture 800 is the horizontal view; with square pixels (see GetXPixelMeter in
+    // HeadlessVideoBuffer.cpp) a wider framebuffer shows the same horizontal view and less vertical.
     viewport.Setup(&buffer, 0, 0, kWidth, kHeight, 800);
 #ifdef HOVERNET_GAME2_PLAYER
     MR_Observer* observer = playerMode ? MR_Observer::New() : nullptr;
