@@ -4,6 +4,11 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.12 - 2026-10-15
+
+### Changed
+- Web client on phones: dragging the steering knob up jumps (the JUMP button still works).
+
 ## 2.0.11 - 2026-10-15
 
 ### Changed

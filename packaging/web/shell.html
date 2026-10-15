@@ -71,11 +71,13 @@
     /* Steering slider: drag the knob left/right of centre to steer. */
     #hn-steer { position: fixed; z-index: 5; display: none; box-sizing: border-box; touch-action: none;
       left: max(14px, env(safe-area-inset-left)); bottom: max(18px, env(safe-area-inset-bottom));
-      width: 192px; height: 84px; border-radius: 42px; border: 2px solid rgba(160, 200, 255, .55);
+      width: 192px; height: 140px; border-radius: 42px; border: 2px solid rgba(160, 200, 255, .55);
       background: rgba(20, 34, 60, .45); }
     #hn-steer::before { content: ''; position: absolute; left: 50%; top: 14px; bottom: 14px; width: 2px;
       margin-left: -1px; background: rgba(160, 200, 255, .3); }
-    #hn-knob { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px;
+    #hn-steer::after { content: '\25B2'; position: absolute; left: 50%; top: 8px; margin-left: -8px;
+      font-size: 14px; color: rgba(160, 200, 255, .5); }
+    #hn-knob { position: absolute; left: 50%; bottom: 8px; width: 64px; height: 64px; margin-left: -32px;
       border-radius: 50%; border: 2px solid rgba(160, 200, 255, .8); background: rgba(90, 160, 255, .45);
       transform: translateX(0); pointer-events: none; }
     #hn-steer.active { background: rgba(20, 34, 60, .65); }
@@ -440,26 +442,30 @@
       });
       btn.addEventListener('contextmenu', function(e) { e.preventDefault(); });
     });
-    // Steering slider: the knob follows the finger along the track; past the dead zone it
-    // holds steer-left (bit 1) or steer-right (bit 2).
+    // Steering stick: the knob follows the finger; past the dead zone it holds steer-left
+    // (bit 1) or steer-right (bit 2), and dragging it up holds jump (bit 32).
     var steer = document.getElementById('hn-steer'), knob = document.getElementById('hn-knob');
     var steerId = null;
-    function steerSet(bits, offset) {
-      touchMask = (touchMask & ~3) | bits;
-      knob.style.transform = 'translateX(' + offset + 'px)';
+    function steerSet(bits, dx, dy) {
+      touchMask = (touchMask & ~35) | bits;
+      knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
       publishMask();
     }
     function steerMove(e) {
       var r = steer.getBoundingClientRect();
       var travel = r.width / 2 - 34;
       var dx = Math.max(-travel, Math.min(travel, e.clientX - (r.left + r.width / 2)));
-      steerSet(dx < -travel * 0.2 ? 1 : dx > travel * 0.2 ? 2 : 0, dx);
+      // Up from the knob's resting spot (near the bottom) jumps; the knob only travels upward.
+      var rest = r.bottom - 8 - 32;
+      var travelY = r.height - 16 - 64;
+      var dy = Math.max(-travelY, Math.min(0, e.clientY - rest));
+      steerSet((dx < -travel * 0.2 ? 1 : dx > travel * 0.2 ? 2 : 0) | (dy < -travelY * 0.5 ? 32 : 0), dx, dy);
     }
     function steerEnd(e) {
       if (e.pointerId !== steerId) return;
       steerId = null;
       steer.classList.remove('active');
-      steerSet(0, 0);
+      steerSet(0, 0, 0);
     }
     steer.addEventListener('pointerdown', function(e) {
       if (steerId !== null) return;
