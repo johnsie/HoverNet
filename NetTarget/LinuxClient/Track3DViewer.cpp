@@ -4801,7 +4801,20 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                                 IM_COL32(255, 91, 108, 70), 2.0f);
         }
 
-        const float panelWidth = std::min(430.0f, workSize.x * 0.42f);
+        // Phones: portrait puts the menu panel across the bottom with the craft above it; short
+        // landscape keeps two columns but with a compact, full-height panel.
+        const bool phonePortrait = workSize.x < 640.0f;
+        const bool phoneShort = !phonePortrait && workSize.y < 460.0f;
+        const bool phone = phonePortrait || phoneShort;
+        const float panelWidth = phonePortrait ? workSize.x - 32.0f
+                               : phoneShort    ? std::min(380.0f, workSize.x * 0.46f)
+                                               : std::min(430.0f, workSize.x * 0.42f);
+        const float panelHeight = phonePortrait ? std::min(workSize.y * 0.62f, 430.0f)
+                                : phoneShort    ? workSize.y - 24.0f
+                                                : std::min(580.0f, workSize.y - 84.0f);
+        const ImVec2 panelPos = phonePortrait ? ImVec2(16.0f, workSize.y - panelHeight - 16.0f)
+                              : phoneShort    ? ImVec2(workSize.x - panelWidth - 12.0f, 12.0f)
+                                              : ImVec2(workSize.x - panelWidth - 42.0f, 42.0f);
         const float craftX = workPos.x + workSize.x * 0.30f;
         const float craftY = workPos.y + workSize.y * 0.68f;
         const float craftScale = std::min(workSize.x / 1200.0f, workSize.y / 760.0f);
@@ -4809,10 +4822,23 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             // This hero render is derived from HoverNet's original round-skirt
             // craft: oversized turbines and a visible pilot give the menu a
             // stronger arcade-racing identity without under-body lighting.
-            const float availableWidth = std::max(220.0f, workSize.x - panelWidth - 66.0f);
-            const float craftSize = std::min(availableWidth, workSize.y * 0.72f);
-            const float imageX = workPos.x + std::max(8.0f, (availableWidth - craftSize) * 0.5f);
-            const float imageY = workPos.y + std::max(155.0f, workSize.y - craftSize - 18.0f);
+            float availableWidth = std::max(220.0f, workSize.x - panelWidth - 66.0f);
+            float craftSize = std::min(availableWidth, workSize.y * 0.72f);
+            float imageX = workPos.x + std::max(8.0f, (availableWidth - craftSize) * 0.5f);
+            float imageY = workPos.y + std::max(155.0f, workSize.y - craftSize - 18.0f);
+            if (phonePortrait) {
+                // Centred in the gap between the title block and the panel.
+                const float gapTop = 112.0f, gapBottom = panelPos.y - 6.0f;
+                craftSize = std::max(100.0f, std::min(workSize.x * 0.78f, gapBottom - gapTop));
+                imageX = workPos.x + (workSize.x - craftSize) * 0.5f;
+                imageY = workPos.y + gapTop + std::max(0.0f, (gapBottom - gapTop - craftSize) * 0.5f);
+            }
+            else if (phoneShort) {
+                availableWidth = std::max(120.0f, workSize.x - panelWidth - 36.0f);
+                craftSize = std::min(availableWidth, workSize.y * 0.64f);
+                imageX = workPos.x + std::max(8.0f, (availableWidth - craftSize) * 0.5f);
+                imageY = workPos.y + std::max(112.0f, workSize.y - craftSize - 8.0f);
+            }
             background->AddImage(
                 reinterpret_cast<ImTextureID>(menuHovercraftTexture),
                 ImVec2(imageX, imageY), ImVec2(imageX + craftSize, imageY + craftSize));
@@ -4840,7 +4866,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                                         43*craftScale, IM_COL32(35, 35, 42, 255));
         }
 
-        ImGui::SetCursorPos(ImVec2(48.0f, 48.0f));
+        ImGui::SetCursorPos(phone ? ImVec2(20.0f, 16.0f) : ImVec2(48.0f, 48.0f));
         ImGui::BeginGroup();
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
         if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
@@ -4854,15 +4880,14 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         ImGui::PopStyleColor();
         ImGui::EndGroup();
 
-        const float panelHeight = std::min(580.0f, workSize.y - 84.0f);
-        ImGui::SetCursorPos(ImVec2(workSize.x - panelWidth - 42.0f, 42.0f));
+        ImGui::SetCursorPos(panelPos);
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.94f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 20.0f));
-        ImGui::BeginChild("MainMenuPanel", ImVec2(panelWidth, panelHeight), true);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phone ? ImVec2(14.0f, 12.0f) : ImVec2(22.0f, 20.0f));
+        ImGui::BeginChild("MainMenuPanel", ImVec2(panelWidth, panelHeight), true, ImGuiWindowFlags_NoScrollbar);
         ImGui::TextColored(kHoverNetCoral, "READY TO RACE?");
-        ImGui::TextDisabled("Choose your mode");
-        ImGui::Spacing();
+        if (!phone) ImGui::TextDisabled("Choose your mode");
+        if (!phone) ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
@@ -4871,43 +4896,54 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             focusFirstButton = false;
         }
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-        if (HoverNetButton("LOCAL RACE", ImVec2(-FLT_MIN, 62))) {
+        const float primaryHeight = phonePortrait ? 54.0f : phoneShort ? 42.0f : 62.0f;
+        const float secondaryHeight = phonePortrait ? 42.0f : phoneShort ? 34.0f : 42.0f;
+        if (HoverNetButton("LOCAL RACE", ImVec2(-FLT_MIN, primaryHeight))) {
             choice = MenuChoice::eLocalPlay;
             running = false;
         }
         ImGui::Spacing();
-        if (HoverNetButton("ONLINE MULTIPLAYER", ImVec2(-FLT_MIN, 62))) {
+        if (HoverNetButton("ONLINE MULTIPLAYER", ImVec2(-FLT_MIN, primaryHeight))) {
             choice = MenuChoice::eOnlineLobby;
             running = false;
         }
         ImGui::PopStyleVar();
 
         ImGui::Spacing();
-        ImGui::TextDisabled("GARAGE & SUPPORT");
-        ImGui::Separator();
-        ImGui::Spacing();
+        if (!phoneShort) {
+            ImGui::TextDisabled("GARAGE & SUPPORT");
+            ImGui::Separator();
+            ImGui::Spacing();
+        }
         for (int index = 2; index < optionCount; ++index) {
-            if (HoverNetButton(options[index], ImVec2(-FLT_MIN, 42))) {
+            if (HoverNetButton(options[index], ImVec2(-FLT_MIN, secondaryHeight))) {
                 choice = static_cast<MenuChoice>(index);
                 running = false;
             }
             ImGui::Spacing();
         }
-        ImGui::PushTextWrapPos(0.0f);
-        HoverNetHint("Navigate with arrow keys or D-pad. Select with Enter or A.");
-        ImGui::PopTextWrapPos();
+        if (!phone) {
+            ImGui::PushTextWrapPos(0.0f);
+            HoverNetHint("Navigate with arrow keys or D-pad. Select with Enter or A.");
+            ImGui::PopTextWrapPos();
+        }
         ImGui::EndChild();
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor();
 
-        ImGui::SetCursorPos(ImVec2(22.0f, workSize.y - 30.0f));
-        ImGui::TextDisabled("v%s   |   ESC / B: quit", HOVERNET_VERSION);
+        if (!phonePortrait) {
+            ImGui::SetCursorPos(ImVec2(22.0f, workSize.y - 30.0f));
+            // HOVERNET_VERSION already starts with "v".
+            ImGui::TextDisabled("%s%s", HOVERNET_VERSION[0] == 'v' ? "" : "v", HOVERNET_VERSION);
+            if (!phone) { ImGui::SameLine(); ImGui::TextDisabled("  |   ESC / B: quit"); }
+        }
         ImGui::End();
 
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        CaptureFrameIfRequested(renderer, framesShown, pFrameLimit);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         HoverNetFrameDelay();
