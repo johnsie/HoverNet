@@ -4,6 +4,17 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.8 - 2026-10-15
+
+### Changed
+- Phone layouts for the web client: the main menu (portrait stack and compact landscape),
+  the Driver Briefing (auto-sized cards, touch-control page on touch devices), the Internet
+  Meeting Room (tabs for games/race, chat and users) and Local Race Setup (slim header,
+  reachable buttons).
+
+### Fixed
+- The main menu footer showed the version as "vv2.0.7".
+
 ## 2.0.7 - 2026-10-15
 
 ### Fixed
