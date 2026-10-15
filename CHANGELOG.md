@@ -4,6 +4,13 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.4 - 2026-10-15
+
+### Fixed
+- Web client: menus, sliders and text boxes are no longer laggy. The browser build now
+  renders with WebGL instead of the CPU software renderer (falling back to software if
+  WebGL is unavailable), and frames are paced to a 16 ms budget.
+
 ## 2.0.3 - 2026-10-15
 
 ### Fixed
