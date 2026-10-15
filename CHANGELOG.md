@@ -4,6 +4,14 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.7 - 2026-10-15
+
+### Fixed
+- Web client on phones no longer gets stuck on the loading screen: startup used `eval`, which
+  the site's Content-Security-Policy blocks, so the game stopped before drawing its first frame.
+- Windows x64 installer packaging in GitHub Actions now stages every client asset
+  (tutorial image, fonts and licences) and the package validator checks for them.
+
 ## 2.0.6 - 2026-10-15
 
 ### Fixed
