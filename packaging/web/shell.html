@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#080c14">
+  <title>HoverNet</title>
+  <style>
+    :root { --vh: 100vh; --vt: 0px; --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px); }
+    @supports (height: 100dvh) { :root { --vh: 100dvh; } }
+    html, body { width: 100%; height: var(--vh); margin: 0; background: #080c14; color: #e8eef8; font: 16px system-ui, sans-serif;
+      overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent; touch-action: none; }
+    body { display: flex; align-items: center; justify-content: center; overflow: hidden; position: fixed;
+      left: 0; right: 0; top: var(--vt); }
+    #loader { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 1.1rem; padding: 2rem 1.5rem; box-sizing: border-box; text-align: center;
+      background: radial-gradient(ellipse at 50% 35%, #14213a 0%, #080c14 70%); }
+    #loader h1 { margin: 0; font: 800 clamp(2rem, 8vw, 3.4rem)/1 system-ui, sans-serif; letter-spacing: .12em; color: #eaf2ff;
+      text-shadow: 0 0 24px rgba(90, 160, 255, .55); }
+    #loader .tag { margin: 0; color: #8fa6c6; font-size: .95rem; letter-spacing: .06em; }
+    #bar { width: min(420px, 80vw); height: 10px; border-radius: 999px; background: rgba(160, 200, 255, .15); overflow: hidden; }
+    #bar > i { display: block; height: 100%; width: 0; border-radius: inherit;
+      background: linear-gradient(90deg, #3d7bff, #7fd0ff); transition: width .2s ease-out; }
+    #bar.indeterminate > i { width: 40%; animation: hn-slide 1.2s ease-in-out infinite; transition: none; }
+    @keyframes hn-slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+    @media (prefers-reduced-motion: reduce) { #bar.indeterminate > i { animation: none; width: 100%; opacity: .5; } }
+    #status { margin: 0; min-height: 1.4em; color: #b7c6da; font-size: .95rem; }
+    #status.error { color: #ff9b9b; }
+    #loader .hint { margin: 0; max-width: 28em; color: #6f86a8; font-size: .8rem; }
+    #loader.error #bar { display: none; }
+    #retry { display: none; min-height: 44px; padding: 0 1.4rem; border-radius: 10px; border: 1px solid #9bbcf0;
+      background: transparent; color: inherit; font: inherit; cursor: pointer; }
+    #loader.error #retry { display: inline-block; }
+    body.running #loader { display: none; }
+    #canvas {
+      display: block;
+      /* Fill the page; SDL follows the CSS size (resizable window) and the menus
+         lay out in real pixels. The race view letterboxes its 4:3 frame. */
+      width: calc(100vw - var(--sal) - var(--sar));
+      height: var(--vh);
+      flex: none;
+      outline: none;
+      touch-action: none;
+    }
+
+    .hn-btn { position: fixed; z-index: 5; display: none; align-items: center; justify-content: center;
+      min-width: 48px; min-height: 48px; padding: 0 .9rem; box-sizing: border-box; border-radius: 14px;
+      border: 2px solid rgba(160, 200, 255, .55); background: rgba(20, 34, 60, .55); color: #e8eef8;
+      font: 700 14px system-ui, sans-serif; letter-spacing: .04em; touch-action: none; cursor: pointer; }
+    .hn-btn.active { background: rgba(90, 160, 255, .65); border-color: #fff; }
+    #hn-util { position: fixed; z-index: 6; display: none; gap: 8px;
+      top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); }
+    #hn-util .hn-btn { position: static; display: flex; min-width: 44px; min-height: 44px; opacity: .8; }
+    body.touch.running.in-race #hn-util { display: flex; }
+    body.touch.running.in-race.controls-on #hn-pad .hn-btn { display: flex; }
+    /* Real input that receives the soft keyboard for the canvas's ImGui text fields.
+       Must stay "visible" and selectable or iOS Safari refuses to focus/type into it. */
+    #hn-text { position: fixed; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; margin: 0;
+      opacity: 0; font-size: 16px; color: transparent; background: transparent; caret-color: transparent;
+      -webkit-user-select: text; user-select: text; touch-action: manipulation; pointer-events: none; z-index: -1; }
+    #hn-pad .left { left: max(14px, env(safe-area-inset-left)); }
+    #hn-pad .right { right: max(14px, env(safe-area-inset-right)); }
+    #hn-steer-l, #hn-steer-r { bottom: max(18px, env(safe-area-inset-bottom)); width: 84px; height: 84px; font-size: 28px; }
+    #hn-steer-l { left: max(14px, env(safe-area-inset-left)); }
+    #hn-steer-r { left: calc(max(14px, env(safe-area-inset-left)) + 96px); }
+    #hn-go, #hn-brake, #hn-fire, #hn-jump, #hn-weapon { width: 84px; height: 84px; border-radius: 50%; }
+    #hn-go { right: max(14px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); width: 104px; height: 104px; }
+    #hn-brake { right: calc(max(14px, env(safe-area-inset-right)) + 116px); bottom: max(18px, env(safe-area-inset-bottom)); }
+    #hn-fire { right: calc(max(14px, env(safe-area-inset-right)) + 8px); bottom: calc(max(18px, env(safe-area-inset-bottom)) + 116px); }
+    #hn-jump { right: calc(max(14px, env(safe-area-inset-right)) + 104px); bottom: calc(max(18px, env(safe-area-inset-bottom)) + 108px); width: 68px; height: 68px; }
+    #hn-menu { top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); min-height: 44px; opacity: .8; }
+    #hn-weapon { right: calc(max(14px, env(safe-area-inset-right)) + 184px); bottom: calc(max(18px, env(safe-area-inset-bottom)) + 100px); width: 60px; height: 60px; font-size: 11px; }
+
+    /* Slim hint instead of a full-screen block: menus are usable in portrait. */
+    #hn-rotate { position: fixed; left: 8px; right: 8px; z-index: 10; display: none; align-items: center; gap: .6rem;
+      bottom: max(8px, env(safe-area-inset-bottom)); padding: .5rem .8rem; box-sizing: border-box; border-radius: 12px;
+      background: rgba(8, 12, 20, .92); border: 1px solid rgba(160, 200, 255, .4); font-size: 14px; }
+    #hn-rotate .icon { font-size: 22px; }
+    #hn-rotate .msg { flex: 1; }
+    #hn-rotate button { min-width: 44px; min-height: 44px; padding: 0 .8rem; border-radius: 10px; border: 1px solid #9bbcf0;
+      background: transparent; color: inherit; font: inherit; }
+    body.touch.running.in-race.portrait:not(.rotate-dismissed) #hn-rotate { display: flex; }
+    @media (max-height: 420px) { #hn-steer-l, #hn-steer-r { width: 72px; height: 72px; } #hn-steer-r { left: calc(max(14px, env(safe-area-inset-left)) + 84px); } }
+  </style>
+</head>
+<body>
+  <div id="loader">
+    <h1>HOVERNET</h1>
+    <p class="tag">Hovercraft racing in your browser</p>
+    <div id="bar" class="indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Loading"><i></i></div>
+    <p id="status" role="status" aria-live="polite">Loading HoverNet…</p>
+    <button id="retry" type="button" onclick="location.reload()">Try again</button>
+    <p class="hint" id="hint">First visit downloads about 13&nbsp;MB of tracks and graphics; it is cached for next time.</p>
+  </div>
+  <div id="hn-util">
+    <button class="hn-btn" id="hn-toggle" type="button" aria-label="Toggle on-screen controls" aria-pressed="true">&#127918;</button>
+    <button class="hn-btn" id="hn-fs" type="button" aria-label="Toggle fullscreen">&#9974;</button>
+  </div>
+  <div id="hn-pad" aria-label="On-screen race controls">
+    <button class="hn-btn" id="hn-steer-l" type="button" data-bit="1" aria-label="Steer left">&#9664;</button>
+    <button class="hn-btn" id="hn-steer-r" type="button" data-bit="2" aria-label="Steer right">&#9654;</button>
+    <button class="hn-btn" id="hn-brake" type="button" data-bit="8" aria-label="Brake">BRAKE</button>
+    <button class="hn-btn" id="hn-go" type="button" data-bit="4" aria-label="Accelerate">GO</button>
+    <button class="hn-btn" id="hn-fire" type="button" data-bit="16" aria-label="Fire missile">FIRE</button>
+    <button class="hn-btn" id="hn-jump" type="button" data-bit="32" aria-label="Jump">JUMP</button>
+    <button class="hn-btn" id="hn-menu" type="button" aria-label="Pause menu">MENU</button>
+    <button class="hn-btn" id="hn-weapon" type="button" data-bit="64" aria-label="Select weapon">WEAPON</button>
+  </div>
+  <div id="hn-rotate" role="status">
+    <div class="icon" aria-hidden="true">&#128241;&#8635;</div>
+    <div class="msg">Racing is best in landscape &mdash; rotate your device.</div>
+    <button type="button" id="hn-rotate-ok" aria-label="Dismiss">OK</button>
+  </div>
+  <input id="hn-text" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off"
+         autocapitalize="off" spellcheck="false" aria-label="Text entry" tabindex="-1">
+  <canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+  <script>
+    var statusNode = document.getElementById('status');
+    var loaderNode = document.getElementById('loader');
+    var barNode = document.getElementById('bar');
+    var fillNode = barNode.firstElementChild;
+    function setProgress(fraction) {
+      if (fraction === null) { barNode.classList.add('indeterminate'); return; }
+      barNode.classList.remove('indeterminate');
+      var pct = Math.max(0, Math.min(1, fraction)) * 100;
+      fillNode.style.width = pct + '%';
+      barNode.setAttribute('aria-valuenow', Math.round(pct));
+    }
+    function showError(text) {
+      statusNode.textContent = text;
+      statusNode.classList.add('error');
+      loaderNode.classList.add('error');
+      document.getElementById('hint').textContent = 'Check your connection and try again.';
+    }
+    function mb(n) { return (n / 1048576).toFixed(1); }
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      print: function(text) { console.log(text); },
+      printErr: function(text) { console.error(text); },
+      // Emscripten reports "Downloading data... (loaded/total)", then
+      // "Preparing... (done/total)", then an empty string when finished.
+      setStatus: function(text) {
+        if (!text) { statusNode.textContent = 'Starting HoverNet…'; setProgress(1); return; }
+        if (/error|failed/i.test(text)) { showError(text); return; }
+        var m = text.match(/^(.*?)\s*\((\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\)/);
+        if (m) {
+          var done = parseFloat(m[2]), total = parseFloat(m[3]), label = m[1].replace(/\.+$/, '');
+          if (/download/i.test(label) && total > 100000) {
+            statusNode.textContent = 'Downloading game data — ' + mb(done) + ' of ' + mb(total) + ' MB';
+          } else {
+            statusNode.textContent = label === 'Preparing' ? 'Preparing game data…' : label + '…';
+          }
+          setProgress(total ? done / total : null);
+        } else {
+          statusNode.textContent = text;
+          setProgress(null);
+        }
+      },
+      onRuntimeInitialized: function() {
+        document.body.classList.add('running');
+        this.canvas.focus();
+      },
+      onAbort: function(reason) {
+        showError('HoverNet could not start: ' + reason);
+      }
+    };
+    Module.canvas.addEventListener('pointerdown', function() { Module.canvas.focus(); });
+
+    // ---- Mobile support ----
+    var isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
+    var store = {
+      get: function(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+      set: function(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+    };
+    function updateOrientation() {
+      document.body.classList.toggle('portrait', window.innerHeight > window.innerWidth);
+    }
+    if (isTouch) {
+      document.body.classList.add('touch');
+      if (store.get('hn-controls') !== 'off') document.body.classList.add('controls-on');
+      updateOrientation();
+      window.addEventListener('resize', updateOrientation);
+      window.addEventListener('orientationchange', updateOrientation);
+      // Block pinch-zoom, double-tap zoom and pull-to-refresh outside the buttons.
+      ['gesturestart', 'gesturechange'].forEach(function(n) {
+        document.addEventListener(n, function(e) { e.preventDefault(); });
+      });
+      document.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+      document.getElementById('hn-rotate-ok').addEventListener('click', function() {
+        document.body.classList.add('rotate-dismissed');
+      });
+    }
+
+    // Track the *visual* viewport: on iOS the keyboard shrinks it without resizing the window,
+    // which would leave the focused field hidden behind the keyboard. Resize the page to the
+    // visible area and tell SDL (it listens for window resize) so menus re-lay out above the keyboard.
+    var lastVV = '';
+    function fitViewport() {
+      var vv = window.visualViewport;
+      var root = document.documentElement.style;
+      if (vv) {
+        root.setProperty('--vh', Math.round(vv.height) + 'px');
+        root.setProperty('--vt', Math.round(vv.offsetTop) + 'px');
+      }
+      var key = vv ? vv.width + 'x' + vv.height + '@' + vv.offsetTop : '';
+      if (key !== lastVV) { lastVV = key; window.dispatchEvent(new Event('resize')); }
+    }
+    if (isTouch && window.visualViewport) {
+      visualViewport.addEventListener('resize', fitViewport);
+      visualViewport.addEventListener('scroll', function() { window.scrollTo(0, 0); fitViewport(); });
+      fitViewport();
+    }
+
+    // ---- Soft keyboard bridge (see hovernet_wants_text in Track3DViewer.cpp) ----
+    var textNode = document.getElementById('hn-text');
+    var textFocusedAt = 0;
+    function gameWantsText() {
+      return !!(Module.ccall && Module.ccall('hovernet_wants_text', 'number', [], []));
+    }
+    function sendText(str) { if (str) Module.ccall('hovernet_text_input', null, ['string'], [str]); }
+    var KEYS = { Backspace: 1, Enter: 2, Tab: 3, ArrowLeft: 4, ArrowRight: 5, ArrowUp: 6, ArrowDown: 7, Delete: 8, Home: 9, End: 10 };
+    function sendTextKey(code) { Module.ccall('hovernet_text_key', null, ['number'], [code]); }
+    function openKeyboard() {
+      // Must run inside the touch's own event so iOS allows focus() to raise the keyboard.
+      if (document.activeElement === textNode) return;
+      textNode.value = '';
+      textFocusedAt = Date.now();
+      textNode.focus({ preventScroll: true });
+    }
+    // A tap on a text field activates it on the game's next frame (a few ms), well before the finger lifts.
+    Module.canvas.addEventListener('pointerup', function(e) {
+      if (e.pointerType === 'mouse') return;
+      if (gameWantsText()) openKeyboard();
+      else if (document.activeElement === textNode) textNode.blur();
+    });
+    textNode.addEventListener('keydown', function(e) {
+      // Keep these away from SDL's document-level listeners; forward the editing keys ourselves.
+      e.stopPropagation();
+      var code = KEYS[e.key];
+      if (code && !e.isComposing) {
+        e.preventDefault();
+        sendTextKey(code);
+        if (e.key === 'Enter') textNode.blur();
+      }
+    });
+    textNode.addEventListener('keyup', function(e) { e.stopPropagation(); });
+    textNode.addEventListener('input', function(e) {
+      if (e.isComposing) return;
+      var v = textNode.value;
+      textNode.value = '';
+      if (e.inputType === 'deleteContentBackward') { sendTextKey(KEYS.Backspace); return; }
+      sendText(v);
+    });
+    textNode.addEventListener('compositionend', function(e) { textNode.value = ''; sendText(e.data); });
+    textNode.addEventListener('blur', function() { Module.canvas.focus({ preventScroll: true }); window.scrollTo(0, 0); });
+
+    // Poll game state a few times a second: dismiss the keyboard when the field is left,
+    // and show the race controls only while a race is running.
+    window.setInterval(function() {
+      if (!Module.ccall || !document.body.classList.contains('running')) return;
+      document.body.classList.toggle('in-race', !!Module.ccall('hovernet_in_race', 'number', [], []));
+      if (document.activeElement === textNode && Date.now() - textFocusedAt > 600 && !gameWantsText()) textNode.blur();
+    }, 200);
+
+    // Held on-screen buttons are published to the game as a bitmask, so the game
+    // combines them with keyboard/gamepad input and remapped keys are irrelevant.
+    var touchMask = 0;
+    function publishMask() {
+      if (Module.ccall) Module.ccall('hovernet_set_touch_mask', null, ['number'], [touchMask]);
+    }
+    // MENU is not a held control: it taps Escape, which opens the pause menu.
+    function tapEscape() {
+      ['keydown', 'keyup'].forEach(function(type) {
+        var ev = new KeyboardEvent(type, { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true });
+        Object.defineProperty(ev, 'keyCode', { get: function() { return 27; } });
+        Object.defineProperty(ev, 'which', { get: function() { return 27; } });
+        document.dispatchEvent(ev);
+      });
+    }
+    function sendKey(btn, type) {
+      var bit = parseInt(btn.dataset.bit || '0', 10);
+      if (!bit) { if (type === 'keydown') tapEscape(); return; }
+      touchMask = type === 'keydown' ? (touchMask | bit) : (touchMask & ~bit);
+      publishMask();
+    }
+    var held = {};  // pointerId -> button
+    function release(id) {
+      var b = held[id];
+      if (!b) return;
+      delete held[id];
+      b.classList.remove('active');
+      sendKey(b, 'keyup');
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('#hn-pad .hn-btn'), function(btn) {
+      btn.addEventListener('pointerdown', function(e) {
+        e.preventDefault();
+        try { btn.setPointerCapture(e.pointerId); } catch (x) {}
+        held[e.pointerId] = btn;
+        btn.classList.add('active');
+        sendKey(btn, 'keydown');
+        if (navigator.vibrate) navigator.vibrate(8);
+      });
+      ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(n) {
+        btn.addEventListener(n, function(e) { release(e.pointerId); });
+      });
+      btn.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+    });
+    // Never leave a key stuck if the page loses focus mid-press.
+    window.addEventListener('blur', function() { Object.keys(held).forEach(release); });
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'hidden') Object.keys(held).forEach(release);
+    });
+
+    document.getElementById('hn-toggle').addEventListener('click', function() {
+      var on = document.body.classList.toggle('controls-on');
+      this.setAttribute('aria-pressed', on ? 'true' : 'false');
+      store.set('hn-controls', on ? 'on' : 'off');
+      Module.canvas.focus();
+    });
+    document.getElementById('hn-fs').addEventListener('click', function() {
+      var el = document.documentElement;
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      } else {
+        var req = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (req) {
+          var p = req.call(el);
+          if (p && p.then) p.then(function() {
+            if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function() {});
+          }, function() {});
+        }
+      }
+    });
+    // Browsers keep audio suspended until a gesture; resume on first touch.
+    document.addEventListener('pointerdown', function resume() {
+      var ctx = window.SDL2 && SDL2.audioContext;
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+    }, { capture: true });
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

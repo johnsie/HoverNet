@@ -49,6 +49,78 @@
 #include <sstream>
 #include <vector>
 
+#ifdef HOVERNET_WEB
+void HoverNetInitializeWebFactory();
+void HoverNetCleanWebFactory();
+
+#include <emscripten.h>
+
+// Bitmask of on-screen touch controls currently held, written by the page's
+// touch pad (packaging/web/shell.html) and OR-ed into the same control state
+// the keyboard and gamepad feed. Going through the game rather than synthetic
+// key events means remapped keyboard bindings never affect touch play.
+enum HoverNetTouchBits {
+    eTouchLeft = 1, eTouchRight = 2, eTouchAccelerate = 4, eTouchBrake = 8,
+    eTouchFire = 16, eTouchJump = 32, eTouchSelectWeapon = 64
+};
+static int gHoverNetTouchMask = 0;
+extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_set_touch_mask(int mask)
+{
+    gHoverNetTouchMask = mask;
+}
+
+// True while the race loop is running; the page shows the on-screen race
+// controls only then, so they never cover the menus.
+static int gHoverNetInRace = 0;
+extern "C" EMSCRIPTEN_KEEPALIVE int hovernet_in_race(void)
+{
+    return gHoverNetInRace;
+}
+
+// Soft-keyboard bridge. Menu text fields are drawn by ImGui inside the canvas,
+// so iOS/Android never show a keyboard for them. The page keeps a real (hidden)
+// <input> for that, asks here whether a field is active, and feeds what the
+// player types back as ordinary SDL events so ImGui and in-race chat see the
+// same input as a hardware keyboard.
+extern "C" EMSCRIPTEN_KEEPALIVE int hovernet_wants_text(void)
+{
+#ifdef HOVERNET_GAME2_PLAYER
+    return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantTextInput ? 1 : 0;
+#else
+    return 0;
+#endif
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_text_input(const char* utf8)
+{
+    if (utf8 == nullptr || utf8[0] == '\0') return;
+    SDL_Event event;
+    SDL_zero(event);
+    event.type = SDL_TEXTINPUT;
+    std::snprintf(event.text.text, sizeof(event.text.text), "%s", utf8);
+    SDL_PushEvent(&event);
+}
+
+// key: 1 Backspace, 2 Enter, 3 Tab, 4 Left, 5 Right, 6 Up, 7 Down, 8 Delete, 9 Home, 10 End
+extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_text_key(int key)
+{
+    static const SDL_Keycode kCodes[] = {
+        SDLK_UNKNOWN, SDLK_BACKSPACE, SDLK_RETURN, SDLK_TAB, SDLK_LEFT, SDLK_RIGHT,
+        SDLK_UP, SDLK_DOWN, SDLK_DELETE, SDLK_HOME, SDLK_END
+    };
+    if (key < 1 || key >= static_cast<int>(sizeof(kCodes) / sizeof(kCodes[0]))) return;
+    for (const Uint32 type : { static_cast<Uint32>(SDL_KEYDOWN), static_cast<Uint32>(SDL_KEYUP) }) {
+        SDL_Event event;
+        SDL_zero(event);
+        event.type = type;
+        event.key.state = type == SDL_KEYDOWN ? SDL_PRESSED : SDL_RELEASED;
+        event.key.keysym.sym = kCodes[key];
+        event.key.keysym.scancode = SDL_GetScancodeFromKey(kCodes[key]);
+        SDL_PushEvent(&event);
+    }
+}
+#endif
+
 namespace
 {
 constexpr int kWidth = 1024;
@@ -71,7 +143,11 @@ bool g_QuitConfirmed = false;
 
 #ifdef HOVERNET_GAME2_PLAYER
 // The public production RaceServer. --lobby overrides this.
+#ifdef HOVERNET_WEB
+constexpr const char* kDefaultLobbyHost = "hovernet.outiva.com";
+#else
 constexpr const char* kDefaultLobbyHost = "outiva.com";
+#endif
 constexpr unsigned kDefaultLobbyPort = 9600;
 #endif
 
@@ -1253,6 +1329,13 @@ float LoadUiScale()
     if (in >> scale && scale >= 0.75f && scale <= 1.5f) {
         return scale;
     }
+#ifdef HOVERNET_WEB
+    // No saved choice: phones get a tighter default so menus fit their short
+    // landscape screens. The settings slider still overrides it.
+    if (emscripten_run_script_int("Math.min(window.innerWidth, window.innerHeight)") < 600) {
+        return 0.85f;
+    }
+#endif
     return 1.0f;
 }
 
@@ -1519,6 +1602,36 @@ constexpr ImVec4 kHoverNetRedHover{0.95f, 0.32f, 0.38f, 1.00f};
 constexpr ImVec4 kHoverNetRedActive{0.70f, 0.12f, 0.18f, 1.00f};
 constexpr ImVec4 kHoverNetCoral{0.98f, 0.45f, 0.48f, 1.00f};
 constexpr ImVec4 kHoverNetWhite{1.00f, 1.00f, 1.00f, 1.00f};
+constexpr ImVec4 kHoverNetSurface{0.075f, 0.080f, 0.105f, 0.98f};
+ImFont* gHoverNetDisplayFont = nullptr;
+
+void LoadHoverNetMenuFonts(ImGuiIO& io)
+{
+    gHoverNetDisplayFont = nullptr;
+
+    ImFontConfig bodyConfig;
+    bodyConfig.SizePixels = 19.0f;
+    bodyConfig.OversampleH = 2;
+    bodyConfig.OversampleV = 2;
+    bodyConfig.RasterizerMultiply = 1.08f;
+    const std::string bodyPath = SourcePath("NetTarget/LinuxClient/assets/Inter-Variable.ttf");
+    ImFont* bodyFont = io.Fonts->AddFontFromFileTTF(bodyPath.c_str(), bodyConfig.SizePixels, &bodyConfig);
+    if (bodyFont == nullptr) {
+        io.Fonts->AddFontDefault(&bodyConfig);
+    }
+
+    ImFontConfig displayConfig;
+    displayConfig.SizePixels = 25.0f;
+    displayConfig.OversampleH = 2;
+    displayConfig.OversampleV = 2;
+    displayConfig.RasterizerMultiply = 1.10f;
+    const std::string displayPath = SourcePath("NetTarget/LinuxClient/assets/Oxanium-Variable.ttf");
+    gHoverNetDisplayFont = io.Fonts->AddFontFromFileTTF(
+        displayPath.c_str(), displayConfig.SizePixels, &displayConfig);
+    if (gHoverNetDisplayFont == nullptr) {
+        gHoverNetDisplayFont = bodyFont;
+    }
+}
 
 void ApplyHoverNetLobbyStyle(float scale, bool highContrast)
 {
@@ -1526,18 +1639,18 @@ void ApplyHoverNetLobbyStyle(float scale, bool highContrast)
     style = ImGuiStyle();
     ImGui::StyleColorsDark(&style);
 
-    style.WindowPadding = ImVec2(16.0f, 16.0f);
-    style.FramePadding = ImVec2(10.0f, 6.0f);
-    style.ItemSpacing = ImVec2(10.0f, 10.0f);
+    style.WindowPadding = ImVec2(20.0f, 18.0f);
+    style.FramePadding = ImVec2(12.0f, 8.0f);
+    style.ItemSpacing = ImVec2(12.0f, 11.0f);
     style.ItemInnerSpacing = ImVec2(8.0f, 6.0f);
     style.IndentSpacing = 18.0f;
     style.ScrollbarSize = 14.0f;
     style.WindowRounding = 0.0f;
-    style.ChildRounding = 8.0f;
-    style.FrameRounding = 6.0f;
-    style.GrabRounding = 6.0f;
-    style.ScrollbarRounding = 8.0f;
-    style.PopupRounding = 8.0f;
+    style.ChildRounding = 12.0f;
+    style.FrameRounding = 8.0f;
+    style.GrabRounding = 8.0f;
+    style.ScrollbarRounding = 10.0f;
+    style.PopupRounding = 12.0f;
     style.WindowBorderSize = 0.0f;
     style.ChildBorderSize = 1.0f;
     style.PopupBorderSize = 1.0f;
@@ -1547,17 +1660,17 @@ void ApplyHoverNetLobbyStyle(float scale, bool highContrast)
     // darker, secondary text and borders brighter, and action red darker under
     // white labels. The standard palette retains its softer layered appearance.
     const ImVec4 windowBg = highContrast ? ImVec4(0.01f, 0.01f, 0.01f, 1.00f)
-                                         : ImVec4(0.09f, 0.09f, 0.11f, 1.00f);
+                                        : ImVec4(0.035f, 0.040f, 0.060f, 1.00f);
     const ImVec4 panelBg = highContrast ? ImVec4(0.045f, 0.045f, 0.055f, 1.00f)
-                                        : ImVec4(0.14f, 0.14f, 0.17f, 1.00f);
+                                        : kHoverNetSurface;
     const ImVec4 fieldBg = highContrast ? ImVec4(0.00f, 0.00f, 0.00f, 1.00f)
-                                        : ImVec4(0.11f, 0.11f, 0.13f, 1.00f);
+                                        : ImVec4(0.045f, 0.050f, 0.070f, 1.00f);
     const ImVec4 softBorder = highContrast ? ImVec4(0.82f, 0.82f, 0.86f, 1.00f)
-                                           : ImVec4(0.24f, 0.24f, 0.28f, 1.00f);
+                                           : ImVec4(0.20f, 0.22f, 0.29f, 1.00f);
     const ImVec4 text = highContrast ? ImVec4(1.00f, 1.00f, 1.00f, 1.00f)
                                      : ImVec4(0.93f, 0.93f, 0.95f, 1.00f);
     const ImVec4 textMuted = highContrast ? ImVec4(0.82f, 0.82f, 0.86f, 1.00f)
-                                          : ImVec4(0.56f, 0.56f, 0.60f, 1.00f);
+                                          : ImVec4(0.62f, 0.65f, 0.72f, 1.00f);
     const ImVec4 actionRed = highContrast ? ImVec4(0.58f, 0.03f, 0.10f, 1.00f) : kHoverNetRed;
     const ImVec4 actionHover = highContrast ? ImVec4(0.78f, 0.08f, 0.16f, 1.00f) : kHoverNetRedHover;
     const ImVec4 actionActive = highContrast ? ImVec4(0.42f, 0.01f, 0.06f, 1.00f) : kHoverNetRedActive;
@@ -1583,6 +1696,8 @@ void ApplyHoverNetLobbyStyle(float scale, bool highContrast)
     colors[ImGuiCol_Header] = selection;
     colors[ImGuiCol_HeaderHovered] = ImVec4(0.86f, 0.20f, 0.27f, 0.55f);
     colors[ImGuiCol_HeaderActive] = ImVec4(0.86f, 0.20f, 0.27f, 0.75f);
+    colors[ImGuiCol_NavHighlight] = kHoverNetCoral;
+    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.01f, 0.01f, 0.02f, 0.78f);
     colors[ImGuiCol_Separator] = softBorder;
     colors[ImGuiCol_SeparatorHovered] = actionHover;
     colors[ImGuiCol_SeparatorActive] = actionActive;
@@ -1614,11 +1729,14 @@ bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
 // the thing to press.
 bool HoverNetQuietButton(const char* label, const ImVec2& size = ImVec2(0, 0))
 {
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.24f, 0.30f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.33f, 0.33f, 0.41f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.18f, 0.23f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.11f, 0.15f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.12f, 0.16f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.28f, 0.10f, 0.15f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.31f, 0.33f, 0.41f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
     const bool pressed = HoverNetButton(label, size);
-    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(4);
     return pressed;
 }
 
@@ -1634,10 +1752,52 @@ void AccentNote(const std::string& text)
 
 void HoverNetSectionHeading(const char* label)
 {
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const float height = ImGui::GetTextLineHeight();
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        cursor, ImVec2(cursor.x + 4.0f, cursor.y + height),
+        ImGui::ColorConvertFloat4ToU32(kHoverNetRed), 2.0f);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 12.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
+    if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
     ImGui::TextUnformatted(label);
+    if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
     ImGui::PopStyleColor();
-    ImGui::Separator();
+}
+
+void DrawHoverNetScreenBackdrop(const ImGuiViewport* viewport)
+{
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const ImVec2 start = viewport->WorkPos;
+    const ImVec2 end(start.x + viewport->WorkSize.x, start.y + viewport->WorkSize.y);
+    draw->AddRectFilledMultiColor(start, end,
+        IM_COL32(9, 12, 22, 255), IM_COL32(31, 10, 22, 255),
+        IM_COL32(5, 8, 15, 255), IM_COL32(13, 7, 15, 255));
+    const float horizon = start.y + viewport->WorkSize.y * 0.72f;
+    const ImVec2 vanish(start.x + viewport->WorkSize.x * 0.50f, horizon);
+    for (int line = -8; line <= 8; ++line) {
+        const float x = start.x + viewport->WorkSize.x * (0.5f + line * 0.14f);
+        draw->AddLine(vanish, ImVec2(x, end.y), IM_COL32(224, 42, 67, 34), 1.0f);
+    }
+    for (int row = 1; row <= 4; ++row) {
+        const float amount = static_cast<float>(row * row) / 16.0f;
+        const float y = horizon + (end.y - horizon) * amount;
+        draw->AddLine(ImVec2(start.x, y), ImVec2(end.x, y), IM_COL32(224, 42, 67, 28), 1.0f);
+    }
+}
+
+void HoverNetScreenHeading(const char* eyebrow, const char* title, const char* detail)
+{
+    ImGui::TextColored(kHoverNetCoral, "%s", eyebrow);
+    ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+    if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
+    ImGui::TextUnformatted(title);
+    if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
+    ImGui::PopStyleColor();
+    if (detail != nullptr && detail[0] != '\0') {
+        ImGui::SameLine();
+        ImGui::TextDisabled("  %s", detail);
+    }
 }
 
 // A one-line coral-accented note (e.g. inline field validation) without the
@@ -1839,6 +1999,11 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     // player has to notice and click the chat box before Enter does anything --
     // easy to read as "chat is broken". Focus it by default instead.
     bool focusChatInput = true;
+    // The browser canvas owns keyboard input, but a newly displayed ImGui text
+    // box isn't active until it receives focus. Focus the first-run username
+    // field as soon as it appears so SDL_TEXTINPUT reaches it without requiring
+    // a precisely positioned mouse click first.
+    bool focusUsernameInput = username.empty();
     // The chat log follows the newest message unless the player scrolled up to read
     // older ones (see the ChatLog child); sending a message always jumps back down.
     bool chatForcePin = true;
@@ -1983,12 +2148,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
     // an imgui.ini behind in whatever directory the game happens to run from.
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-    // ImGui's default font renders at 13px, which looks cramped blown up across a
-    // 1024x768 screen -- build the atlas at a larger fixed size instead of scaling
-    // the default bitmap font (which just blurs it).
-    ImFontConfig fontConfig;
-    fontConfig.SizePixels = 19.0f;
-    io.Fonts->AddFontDefault(&fontConfig);
+    LoadHoverNetMenuFonts(io);
     ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -2281,6 +2441,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                       ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
 
+        DrawHoverNetScreenBackdrop(mainViewport);
+        HoverNetScreenHeading("ONLINE MULTIPLAYER", "RACE CONTROL", statusText.c_str());
+        ImGui::Spacing();
+
         if (!client.IsConnected()) {
             const float panelWidth = std::min(520.0f, ImGui::GetContentRegionAvail().x);
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
@@ -2305,13 +2469,28 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             ImGui::EndChild();
         }
         else if (phase == LobbyPhase::eEnteringName) {
+            const float cardWidth = std::min(560.0f, ImGui::GetContentRegionAvail().x);
+            const float cardHeight = 230.0f;
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - cardWidth) * 0.5f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() +
+                std::max(20.0f, (ImGui::GetContentRegionAvail().y - cardHeight) * 0.36f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetSurface);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
+            ImGui::BeginChild("ChooseRacerName", ImVec2(cardWidth, cardHeight), true);
+            HoverNetSectionHeading("WELCOME, RACER");
             ImGui::Spacing();
-            ImGui::TextUnformatted("Welcome to HoverNet -- enter a username:");
-            ImGui::SetNextItemWidth(320);
+            ImGui::TextDisabled("Choose the name other drivers will see in the lobby.");
+            ImGui::Spacing();
+            ImGui::SetNextItemWidth(-1.0f);
+            if (focusUsernameInput) {
+                SDL_StartTextInput();
+                ImGui::SetKeyboardFocusHere();
+                focusUsernameInput = false;
+            }
             const bool submitted = ImGui::InputText("##username", usernameBuf, sizeof(usernameBuf),
                                                      ImGuiInputTextFlags_EnterReturnsTrue);
-            ImGui::SameLine();
-            const bool clicked = HoverNetButton("Continue");
+            ImGui::Spacing();
+            const bool clicked = HoverNetButton("ENTER THE LOBBY", ImVec2(-FLT_MIN, 46.0f));
             if ((submitted || clicked) && usernameBuf[0] != '\0') {
                 username = usernameBuf;
                 SaveUsername(username);
@@ -2320,6 +2499,9 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 phase = LobbyPhase::eBrowsing;
                 statusText = "Connected to the shared HoverNet lobby.";
             }
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
         }
         else {
             // Panel grid (after the Windows client's IDD_INTERNET_MEETING dialog): race
@@ -2521,7 +2703,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 }
                 ImGui::PopTextWrapPos();
                 ImGui::Spacing();
-                if (HoverNetQuietButton("Host Race...", ImVec2(-FLT_MIN, 0))) {
+                if (HoverNetButton("HOST A RACE", ImVec2(-FLT_MIN, 44.0f))) {
                     requestOpenHostPopup = true;
                 }
             }
@@ -2802,9 +2984,7 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-        ImFontConfig fontConfig;
-        fontConfig.SizePixels = 19.0f;
-        io.Fonts->AddFontDefault(&fontConfig);
+        LoadHoverNetMenuFonts(io);
         ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -2923,9 +3103,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-        ImFontConfig fontConfig;
-        fontConfig.SizePixels = 19.0f;
-        io.Fonts->AddFontDefault(&fontConfig);
+        LoadHoverNetMenuFonts(io);
         ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -2999,9 +3177,9 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         ImGui::SetCursorPos(ImVec2(54.0f, 64.0f));
         ImGui::BeginGroup();
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(2.1f);
+        if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
         ImGui::TextUnformatted("GAME PAUSED");
-        ImGui::SetWindowFontScale(1.0f);
+        if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
         ImGui::PopStyleColor();
         ImGui::TextColored(kHoverNetCoral, "%s", pIsOnline ? "ONLINE RACE" : "LOCAL RACE");
         ImGui::Spacing();
@@ -3077,9 +3255,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-        ImFontConfig fontConfig;
-        fontConfig.SizePixels = 19.0f;
-        io.Fonts->AddFontDefault(&fontConfig);
+        LoadHoverNetMenuFonts(io);
         ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -3262,9 +3438,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-    ImFontConfig fontConfig;
-    fontConfig.SizePixels = 19.0f;
-    io.Fonts->AddFontDefault(&fontConfig);
+    LoadHoverNetMenuFonts(io);
     ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -3323,6 +3497,8 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Begin("HoverNet Local Race", nullptr,
                       ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+
+        DrawHoverNetScreenBackdrop(mainViewport);
 
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
@@ -3560,9 +3736,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-        ImFontConfig fontConfig;
-        fontConfig.SizePixels = 19.0f;
-        io.Fonts->AddFontDefault(&fontConfig);
+        LoadHoverNetMenuFonts(io);
         ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -3621,6 +3795,8 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Begin("HoverNet Settings", nullptr,
                       ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+
+        DrawHoverNetScreenBackdrop(mainViewport);
 
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
@@ -3855,34 +4031,24 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-    ImFontConfig fontConfig;
-    fontConfig.SizePixels = 19.0f;
-    io.Fonts->AddFontDefault(&fontConfig);
+    LoadHoverNetMenuFonts(io);
     ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
 
+    SDL_Texture* tutorialRaceTexture = nullptr;
+    const std::string tutorialRacePath =
+        SourcePath("NetTarget/LinuxClient/assets/tutorial-race.bmp");
+    if (SDL_Surface* tutorialRaceSurface = SDL_LoadBMP(tutorialRacePath.c_str())) {
+        tutorialRaceTexture = SDL_CreateTextureFromSurface(
+            graphics.GetRenderer(), tutorialRaceSurface);
+        SDL_FreeSurface(tutorialRaceSurface);
+    }
+
     const char* titles[] = {
         "CHOOSE A RACE", "DRIVE YOUR HOVERCRAFT", "READ THE RACE", "MAKE IT YOURS"
     };
-    const char* bodies[] = {
-        "Local Play lets you choose a track, lap count, and whether weapons are enabled. "
-        "Online Lobby connects to the shared RaceServer, where you can join an open race "
-        "or host one for other players.",
-        "Use Left/Right to steer, Shift to accelerate, Down to brake or reverse, and Up "
-        "to jump. Ctrl fires, Tab selects a weapon, and Escape opens the pause menu. "
-        "A standard controller uses the left stick, triggers, A, X, Y, and Start.",
-        "The top HUD shows elapsed time and lap progress. The status line reports speed, "
-        "fuel, weapon readiness, and network latency. The minimap tracks racers. Open "
-        "Controls from the main or pause menu whenever you need to review or remap inputs.",
-        "Settings controls your display name, RaceServer, sound, window mode, resolution, "
-        "UI scale, and accessibility options. Large HUD text keeps race information and "
-        "chat readable; Reduced motion and High contrast adjust the menus. Changes preview "
-        "live, Save keeps them, and Cancel restores your previous setup."
-    };
     constexpr int pageCount = sizeof(titles) / sizeof(titles[0]);
-    static_assert(pageCount == sizeof(bodies) / sizeof(bodies[0]),
-                  "Every onboarding title needs body text");
     int page = std::max(0, std::min(pStartPage, pageCount - 1));
     int framesShown = 0;
     bool completed = false;
@@ -3914,36 +4080,145 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings);
 
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
-        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(1.35f);
-        ImGui::TextUnformatted("WELCOME TO HOVERNET");
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
+        DrawHoverNetScreenBackdrop(viewport);
 
-        const float panelWidth = std::min(680.0f, ImGui::GetContentRegionAvail().x);
+        HoverNetScreenHeading("DRIVER BRIEFING", "HOW TO PLAY", "Everything you need before the lights go green");
+        ImGui::Spacing();
+
+        const float panelWidth = std::min(900.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
-        ImGui::BeginChild("OnboardingPanel", ImVec2(panelWidth, -60.0f), true);
-        ImGui::Text("STEP %d OF %d", page + 1, pageCount);
-        HoverNetSectionHeading(titles[page]);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetSurface);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
+        ImGui::BeginChild("OnboardingPanel", ImVec2(panelWidth, -20.0f), true);
+
+        const float progressWidth = ImGui::GetContentRegionAvail().x;
+        const float segmentGap = 8.0f;
+        const float segmentWidth = (progressWidth - segmentGap * (pageCount - 1)) / pageCount;
+        ImDrawList* panelDraw = ImGui::GetWindowDrawList();
+        ImVec2 progressPos = ImGui::GetCursorScreenPos();
+        for (int step = 0; step < pageCount; ++step) {
+            const ImU32 color = step <= page ? IM_COL32(220, 50, 70, 255) : IM_COL32(58, 62, 78, 255);
+            panelDraw->AddRectFilled(
+                ImVec2(progressPos.x + step * (segmentWidth + segmentGap), progressPos.y),
+                ImVec2(progressPos.x + step * (segmentWidth + segmentGap) + segmentWidth, progressPos.y + 5.0f),
+                color, 3.0f);
+        }
+        ImGui::Dummy(ImVec2(0, 14.0f));
+        ImGui::TextColored(kHoverNetCoral, "BRIEFING %02d / %02d", page + 1, pageCount);
+        ImGui::SetWindowFontScale(1.45f);
+        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+        ImGui::TextUnformatted(titles[page]);
+        ImGui::PopStyleColor();
+        ImGui::SetWindowFontScale(1.0f);
         ImGui::Spacing();
-        ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextUnformatted(bodies[page]);
-        ImGui::PopTextWrapPos();
-        ImGui::Spacing();
+
+        const float contentHeight = std::max(300.0f, ImGui::GetContentRegionAvail().y - 72.0f);
+        ImGui::BeginChild("BriefingContent", ImVec2(0, contentHeight), false);
+        if (page == 0) {
+            const float gap = 18.0f;
+            const float cardWidth = (ImGui::GetContentRegionAvail().x - gap) * 0.5f;
+            auto modeCard = [&](const char* number, const char* heading, const char* copy, bool primary) {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, primary ? ImVec4(0.20f, 0.055f, 0.085f, 1.0f)
+                                                                : ImVec4(0.065f, 0.075f, 0.105f, 1.0f));
+                ImGui::BeginChild(heading, ImVec2(cardWidth, 245.0f), true);
+                ImGui::TextColored(kHoverNetCoral, "%s", number);
+                ImGui::SetWindowFontScale(1.25f);
+                ImGui::TextUnformatted(heading);
+                ImGui::SetWindowFontScale(1.0f);
+                ImGui::Spacing();
+                ImGui::TextWrapped("%s", copy);
+                ImGui::Spacing();
+                ImGui::TextDisabled("%s", primary ? "RACE WITH THE WORLD" : "RACE ON YOUR TERMS");
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+            };
+            modeCard("01", "LOCAL RACE", "Choose a track, set the laps and decide whether weapons are enabled.", false);
+            ImGui::SameLine(0.0f, gap);
+            modeCard("02", "ONLINE MULTIPLAYER", "Join an open race or host a new event in the shared HoverNet lobby.", true);
+            ImGui::Spacing();
+            AccentNote("Start with Local Race to learn a track, then take your hovercraft online.");
+        }
+        else if (page == 1) {
+            const float cardGap = 14.0f;
+            const float cardWidth = (ImGui::GetContentRegionAvail().x - cardGap * 2.0f) / 3.0f;
+            auto keyCap = [&](const char* id, const char* key, const char* action) {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.09f, 1.0f));
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
+                ImGui::BeginChild(id, ImVec2(cardWidth, 98.0f), true);
+                if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
+                ImGui::TextColored(kHoverNetCoral, "%s", key);
+                if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
+                ImGui::Spacing();
+                ImGui::TextUnformatted(action);
+                ImGui::EndChild();
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor();
+            };
+            keyCap("KeyboardAccelerate", "SHIFT", "Accelerate");
+            ImGui::SameLine(0.0f, cardGap);
+            keyCap("KeyboardBrake", "DOWN", "Brake / reverse");
+            ImGui::SameLine(0.0f, cardGap);
+            keyCap("KeyboardSteer", "LEFT / RIGHT", "Steer");
+            keyCap("KeyboardJump", "UP", "Jump");
+            ImGui::SameLine(0.0f, cardGap);
+            keyCap("KeyboardFire", "CTRL", "Fire weapon");
+            ImGui::SameLine(0.0f, cardGap);
+            keyCap("KeyboardWeapon", "TAB", "Select weapon");
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.085f, 0.055f, 0.075f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
+            ImGui::BeginChild("ControllerSummary", ImVec2(0.0f, 112.0f), true);
+            HoverNetSectionHeading("CONTROLLER");
+            ImGui::TextWrapped("LEFT STICK  Steer    |    TRIGGERS  Accelerate / brake    |    A  Jump    |    X  Fire    |    Y  Select weapon");
+            ImGui::TextDisabled("Review and remap every binding from Controls.");
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
+        }
+        else if (page == 2) {
+            const ImVec2 diagramPos = ImGui::GetCursorScreenPos();
+            const ImVec2 diagramSize(ImGui::GetContentRegionAvail().x, 265.0f);
+            if (tutorialRaceTexture != nullptr) {
+                ImGui::Image(reinterpret_cast<ImTextureID>(tutorialRaceTexture), diagramSize);
+            }
+            else {
+                ImGui::InvisibleButton("RaceScreenPreview", diagramSize);
+                ImGui::GetWindowDrawList()->AddText(
+                    ImVec2(diagramPos.x + 20.0f, diagramPos.y + 20.0f),
+                    IM_COL32(255, 112, 122, 255), "RACE PREVIEW UNAVAILABLE");
+            }
+            ImGui::Spacing();
+            ImGui::TextWrapped("The race view keeps your position, speed, fuel and weapon state across the top. The course and rival craft remain visible ahead of you.");
+        }
+        else {
+            const char* features[][2] = {
+                {"IDENTITY", "Set your display name and RaceServer."},
+                {"DISPLAY", "Choose window mode, resolution and UI scale."},
+                {"ACCESSIBILITY", "Enable large HUD text, reduced motion and high contrast."},
+                {"AUDIO", "Adjust volume or mute the game."}
+            };
+            for (int feature = 0; feature < 4; ++feature) {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.09f, 1.0f));
+                ImGui::BeginChild(features[feature][0], ImVec2(0, 68.0f), true);
+                ImGui::TextColored(kHoverNetCoral, "%s", features[feature][0]);
+                ImGui::SameLine(180.0f);
+                ImGui::TextUnformatted(features[feature][1]);
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+            }
+            ImGui::TextDisabled("Settings preview live. Save keeps them; Cancel restores the previous setup.");
+        }
+        ImGui::EndChild();
+
         ImGui::Separator();
         ImGui::Spacing();
         if (page > 0) {
-            if (HoverNetButton("Back", ImVec2(130, 40))) --page;
+            if (HoverNetQuietButton("BACK", ImVec2(130, 44))) --page;
             ImGui::SameLine();
         }
-        const char* nextLabel = page == pageCount - 1 ? "Finish" : "Next";
-        if (HoverNetButton(nextLabel, ImVec2(130, 40))) {
+        const char* nextLabel = page == pageCount - 1 ? "FINISH BRIEFING" : "NEXT BRIEFING";
+        const float nextWidth = page == pageCount - 1 ? 190.0f : 175.0f;
+        if (HoverNetButton(nextLabel, ImVec2(nextWidth, 44))) {
             if (page == pageCount - 1) {
                 completed = true;
                 running = false;
@@ -3953,6 +4228,8 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
             }
         }
         ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
         ImGui::End();
 
         ImGui::Render();
@@ -3964,6 +4241,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
         SDL_Delay(16);
     }
 
+    if (tutorialRaceTexture != nullptr) SDL_DestroyTexture(tutorialRaceTexture);
     ImGui_ImplSDLRenderer2_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
@@ -3978,9 +4256,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-        ImFontConfig fontConfig;
-        fontConfig.SizePixels = 19.0f;
-        io.Fonts->AddFontDefault(&fontConfig);
+        LoadHoverNetMenuFonts(io);
         ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
         ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -4077,6 +4353,8 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         ImGui::Begin("HoverNet Controls", nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+
+        DrawHoverNetScreenBackdrop(mainViewport);
 
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
@@ -4263,9 +4541,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-    ImFontConfig fontConfig;
-    fontConfig.SizePixels = 19.0f;
-    io.Fonts->AddFontDefault(&fontConfig);
+    LoadHoverNetMenuFonts(io);
     ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
     ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
     ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
@@ -4409,9 +4685,11 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         ImGui::SetCursorPos(ImVec2(48.0f, 48.0f));
         ImGui::BeginGroup();
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(2.35f);
+        if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
+        ImGui::SetWindowFontScale(1.45f);
         ImGui::TextUnformatted("HOVERNET");
         ImGui::SetWindowFontScale(1.0f);
+        if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
         ImGui::TextColored(kHoverNetCoral, "HIGH-SPEED COMBAT RACING");
         ImGui::Spacing();
         ImGui::TextDisabled("RACE THE LINE.  OWN THE TRACK.");
@@ -4737,9 +5015,18 @@ int RunClient(int argc, char** argv)
 #endif
     MR_InitTrigoTables();
     MR_MainCharacter::RegisterFactory();
+#ifdef HOVERNET_WEB
+    HoverNetInitializeWebFactory();
+#endif
     struct FactoryCleanup
     {
-        ~FactoryCleanup() { MR_DllObjectFactory::Clean(FALSE); }
+        ~FactoryCleanup()
+        {
+            MR_DllObjectFactory::Clean(FALSE);
+#ifdef HOVERNET_WEB
+            HoverNetCleanWebFactory();
+#endif
+        }
     } factoryCleanup;
 #ifdef HOVERNET_GAME2_PLAYER
     MR_SoundServer::Init(nullptr);
@@ -5295,6 +5582,12 @@ int RunClient(int argc, char** argv)
     // anything once online, but it's harmless to leave enabled for local play.
     std::string chatBuffer;
     SDL_StartTextInput();
+#ifdef HOVERNET_WEB
+    struct InRaceFlag {
+        InRaceFlag() { gHoverNetInRace = 1; }
+        ~InRaceFlag() { gHoverNetInRace = 0; }
+    } inRaceFlag;
+#endif
     while (running && (frameLimit < 0 || framesRendered < frameLimit)) {
         gameController.Refresh();
         bool sceneChanged = renderStats.actorsRendered > 0;
@@ -5448,29 +5741,35 @@ int RunClient(int argc, char** argv)
         if (gControllerBindings.invertBrake) controllerBrakeValue = -controllerBrakeValue;
         const bool controllerAccelerate = controllerAccelerateValue > gControllerBindings.deadzone;
         const bool controllerBrake = controllerBrakeValue > gControllerBindings.deadzone;
-        const bool turnLeft = keyboard[gKeyboardBindings.steerLeft] || controllerLeft ||
+#ifdef HOVERNET_WEB
+        const int touch = gHoverNetTouchMask;
+#else
+        const int touch = 0;
+#endif
+        const bool touchLeft = (touch & 1) != 0, touchRight = (touch & 2) != 0;
+        const bool turnLeft = keyboard[gKeyboardBindings.steerLeft] || controllerLeft || touchLeft ||
                               (!playerMode && keyboard[SDL_SCANCODE_A]);
-        const bool turnRight = keyboard[gKeyboardBindings.steerRight] || controllerRight ||
+        const bool turnRight = keyboard[gKeyboardBindings.steerRight] || controllerRight || touchRight ||
                                (!playerMode && keyboard[SDL_SCANCODE_D]);
         const bool moveForward = playerMode ?
             keyboard[gKeyboardBindings.accelerate] ||
             (gKeyboardBindings.accelerate == SDL_SCANCODE_LSHIFT && keyboard[SDL_SCANCODE_RSHIFT]) ||
-            controllerAccelerate :
+            controllerAccelerate || (touch & 4) != 0 :
             keyboard[SDL_SCANCODE_UP] || keyboard[SDL_SCANCODE_W];
         const bool moveBackward = playerMode ?
-            keyboard[gKeyboardBindings.brake] || controllerBrake :
+            keyboard[gKeyboardBindings.brake] || controllerBrake || (touch & 8) != 0 :
             keyboard[SDL_SCANCODE_DOWN] || keyboard[SDL_SCANCODE_S];
         const bool moveUp = keyboard[SDL_SCANCODE_Q];
         const bool moveDown = keyboard[SDL_SCANCODE_E];
         const bool fire = keyboard[gKeyboardBindings.fire] ||
                   (gKeyboardBindings.fire == SDL_SCANCODE_LCTRL && keyboard[SDL_SCANCODE_RCTRL]) ||
-                  gameController.Button(gControllerBindings.fire) ||
+                  gameController.Button(gControllerBindings.fire) || (touch & 16) != 0 ||
                   HasArgument(argc, argv, "--fire");
         const bool jump = keyboard[gKeyboardBindings.jump] ||
-                          gameController.Button(gControllerBindings.jump) ||
+                          gameController.Button(gControllerBindings.jump) || (touch & 32) != 0 ||
                           HasArgument(argc, argv, "--jump");
         const bool selectWeapon = keyboard[gKeyboardBindings.selectWeapon] ||
-                                  gameController.Button(gControllerBindings.selectWeapon) ||
+                                  gameController.Button(gControllerBindings.selectWeapon) || (touch & 64) != 0 ||
                                   HasArgument(argc, argv, "--select-weapon");
 
 #ifdef HOVERNET_GAME2_PLAYER
@@ -5862,6 +6161,12 @@ int RunClient(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
+#ifdef HOVERNET_WEB
+    // Emscripten's virtual filesystem is backed by IDBFS (mounted in the HTML
+    // preRun hook) so the shared client's existing XDG settings stay persistent.
+    setenv("HOME", "/home/web", 1);
+    setenv("XDG_CONFIG_HOME", "/home/web/.config", 1);
+#endif
     try {
         return RunClient(argc, argv);
     }

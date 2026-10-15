@@ -832,11 +832,14 @@ HOVERNET_PLUGIN_EXPORT void MR_InitModule(HMODULE module)
     MR_InitTrigoTables();
     const char* dataDirectory = std::getenv("HOVERNET_DATA_DIR");
     std::string lDatPath;
-    if (dataDirectory != nullptr && dataDirectory[0] != '\0') {
+#ifdef HOVERNET_WEB
+    lDatPath = "/NetTarget/ObjFac1.dat";
+#endif
+    if (lDatPath.empty() && dataDirectory != nullptr && dataDirectory[0] != '\0') {
         lDatPath = std::string(dataDirectory) + "/NetTarget/ObjFac1.dat";
     }
 #ifdef _WIN32
-    else {
+    else if (lDatPath.empty()) {
         char modulePath[MAX_PATH];
         const DWORD modulePathLength = GetModuleFileNameA(module, modulePath, MAX_PATH);
         if (modulePathLength > 0 && modulePathLength < MAX_PATH) {
@@ -857,11 +860,11 @@ HOVERNET_PLUGIN_EXPORT void MR_InitModule(HMODULE module)
 #endif
     }
 #elif defined(HOVERNET_SOURCE_DIR)
-    else {
+    else if (lDatPath.empty()) {
         lDatPath = HOVERNET_SOURCE_DIR "/NetTarget/ObjFac1.dat";
     }
 #else
-    else {
+    else if (lDatPath.empty()) {
         lDatPath = "../../NetTarget/ObjFac1.dat";
     }
 #endif

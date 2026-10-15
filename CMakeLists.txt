@@ -19,6 +19,8 @@ endif()
 # HOVERNET_SANITIZE on a dedicated RelWithDebInfo build; see docs/gitlab-ci.md.
 option(HOVERNET_WARNINGS "Compile with -Wall -Wextra (GCC/Clang)" OFF)
 option(HOVERNET_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer (GCC/Clang)" OFF)
+set(HOVERNET_WEB_SOCKET_URL "wss://hovernet.outiva.com/race/" CACHE STRING
+    "WebSocket URL used by the browser client to reach its RaceServer gateway")
 
 if(NOT MSVC)
     if(HOVERNET_WARNINGS)
@@ -37,7 +39,22 @@ if(NOT MSVC)
     endif()
 endif()
 
-find_package(SDL2 REQUIRED)
+if(EMSCRIPTEN)
+    # Track downloads use the existing background worker. Pthreads in browsers
+    # require cross-origin isolation, which the Apache vhost supplies.
+    add_compile_options(-pthread)
+    add_link_options(-pthread -sPTHREAD_POOL_SIZE=2)
+endif()
+
+if(EMSCRIPTEN)
+    # Emscripten ships SDL2 as a system port instead of an SDL2Config.cmake
+    # package. Keep the same imported target name used by native targets.
+    add_library(SDL2::SDL2 INTERFACE IMPORTED GLOBAL)
+    target_compile_options(SDL2::SDL2 INTERFACE -sUSE_SDL=2)
+    target_link_options(SDL2::SDL2 INTERFACE -sUSE_SDL=2)
+else()
+    find_package(SDL2 REQUIRED)
+endif()
 include(CTest)
 find_package(Threads REQUIRED)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
@@ -399,7 +416,41 @@ add_executable(HoverNetGame2Player
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
 )
 
-add_dependencies(HoverNetGame2Player HoverNetHeadlessObjFac1)
+if(EMSCRIPTEN)
+    # The browser cannot dlopen ObjFac1.so. Compile the same factory into the
+    # executable and register it through the local-factory API instead.
+    target_sources(HoverNetGame2Player PRIVATE
+        NetTarget/LinuxClient/WebFactory.cpp
+        NetTarget/ObjFac1/LinuxPlugin.cpp
+        NetTarget/ObjFac1/FuelSource.cpp
+        NetTarget/ObjFac1/DoubleSpeedSource.cpp
+        NetTarget/ObjFac1/FinishLine.cpp
+    )
+    target_compile_definitions(HoverNetGame2Player PRIVATE HOVERNET_WEB)
+    target_compile_definitions(HoverNetGame2Player PRIVATE
+        "HOVERNET_WEB_SOCKET_URL=\"${HOVERNET_WEB_SOCKET_URL}\"")
+    set_target_properties(HoverNetGame2Player PROPERTIES OUTPUT_NAME HoverNet)
+    target_link_options(HoverNetGame2Player PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sMAX_WEBGL_VERSION=2
+        -sASYNCIFY=1
+        -sFETCH=1
+        -lwebsocket.js
+        -lidbfs.js
+        "-sEXPORTED_FUNCTIONS=_main,_hovernet_set_touch_mask,_hovernet_in_race,_hovernet_wants_text,_hovernet_text_input,_hovernet_text_key"
+        "-sEXPORTED_RUNTIME_METHODS=ccall"
+        --shell-file "${CMAKE_SOURCE_DIR}/packaging/web/shell.html"
+        --pre-js "${CMAKE_SOURCE_DIR}/packaging/web/web-pre.js"
+        "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/ObjFac1.dat@/NetTarget/ObjFac1.dat"
+        "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/Tracks@/NetTarget/Tracks"
+        "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/CommunityTracks.tsv@/NetTarget/CommunityTracks.tsv"
+        "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/LinuxClient/assets@/NetTarget/LinuxClient/assets"
+    )
+    set_target_properties(HoverNetGame2Player PROPERTIES SUFFIX ".html"
+        LINK_DEPENDS "${CMAKE_SOURCE_DIR}/packaging/web/shell.html;${CMAKE_SOURCE_DIR}/packaging/web/web-pre.js")
+else()
+    add_dependencies(HoverNetGame2Player HoverNetHeadlessObjFac1)
+endif()
 target_compile_definitions(HoverNetGame2Player PRIVATE _HAVE_SDL2 HOVERNET_GAME2_PLAYER HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}" HOVERNET_VERSION="${HOVERNET_VERSION}")
 target_link_libraries(HoverNetGame2Player PRIVATE HoverNetObserver HoverNetClientSession HoverNetResourceCore HoverNetVideoCore HoverNetRaceServerClient HoverNetImGui SDL2::SDL2)
 # SDL rewrites main() to SDL_main() on Windows. Its small platform entry-point

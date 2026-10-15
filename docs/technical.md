@@ -54,6 +54,7 @@ The runnable client and its libraries are written to `Release\`. CI creates an I
 - [Linux client and controls](linux-client.md)
 - [GitHub Actions](github-actions.md)
 - [GitLab CI and deployment](gitlab-ci.md)
+- [Browser web client roadmap](web-client-roadmap.md)
 - [Track compiler format](track-format.md)
 - [Race server](../NetTarget/RaceServer/README.md)
 - [Resource decompiler](../NetTarget/ResourceDecompiler/README.md)

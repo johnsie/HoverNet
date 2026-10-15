@@ -7,7 +7,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#if !defined(__EMSCRIPTEN__)
 #include <dlfcn.h>
+#endif
 #include <fstream>
 #include <list>
 #include <type_traits>
@@ -109,17 +111,33 @@ inline int MulDiv(int number, int numerator, int denominator)
 
 inline HMODULE LoadLibrary(const char* fileName)
 {
+#if defined(__EMSCRIPTEN__)
+    (void)fileName;
+    return nullptr;
+#else
     return dlopen(fileName, RTLD_NOW | RTLD_LOCAL);
+#endif
 }
 
 inline void* GetProcAddress(HMODULE module, const char* symbol)
 {
+#if defined(__EMSCRIPTEN__)
+    (void)module;
+    (void)symbol;
+    return nullptr;
+#else
     return dlsym(module, symbol);
+#endif
 }
 
 inline BOOL FreeLibrary(HMODULE module)
 {
+#if defined(__EMSCRIPTEN__)
+    (void)module;
+    return FALSE;
+#else
     return dlclose(module) == 0 ? TRUE : FALSE;
+#endif
 }
 
 inline void InitializeCriticalSection(CRITICAL_SECTION*) {}

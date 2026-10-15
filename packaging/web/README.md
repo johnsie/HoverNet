@@ -1,0 +1,140 @@
+# Browser client and server setup
+
+## Build the browser client
+
+Install the Emscripten SDK and activate the version declared by
+`WEB_EMSDK_VERSION` in `.gitlab-ci.yml`. This checkout has Emscripten 3.1.74
+installed in `.tools/emsdk` (ignored by Git). In a new shell, run:
+
+```sh
+source .tools/emsdk/emsdk_env.sh
+emcmake cmake -S . -B build/web -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+cmake --build build/web --target HoverNetGame2Player --parallel 2
+```
+
+The output is `build/web/HoverNet.html` with `HoverNet.js`, `HoverNet.wasm`, and
+`HoverNet.data`. The data file contains the game resource library, bundled
+tracks, community manifest, and menu artwork. The HTML shell stores the shared
+client's XDG settings in IndexedDB.
+
+The browser client opens a binary WebSocket at
+`wss://hovernet.outiva.com/race/` by default. For local development, override
+`HOVERNET_WEB_SOCKET_URL` at CMake configure time, for example with
+`ws://localhost:8080/race/`.
+
+## Mobile and touch devices
+
+On touch devices (`pointer: coarse`) `shell.html` adds a fullscreen button, a
+controls toggle, a portrait "rotate your device" hint, and an on-screen race pad
+(steer, GO, BRAKE, FIRE, JUMP, WEAPON, MENU). Held buttons are passed to the
+game through the exported `hovernet_set_touch_mask` function and combined with
+keyboard and gamepad input, so remapped keys do not matter; MENU taps Escape for
+the pause menu. Menus work through SDL's touch-to-mouse emulation. The canvas
+fills the page (SDL follows its CSS size); the in-race 4:3 frame is letterboxed.
+The page blocks pinch-zoom and pull-to-refresh and uses `100dvh` so mobile
+toolbars do not clip the canvas. The pad's visibility is remembered.
+
+The start-up screen shows a progress bar driven by Emscripten's download status
+(`Downloading game data — x of y MB`, then `Preparing…`), and a Try again button
+if loading fails.
+
+## Install the WebSocket gateway
+
+The gateway relays bounded binary RaceServer frames between a browser WebSocket
+and the existing local TCP listener on port 9600. It accepts the production
+site's HTTPS origin, limits concurrent browser sessions to 64, and listens on
+loopback port 9601 so Apache is the only public WebSocket endpoint.
+
+Install the Python `websockets` dependency from `requirements.txt` into the
+system Python (or install the matching distro package), then install the
+gateway and service file as root:
+
+```sh
+sudo install -o root -g root -m 0644 packaging/web/websocket_gateway.py /usr/lib/hovernet/websocket_gateway.py
+sudo install -o root -g root -m 0644 packaging/web/hovernet-websocket-gateway.service /etc/systemd/system/hovernet-websocket-gateway.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now hovernet-websocket-gateway.service
+```
+
+The service runs as the existing `hovernet` system account and does not expose
+its listener outside loopback. The RaceServer remains on its existing port and
+native clients continue to connect directly.
+
+## Apache and TLS
+
+The virtual-host template is `hovernet.outiva.com.conf`. It serves the current
+immutable web release, supplies the WebAssembly MIME type and browser security
+headers, redirects HTTP to HTTPS, and proxies `/race/` to the local gateway.
+Cross-origin isolation headers are required for the existing background track
+download worker in the Emscripten build; third-party assets must therefore be
+served with compatible CORS/CORP headers or from this same origin.
+Enable Apache's `ssl`, `headers`, `expires`, `proxy`, `proxy_http`, and
+`proxy_wstunnel` modules. Install and enable the virtual host after DNS resolves
+to the HAProxy frontend and an origin certificate exists at:
+
+- `/etc/ssl/certs/hovernet-origin.crt`
+- `/etc/ssl/private/hovernet-origin.key`
+
+Validate the global Apache configuration before reloading it. A failure in any
+enabled site's configuration prevents a safe reload of all sites.
+
+## GitLab deployment
+
+The `race-server` runner downloads the pinned Emscripten SDK into its user cache
+when `$EMSDK` is not configured. The protected default-branch pipeline deploys
+the web artifact automatically after building it; tagged deploys are manual.
+The job invokes `sudo /usr/local/sbin/hovernet-web-deploy` with a versioned
+archive.
+Install that script root-owned and grant the GitLab runner passwordless sudo
+only for this wrapper. The wrapper accepts artifacts only from the runner build
+tree, extracts only the four expected regular files, publishes to
+`/var/www/hovernet.outiva.com/releases/<version>`, and atomically switches the
+`current` symlink. Apache should have read-only access to the releases.
+
+The wrapper deliberately does not alter Apache sites, certificates, system
+packages, or services. Configure the gateway and virtual host separately
+before enabling production deployment.
+
+## Repair the browser multiplayer gateway
+
+On Python 3.10 or later, Debian's `websockets 9.1` package passes a removed
+`loop` argument to `asyncio.Lock`, so browser WebSocket handshakes fail. To
+install the compatibility fix and restart the gateway on `.181`, run:
+
+```sh
+sudo bash packaging/web/fix-websocket-gateway.sh
+```
+
+## Configure the host
+
+The public TLS certificate terminates on the HAProxy server. Apache still
+needs a certificate for the HTTPS backend connection. Copy
+`fix-lifehub-backend-tls.sh` to `.181` and run it with sudo; it creates a
+self-signed certificate with DNS and backend IP subject names, validates
+Apache, and reloads Apache with rollback on failure:
+
+```sh
+scp packaging/web/fix-lifehub-backend-tls.sh john@192.168.10.181:/tmp/
+ssh -t john@192.168.10.181 'sudo bash /tmp/fix-lifehub-backend-tls.sh'
+```
+
+Configure HAProxy to trust the origin certificate if its backend uses
+certificate verification. After public DNS for `hovernet.outiva.com` resolves
+to HAProxy, run `sudo bash /tmp/hovernet-web-setup/setup-host.sh` on `.181`.
+That script creates a self-signed HoverNet origin certificate, installs the
+WebSocket gateway and scoped GitLab deploy sudo rule, and configures the
+Apache vhost. It does not request a public certificate because HAProxy owns
+the public TLS certificate.
+
+## Mobile behaviour
+
+- **Text fields**: menu text boxes are drawn by ImGui inside the canvas, so phones
+  never raise a keyboard for them. `shell.html` keeps a hidden real `<input>`;
+  tapping a field (the game reports `hovernet_wants_text`) focuses it, and typed
+  text/Backspace/Enter go back to the game as SDL events (`hovernet_text_input`,
+  `hovernet_text_key`). The page resizes to the visual viewport while the
+  keyboard is open so the field stays visible.
+- **Screen space**: race controls and the controls/fullscreen buttons appear only
+  during a race (`hovernet_in_race`); the portrait hint is a slim banner rather
+  than a blocking overlay; the canvas respects the notch/safe-area insets; phones
+  default to an 85% UI scale until the player picks one in Settings.

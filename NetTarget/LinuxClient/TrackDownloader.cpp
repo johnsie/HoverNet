@@ -8,11 +8,21 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/fetch.h>
+#endif
 
 #ifdef _WIN32
 #include <direct.h>
 #include <windows.h>
+#elif defined(__EMSCRIPTEN__)
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #else
 #include <errno.h>
 #include <signal.h>
@@ -77,6 +87,80 @@ bool ReplaceFile(const std::string& pFrom, const std::string& pTo)
 // eRejected: the server answered but refused (HTTP 4xx/5xx, e.g. 404).
 enum class RunResult { eOk, eFailed, eRejected, eNotFound, eCancelled };
 
+#ifdef __EMSCRIPTEN__
+struct BrowserFetch
+{
+    std::atomic<bool> done{false};
+    std::atomic<RunResult> result{RunResult::eFailed};
+    std::vector<char> bytes;
+    std::atomic<long long>* progress = nullptr;
+};
+
+void BrowserFetchProgress(emscripten_fetch_t* fetch)
+{
+    BrowserFetch* state = static_cast<BrowserFetch*>(fetch->userData);
+    if (state != nullptr && state->progress != nullptr) state->progress->store(fetch->numBytes);
+}
+
+void BrowserFetchFinished(emscripten_fetch_t* fetch)
+{
+    BrowserFetch* state = static_cast<BrowserFetch*>(fetch->userData);
+    if (state != nullptr) {
+        if (fetch->status == 200 && fetch->numBytes <= 64u * 1024u * 1024u) {
+            state->bytes.assign(fetch->data, fetch->data + fetch->numBytes);
+            state->result.store(RunResult::eOk);
+        }
+        else if (fetch->status >= 400) {
+            state->result.store(RunResult::eRejected);
+        }
+        state->done.store(true);
+    }
+    emscripten_fetch_close(fetch);
+}
+
+void BrowserFetchFailed(emscripten_fetch_t* fetch)
+{
+    BrowserFetch* state = static_cast<BrowserFetch*>(fetch->userData);
+    if (state != nullptr) {
+        state->result.store(fetch->status >= 400 ? RunResult::eRejected : RunResult::eFailed);
+        state->done.store(true);
+    }
+    emscripten_fetch_close(fetch);
+}
+
+RunResult DownloadInBrowser(const std::string& url, const std::string& outputPath,
+                            const std::atomic<bool>& cancel,
+                            std::atomic<long long>& bytesDone)
+{
+    BrowserFetch state;
+    state.progress = &bytesDone;
+    emscripten_fetch_attr_t attributes;
+    emscripten_fetch_attr_init(&attributes);
+    std::strcpy(attributes.requestMethod, "GET");
+    attributes.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+    attributes.timeoutMSecs = 600000;
+    attributes.userData = &state;
+    attributes.onprogress = BrowserFetchProgress;
+    attributes.onsuccess = BrowserFetchFinished;
+    attributes.onerror = BrowserFetchFailed;
+    emscripten_fetch_t* request = emscripten_fetch(&attributes, url.c_str());
+    if (request == nullptr) return RunResult::eFailed;
+
+    bool cancelled = false;
+    while (!state.done.load()) {
+        cancelled = cancelled || cancel.load();
+        emscripten_sleep(10);
+    }
+    if (cancelled) return RunResult::eCancelled;
+    if (state.result.load() != RunResult::eOk) return state.result.load();
+    std::ofstream output(outputPath.c_str(), std::ios::binary | std::ios::trunc);
+    if (!output.good()) return RunResult::eFailed;
+    output.write(state.bytes.data(), static_cast<std::streamsize>(state.bytes.size()));
+    return output.good() ? RunResult::eOk : RunResult::eFailed;
+}
+#endif
+
+#ifndef __EMSCRIPTEN__
 #ifdef _WIN32
 
 // Quotes one argument for a Windows command line.
@@ -183,6 +267,7 @@ RunResult RunDownloader(const std::vector<std::string>& pArguments, const std::s
 }
 
 #endif
+#endif // !__EMSCRIPTEN__: browser downloads use the Fetch API above.
 
 } // namespace
 
@@ -249,6 +334,9 @@ bool DownloadTrack(const TrackEntry& pTrack, const TrackDownloadSettings& pSetti
     };
     std::remove(lDownloadPath.c_str());
 
+#ifdef __EMSCRIPTEN__
+    RunResult lResult = DownloadInBrowser(lUrl, lDownloadPath, pCancel, pBytesDone);
+#else
 #ifdef _WIN32
     const std::vector<std::vector<std::string>> lTools = {
         {"curl.exe", "--fail", "--location", "--silent", "--show-error", "--retry", "2", "--connect-timeout", "15",
@@ -267,6 +355,7 @@ bool DownloadTrack(const TrackEntry& pTrack, const TrackDownloadSettings& pSetti
             break;
         }
     }
+#endif
     if (lResult == RunResult::eCancelled) {
         lCleanup();
         pError = "download cancelled";
@@ -274,7 +363,9 @@ bool DownloadTrack(const TrackEntry& pTrack, const TrackDownloadSettings& pSetti
     }
     if (lResult == RunResult::eNotFound) {
         lCleanup();
-#ifdef _WIN32
+#if defined(__EMSCRIPTEN__)
+        pError = "browser download failed; check the internet connection and retry";
+#elif defined(_WIN32)
         pError = "curl.exe was not found; it ships with Windows 10 and later";
 #else
         pError = "neither curl nor wget is installed; install one (for example: sudo apt install curl)";

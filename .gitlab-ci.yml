@@ -6,6 +6,7 @@ workflow:
 
 stages:
   - validate
+  - web
   - build
   - package
   - publish
@@ -14,6 +15,8 @@ stages:
 variables:
   GIT_DEPTH: "20"
   LINUX_RUNNER_TAG: "race-server"
+  WEB_RUNNER_TAG: "race-server"
+  WEB_EMSDK_VERSION: "3.1.74"
   WINDOWS_RUNNER_TAG: "windows"
   SERVER_RUNNER_TAG: "race-server"
   CMAKE_BUILD_PARALLEL_LEVEL: "2"
@@ -35,6 +38,11 @@ lint:gitlab-ci:
     - test -x scripts/make-release-checksums.sh
     - test -x scripts/generate-community-manifest.sh
     - test -x scripts/package-community-tracks.sh
+    - test -f packaging/web/shell.html
+    - test -f packaging/web/web-pre.js
+    - test -f packaging/web/websocket_gateway.py
+    - test -f packaging/web/hovernet-websocket-gateway.service
+    - test -x packaging/web/hovernet-web-deploy
 
 build:raceserver:linux:
   stage: build
@@ -60,6 +68,57 @@ build:game:linux:
     paths:
       - build/linux/HoverNetGame2Player
       - build/linux/ObjFac1.so
+
+build:game:web:
+  stage: web
+  tags: ["$WEB_RUNNER_TAG"]
+  script:
+    - |
+      EMSDK_BOOTSTRAP=0
+      if [ -z "${EMSDK:-}" ]; then
+        EMSDK="${HOME}/.cache/emsdk/${WEB_EMSDK_VERSION}"
+        export EMSDK
+        EMSDK_BOOTSTRAP=1
+      fi
+      EMSDK_MARKER="$EMSDK/.hovernet-installed-${WEB_EMSDK_VERSION}"
+      if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ] || { [ "$EMSDK_BOOTSTRAP" -eq 1 ] && [ ! -f "$EMSDK_MARKER" ]; }; then
+        if [ "$EMSDK_BOOTSTRAP" -ne 1 ]; then
+          echo "Configured EMSDK does not contain emcmake: $EMSDK" >&2
+          exit 1
+        fi
+        mkdir -p "$(dirname "$EMSDK")"
+        (
+          flock -x 9
+          if [ ! -x "$EMSDK/upstream/emscripten/emcmake" ] || [ ! -f "$EMSDK_MARKER" ]; then
+            INSTALLING="${EMSDK}.installing"
+            rm -rf "$INSTALLING" "$EMSDK"
+            git clone --depth 1 --branch "$WEB_EMSDK_VERSION" https://github.com/emscripten-core/emsdk.git "$INSTALLING"
+            mv "$INSTALLING" "$EMSDK"
+            "$EMSDK/emsdk" install "$WEB_EMSDK_VERSION"
+            "$EMSDK/emsdk" activate "$WEB_EMSDK_VERSION"
+            touch "$EMSDK_MARKER"
+          fi
+        ) 9>"${EMSDK}.install.lock"
+      fi
+      . "$EMSDK/emsdk_env.sh"
+      command -v emcc
+      emcc --version | grep -F "$WEB_EMSDK_VERSION"
+    - emcmake cmake -S . -B build/web -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+    - cmake --build build/web --target HoverNetGame2Player --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+    - mkdir -p dist/web
+    - cp build/web/HoverNet.html dist/web/index.html
+    - cp build/web/HoverNet.js build/web/HoverNet.wasm build/web/HoverNet.data dist/web/
+    - tar -czf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web index.html HoverNet.js HoverNet.wasm HoverNet.data
+    - 'if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then sudo /usr/local/sbin/hovernet-web-deploy "dist/hovernet-web-${CI_COMMIT_SHORT_SHA}.tar.gz"; fi'
+  artifacts:
+    name: "hovernet-web-${CI_COMMIT_REF_SLUG}"
+    expire_in: 30 days
+    paths:
+      - dist/hovernet-web-*.tar.gz
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
 
 build:game:linux:sanitizers:
   stage: build
@@ -135,7 +194,7 @@ package:game:windows:shared-x64:
     - job: build:game:windows:shared-x64
       artifacts: true
   script:
-    - '$release = "build\windows-shared\Release"; New-Item -ItemType Directory -Force "$release\NetTarget\Tracks", "$release\NetTarget\LinuxClient\assets" | Out-Null; Copy-Item "NetTarget\ObjFac1.dat" "$release\NetTarget\ObjFac1.dat" -Force; Copy-Item "NetTarget\Tracks\*.trk" "$release\NetTarget\Tracks\" -Force; Copy-Item "NetTarget\CommunityTracks.tsv" "$release\NetTarget\CommunityTracks.tsv" -Force; Copy-Item "NetTarget\LinuxClient\assets\menu-hovercraft.bmp" "$release\NetTarget\LinuxClient\assets\menu-hovercraft.bmp" -Force'
+    - '$release = "build\windows-shared\Release"; New-Item -ItemType Directory -Force "$release\NetTarget\Tracks", "$release\NetTarget\LinuxClient\assets" | Out-Null; Copy-Item "NetTarget\ObjFac1.dat" "$release\NetTarget\ObjFac1.dat" -Force; Copy-Item "NetTarget\Tracks\*.trk" "$release\NetTarget\Tracks\" -Force; Copy-Item "NetTarget\CommunityTracks.tsv" "$release\NetTarget\CommunityTracks.tsv" -Force; Copy-Item "NetTarget\LinuxClient\assets\*.bmp" "$release\NetTarget\LinuxClient\assets\" -Force; Copy-Item "NetTarget\LinuxClient\assets\*.ttf" "$release\NetTarget\LinuxClient\assets\" -Force; Copy-Item "NetTarget\LinuxClient\assets\*-OFL.txt" "$release\NetTarget\LinuxClient\assets\" -Force'
     - '$vcRedist = "build\windows-shared\Release\vc_redist.x64.exe"; Invoke-WebRequest "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile $vcRedist; $vcSignature = Get-AuthenticodeSignature $vcRedist; if ($vcSignature.Status -ne "Valid" -or $vcSignature.SignerCertificate.Subject -notmatch "Microsoft Corporation") { throw "Downloaded Visual C++ x64 Redistributable does not have a valid Microsoft signature" }'
     - '& "scripts\validate-windows-x64-package.ps1" -ReleaseDir "build\windows-shared\Release" -RequireVCRedist'
     - '$env:HOVERNET_VERSION = if ($env:CI_COMMIT_TAG) { $env:CI_COMMIT_TAG.TrimStart("v") } else { "0.0.0-$env:CI_COMMIT_SHORT_SHA" }; $env:HOVERNET_X64_RELEASE_DIR = (Resolve-Path "build\windows-shared\Release").Path; $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"; if (-not (Test-Path $iscc)) { throw "ISCC not found at $iscc" }; & $iscc packaging/windows/HoverNet-x64.iss; if ($LASTEXITCODE -ne 0) { throw "Shared x64 Inno Setup packaging failed" }'
@@ -257,6 +316,23 @@ deploy:raceserver:
     deployment_tier: production
   script:
     - sudo /usr/local/sbin/hovernet-deploy dist/hovernet-raceserver_*.deb
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+      allow_failure: false
+
+deploy:web:
+  stage: deploy
+  tags: ["$SERVER_RUNNER_TAG"]
+  needs:
+    - job: build:game:web
+      artifacts: true
+  resource_group: production-web
+  environment:
+    name: production-web
+    deployment_tier: production
+  script:
+    - sudo /usr/local/sbin/hovernet-web-deploy "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz"
   rules:
     - if: '$CI_COMMIT_TAG'
       when: manual
