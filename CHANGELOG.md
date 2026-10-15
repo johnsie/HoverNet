@@ -4,6 +4,12 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.2 - 2026-10-15
+
+### Changed
+- Every CI deploy is automatic: version tags deploy both the web client and the RaceServer.
+- The web build is queued ahead of native builds, and the runner allows three concurrent jobs.
+
 ## 2.0.1 - 2026-10-15
 
 ### Fixed
