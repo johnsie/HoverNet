@@ -344,8 +344,6 @@ deploy:raceserver:
     - sudo /usr/local/sbin/hovernet-deploy dist/hovernet-raceserver_*.deb
   rules:
     - if: '$CI_COMMIT_TAG'
-      when: manual
-      allow_failure: false
 
 deploy:web:
   stage: deploy
