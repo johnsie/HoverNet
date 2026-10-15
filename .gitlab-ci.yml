@@ -6,7 +6,6 @@ workflow:
 
 stages:
   - validate
-  - web
   - build
   - package
   - publish
@@ -46,6 +45,7 @@ lint:gitlab-ci:
 
 build:raceserver:linux:
   stage: build
+  needs: []
   tags: ["$LINUX_RUNNER_TAG"]
   script:
     - mkdir -p build/raceserver
@@ -58,6 +58,7 @@ build:raceserver:linux:
 
 build:game:linux:
   stage: build
+  needs: []
   tags: ["$LINUX_RUNNER_TAG"]
   script:
     - cmake -S . -B build/linux -DCMAKE_BUILD_TYPE=Release
@@ -70,7 +71,8 @@ build:game:linux:
       - build/linux/ObjFac1.so
 
 build:game:web:
-  stage: web
+  stage: build
+  needs: []
   tags: ["$WEB_RUNNER_TAG"]
   script:
     - |
@@ -103,11 +105,23 @@ build:game:web:
       . "$EMSDK/emsdk_env.sh"
       command -v emcc
       emcc --version | grep -F "$WEB_EMSDK_VERSION"
-    - emcmake cmake -S . -B build/web -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-    - cmake --build build/web --target HoverNetGame2Player --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
-    - mkdir -p dist/web
-    - cp build/web/HoverNet.html dist/web/index.html
-    - cp build/web/HoverNet.js build/web/HoverNet.wasm build/web/HoverNet.data dist/web/
+    # Incremental build: keep the CMake tree on the runner between pipelines so only
+    # changed sources recompile. The lock serialises pipelines sharing the tree; a
+    # configure failure (moved checkout, changed toolchain) discards it and starts clean.
+    - |
+      WEB_BUILD_DIR="${HOME}/.cache/hovernet-web-build"
+      mkdir -p "$WEB_BUILD_DIR"
+      (
+        flock -x 8
+        if ! emcmake cmake -S . -B "$WEB_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF; then
+          rm -rf "$WEB_BUILD_DIR"; mkdir -p "$WEB_BUILD_DIR"
+          emcmake cmake -S . -B "$WEB_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+        fi
+        cmake --build "$WEB_BUILD_DIR" --target HoverNetGame2Player --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+        mkdir -p dist/web
+        cp "$WEB_BUILD_DIR/HoverNet.html" dist/web/index.html
+        cp "$WEB_BUILD_DIR/HoverNet.js" "$WEB_BUILD_DIR/HoverNet.wasm" "$WEB_BUILD_DIR/HoverNet.data" dist/web/
+      ) 8>"${WEB_BUILD_DIR}.lock"
     - tar -czf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web index.html HoverNet.js HoverNet.wasm HoverNet.data
     - 'if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then sudo /usr/local/sbin/hovernet-web-deploy "dist/hovernet-web-${CI_COMMIT_SHORT_SHA}.tar.gz"; fi'
   artifacts:
@@ -116,12 +130,20 @@ build:game:web:
     paths:
       - dist/hovernet-web-*.tar.gz
   rules:
+    # Docs-only changes cannot alter the web artifact, so skip the rebuild.
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: &web_inputs
+        - NetTarget/**/*
+        - packaging/web/**/*
+        - CMakeLists.txt
+        - .gitlab-ci.yml
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      changes: *web_inputs
     - if: '$CI_COMMIT_TAG'
 
 build:game:linux:sanitizers:
   stage: build
+  needs: []
   tags: ["$LINUX_RUNNER_TAG"]
   variables:
     ASAN_OPTIONS: "detect_leaks=1:halt_on_error=1"
@@ -169,6 +191,7 @@ package:game:deb:
 
 build:game:windows:shared-x64:
   stage: build
+  needs: []
   tags: ["$WINDOWS_RUNNER_TAG"]
   script:
     - '$vcpkgRoot = if ($env:VCPKG_ROOT) { $env:VCPKG_ROOT } elseif ($env:VCPKG_INSTALLATION_ROOT) { $env:VCPKG_INSTALLATION_ROOT } elseif (Test-Path "C:\vcpkg\vcpkg.exe") { "C:\vcpkg" } else { throw "vcpkg was not found; set VCPKG_ROOT on the Windows runner" }; $vcpkg = Join-Path $vcpkgRoot "vcpkg.exe"; & $vcpkg install "sdl2:x64-windows"; if ($LASTEXITCODE -ne 0) { throw "vcpkg failed to install x64 SDL2" }; $toolchain = Join-Path $vcpkgRoot "scripts\buildsystems\vcpkg.cmake"; $cmakeOnPath = Get-Command cmake.exe -ErrorAction SilentlyContinue; $cmakeCandidates = @("C:\Program Files\CMake\bin\cmake.exe", "C:\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe", "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe", "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"); $cmake = if ($cmakeOnPath) { $cmakeOnPath.Source } else { $cmakeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1 }; if (-not $cmake) { $cmake = (& $vcpkg fetch cmake | Select-Object -Last 1).Trim() }; if (-not (Test-Path $cmake)) { throw "CMake was not found on PATH, in Visual Studio Build Tools, or through vcpkg fetch cmake" }; & $cmake -S . -B build/windows-shared -A x64 -DCMAKE_TOOLCHAIN_FILE="$toolchain" -DVCPKG_TARGET_TRIPLET=x64-windows -DBUILD_TESTING=OFF; if ($LASTEXITCODE -ne 0) { throw "Shared x64 client configure failed" }; & $cmake --build build/windows-shared --target HoverNetGame2Player RaceServer --config Release --parallel 2; if ($LASTEXITCODE -ne 0) { throw "Shared x64 client or RaceServer build failed" }'
@@ -209,6 +232,7 @@ package:game:windows:shared-x64:
 
 build:game:windows:
   stage: build
+  needs: []
   tags: ["$WINDOWS_RUNNER_TAG"]
   script:
     - '$msbuild = "C:\BuildTools\MSBuild\Current\Bin\MSBuild.exe"; if (-not (Test-Path $msbuild)) { throw "MSBuild not found at $msbuild" }; & $msbuild NetTarget/ObjFac1/ObjFac1.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & $msbuild NetTarget/Game2/Game2.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal'
@@ -240,6 +264,7 @@ package:game:windows:
 
 build:raceserver:windows:
   stage: build
+  needs: []
   tags: ["$WINDOWS_RUNNER_TAG"]
   script:
     - '$msbuild = "C:\BuildTools\MSBuild\Current\Bin\MSBuild.exe"; if (-not (Test-Path $msbuild)) { throw "MSBuild not found at $msbuild" }; & $msbuild NetTarget/RaceServer/RaceServer.vcxproj /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }'
