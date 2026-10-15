@@ -4,6 +4,15 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.5 - 2026-10-15
+
+### Fixed
+- Web client: sliders and clicks now follow the pointer at any window size (SDL no longer
+  rescales mouse events into 1024x768 while a frame sleeps).
+
+### Changed
+- The online lobby screen is titled "Internet Meeting Room".
+
 ## 2.0.4 - 2026-10-15
 
 ### Fixed
