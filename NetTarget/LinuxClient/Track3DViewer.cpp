@@ -55,6 +55,12 @@ void HoverNetCleanWebFactory();
 
 #include <emscripten.h>
 
+// Compiled into the page's script rather than emscripten_run_script_int(), which would eval()
+// a string -- forbidden by the site's Content-Security-Policy.
+EM_JS(int, hovernet_js_min_viewport, (), {
+    return Math.min(window.innerWidth, window.innerHeight);
+});
+
 // Bitmask of on-screen touch controls currently held, written by the page's
 // touch pad (packaging/web/shell.html) and OR-ed into the same control state
 // the keyboard and gamepad feed. Going through the game rather than synthetic
@@ -1374,7 +1380,7 @@ float LoadUiScale()
 #ifdef HOVERNET_WEB
     // No saved choice: phones get a tighter default so menus fit their short
     // landscape screens. The settings slider still overrides it.
-    if (emscripten_run_script_int("Math.min(window.innerWidth, window.innerHeight)") < 600) {
+    if (hovernet_js_min_viewport() < 600) {
         return 0.85f;
     }
 #endif

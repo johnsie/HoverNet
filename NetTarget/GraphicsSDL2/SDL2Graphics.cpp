@@ -1,6 +1,11 @@
 #include "SDL2Graphics.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+// EM_JS compiles these into the page's script. emscripten_run_script*() would eval() a string,
+// which the site's Content-Security-Policy forbids (it throws EvalError and stops startup).
+EM_JS(int, hovernet_js_force_software, (), {
+    try { return localStorage.getItem('hn-renderer') === 'software' ? 1 : 0; } catch (e) { return 0; }
+});
 #endif
 
 #ifdef _HAVE_SDL2
@@ -71,8 +76,7 @@ bool SDL2GraphicsBackend::Initialize(void* windowHandle, int width, int height)
     // WebGL is unavailable. No vsync flag: the browser paces presents.
     // The page sets localStorage "hn-renderer" = "software" when WebGL failed to produce a frame
     // on this browser (see shell.html), so such browsers skip the accelerated renderer.
-    const bool forceSoftware = emscripten_run_script_int(
-        "(function(){try{return localStorage.getItem('hn-renderer')==='software'?1:0}catch(e){return 0}})()") != 0;
+    const bool forceSoftware = hovernet_js_force_software() != 0;
     if (!forceSoftware) m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED);
     if (!m_renderer && !forceSoftware) {
         SDL_DestroyWindow(m_window);
