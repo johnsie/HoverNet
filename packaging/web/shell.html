@@ -60,6 +60,7 @@
     #hn-util .hn-btn { position: static; display: flex; min-width: 44px; min-height: 44px; opacity: .8; }
     body.touch.running.in-race #hn-util { display: flex; }
     body.touch.running.in-race.controls-on #hn-pad .hn-btn { display: flex; }
+    body.touch.running.in-race.controls-on #hn-steer { display: block; }
     /* Real input that receives the soft keyboard for the canvas's ImGui text fields.
        Must stay "visible" and selectable or iOS Safari refuses to focus/type into it. */
     #hn-text { position: fixed; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; margin: 0;
@@ -67,9 +68,17 @@
       -webkit-user-select: text; user-select: text; touch-action: manipulation; pointer-events: none; z-index: -1; }
     #hn-pad .left { left: max(14px, env(safe-area-inset-left)); }
     #hn-pad .right { right: max(14px, env(safe-area-inset-right)); }
-    #hn-steer-l, #hn-steer-r { bottom: max(18px, env(safe-area-inset-bottom)); width: 84px; height: 84px; font-size: 28px; }
-    #hn-steer-l { left: max(14px, env(safe-area-inset-left)); }
-    #hn-steer-r { left: calc(max(14px, env(safe-area-inset-left)) + 96px); }
+    /* Steering slider: drag the knob left/right of centre to steer. */
+    #hn-steer { position: fixed; z-index: 5; display: none; box-sizing: border-box; touch-action: none;
+      left: max(14px, env(safe-area-inset-left)); bottom: max(18px, env(safe-area-inset-bottom));
+      width: 192px; height: 84px; border-radius: 42px; border: 2px solid rgba(160, 200, 255, .55);
+      background: rgba(20, 34, 60, .45); }
+    #hn-steer::before { content: ''; position: absolute; left: 50%; top: 14px; bottom: 14px; width: 2px;
+      margin-left: -1px; background: rgba(160, 200, 255, .3); }
+    #hn-knob { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px;
+      border-radius: 50%; border: 2px solid rgba(160, 200, 255, .8); background: rgba(90, 160, 255, .45);
+      transform: translateX(0); pointer-events: none; }
+    #hn-steer.active { background: rgba(20, 34, 60, .65); }
     #hn-go, #hn-brake, #hn-fire, #hn-jump, #hn-weapon { width: 84px; height: 84px; border-radius: 50%; }
     #hn-go { right: max(14px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); width: 104px; height: 104px; }
     #hn-brake { right: calc(max(14px, env(safe-area-inset-right)) + 116px); bottom: max(18px, env(safe-area-inset-bottom)); }
@@ -110,8 +119,7 @@
     <button class="hn-btn" id="hn-fs" type="button" aria-label="Toggle fullscreen">&#9974;</button>
   </div>
   <div id="hn-pad" aria-label="On-screen race controls">
-    <button class="hn-btn" id="hn-steer-l" type="button" data-bit="1" aria-label="Steer left">&#9664;</button>
-    <button class="hn-btn" id="hn-steer-r" type="button" data-bit="2" aria-label="Steer right">&#9654;</button>
+    <div id="hn-steer" aria-label="Steering: drag the knob left or right"><div id="hn-knob"></div></div>
     <button class="hn-btn" id="hn-brake" type="button" data-bit="8" aria-label="Brake">BRAKE</button>
     <button class="hn-btn" id="hn-go" type="button" data-bit="4" aria-label="Accelerate">GO</button>
     <button class="hn-btn" id="hn-fire" type="button" data-bit="16" aria-label="Fire missile">FIRE</button>
@@ -432,10 +440,44 @@
       });
       btn.addEventListener('contextmenu', function(e) { e.preventDefault(); });
     });
+    // Steering slider: the knob follows the finger along the track; past the dead zone it
+    // holds steer-left (bit 1) or steer-right (bit 2).
+    var steer = document.getElementById('hn-steer'), knob = document.getElementById('hn-knob');
+    var steerId = null;
+    function steerSet(bits, offset) {
+      touchMask = (touchMask & ~3) | bits;
+      knob.style.transform = 'translateX(' + offset + 'px)';
+      publishMask();
+    }
+    function steerMove(e) {
+      var r = steer.getBoundingClientRect();
+      var travel = r.width / 2 - 34;
+      var dx = Math.max(-travel, Math.min(travel, e.clientX - (r.left + r.width / 2)));
+      steerSet(dx < -travel * 0.2 ? 1 : dx > travel * 0.2 ? 2 : 0, dx);
+    }
+    function steerEnd(e) {
+      if (e.pointerId !== steerId) return;
+      steerId = null;
+      steer.classList.remove('active');
+      steerSet(0, 0);
+    }
+    steer.addEventListener('pointerdown', function(e) {
+      if (steerId !== null) return;
+      e.preventDefault();
+      steerId = e.pointerId;
+      try { steer.setPointerCapture(e.pointerId); } catch (x) {}
+      steer.classList.add('active');
+      steerMove(e);
+      if (navigator.vibrate) navigator.vibrate(8);
+    });
+    steer.addEventListener('pointermove', function(e) { if (e.pointerId === steerId) steerMove(e); });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(n) { steer.addEventListener(n, steerEnd); });
+    steer.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+    function releaseSteer() { if (steerId !== null) steerEnd({ pointerId: steerId }); }
     // Never leave a key stuck if the page loses focus mid-press.
-    window.addEventListener('blur', function() { Object.keys(held).forEach(release); });
+    window.addEventListener('blur', function() { Object.keys(held).forEach(release); releaseSteer(); });
     document.addEventListener('visibilitychange', function() {
-      if (document.visibilityState === 'hidden') Object.keys(held).forEach(release);
+      if (document.visibilityState === 'hidden') { Object.keys(held).forEach(release); releaseSteer(); }
     });
 
     document.getElementById('hn-toggle').addEventListener('click', function() {

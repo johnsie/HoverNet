@@ -4,6 +4,17 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.11 - 2026-10-15
+
+### Changed
+- Web client on phones: the two steering arrows are replaced by a steering slider -- drag the
+  knob left or right to steer. The other race controls are unchanged.
+
+### Fixed
+- Web client on phones: the pause menu's top buttons (Resume, New Local Race, Online
+  Multiplayer) could not be tapped because the race controls floated over them; the race
+  controls are now hidden while paused.
+
 ## 2.0.10 - 2026-10-15
 
 ### Added
