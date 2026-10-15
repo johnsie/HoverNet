@@ -6138,6 +6138,20 @@ int RunClient(int argc, char** argv)
             if (jump) controlState |= MR_MainCharacter::eJump;
             if (selectWeapon) controlState |= MR_MainCharacter::eSelectWeapon;
             session.SetControlState(controlState, 0);
+#ifdef HOVERNET_WEB
+            // The simulation steps by wall-clock time, so after a browser stall (hidden tab, a
+            // long GC or decode pause, a slow phone frame) it used to replay the whole gap in one
+            // go: hovercraft jumped into walls and platforms and missiles skipped past targets.
+            // Drop gaps over a quarter of a second instead of replaying them.
+            {
+                static Uint32 lastSimTicks = 0;
+                const Uint32 nowTicks = SDL_GetTicks();
+                if (lastSimTicks != 0 && nowTicks - lastSimTicks > 250) {
+                    session.SetSimulationTime(session.GetSimulationTime());
+                }
+                lastSimTicks = nowTicks;
+            }
+#endif
             session.Process();
 
 #ifdef HOVERNET_GAME2_PLAYER

@@ -4,6 +4,13 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.13 - 2026-10-16
+
+### Fixed
+- Web client: after a browser stall (hidden tab, long pause, slow phone frame) the race no longer
+  replays the whole gap at once, which threw hovercraft into walls and platforms and let
+  missiles skip past targets.
+
 ## 2.0.12 - 2026-10-15
 
 ### Changed
