@@ -143,7 +143,7 @@
     // Last few game/startup log lines, shown while loading so a stall can be diagnosed on a phone.
     var logLines = [];
     function logLine(text) {
-      if (document.body.classList.contains('running')) return;
+      if (document.body.classList.contains('running')) return;  // game is up; stop collecting
       logLines.push(String(text).slice(0, 160));
       if (logLines.length > 5) logLines.shift();
       document.getElementById('startlog').textContent = logLines.join('\n');
@@ -195,6 +195,7 @@
     function waitForFirstFrame() {
       var started = Date.now();
       (function check() {
+        if (loaderNode.classList.contains('error')) return;  // a real error is showing; leave it
         var frames = framesDrawn();
         if (frames >= 2 || (frames < 0 && Date.now() - started > 4000) || Date.now() - started > 60000) {
           document.body.classList.add('running');
@@ -214,13 +215,14 @@
         setTimeout(check, 150);
       })();
     }
-    // Surface crashes instead of leaving a silent blank screen.
+    // Stray page errors during startup are shown in the on-screen log but are not treated as fatal:
+    // genuinely fatal ones reach us through Module.onAbort / setStatus.
     window.addEventListener('error', function(e) {
       if (/unwind/.test(String(e.message))) return;  // Emscripten's normal Asyncify control flow
-      if (!document.body.classList.contains('running')) showError('HoverNet hit an error: ' + (e.message || 'unknown'));
+      logLine('error: ' + (e.message || 'unknown'));
     });
     window.addEventListener('unhandledrejection', function(e) {
-      if (!document.body.classList.contains('running')) showError('HoverNet hit an error: ' + (e.reason && e.reason.message || e.reason));
+      logLine('rejection: ' + (e.reason && e.reason.message || e.reason));
     });
 
     // SDL sizes its window when main() runs and only follows the canvas's CSS size on a window
