@@ -3260,6 +3260,16 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
     }
 
+#ifdef HOVERNET_WEB
+    // The page's on-screen race controls (top-right buttons, touch pad) float above the canvas
+    // and swallowed clicks on the menu buttons beneath them; hide them while paused.
+    struct PausedFlag {
+        int mSaved = gHoverNetInRace;
+        PausedFlag() { gHoverNetInRace = 0; }
+        ~PausedFlag() { gHoverNetInRace = mSaved; }
+    } pausedFlag;
+#endif
+
     const char* options[] = {"RESUME RACE", pIsOnline ? "LEAVE RACE" : "NEW LOCAL RACE",
                              "ONLINE MULTIPLAYER", "SETTINGS", "CONTROLS", "QUIT HOVERNET"};
     constexpr int optionCount = sizeof(options) / sizeof(options[0]);
