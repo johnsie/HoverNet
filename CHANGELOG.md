@@ -4,6 +4,13 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.9 - 2026-10-15
+
+### Changed
+- Web client on phones: holding the phone in portrait now shows a full-screen "Rotate your
+  phone" prompt on every screen (including loading and the menus), with a
+  "Continue in portrait" option for the rest of the session.
+
 ## 2.0.8 - 2026-10-15
 
 ### Changed
