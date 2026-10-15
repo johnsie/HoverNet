@@ -18,7 +18,7 @@ variables:
   WEB_EMSDK_VERSION: "3.1.74"
   WINDOWS_RUNNER_TAG: "windows"
   SERVER_RUNNER_TAG: "race-server"
-  CMAKE_BUILD_PARALLEL_LEVEL: "2"
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
 
 default:
   interruptible: true
