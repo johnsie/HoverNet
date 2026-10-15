@@ -4,6 +4,14 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.6 - 2026-10-15
+
+### Fixed
+- Web client on phones: real startup errors are no longer overwritten by "Still loading…",
+  stray page errors no longer break the loader, the last startup log lines are shown while
+  loading, and a browser that draws no frame within 25 seconds falls back to the software
+  renderer automatically.
+
 ## 2.0.5 - 2026-10-15
 
 ### Fixed
