@@ -10,7 +10,7 @@ Configure protected runners with these tags, or override the CI variables in Git
 - `windows`: PowerShell, Visual Studio MSBuild with the **C++ CMake tools for Windows** component, all client dependencies, and Inno Setup (`iscc` on `PATH`).
 - `race-server` also runs the browser build. If `EMSDK` is unset, the web job installs the pinned SDK under the runner user's cache and reuses it on later builds.
 
-Mark the `race-server` runner and production environments as protected. The RaceServer deploy remains manual and tag-only. The web deploy runs automatically from the protected default branch and remains manual for tags.
+Mark the `race-server` runner and production environments as protected. The RaceServer deploy remains manual and tag-only. The web deploy runs automatically from the protected default branch and for tags.
 
 The browser client is built by `build:game:web` and packaged as a standalone
 static artifact. `deploy:web` runs from the default branch after the web build

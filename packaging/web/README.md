@@ -82,7 +82,7 @@ enabled site's configuration prevents a safe reload of all sites.
 
 The `race-server` runner downloads the pinned Emscripten SDK into its user cache
 when `$EMSDK` is not configured. The protected default-branch pipeline deploys
-the web artifact automatically after building it; tagged deploys are manual.
+the web artifact automatically after building it; tagged releases deploy automatically too.
 The job invokes `sudo /usr/local/sbin/hovernet-web-deploy` with a versioned
 archive.
 Install that script root-owned and grant the GitLab runner passwordless sudo
