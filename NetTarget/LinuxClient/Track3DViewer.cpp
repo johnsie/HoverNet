@@ -59,10 +59,65 @@ void HoverNetCleanWebFactory();
 // touch pad (packaging/web/shell.html) and OR-ed into the same control state
 // the keyboard and gamepad feed. Going through the game rather than synthetic
 // key events means remapped keyboard bindings never affect touch play.
+enum HoverNetTouchBits {
+    eTouchLeft = 1, eTouchRight = 2, eTouchAccelerate = 4, eTouchBrake = 8,
+    eTouchFire = 16, eTouchJump = 32, eTouchSelectWeapon = 64
+};
 static int gHoverNetTouchMask = 0;
 extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_set_touch_mask(int mask)
 {
     gHoverNetTouchMask = mask;
+}
+
+// True while the race loop is running; the page shows the on-screen race
+// controls only then, so they never cover the menus.
+static int gHoverNetInRace = 0;
+extern "C" EMSCRIPTEN_KEEPALIVE int hovernet_in_race(void)
+{
+    return gHoverNetInRace;
+}
+
+// Soft-keyboard bridge. Menu text fields are drawn by ImGui inside the canvas,
+// so iOS/Android never show a keyboard for them. The page keeps a real (hidden)
+// <input> for that, asks here whether a field is active, and feeds what the
+// player types back as ordinary SDL events so ImGui and in-race chat see the
+// same input as a hardware keyboard.
+extern "C" EMSCRIPTEN_KEEPALIVE int hovernet_wants_text(void)
+{
+#ifdef HOVERNET_GAME2_PLAYER
+    return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantTextInput ? 1 : 0;
+#else
+    return 0;
+#endif
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_text_input(const char* utf8)
+{
+    if (utf8 == nullptr || utf8[0] == '\0') return;
+    SDL_Event event;
+    SDL_zero(event);
+    event.type = SDL_TEXTINPUT;
+    std::snprintf(event.text.text, sizeof(event.text.text), "%s", utf8);
+    SDL_PushEvent(&event);
+}
+
+// key: 1 Backspace, 2 Enter, 3 Tab, 4 Left, 5 Right, 6 Up, 7 Down, 8 Delete, 9 Home, 10 End
+extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_text_key(int key)
+{
+    static const SDL_Keycode kCodes[] = {
+        SDLK_UNKNOWN, SDLK_BACKSPACE, SDLK_RETURN, SDLK_TAB, SDLK_LEFT, SDLK_RIGHT,
+        SDLK_UP, SDLK_DOWN, SDLK_DELETE, SDLK_HOME, SDLK_END
+    };
+    if (key < 1 || key >= static_cast<int>(sizeof(kCodes) / sizeof(kCodes[0]))) return;
+    for (const Uint32 type : { static_cast<Uint32>(SDL_KEYDOWN), static_cast<Uint32>(SDL_KEYUP) }) {
+        SDL_Event event;
+        SDL_zero(event);
+        event.type = type;
+        event.key.state = type == SDL_KEYDOWN ? SDL_PRESSED : SDL_RELEASED;
+        event.key.keysym.sym = kCodes[key];
+        event.key.keysym.scancode = SDL_GetScancodeFromKey(kCodes[key]);
+        SDL_PushEvent(&event);
+    }
 }
 #endif
 
@@ -1274,6 +1329,13 @@ float LoadUiScale()
     if (in >> scale && scale >= 0.75f && scale <= 1.5f) {
         return scale;
     }
+#ifdef HOVERNET_WEB
+    // No saved choice: phones get a tighter default so menus fit their short
+    // landscape screens. The settings slider still overrides it.
+    if (emscripten_run_script_int("Math.min(window.innerWidth, window.innerHeight)") < 600) {
+        return 0.85f;
+    }
+#endif
     return 1.0f;
 }
 
@@ -5520,6 +5582,12 @@ int RunClient(int argc, char** argv)
     // anything once online, but it's harmless to leave enabled for local play.
     std::string chatBuffer;
     SDL_StartTextInput();
+#ifdef HOVERNET_WEB
+    struct InRaceFlag {
+        InRaceFlag() { gHoverNetInRace = 1; }
+        ~InRaceFlag() { gHoverNetInRace = 0; }
+    } inRaceFlag;
+#endif
     while (running && (frameLimit < 0 || framesRendered < frameLimit)) {
         gameController.Refresh();
         bool sceneChanged = renderStats.actorsRendered > 0;

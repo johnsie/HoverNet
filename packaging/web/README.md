@@ -29,12 +29,14 @@ controls toggle, a portrait "rotate your device" hint, and an on-screen race pad
 (steer, GO, BRAKE, FIRE, JUMP, WEAPON, MENU). Held buttons are passed to the
 game through the exported `hovernet_set_touch_mask` function and combined with
 keyboard and gamepad input, so remapped keys do not matter; MENU taps Escape for
-the pause menu. Menus work through SDL's touch-to-mouse emulation. The page
-blocks pinch-zoom and pull-to-refresh and uses `100dvh` so mobile toolbars do
-not clip the canvas. The canvas keeps its 4:3 aspect ratio.
+the pause menu. Menus work through SDL's touch-to-mouse emulation. The canvas
+fills the page (SDL follows its CSS size); the in-race 4:3 frame is letterboxed.
+The page blocks pinch-zoom and pull-to-refresh and uses `100dvh` so mobile
+toolbars do not clip the canvas. The pad's visibility is remembered.
 
 The start-up screen shows a progress bar driven by Emscripten's download status
-and a Try again button if loading fails.
+(`Downloading game data — x of y MB`, then `Preparing…`), and a Try again button
+if loading fails.
 
 ## Install the WebSocket gateway
 
@@ -96,7 +98,7 @@ before enabling production deployment.
 ## Repair the browser multiplayer gateway
 
 On Python 3.10 or later, Debian's `websockets 9.1` package passes a removed
-`loop` argument to asyncio APIs, so browser WebSocket connections fail. To
+`loop` argument to `asyncio.Lock`, so browser WebSocket handshakes fail. To
 install the compatibility fix and restart the gateway on `.181`, run:
 
 ```sh
@@ -123,3 +125,16 @@ That script creates a self-signed HoverNet origin certificate, installs the
 WebSocket gateway and scoped GitLab deploy sudo rule, and configures the
 Apache vhost. It does not request a public certificate because HAProxy owns
 the public TLS certificate.
+
+## Mobile behaviour
+
+- **Text fields**: menu text boxes are drawn by ImGui inside the canvas, so phones
+  never raise a keyboard for them. `shell.html` keeps a hidden real `<input>`;
+  tapping a field (the game reports `hovernet_wants_text`) focuses it, and typed
+  text/Backspace/Enter go back to the game as SDL events (`hovernet_text_input`,
+  `hovernet_text_key`). The page resizes to the visual viewport while the
+  keyboard is open so the field stays visible.
+- **Screen space**: race controls and the controls/fullscreen buttons appear only
+  during a race (`hovernet_in_race`); the portrait hint is a slim banner rather
+  than a blocking overlay; the canvas respects the notch/safe-area insets; phones
+  default to an 85% UI scale until the player picks one in Settings.
