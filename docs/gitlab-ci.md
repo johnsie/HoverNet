@@ -14,8 +14,8 @@ Mark the `race-server` runner and production environments as protected. The Race
 
 The browser client is built by `build:game:web` and packaged as a standalone
 static artifact. `deploy:web` runs from the default branch after the web build
-and has its own `production-web` resource group. Tagged web deployments remain
-manual. On `192.168.10.181`, install
+and has its own `production-web` resource group. Tagged web deployments run
+automatically too. On `192.168.10.181`, install
 `packaging/web/hovernet-web-deploy` as the root-owned
 `/usr/local/sbin/hovernet-web-deploy` wrapper and permit the `gitlab-runner`
 account to invoke only that wrapper with passwordless sudo. The wrapper
