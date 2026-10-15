@@ -78,15 +78,20 @@
     #hn-menu { top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); min-height: 44px; opacity: .8; }
     #hn-weapon { right: calc(max(14px, env(safe-area-inset-right)) + 184px); bottom: calc(max(18px, env(safe-area-inset-bottom)) + 100px); width: 60px; height: 60px; font-size: 11px; }
 
-    /* Slim hint instead of a full-screen block: menus are usable in portrait. */
-    #hn-rotate { position: fixed; left: 8px; right: 8px; z-index: 10; display: none; align-items: center; gap: .6rem;
-      bottom: max(8px, env(safe-area-inset-bottom)); padding: .5rem .8rem; box-sizing: border-box; border-radius: 12px;
-      background: rgba(8, 12, 20, .92); border: 1px solid rgba(160, 200, 255, .4); font-size: 14px; }
-    #hn-rotate .icon { font-size: 22px; }
-    #hn-rotate .msg { flex: 1; }
-    #hn-rotate button { min-width: 44px; min-height: 44px; padding: 0 .8rem; border-radius: 10px; border: 1px solid #9bbcf0;
-      background: transparent; color: inherit; font: inherit; }
-    body.touch.running.in-race.portrait:not(.rotate-dismissed) #hn-rotate { display: flex; }
+    /* Phones in portrait are asked to rotate: every screen is laid out for landscape first. The
+       prompt covers loading and menus too, and can be dismissed for the rest of the session. */
+    #hn-rotate { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column; align-items: center;
+      justify-content: center; gap: 1.1rem; padding: 2rem 1.5rem; box-sizing: border-box; text-align: center;
+      background: radial-gradient(ellipse at 50% 35%, #14213a 0%, #080c14 75%); }
+    #hn-rotate .icon { font-size: 64px; line-height: 1; display: inline-block; animation: hn-turn 2.6s ease-in-out infinite; }
+    @keyframes hn-turn { 0%, 25% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
+    @media (prefers-reduced-motion: reduce) { #hn-rotate .icon { animation: none; transform: rotate(-90deg); } }
+    #hn-rotate h2 { margin: 0; font: 800 1.35rem/1.2 system-ui, sans-serif; letter-spacing: .06em; color: #eaf2ff; }
+    #hn-rotate p { margin: 0; max-width: 22em; color: #9fb4d2; font-size: .95rem; line-height: 1.45; }
+    #hn-rotate .small { color: #6f86a8; font-size: .8rem; }
+    #hn-rotate button { min-height: 44px; padding: 0 1.3rem; border-radius: 10px; border: 1px solid #9bbcf0;
+      background: transparent; color: inherit; font: inherit; cursor: pointer; }
+    body.touch.portrait:not(.rotate-dismissed) #hn-rotate { display: flex; }
     @media (max-height: 420px) { #hn-steer-l, #hn-steer-r { width: 72px; height: 72px; } #hn-steer-r { left: calc(max(14px, env(safe-area-inset-left)) + 84px); } }
   </style>
 </head>
@@ -114,10 +119,12 @@
     <button class="hn-btn" id="hn-menu" type="button" aria-label="Pause menu">MENU</button>
     <button class="hn-btn" id="hn-weapon" type="button" data-bit="64" aria-label="Select weapon">WEAPON</button>
   </div>
-  <div id="hn-rotate" role="status">
-    <div class="icon" aria-hidden="true">&#128241;&#8635;</div>
-    <div class="msg">Racing is best in landscape &mdash; rotate your device.</div>
-    <button type="button" id="hn-rotate-ok" aria-label="Dismiss">OK</button>
+  <div id="hn-rotate" role="dialog" aria-label="Rotate your device">
+    <div class="icon" aria-hidden="true">&#128241;</div>
+    <h2>ROTATE YOUR PHONE</h2>
+    <p>HoverNet is built for landscape. Turn your phone sideways for the best view and controls.</p>
+    <p class="small">If it won't turn, switch off Portrait Orientation Lock in Control Centre.</p>
+    <button type="button" id="hn-rotate-ok">Continue in portrait</button>
   </div>
   <input id="hn-text" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off"
          autocapitalize="off" spellcheck="false" aria-label="Text entry" tabindex="-1">
@@ -260,8 +267,16 @@
         document.addEventListener(n, function(e) { e.preventDefault(); });
       });
       document.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+      // Remember "continue in portrait" for this browser session only; the prompt returns next visit.
+      var rotateKey = 'hn-rotate-dismissed';
+      try { if (sessionStorage.getItem(rotateKey)) document.body.classList.add('rotate-dismissed'); } catch (e) {}
       document.getElementById('hn-rotate-ok').addEventListener('click', function() {
         document.body.classList.add('rotate-dismissed');
+        try { sessionStorage.setItem(rotateKey, '1'); } catch (e) {}
+      });
+      // Back in landscape: clear the dismissal so turning portrait again asks again.
+      window.addEventListener('resize', function() {
+        if (window.innerWidth > window.innerHeight) document.body.classList.remove('rotate-dismissed');
       });
     }
 
