@@ -4,6 +4,14 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.3 - 2026-10-15
+
+### Fixed
+- Web client: the desktop GUI no longer appears stretched, and phones no longer show a
+  blank screen after the download (the loader stays up until the first frame is drawn,
+  and startup errors are shown on the page).
+- The sanitizer job runs only from a nightly schedule.
+
 ## 2.0.2 - 2026-10-15
 
 ### Changed
