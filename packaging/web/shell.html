@@ -201,7 +201,16 @@
           Module.canvas.focus();
           return;
         }
-        if (Date.now() - started > 15000) statusNode.textContent = 'Still loading… if this stays, try adding ?renderer=software to the address.';
+        var waited = Date.now() - started;
+        if (waited > 12000) statusNode.textContent = 'Still loading…';
+        // No frame after a long wait: assume this browser's WebGL path is stuck. Remember that and
+        // reload once so the game starts with the software renderer instead.
+        if (waited > 25000 && store.get('hn-renderer') !== 'software') {
+          store.set('hn-renderer', 'software');
+          statusNode.textContent = 'Switching to compatibility mode…';
+          location.reload();
+          return;
+        }
         setTimeout(check, 150);
       })();
     }

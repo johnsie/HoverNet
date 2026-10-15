@@ -69,8 +69,10 @@ bool SDL2GraphicsBackend::Initialize(void* windowHandle, int width, int height)
     // canvas each frame, which is far too slow for a page-sized canvas. Use the WebGL renderer
     // (SDL converts the RGB24 game texture itself); fall back to software on a fresh window if
     // WebGL is unavailable. No vsync flag: the browser paces presents.
-    // "?renderer=software" in the page address forces the software renderer (diagnostics).
-    const bool forceSoftware = emscripten_run_script_int("/[?&]renderer=software/.test(location.search) ? 1 : 0") != 0;
+    // The page sets localStorage "hn-renderer" = "software" when WebGL failed to produce a frame
+    // on this browser (see shell.html), so such browsers skip the accelerated renderer.
+    const bool forceSoftware = emscripten_run_script_int(
+        "(function(){try{return localStorage.getItem('hn-renderer')==='software'?1:0}catch(e){return 0}})()") != 0;
     if (!forceSoftware) m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED);
     if (!m_renderer && !forceSoftware) {
         SDL_DestroyWindow(m_window);
