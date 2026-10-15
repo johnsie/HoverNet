@@ -72,3 +72,10 @@ in parallel instead of waiting for earlier stages. The web job stays in the firs
 tree in `~/.cache/hovernet-web-build` on the runner (guarded by `flock`), so
 pipelines rebuild only changed sources; delete that directory to force a clean
 build. Web builds are skipped for changes that touch no web inputs (docs only).
+
+### Nightly sanitizers
+
+`build:game:linux:sanitizers` (ASan + UBSan build and full `ctest`) is slow, so it runs
+only from a nightly pipeline schedule, not on pushes, merge requests or tags. Every other
+job skips scheduled pipelines (`.no_schedule`). Create the schedule once on the GitLab
+server with `sudo bash packaging/web/gitlab-nightly-schedule.sh` (02:00 Europe/London).
