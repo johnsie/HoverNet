@@ -142,7 +142,20 @@ inline void HoverNetFrameDelay()
     static Uint32 frameStart = 0;
     const Uint32 now = SDL_GetTicks();
     const Uint32 spent = now - frameStart;
+    // Browser mouse/touch events are pushed into SDL while we sleep here. Loops restore the
+    // renderer's 1024x768 logical size before this call, and SDL rescales every event queued while
+    // a logical size is set -- but the ImGui menus draw 1:1 in real window pixels, so clicks and
+    // slider drags landed in the wrong place unless the window was exactly 1024x768. Keep the
+    // logical size off while events can arrive; put it back before the next frame polls.
+    SDL_Window* const window = SDL_GetWindowFromID(1);
+    SDL_Renderer* const renderer = window != nullptr ? SDL_GetRenderer(window) : nullptr;
+    int logicalW = 0, logicalH = 0;
+    if (renderer != nullptr) {
+        SDL_RenderGetLogicalSize(renderer, &logicalW, &logicalH);
+        SDL_RenderSetLogicalSize(renderer, 0, 0);
+    }
     emscripten_sleep(spent < 16 ? 16 - spent : 0);
+    if (renderer != nullptr) SDL_RenderSetLogicalSize(renderer, logicalW, logicalH);
     frameStart = SDL_GetTicks();
 #else
     SDL_Delay(16);
