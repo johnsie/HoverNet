@@ -30,6 +30,9 @@
     @media (prefers-reduced-motion: reduce) { #bar.indeterminate > i { animation: none; width: 100%; opacity: .5; } }
     #status { margin: 0; min-height: 1.4em; color: #b7c6da; font-size: .95rem; }
     #status.error { color: #ff9b9b; }
+    #startlog { margin: 0; max-width: 90vw; max-height: 7em; overflow: hidden; color: #6f86a8; font: 11px/1.35 ui-monospace, monospace;
+      text-align: left; white-space: pre-wrap; word-break: break-all; }
+    #startlog:empty { display: none; }
     #loader .hint { margin: 0; max-width: 28em; color: #6f86a8; font-size: .8rem; }
     #loader.error #bar { display: none; }
     #retry { display: none; min-height: 44px; padding: 0 1.4rem; border-radius: 10px; border: 1px solid #9bbcf0;
@@ -93,6 +96,7 @@
     <p class="tag">Hovercraft racing in your browser</p>
     <div id="bar" class="indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Loading"><i></i></div>
     <p id="status" role="status" aria-live="polite">Loading HoverNet…</p>
+    <pre id="startlog" aria-hidden="true"></pre>
     <button id="retry" type="button" onclick="location.reload()">Try again</button>
     <p class="hint" id="hint">First visit downloads about 13&nbsp;MB of tracks and graphics; it is cached for next time.</p>
   </div>
@@ -136,11 +140,19 @@
       loaderNode.classList.add('error');
       document.getElementById('hint').textContent = 'Check your connection and try again.';
     }
+    // Last few game/startup log lines, shown while loading so a stall can be diagnosed on a phone.
+    var logLines = [];
+    function logLine(text) {
+      if (document.body.classList.contains('running')) return;
+      logLines.push(String(text).slice(0, 160));
+      if (logLines.length > 5) logLines.shift();
+      document.getElementById('startlog').textContent = logLines.join('\n');
+    }
     function mb(n) { return (n / 1048576).toFixed(1); }
     var Module = {
       canvas: document.getElementById('canvas'),
-      print: function(text) { console.log(text); },
-      printErr: function(text) { console.error(text); },
+      print: function(text) { console.log(text); logLine(text); },
+      printErr: function(text) { console.error(text); logLine(text); },
       // Emscripten reports "Downloading data... (loaded/total)", then
       // "Preparing... (done/total)", then an empty string when finished.
       setStatus: function(text) {
@@ -189,7 +201,7 @@
           Module.canvas.focus();
           return;
         }
-        if (Date.now() - started > 15000) statusNode.textContent = 'Still loading… this can take a while on a slow connection.';
+        if (Date.now() - started > 15000) statusNode.textContent = 'Still loading… if this stays, try adding ?renderer=software to the address.';
         setTimeout(check, 150);
       })();
     }
