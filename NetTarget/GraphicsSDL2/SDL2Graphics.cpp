@@ -149,6 +149,20 @@ bool SDL2GraphicsBackend::SetPalette(const uint8_t* palette, int paletteSize)
     return CreateSDLPalette(); 
 }
 
+bool SDL2GraphicsBackend::ConvertToRGBA(const uint8_t* buffer, int width, int height, uint8_t* out) const
+{
+    if (!m_paletteRGB || !buffer || !out) return false;
+    const size_t count = static_cast<size_t>(width) * height;
+    for (size_t i = 0; i < count; ++i) {
+        const uint8_t* rgb = m_paletteRGB + buffer[i] * 3;
+        out[i * 4 + 0] = rgb[0];
+        out[i * 4 + 1] = rgb[1];
+        out[i * 4 + 2] = rgb[2];
+        out[i * 4 + 3] = 255;
+    }
+    return true;
+}
+
 bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height)
 {
     if (!m_renderer || !m_texture || !m_paletteRGB || !buffer) return false;
@@ -259,5 +273,6 @@ void SDL2GraphicsBackend::FreeBuffer(uint8_t* buffer) {}
 bool SDL2GraphicsBackend::SetPalette(const uint8_t* palette, int paletteSize) { return false; }
 bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height) { return false; }
 bool SDL2GraphicsBackend::Clear(uint8_t color) { return false; }
+bool SDL2GraphicsBackend::ConvertToRGBA(const uint8_t*, int, int, uint8_t*) const { return false; }
 bool SDL2GraphicsBackend::CreateSDLPalette() { return false; }
 #endif

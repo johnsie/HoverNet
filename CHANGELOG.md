@@ -4,6 +4,21 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.14 - 2026-10-16
+
+### Added
+- Web client: VR mode for the Meta Quest browser. An ENTER VR button (shown only in a headset
+  browser) puts the game on a big virtual screen with real stereo 3D in races -- the game renders
+  one view per eye -- and a controller to drive, fire, jump and switch between the chase and
+  cockpit views; menus are pointed at and clicked with the controller. Desktop and phone
+  browsers are unaffected.
+
+### Fixed
+- A hovercraft could stop dead against a wall or platform instead of bouncing (most often at
+  high speed): the bounce is triggered by a contact ring slightly wider than the space the craft
+  may move in, so it could rest just outside it. A craft whose moves keep being refused is now
+  bounced back.
+
 ## 2.0.13 - 2026-10-16
 
 ### Fixed

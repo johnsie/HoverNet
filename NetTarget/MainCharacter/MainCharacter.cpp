@@ -279,6 +279,7 @@ MR_MainCharacter::MR_MainCharacter( const MR_ObjectFromFactoryId& pId )
    mZSpeed                = 0;
    mXSpeedBeforeCollision = 0;
    mYSpeedBeforeCollision = 0;
+   mBlockedSteps          = 0;
    mOnFloor               = FALSE;
    mCabinOrientation      = 0; // mOrientation; mOrientation is not set yet
    mOutOfControlDuration  = 0;
@@ -1063,6 +1064,9 @@ int MR_MainCharacter::InternalSimulate( MR_SimulationTime pDuration, MR_Level* p
    BOOL              lSuccessfullTry;
    MR_SimulationTime lDuration = pDuration;
 
+   const MR_Int32 lStartX = mPosition.mX;
+   const MR_Int32 lStartY = mPosition.mY;
+
    lShape.mPosition.mX = mPosition.mX+lTranslation.mX;
    lShape.mPosition.mY = mPosition.mY+lTranslation.mY;
    lShape.mPosition.mZ = mPosition.mZ+lTranslation.mZ;
@@ -1173,6 +1177,27 @@ int MR_MainCharacter::InternalSimulate( MR_SimulationTime pDuration, MR_Level* p
 
    }
 
+
+   // Stuck guard. The bounce comes from the contact effect, which only fires when the craft is
+   // within the (larger) contact ring of a wall. A fast craft (speed doubler) or an awkward
+   // corner can be refused every move while resting just outside that ring, so it sat against
+   // the wall instead of bouncing. If horizontal moves keep being rejected, bounce it back.
+   if( mMasterMode )
+   {
+      const bool lMoved = (mPosition.mX != lStartX) || (mPosition.mY != lStartY);
+      const double lSpeedSquared = mXSpeed*mXSpeed + mYSpeed*mYSpeed;
+
+      if( lMoved || lSpeedSquared < 0.09 )
+      {
+         mBlockedSteps = 0;
+      }
+      else if( ++mBlockedSteps >= 4 )
+      {
+         mBlockedSteps = 0;
+         mXSpeed = -mXSpeed*0.5;
+         mYSpeed = -mYSpeed*0.5;
+      }
+   }
 
    if( (mFuelLevel < 0.0)&& mMasterMode )
    {

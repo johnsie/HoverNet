@@ -93,13 +93,42 @@ EM_ASYNC_JS(void, hovernet_js_wait_frame, (), {
     });
 });
 
+// ---- VR (Meta Quest browser, WebXR) -- see shell.html "VR" and docs. All of this is inert unless
+// the player pressed Enter VR; desktop and phone browsers never take these paths.
+EM_JS(int, hovernet_js_is_quest, (), {
+    return /OculusBrowser|Quest/i.test(navigator.userAgent) ? 1 : 0;
+});
+EM_JS(int, hovernet_js_vr_active, (), {
+    return (window.hnVR && window.hnVR.active) ? 1 : 0;
+});
+// Inside a headset the page's requestAnimationFrame is paused; pace to the XR frame instead.
+EM_ASYNC_JS(void, hovernet_js_vr_wait_frame, (), {
+    await new Promise(function(resolve) {
+        var done = false;
+        function finish() { if (!done) { done = true; resolve(); } }
+        if (window.hnVR && window.hnVR.waiters) window.hnVR.waiters.push(finish);
+        setTimeout(finish, 40);
+    });
+});
+// A 2D screen (menus) shown on the virtual screen: copy the canvas now, while it still holds the
+// frame that was just presented.
+EM_JS(void, hovernet_js_vr_submit_mono, (), {
+    if (window.hnVR && window.hnVR.submitMono) window.hnVR.submitMono();
+});
+// A stereo race frame: two RGBA images, left then right.
+EM_JS(void, hovernet_js_vr_submit_stereo, (const unsigned char* left, const unsigned char* right, int w, int h), {
+    if (window.hnVR && window.hnVR.submitStereo) {
+        window.hnVR.submitStereo(HEAPU8.subarray(left, left + w * h * 4), HEAPU8.subarray(right, right + w * h * 4), w, h);
+    }
+});
+
 // Bitmask of on-screen touch controls currently held, written by the page's
 // touch pad (packaging/web/shell.html) and OR-ed into the same control state
 // the keyboard and gamepad feed. Going through the game rather than synthetic
 // key events means remapped keyboard bindings never affect touch play.
 enum HoverNetTouchBits {
     eTouchLeft = 1, eTouchRight = 2, eTouchAccelerate = 4, eTouchBrake = 8,
-    eTouchFire = 16, eTouchJump = 32, eTouchSelectWeapon = 64
+    eTouchFire = 16, eTouchJump = 32, eTouchSelectWeapon = 64, eTouchToggleView = 128
 };
 static int gHoverNetTouchMask = 0;
 extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_set_touch_mask(int mask)
@@ -184,10 +213,48 @@ inline bool HoverNetIsTouchDevice()
 // 16 ms sleep. In the browser a fixed sleep stacks on top of the (software) render and canvas
 // copy, so a slow frame took 16 ms longer than it needed to; sleep only what is left of a
 // 16 ms frame budget (always yielding once so the page can process input and paint).
+// VR mode: true only inside a headset session on web. Natively, HOVERNET_TEST_VR=<dir> pretends
+// VR is on and writes each eye's frame there as a PPM, so the stereo camera can be checked
+// without a headset.
+static bool gHoverNetVrStereoSubmitted = false;
+inline bool HoverNetVrActive()
+{
+#ifdef HOVERNET_WEB
+    return hovernet_js_vr_active() != 0;
+#else
+    static const bool testVr = std::getenv("HOVERNET_TEST_VR") != nullptr;
+    return testVr;
+#endif
+}
+
+inline void HoverNetVrSubmitStereo(const uint8_t* pLeft, const uint8_t* pRight, int pWidth, int pHeight)
+{
+    gHoverNetVrStereoSubmitted = true;
+#ifdef HOVERNET_WEB
+    hovernet_js_vr_submit_stereo(pLeft, pRight, pWidth, pHeight);
+#else
+    static int frame = 0;
+    if (frame < 3) {
+        const char* dir = std::getenv("HOVERNET_TEST_VR");
+        for (int eye = 0; eye < 2; ++eye) {
+            const std::string path = std::string(dir) + "/eye" + (eye == 0 ? "L" : "R") + std::to_string(frame) + ".ppm";
+            if (FILE* out = std::fopen(path.c_str(), "wb")) {
+                std::fprintf(out, "P6\n%d %d\n255\n", pWidth, pHeight);
+                const uint8_t* rgba = eye == 0 ? pLeft : pRight;
+                for (int i = 0; i < pWidth * pHeight; ++i) std::fwrite(rgba + i * 4, 1, 3, out);
+                std::fclose(out);
+            }
+        }
+    }
+    ++frame;
+#endif
+}
+
 inline void HoverNetFrameDelay()
 {
 #ifdef HOVERNET_WEB
     ++gHoverNetFrames;
+    const bool vr = HoverNetVrActive();
     // Browser mouse/touch events are pushed into SDL while we wait here. Loops restore the
     // renderer's logical size before this call, and SDL rescales every event queued while a
     // logical size is set -- but the ImGui menus draw 1:1 in real window pixels, so clicks and
@@ -200,7 +267,16 @@ inline void HoverNetFrameDelay()
         SDL_RenderGetLogicalSize(renderer, &logicalW, &logicalH);
         SDL_RenderSetLogicalSize(renderer, 0, 0);
     }
-    hovernet_js_wait_frame();
+    if (vr) {
+        // In a headset: menus go to the virtual screen as a copy of the canvas (a race frame has
+        // already been sent as two eye images), and the loop paces to the headset's frames.
+        if (!gHoverNetVrStereoSubmitted) hovernet_js_vr_submit_mono();
+        gHoverNetVrStereoSubmitted = false;
+        hovernet_js_vr_wait_frame();
+    }
+    else {
+        hovernet_js_wait_frame();
+    }
     if (renderer != nullptr) SDL_RenderSetLogicalSize(renderer, logicalW, logicalH);
 #else
     SDL_Delay(16);
@@ -225,6 +301,13 @@ void ConfigureGameResolution()
         return;
     }
 #ifdef HOVERNET_WEB
+    if (hovernet_js_is_quest() != 0) {
+        // Quest browser: the race is drawn twice per frame (one image per eye) by the CPU
+        // rasteriser, so use a smaller frame. Only this headset browser takes this branch.
+        kWidth = 640;
+        kHeight = 480;
+        return;
+    }
     if (HoverNetIsTouchDevice()) {
         // Phones are about 2.2:1 in landscape. Keep the width modest (the CPU rasteriser's cost
         // scales with pixels, and this is fewer than 1024x768) and match the screen's shape,
@@ -5899,6 +5982,7 @@ int RunClient(int argc, char** argv)
     // eRSMsgChatMessage handling below) -- text input only actually does
     // anything once online, but it's harmless to leave enabled for local play.
     std::string chatBuffer;
+    std::vector<uint8_t> vrEyes; // VR: left+right eye RGBA, reused between frames
     SDL_StartTextInput();
 #ifdef HOVERNET_WEB
     struct InRaceFlag {
@@ -6092,6 +6176,18 @@ int RunClient(int argc, char** argv)
 
 #ifdef HOVERNET_GAME2_PLAYER
         if (playerMode && mainCharacter != nullptr && level != nullptr) {
+#ifdef HOVERNET_WEB
+            // VR controller button: switch between the chase view and the cockpit view.
+            {
+                static bool viewHeld = false;
+                const bool viewDown = (touch & eTouchToggleView) != 0;
+                if (viewDown && !viewHeld) {
+                    cockpitView = !cockpitView;
+                    observer->SetCockpitView(cockpitView ? TRUE : FALSE);
+                }
+                viewHeld = viewDown;
+            }
+#endif
             if (keyboard[SDL_SCANCODE_F3]) {
                 debugView = false;
                 cockpitView = false;
@@ -6388,8 +6484,29 @@ int RunClient(int argc, char** argv)
                     else {
                         observer->SetNetworkLatency(-2);
                     }
-                    observer->RenderNormalDisplay(&buffer, &session, mainCharacter, session.GetSimulationTime(),
-                                                  session.GetBackImage());
+                    if (HoverNetVrActive()) {
+                        // VR camera: two views of the same moment, each eye shifted sideways.
+                        // The spacing is exaggerated relative to a real 64 mm because the world
+                        // is hovercraft-sized, which makes the depth easy to see; the cockpit
+                        // camera is much nearer the scenery, so it gets half of it.
+                        const int kEyeSeparationMm = cockpitView ? 70 : 140;
+                        const std::size_t eyeBytes = static_cast<std::size_t>(kWidth) * kHeight * 4;
+                        vrEyes.resize(eyeBytes * 2);
+                        for (int eye = 0; eye < 2; ++eye) {
+                            observer->SetEyeOffset(eye == 0 ? -kEyeSeparationMm / 2 : kEyeSeparationMm / 2,
+                                                   eye == 1 ? TRUE : FALSE);
+                            observer->RenderNormalDisplay(&buffer, &session, mainCharacter,
+                                                          session.GetSimulationTime(), session.GetBackImage());
+                            graphics.ConvertToRGBA(buffer.GetBuffer(), kWidth, kHeight,
+                                                   vrEyes.data() + eyeBytes * eye);
+                        }
+                        observer->SetEyeOffset(0, FALSE);
+                        HoverNetVrSubmitStereo(vrEyes.data(), vrEyes.data() + eyeBytes, kWidth, kHeight);
+                    }
+                    else {
+                        observer->RenderNormalDisplay(&buffer, &session, mainCharacter, session.GetSimulationTime(),
+                                                      session.GetBackImage());
+                    }
                 }
                 if (!chatBuffer.empty() && menuFontHandle != nullptr) {
                     const std::string prompt = "Chat: " + chatBuffer + "_";

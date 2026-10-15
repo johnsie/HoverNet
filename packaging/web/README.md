@@ -138,3 +138,20 @@ the public TLS certificate.
   during a race (`hovernet_in_race`); the portrait hint is a slim banner rather
   than a blocking overlay; the canvas respects the notch/safe-area insets; phones
   default to an 85% UI scale until the player picks one in Settings.
+
+## VR (Meta Quest browser)
+
+In a headset browser that supports WebXR (Meta Quest 2/3 browser; `?vr=1` forces the button for
+testing) an **ENTER VR** button appears once the game is running. Desktop and phone browsers never
+show it and never run any of the VR code.
+
+- **View:** a large virtual screen in front of you. In a race the game renders the 3D view twice per
+  frame (`MR_Observer::SetEyeOffset`: the chase camera shifted 140 mm sideways per eye, 70 mm in the
+  cockpit view) and the page draws one image per eye (`window.hnVR` in `shell.html`), so you get real
+  stereo depth. The Quest browser uses a 640x480 frame to keep two renders per frame affordable.
+- **Race controls:** left or right stick steers, trigger GO, grip BRAKE, right A FIRE, right B JUMP,
+  right stick click WEAPON, left X switches chase/cockpit view, left Y opens the pause menu.
+- **Menus:** point the right controller at the screen and pull the trigger to click. Typing needs the
+  keyboard, so enter your name before putting the headset on.
+- `HOVERNET_TEST_VR=<dir>` (native) writes each eye's frame as a PPM, for checking the stereo camera
+  without a headset.

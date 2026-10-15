@@ -80,6 +80,11 @@
     #hn-knob { position: absolute; left: 50%; bottom: 8px; width: 64px; height: 64px; margin-left: -32px;
       border-radius: 50%; border: 2px solid rgba(160, 200, 255, .8); background: rgba(90, 160, 255, .45);
       transform: translateX(0); pointer-events: none; }
+    /* VR entry: shown only in a VR-capable headset browser (Meta Quest), never on desktop or phones. */
+    #hn-vr { position: fixed; z-index: 7; display: none; left: 50%; bottom: max(16px, env(safe-area-inset-bottom));
+      transform: translateX(-50%); padding: .8rem 1.6rem; border-radius: 28px; border: 2px solid #fff;
+      background: rgba(227, 43, 66, .92); color: #fff; font: 700 18px system-ui, sans-serif; letter-spacing: .06em; cursor: pointer; }
+    body.vr-capable.running #hn-vr { display: block; }
     #hn-steer.active { background: rgba(20, 34, 60, .65); }
     #hn-go, #hn-brake, #hn-fire, #hn-jump, #hn-weapon { width: 84px; height: 84px; border-radius: 50%; }
     #hn-go { right: max(14px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); width: 104px; height: 104px; }
@@ -120,6 +125,7 @@
     <button class="hn-btn" id="hn-toggle" type="button" aria-label="Toggle on-screen controls" aria-pressed="true">&#127918;</button>
     <button class="hn-btn" id="hn-fs" type="button" aria-label="Toggle fullscreen">&#9974;</button>
   </div>
+  <button id="hn-vr" type="button">ENTER VR</button>
   <div id="hn-pad" aria-label="On-screen race controls">
     <div id="hn-steer" aria-label="Steering: drag the knob left or right"><div id="hn-knob"></div></div>
     <button class="hn-btn" id="hn-brake" type="button" data-bit="8" aria-label="Brake">BRAKE</button>
@@ -403,7 +409,8 @@
     // combines them with keyboard/gamepad input and remapped keys are irrelevant.
     var touchMask = 0;
     function publishMask() {
-      if (Module.ccall) Module.ccall('hovernet_set_touch_mask', null, ['number'], [touchMask]);
+      var vrBits = (window.hnVR && window.hnVR.mask) || 0;
+      if (Module.ccall) Module.ccall('hovernet_set_touch_mask', null, ['number'], [touchMask | vrBits]);
     }
     // MENU is not a held control: it taps Escape, which opens the pause menu.
     function tapEscape() {
@@ -485,6 +492,239 @@
     document.addEventListener('visibilitychange', function() {
       if (document.visibilityState === 'hidden') { Object.keys(held).forEach(release); releaseSteer(); }
     });
+
+
+    // ---- VR (Meta Quest browser, WebXR) ----
+    // The race is a CPU-rasterised 3D view. In VR the game renders it twice (one image per eye,
+    // from cameras a little apart) and this code shows the two images on a big virtual screen in
+    // front of the player; menus show the page canvas on the same screen, pointed at with a
+    // controller. Nothing here runs unless the player presses ENTER VR, and the button only
+    // exists in a headset browser, so desktop and phone browsers are unaffected.
+    (function() {
+      var vr = window.hnVR = { active: false, mask: 0, waiters: [], submitMono: function() {}, submitStereo: function() {} };
+      var forced = /[?&]vr=1\b/.test(location.search);
+      if (!(forced || /OculusBrowser|Quest/i.test(navigator.userAgent)) || !navigator.xr || !navigator.xr.isSessionSupported) return;
+      navigator.xr.isSessionSupported('immersive-vr').then(function(ok) {
+        if (ok) document.body.classList.add('vr-capable');
+      }).catch(function() {});
+      var btn = document.getElementById('hn-vr');
+      var DIST = 2.2, SCREEN_H = 2.1;
+      var session = null, gl = null, layer = null, refSpace = null, prog = null, loc = null;
+      var texMono = null, texL = null, texR = null;
+      var monoAspect = 16 / 9, stereoAspect = 4 / 3, stereo = false;
+      var pointer = { on: false, u: 0, v: 0, down: false };
+      var lastMenuHeld = false;
+
+      function makeTex() {
+        var t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([8, 8, 14, 255]));
+        return t;
+      }
+      function shader(type, src) {
+        var sh = gl.createShader(type);
+        gl.shaderSource(sh, src);
+        gl.compileShader(sh);
+        return sh;
+      }
+      function setupGL() {
+        prog = gl.createProgram();
+        gl.attachShader(prog, shader(gl.VERTEX_SHADER,
+          'attribute vec2 aPos; uniform mat4 uProj; uniform mat4 uView; uniform vec2 uSize; varying vec2 vUv;' +
+          'void main() { vUv = vec2(aPos.x * 0.5 + 0.5, 0.5 - aPos.y * 0.5);' +
+          ' gl_Position = uProj * uView * vec4(aPos.x * uSize.x * 0.5, aPos.y * uSize.y * 0.5, -' + DIST.toFixed(2) + ', 1.0); }'));
+        gl.attachShader(prog, shader(gl.FRAGMENT_SHADER,
+          'precision mediump float; uniform sampler2D uTex; uniform vec2 uDot; uniform float uDotOn; uniform float uAspect; varying vec2 vUv;' +
+          'void main() { vec4 c = texture2D(uTex, vUv);' +
+          ' if (uDotOn > 0.5 && length((vUv - uDot) * vec2(uAspect, 1.0)) < 0.014) c = vec4(1.0, 0.25, 0.3, 1.0);' +
+          ' gl_FragColor = c; }'));
+        gl.linkProgram(prog);
+        loc = {
+          pos: gl.getAttribLocation(prog, 'aPos'), proj: gl.getUniformLocation(prog, 'uProj'),
+          view: gl.getUniformLocation(prog, 'uView'), size: gl.getUniformLocation(prog, 'uSize'),
+          tex: gl.getUniformLocation(prog, 'uTex'), dot: gl.getUniformLocation(prog, 'uDot'),
+          dotOn: gl.getUniformLocation(prog, 'uDotOn'), aspect: gl.getUniformLocation(prog, 'uAspect')
+        };
+        var buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+        texMono = makeTex(); texL = makeTex(); texR = makeTex();
+      }
+
+      vr.submitMono = function() {
+        if (!gl) return;
+        stereo = false;
+        try {
+          gl.bindTexture(gl.TEXTURE_2D, texMono);
+          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, Module.canvas);
+          if (Module.canvas.height) monoAspect = Module.canvas.width / Module.canvas.height;
+        } catch (e) {}
+      };
+      vr.submitStereo = function(left, right, w, h) {
+        if (!gl) return;
+        stereo = true;
+        stereoAspect = w / h;
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.bindTexture(gl.TEXTURE_2D, texL);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, left);
+        gl.bindTexture(gl.TEXTURE_2D, texR);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, right);
+      };
+
+      function mouse(type, x, y, buttons) {
+        Module.canvas.dispatchEvent(new MouseEvent(type, {
+          bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0, buttons: buttons
+        }));
+      }
+
+      // Controllers. In a race: right stick/left stick steer, trigger GO, grip BRAKE, right A FIRE,
+      // right B JUMP, right stick click WEAPON, left X chase/cockpit view, left Y pause menu.
+      // Elsewhere: the right (or any) controller's laser points at the screen and its trigger clicks.
+      function readControllers(frame) {
+        var inRace = document.body.classList.contains('in-race');
+        var mask = 0, steer = 0, menuHeld = false, ray = null, trigger = false;
+        var sources = session.inputSources;
+        for (var i = 0; i < sources.length; i++) {
+          var src = sources[i], gp = src.gamepad;
+          if (!gp) continue;
+          var b = gp.buttons, pressed = function(n) { return !!(b[n] && b[n].pressed); };
+          if (pressed(0)) { mask |= 4; trigger = true; }
+          if (pressed(1)) mask |= 8;
+          if (src.handedness === 'right') {
+            if (pressed(4)) mask |= 16;
+            if (pressed(5)) mask |= 32;
+            if (pressed(3)) mask |= 64;
+          } else if (src.handedness === 'left') {
+            if (pressed(4)) mask |= 128;
+            if (pressed(5)) menuHeld = true;
+          }
+          var x = gp.axes.length >= 4 ? gp.axes[2] : (gp.axes[0] || 0);
+          if (Math.abs(x) > Math.abs(steer)) steer = x;
+          if (src.targetRaySpace && (!ray || src.handedness === 'right')) {
+            var p = frame.getPose(src.targetRaySpace, refSpace);
+            if (p) ray = p.transform.matrix;
+            if (src.handedness === 'right' && p) ray = p.transform.matrix;
+          }
+        }
+        if (steer < -0.35) mask |= 1; else if (steer > 0.35) mask |= 2;
+        if (inRace) {
+          vr.mask = mask;
+          if (menuHeld && !lastMenuHeld) {
+            ['keydown', 'keyup'].forEach(function(type) {
+              var ev = new KeyboardEvent(type, { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true });
+              Object.defineProperty(ev, 'keyCode', { get: function() { return 27; } });
+              Object.defineProperty(ev, 'which', { get: function() { return 27; } });
+              document.dispatchEvent(ev);
+            });
+          }
+          pointer.on = false;
+        } else {
+          vr.mask = 0;
+          pointer.on = false;
+          if (ray) {
+            var dz = -ray[10];
+            if (dz < -0.0001) {
+              var t = (-DIST - ray[14]) / dz;
+              // ray direction is -Z of the controller: (-ray[8], -ray[9], -ray[10])
+              var hx = ray[12] + t * (-ray[8]), hy = ray[13] + t * (-ray[9]);
+              var H = SCREEN_H, W = Math.min(3.6, H * monoAspect);
+              if (t > 0 && Math.abs(hx) <= W / 2 && Math.abs(hy) <= H / 2) {
+                pointer.on = true;
+                pointer.u = hx / W + 0.5;
+                pointer.v = 0.5 - hy / H;
+              }
+            }
+          }
+          if (pointer.on) {
+            var r = Module.canvas.getBoundingClientRect();
+            var cx = r.left + pointer.u * r.width, cy = r.top + pointer.v * r.height;
+            mouse('mousemove', cx, cy, pointer.down ? 1 : 0);
+            if (trigger && !pointer.down) { pointer.down = true; mouse('mousedown', cx, cy, 1); }
+          }
+          if (!trigger && pointer.down) {
+            pointer.down = false;
+            var r2 = Module.canvas.getBoundingClientRect();
+            mouse('mouseup', r2.left + pointer.u * r2.width, r2.top + pointer.v * r2.height, 0);
+          }
+        }
+        lastMenuHeld = menuHeld;
+        publishMask();
+      }
+
+      function onFrame(t, frame) {
+        if (!session) return;
+        session.requestAnimationFrame(onFrame);
+        var w = vr.waiters; vr.waiters = [];
+        for (var i = 0; i < w.length; i++) w[i]();
+        var pose = frame.getViewerPose(refSpace);
+        if (!pose) return;
+        try { readControllers(frame); } catch (e) {}
+        gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
+        gl.clearColor(0.01, 0.01, 0.03, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.useProgram(prog);
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.getParameter(gl.ARRAY_BUFFER_BINDING));
+        gl.enableVertexAttribArray(loc.pos);
+        gl.vertexAttribPointer(loc.pos, 2, gl.FLOAT, false, 0, 0);
+        var aspect = stereo ? stereoAspect : monoAspect;
+        var sw = Math.min(3.6, SCREEN_H * aspect);
+        for (var v = 0; v < pose.views.length; v++) {
+          var view = pose.views[v], vp = layer.getViewport(view);
+          gl.viewport(vp.x, vp.y, vp.width, vp.height);
+          gl.uniformMatrix4fv(loc.proj, false, view.projectionMatrix);
+          gl.uniformMatrix4fv(loc.view, false, view.transform.inverse.matrix);
+          gl.uniform2f(loc.size, sw, SCREEN_H);
+          gl.uniform1f(loc.aspect, aspect);
+          gl.uniform1f(loc.dotOn, !stereo && pointer.on ? 1 : 0);
+          gl.uniform2f(loc.dot, pointer.u, pointer.v);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, stereo ? (view.eye === 'right' ? texR : texL) : texMono);
+          gl.uniform1i(loc.tex, 0);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        }
+      }
+
+      function end() {
+        vr.active = false; vr.mask = 0; stereo = false; session = null; gl = null;
+        pointer.on = false; pointer.down = false;
+        var w = vr.waiters; vr.waiters = []; w.forEach(function(f) { f(); });
+        btn.textContent = 'ENTER VR';
+        publishMask();
+        Module.canvas.focus();
+      }
+
+      btn.addEventListener('click', function() {
+        if (vr.active && session) { session.end(); return; }
+        navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] }).then(function(s) {
+          var c = document.createElement('canvas');
+          var g = c.getContext('webgl2', { xrCompatible: true, antialias: false, alpha: false }) ||
+                  c.getContext('webgl', { xrCompatible: true, antialias: false, alpha: false });
+          if (!g) { s.end(); btn.textContent = 'VR NEEDS WEBGL'; return; }
+          var ready = g.makeXRCompatible ? g.makeXRCompatible() : Promise.resolve();
+          return ready.then(function() {
+            gl = g; session = s;
+            setupGL();
+            layer = new XRWebGLLayer(s, gl);
+            s.updateRenderState({ baseLayer: layer });
+            s.addEventListener('end', end);
+            return s.requestReferenceSpace('local');
+          }).then(function(space) {
+            refSpace = space;
+            vr.active = true;
+            btn.textContent = 'EXIT VR';
+            s.requestAnimationFrame(onFrame);
+          });
+        }).catch(function(e) {
+          btn.textContent = 'VR FAILED';
+          setTimeout(function() { btn.textContent = 'ENTER VR'; }, 2500);
+        });
+      });
+    })();
 
     document.getElementById('hn-toggle').addEventListener('click', function() {
       var on = document.body.classList.toggle('controls-on');

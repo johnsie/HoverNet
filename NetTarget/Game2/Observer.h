@@ -44,6 +44,8 @@ class MR_Observer
    private:
       MR_3DCoordinate mLastCameraPos;
       BOOL            mLastCameraPosValid;
+      int             mEyeOffset;   // VR: sideways camera shift in mm (0 = normal view)
+      BOOL            mReuseCamera; // VR second eye: reuse the first eye's smoothed camera
       BOOL            mCockpitView;
       // -2 local race, -1 online but awaiting a sample, -3 connection lost,
       // otherwise the most recent server TCP round-trip in milliseconds.
@@ -109,6 +111,9 @@ class MR_Observer
       void Home();
 
       void EnlargeMargin();
+      // VR stereo: render the next frame from an eye shifted pOffsetMm sideways. pReuseCamera makes
+      // the second eye of a frame use exactly the same smoothed centre camera as the first.
+      void SetEyeOffset( int pOffsetMm, BOOL pReuseCamera ) { mEyeOffset = pOffsetMm; mReuseCamera = pReuseCamera; }
       void ReduceMargin();
 
       void MoreMessages();
