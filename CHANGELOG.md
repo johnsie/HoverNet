@@ -4,6 +4,22 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.10 - 2026-10-15
+
+### Added
+- Web client (desktop): a "Game Size" setting sizes the gameplay area inside the browser
+  window (Fit, or 800x600 up to 1920x1080) without resizing the browser. Remembered per browser.
+
+### Changed
+- Web client (phones): the race frame matches the screen's shape (960 wide, about 2.2:1 in
+  landscape) instead of a letterboxed 4:3 frame.
+
+### Fixed
+- Wide framebuffers were stretched horizontally because the 3D projection assumed a 4:3 screen;
+  pixels are now square at every resolution (4:3 output is unchanged).
+- Web client on phones: less flicker -- frames are paced to the display and the canvas is no
+  longer resized when iOS toolbars slide in and out.
+
 ## 2.0.9 - 2026-10-15
 
 ### Changed
