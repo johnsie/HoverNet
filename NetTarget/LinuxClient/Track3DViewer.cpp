@@ -2471,7 +2471,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
 
         DrawHoverNetScreenBackdrop(mainViewport);
-        HoverNetScreenHeading("ONLINE MULTIPLAYER", "RACE CONTROL", statusText.c_str());
+        HoverNetScreenHeading("ONLINE MULTIPLAYER", "ONLINE MEETING ROOM", statusText.c_str());
         ImGui::Spacing();
 
         if (!client.IsConnected()) {
