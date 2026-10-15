@@ -160,15 +160,67 @@
           setProgress(null);
         }
       },
+      // The wasm runtime is ready long before the game has drawn anything (main() still loads the
+      // resource library and tracks). Keep the loader up until a frame is actually on the canvas,
+      // otherwise phones show a blank page after the download finishes.
       onRuntimeInitialized: function() {
-        document.body.classList.add('running');
+        statusNode.textContent = 'Starting HoverNet…';
+        setProgress(null);
         this.canvas.focus();
+        waitForFirstFrame();
       },
       onAbort: function(reason) {
         showError('HoverNet could not start: ' + reason);
       }
     };
     Module.canvas.addEventListener('pointerdown', function() { Module.canvas.focus(); });
+
+    function canvasHasPicture() {
+      try {
+        var c = Module.canvas, ctx = c.getContext('2d');
+        if (!ctx || !c.width || !c.height) return false;
+        for (var i = 1; i < 5; i++) for (var j = 1; j < 5; j++) {
+          if (ctx.getImageData(Math.floor(c.width * i / 5), Math.floor(c.height * j / 5), 1, 1).data[3] > 0) return true;
+        }
+        return false;
+      } catch (e) { return null; }  // null: cannot inspect this canvas
+    }
+    function waitForFirstFrame() {
+      var started = Date.now();
+      (function check() {
+        var drawn = canvasHasPicture();
+        if (drawn === true || (drawn === null && Date.now() - started > 4000) || Date.now() - started > 60000) {
+          document.body.classList.add('running');
+          Module.canvas.focus();
+          return;
+        }
+        if (Date.now() - started > 15000) statusNode.textContent = 'Still loading… this can take a while on a slow connection.';
+        setTimeout(check, 150);
+      })();
+    }
+    // Surface crashes instead of leaving a silent blank screen.
+    window.addEventListener('error', function(e) {
+      if (/unwind/.test(String(e.message))) return;  // Emscripten's normal Asyncify control flow
+      if (!document.body.classList.contains('running')) showError('HoverNet hit an error: ' + (e.message || 'unknown'));
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      if (!document.body.classList.contains('running')) showError('HoverNet hit an error: ' + (e.reason && e.reason.message || e.reason));
+    });
+
+    // SDL sizes its window when main() runs and only follows the canvas's CSS size on a window
+    // resize event, so on load the 1024x768 backbuffer would be stretched to fill the page. Nudge
+    // SDL until the backbuffer matches the displayed size (it then keeps following real resizes).
+    var resizeNudges = 0;
+    window.setInterval(function() {
+      var c = Module.canvas;
+      if (!document.body.classList.contains('running') || resizeNudges > 40) return;
+      if (c.clientWidth && (c.width !== c.clientWidth || c.height !== c.clientHeight)) {
+        resizeNudges++;
+        window.dispatchEvent(new Event('resize'));
+      } else {
+        resizeNudges = 0;
+      }
+    }, 250);
 
     // ---- Mobile support ----
     var isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
