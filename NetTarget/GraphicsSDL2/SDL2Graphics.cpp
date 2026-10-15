@@ -61,7 +61,20 @@ bool SDL2GraphicsBackend::Initialize(void* windowHandle, int width, int height)
 
     // Create renderer with VSYNC enabled to synchronize with monitor refresh rate
     // This prevents flickering by ensuring Present() waits for the next vertical blank
-    m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_SOFTWARE | SDL_RENDERER_PRESENTVSYNC);
+#ifdef __EMSCRIPTEN__
+    // In the browser the software renderer rasterises every pixel on the CPU and copies the whole
+    // canvas each frame, which is far too slow for a page-sized canvas. Use the WebGL renderer
+    // (SDL converts the RGB24 game texture itself); fall back to software on a fresh window if
+    // WebGL is unavailable. No vsync flag: the browser paces presents.
+    m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED);
+    if (!m_renderer) {
+        SDL_DestroyWindow(m_window);
+        m_window = SDL_CreateWindow(windowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                    width, height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+        if (!m_window) { SDL_QuitSubSystem(SDL_INIT_VIDEO); return false; }
+    }
+#endif
+    if (!m_renderer) m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_SOFTWARE | SDL_RENDERER_PRESENTVSYNC);
     if (!m_renderer) { 
         // Fallback: try without VSYNC
         m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_SOFTWARE);

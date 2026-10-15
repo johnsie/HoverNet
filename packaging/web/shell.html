@@ -175,21 +175,16 @@
     };
     Module.canvas.addEventListener('pointerdown', function() { Module.canvas.focus(); });
 
-    function canvasHasPicture() {
-      try {
-        var c = Module.canvas, ctx = c.getContext('2d');
-        if (!ctx || !c.width || !c.height) return false;
-        for (var i = 1; i < 5; i++) for (var j = 1; j < 5; j++) {
-          if (ctx.getImageData(Math.floor(c.width * i / 5), Math.floor(c.height * j / 5), 1, 1).data[3] > 0) return true;
-        }
-        return false;
-      } catch (e) { return null; }  // null: cannot inspect this canvas
+    // Frames drawn so far, reported by the game (never read the canvas itself: asking for a 2D
+    // context would stop SDL creating its WebGL renderer).
+    function framesDrawn() {
+      try { return Module.ccall ? Module.ccall('hovernet_frames', 'number', [], []) : 0; } catch (e) { return -1; }
     }
     function waitForFirstFrame() {
       var started = Date.now();
       (function check() {
-        var drawn = canvasHasPicture();
-        if (drawn === true || (drawn === null && Date.now() - started > 4000) || Date.now() - started > 60000) {
+        var frames = framesDrawn();
+        if (frames >= 2 || (frames < 0 && Date.now() - started > 4000) || Date.now() - started > 60000) {
           document.body.classList.add('running');
           Module.canvas.focus();
           return;

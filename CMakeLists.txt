@@ -437,7 +437,7 @@ if(EMSCRIPTEN)
         -sFETCH=1
         -lwebsocket.js
         -lidbfs.js
-        "-sEXPORTED_FUNCTIONS=_main,_hovernet_set_touch_mask,_hovernet_in_race,_hovernet_wants_text,_hovernet_text_input,_hovernet_text_key"
+        "-sEXPORTED_FUNCTIONS=_main,_hovernet_set_touch_mask,_hovernet_in_race,_hovernet_frames,_hovernet_wants_text,_hovernet_text_input,_hovernet_text_key"
         "-sEXPORTED_RUNTIME_METHODS=ccall"
         --shell-file "${CMAKE_SOURCE_DIR}/packaging/web/shell.html"
         --pre-js "${CMAKE_SOURCE_DIR}/packaging/web/web-pre.js"

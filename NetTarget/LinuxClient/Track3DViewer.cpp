@@ -69,6 +69,14 @@ extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_set_touch_mask(int mask)
     gHoverNetTouchMask = mask;
 }
 
+// Frames completed by any menu or race loop; the page keeps its loader up until the
+// first one so a slow start never shows a blank canvas. (Counted in HoverNetFrameDelay.)
+static int gHoverNetFrames = 0;
+extern "C" EMSCRIPTEN_KEEPALIVE int hovernet_frames(void)
+{
+    return gHoverNetFrames;
+}
+
 // True while the race loop is running; the page shows the on-screen race
 // controls only then, so they never cover the menus.
 static int gHoverNetInRace = 0;
@@ -130,6 +138,7 @@ namespace
 inline void HoverNetFrameDelay()
 {
 #ifdef HOVERNET_WEB
+    ++gHoverNetFrames;
     static Uint32 frameStart = 0;
     const Uint32 now = SDL_GetTicks();
     const Uint32 spent = now - frameStart;
