@@ -52,6 +52,18 @@
 #ifdef HOVERNET_WEB
 void HoverNetInitializeWebFactory();
 void HoverNetCleanWebFactory();
+
+#include <emscripten.h>
+
+// Bitmask of on-screen touch controls currently held, written by the page's
+// touch pad (packaging/web/shell.html) and OR-ed into the same control state
+// the keyboard and gamepad feed. Going through the game rather than synthetic
+// key events means remapped keyboard bindings never affect touch play.
+static int gHoverNetTouchMask = 0;
+extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_set_touch_mask(int mask)
+{
+    gHoverNetTouchMask = mask;
+}
 #endif
 
 namespace
@@ -5661,29 +5673,35 @@ int RunClient(int argc, char** argv)
         if (gControllerBindings.invertBrake) controllerBrakeValue = -controllerBrakeValue;
         const bool controllerAccelerate = controllerAccelerateValue > gControllerBindings.deadzone;
         const bool controllerBrake = controllerBrakeValue > gControllerBindings.deadzone;
-        const bool turnLeft = keyboard[gKeyboardBindings.steerLeft] || controllerLeft ||
+#ifdef HOVERNET_WEB
+        const int touch = gHoverNetTouchMask;
+#else
+        const int touch = 0;
+#endif
+        const bool touchLeft = (touch & 1) != 0, touchRight = (touch & 2) != 0;
+        const bool turnLeft = keyboard[gKeyboardBindings.steerLeft] || controllerLeft || touchLeft ||
                               (!playerMode && keyboard[SDL_SCANCODE_A]);
-        const bool turnRight = keyboard[gKeyboardBindings.steerRight] || controllerRight ||
+        const bool turnRight = keyboard[gKeyboardBindings.steerRight] || controllerRight || touchRight ||
                                (!playerMode && keyboard[SDL_SCANCODE_D]);
         const bool moveForward = playerMode ?
             keyboard[gKeyboardBindings.accelerate] ||
             (gKeyboardBindings.accelerate == SDL_SCANCODE_LSHIFT && keyboard[SDL_SCANCODE_RSHIFT]) ||
-            controllerAccelerate :
+            controllerAccelerate || (touch & 4) != 0 :
             keyboard[SDL_SCANCODE_UP] || keyboard[SDL_SCANCODE_W];
         const bool moveBackward = playerMode ?
-            keyboard[gKeyboardBindings.brake] || controllerBrake :
+            keyboard[gKeyboardBindings.brake] || controllerBrake || (touch & 8) != 0 :
             keyboard[SDL_SCANCODE_DOWN] || keyboard[SDL_SCANCODE_S];
         const bool moveUp = keyboard[SDL_SCANCODE_Q];
         const bool moveDown = keyboard[SDL_SCANCODE_E];
         const bool fire = keyboard[gKeyboardBindings.fire] ||
                   (gKeyboardBindings.fire == SDL_SCANCODE_LCTRL && keyboard[SDL_SCANCODE_RCTRL]) ||
-                  gameController.Button(gControllerBindings.fire) ||
+                  gameController.Button(gControllerBindings.fire) || (touch & 16) != 0 ||
                   HasArgument(argc, argv, "--fire");
         const bool jump = keyboard[gKeyboardBindings.jump] ||
-                          gameController.Button(gControllerBindings.jump) ||
+                          gameController.Button(gControllerBindings.jump) || (touch & 32) != 0 ||
                           HasArgument(argc, argv, "--jump");
         const bool selectWeapon = keyboard[gKeyboardBindings.selectWeapon] ||
-                                  gameController.Button(gControllerBindings.selectWeapon) ||
+                                  gameController.Button(gControllerBindings.selectWeapon) || (touch & 64) != 0 ||
                                   HasArgument(argc, argv, "--select-weapon");
 
 #ifdef HOVERNET_GAME2_PLAYER

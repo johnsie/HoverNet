@@ -437,6 +437,8 @@ if(EMSCRIPTEN)
         -sFETCH=1
         -lwebsocket.js
         -lidbfs.js
+        "-sEXPORTED_FUNCTIONS=_main,_hovernet_set_touch_mask"
+        "-sEXPORTED_RUNTIME_METHODS=ccall"
         --shell-file "${CMAKE_SOURCE_DIR}/packaging/web/shell.html"
         --pre-js "${CMAKE_SOURCE_DIR}/packaging/web/web-pre.js"
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/ObjFac1.dat@/NetTarget/ObjFac1.dat"
@@ -444,7 +446,8 @@ if(EMSCRIPTEN)
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/CommunityTracks.tsv@/NetTarget/CommunityTracks.tsv"
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/LinuxClient/assets@/NetTarget/LinuxClient/assets"
     )
-    set_target_properties(HoverNetGame2Player PROPERTIES SUFFIX ".html")
+    set_target_properties(HoverNetGame2Player PROPERTIES SUFFIX ".html"
+        LINK_DEPENDS "${CMAKE_SOURCE_DIR}/packaging/web/shell.html;${CMAKE_SOURCE_DIR}/packaging/web/web-pre.js")
 else()
     add_dependencies(HoverNetGame2Player HoverNetHeadlessObjFac1)
 endif()

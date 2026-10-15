@@ -22,6 +22,20 @@ The browser client opens a binary WebSocket at
 `HOVERNET_WEB_SOCKET_URL` at CMake configure time, for example with
 `ws://localhost:8080/race/`.
 
+## Mobile and touch devices
+
+On touch devices (`pointer: coarse`) `shell.html` adds a fullscreen button, a
+controls toggle, a portrait "rotate your device" hint, and an on-screen race pad
+(steer, GO, BRAKE, FIRE, JUMP, WEAPON, MENU). Held buttons are passed to the
+game through the exported `hovernet_set_touch_mask` function and combined with
+keyboard and gamepad input, so remapped keys do not matter; MENU taps Escape for
+the pause menu. Menus work through SDL's touch-to-mouse emulation. The page
+blocks pinch-zoom and pull-to-refresh and uses `100dvh` so mobile toolbars do
+not clip the canvas. The canvas keeps its 4:3 aspect ratio.
+
+The start-up screen shows a progress bar driven by Emscripten's download status
+and a Try again button if loading fails.
+
 ## Install the WebSocket gateway
 
 The gateway relays bounded binary RaceServer frames between a browser WebSocket
