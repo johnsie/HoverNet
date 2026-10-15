@@ -4,6 +4,16 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.1 - 2026-10-15
+
+### Fixed
+- Web client on phones: menu text boxes (username, chat, server) can now be typed
+  into on iOS; the race controls appear only during a race; the page fits above the
+  on-screen keyboard and inside the notch/safe area; phones default to a tighter UI scale.
+
+### Changed
+- CI builds run in parallel, the web build is incremental, and docs-only changes skip it.
+
 ## 2.0.0 - 2026-10-02
 
 HoverNet 2.0, the first stable release of the 2.0 line (it follows the public beta).
