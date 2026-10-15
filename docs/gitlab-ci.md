@@ -67,7 +67,8 @@ Merge through a protected default branch and create a protected version tag to e
 ### Pipeline speed
 
 Build jobs use `needs: []` so Linux, Windows and web builds start immediately and
-in parallel instead of waiting for earlier stages. `build:game:web` keeps its CMake
+in parallel instead of waiting for earlier stages. The web job stays in the first
+(`web`) stage so it is queued ahead of the native builds when runner slots are scarce. `build:game:web` keeps its CMake
 tree in `~/.cache/hovernet-web-build` on the runner (guarded by `flock`), so
 pipelines rebuild only changed sources; delete that directory to force a clean
 build. Web builds are skipped for changes that touch no web inputs (docs only).
