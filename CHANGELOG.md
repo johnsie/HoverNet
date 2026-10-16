@@ -6,6 +6,17 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **Replay playback.** `HoverNet --replay race.hnr [--replay-player N]` plays a replay file back with the normal renderer, exactly as
+  the race happened (P pauses, 1 to 5 set the speed). Replays are small, verifiable files; see [docs/replays.md](docs/replays.md).
+  The game refuses a replay recorded under different rules or on a different version of the track instead of showing a wrong race.
+- **Authoritative server (preview, for testers and server operators).** `HoverNetAuthServer` runs a race in which the server alone
+  decides every position, collision, lap and result and players send only their controls; it writes an official replay of each race
+  (`--replay-dir`). `HoverNetAuthBot` is a scripted player for it. It listens on the loopback address unless told otherwise and does
+  not encrypt yet, so do not expose it to the internet. This is the first part of HoverNet 3.0's networking; the game's online play
+  still uses the existing race server. See [docs/authoritative-race.md](docs/authoritative-race.md).
+- `--fixed-step` runs the game's simulation in whole 16 ms ticks whatever the frame rate (off by default).
+
 ### Fixed
 - Missiles fly at the original game's speed again. The shared client had been rounding the missile speed down from
   46.66 to 46 units per millisecond, so its missiles were about 1.4% slower than the original game's and ended a few
