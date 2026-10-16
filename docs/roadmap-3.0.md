@@ -126,7 +126,7 @@ the architecture decision is written down; and the simulation is clean under UBS
 - Golden tests against 2.0 behaviour; every difference is fixed or recorded as a design
   decision.
 - Divergence reports, property tests, fuzz tests, and long-replay tests in CI on every
-  supported platform.
+  supported platform. *Status (16 October 2026): done for Linux and Windows x64, see [determinism.md](determinism.md): `HoverNetReplay trace|dump` divergence reports; snapshot, frame-rate and golden property tests; replay and snapshot decoder fuzzing (which found and fixed a crash); a 100,000-tick replay; all in ctest and the Windows CI job. The WebAssembly job still runs only the determinism and physics suites.*
 - The same core runs in the client, the dedicated server, the replay viewer, and the
   headless test runner.
 

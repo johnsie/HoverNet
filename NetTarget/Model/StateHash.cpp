@@ -31,3 +31,22 @@ std::uint64_t MR_HashLevelState( const MR_Level* pLevel, std::int64_t pSimulatio
    lHasher.Int( lCount );
    return lHasher.Value();
 }
+
+void MR_DumpLevelState( const MR_Level* pLevel, std::int64_t pSimulationTime, std::FILE* pOut )
+{
+   std::fprintf( pOut, "time = %lld\n", static_cast<long long>( pSimulationTime ) );
+   MR_StateDumper lDumper( pOut );
+   int lIndex = 0;
+   for( int lRoom = -1; lRoom < pLevel->GetRoomCount(); ++lRoom )
+   {
+      for( MR_FreeElementHandle lHandle = pLevel->GetFirstFreeElement( lRoom ); lHandle != NULL; lHandle = MR_Level::GetNextFreeElement( lHandle ) )
+      {
+         MR_FreeElement* lElement = MR_Level::GetFreeElement( lHandle );
+         std::fprintf( pOut, "element %d: room %d, class %d/%d, pos (%d,%d,%d), orientation %d\n", lIndex++, lRoom,
+                       (int)lElement->GetTypeId().mDllId, (int)lElement->GetTypeId().mClassId, (int)lElement->mPosition.mX,
+                       (int)lElement->mPosition.mY, (int)lElement->mPosition.mZ, (int)lElement->mOrientation );
+         lDumper.StartElement();
+         lElement->VisitLogicState( lDumper );
+      }
+   }
+}

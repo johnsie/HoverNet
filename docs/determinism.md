@@ -24,6 +24,20 @@ The runner, the replay tool and the netcode prototype register the simulation's 
 plug-in-based runs: the golden hashes, the physics suite and all 1,012 community tracks (checked by comparing the two
 builds track by track).
 
+## Divergence reports
+
+When two platforms or builds disagree, find out where in three commands (the replay file is the shared input):
+
+1. `HoverNetReplay trace race.hnr > a.txt` on each platform prints the state hash of every tick; `diff a.txt b.txt` names the
+   first tick that differs.
+2. `HoverNetReplay dump race.hnr <tick> > a.dump` prints the whole state after that tick: every free element with its room,
+   type, position and orientation, then each of its logic fields (doubles also as exact bits).
+3. `diff a.dump b.dump` shows the element and the field. Fields are numbered in the order of the element's
+   `VisitLogicState` list (for a hovercraft, `MainCharacter.cpp`).
+
+`HoverNetReplay verify` already reports the 250-tick window of the first mismatching checkpoint, which tells you which tick
+range to trace.
+
 ## Golden physics suite
 
 `scripts/test-physics.sh` (ctest `HoverNetPhysicsGolden`, and the web CI job under Node) runs one craft alone through

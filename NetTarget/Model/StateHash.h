@@ -13,6 +13,7 @@
 #define STATE_HASH_H
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -126,6 +127,31 @@ private:
     std::size_t mPos;
     bool mOk;
 };
+
+// Prints every visited value, one per line, for divergence reports: run the same race on two platforms, dump the same
+// tick, and a plain diff names the element and field that differ.
+class MR_StateDumper : public MR_StateVisitor
+{
+public:
+    explicit MR_StateDumper( std::FILE* pOut ) : mOut( pOut ), mField( 0 ) {}
+    void StartElement() { mField = 0; }
+
+protected:
+    void VisitInt64( std::int64_t& pValue ) override { std::fprintf( mOut, "    f%02d = %lld\n", mField++, static_cast<long long>( pValue ) ); }
+    void VisitDouble( double& pValue ) override
+    {
+        std::uint64_t lBits = 0;
+        std::memcpy( &lBits, &pValue, sizeof( lBits ) );
+        std::fprintf( mOut, "    f%02d = %.17g (0x%016llx)\n", mField++, pValue, static_cast<unsigned long long>( lBits ) );
+    }
+
+private:
+    std::FILE* mOut;
+    int mField;
+};
+
+// Writes a readable dump of the whole state (every free element, its position and its logic fields) to pOut.
+void MR_DumpLevelState( const MR_Level* pLevel, std::int64_t pSimulationTime, std::FILE* pOut );
 
 // Hash of the whole simulation state: the simulation time, then every free element of the level in list order (its
 // type, room, position, orientation and its own logic state).

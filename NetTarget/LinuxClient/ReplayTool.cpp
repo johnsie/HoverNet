@@ -275,6 +275,26 @@ int Fuzz(const std::string& path, int iterations)
     return 0;
 }
 
+// Divergence reports. "trace" prints the state hash of every tick; run it on two platforms or builds and diff the output
+// to find the first tick that differs. "dump" prints the full state at one tick; diff two dumps to see which element and
+// which field differ. Both read a replay file and re-simulate it.
+int Replay_(const std::string& path, long dumpTick, bool trace)
+{
+    std::vector<std::uint8_t> file;
+    Replay r;
+    std::string error;
+    if (!ReadFile(path, file) || !Decode(file, r, error)) { std::fprintf(stderr, "%s: %s\n", path.c_str(), error.empty() ? "unreadable" : error.c_str()); return 1; }
+    World w;
+    if (!w.Build(TrackPath(r.track), r.track, r.players)) { std::fprintf(stderr, "Could not load %s\n", r.track.c_str()); return 1; }
+    if (dumpTick == 0) MR_DumpLevelState(w.session->GetCurrentLevel(), w.session->GetSimulationTime(), stdout);
+    for (std::uint32_t t = 0; t < r.ticks; ++t) {
+        w.Step(&r.inputs[static_cast<std::size_t>(t) * r.players]);
+        if (trace) std::printf("%u %016llx\n", t + 1, static_cast<unsigned long long>(w.Hash()));
+        if (dumpTick == static_cast<long>(t) + 1) { std::printf("== state after tick %u ==\n", t + 1); MR_DumpLevelState(w.session->GetCurrentLevel(), w.session->GetSimulationTime(), stdout); }
+    }
+    return 0;
+}
+
 int Info(const std::string& path)
 {
     std::vector<std::uint8_t> file;
@@ -311,6 +331,8 @@ int main(int argc, char** argv)
     }
     if (cmd == "verify") return Verify(argv[2]);
     if (cmd == "info") return Info(argv[2]);
+    if (cmd == "trace") return Replay_(argv[2], -1, true);
+    if (cmd == "dump" && argc >= 4) return Replay_(argv[2], std::atol(argv[3]), false);
     if (cmd == "fuzz" && argc >= 4) return Fuzz(argv[2], std::atoi(argv[3]));
     std::fprintf(stderr, "unknown command\n");
     return 2;
