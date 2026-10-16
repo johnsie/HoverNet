@@ -67,6 +67,9 @@ No install needed: open **https://hovernet.outiva.com** and race on a PC, Mac, p
   steer (drag it **up** to jump), and use GO, BRAKE, FIRE, JUMP and WEAPON on the right. Menus, the
   Driver Briefing and the Internet Meeting Room are laid out for small screens, and the race frame is
   widescreen on phones. Phones in portrait are asked to turn sideways; iPads and tablets can stay put.
+- **Best with a proper game controller:** touch controls work, but phone and tablet play is better with
+  a Bluetooth game controller (Xbox, PlayStation or similar) paired with the device. Press a button
+  on it in the game and it takes over; see **Controls** in the menu to check it is detected.
 - **Desktop:** pick the gameplay size in **Settings &rarr; Game Size** without resizing the window.
 - **VR (Meta Quest 2/3 browser):** press **ENTER VR** for stereo 3D on a big virtual screen. Drive with
   the controllers (stick steers, trigger GO, grip BRAKE, A fire, B jump, left X switches between the
