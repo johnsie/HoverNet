@@ -258,17 +258,35 @@ void MR_GameSession::Simulate()
       lTimeToSimulate = 0;
    }
 
-   /*
-   if( (lTimeToSimulate < 0 )||(lTimeToSimulate>500) )
-   {
-      // There is someting wrong with the calculated duration
-      // This is probably because the game have been paused
-      // (or the refresh rate is extrenemly slow, less than 2 frames sec)
+   const MR_SimulationTime lRemainder = SimulateSlices( lTimeToSimulate );
 
-      // Use a relativly small time step
-      lTimeToSimulate = 20; // 2/100 of second
+   SimulateSurfaceElems( lSimulateCallTime-lRemainder-mLastSimulateCallTime );
+
+   mLastSimulateCallTime = lSimulateCallTime - lRemainder;
+}
+
+void MR_GameSession::SimulateStep( MR_SimulationTime pDurationMs )
+{
+   ASSERT( mCurrentLevel !=NULL );
+
+   if( pDurationMs < 0 )
+   {
+      pDurationMs = 0;
    }
-   */
+
+   const MR_SimulationTime lRemainder = SimulateSlices( pDurationMs );
+
+   SimulateSurfaceElems( pDurationMs-lRemainder );
+
+   // Anything shorter than the minimum slice is dropped, as Simulate() carries it to the next call
+   // by leaving it on the clock; a fixed-step caller simply uses steps of at least the minimum.
+   mLastSimulateCallTime = timeGetTime();
+}
+
+// Runs whole slices for pTime and returns the part too short to simulate yet.
+MR_SimulationTime MR_GameSession::SimulateSlices( MR_SimulationTime pTime )
+{
+   MR_SimulationTime lTimeToSimulate = pTime;
 
    while( lTimeToSimulate >= MR_SIMULATION_SLICE )
    {
@@ -284,9 +302,7 @@ void MR_GameSession::Simulate()
       lTimeToSimulate = 0;
    }
 
-   SimulateSurfaceElems( lSimulateCallTime-lTimeToSimulate-mLastSimulateCallTime );
-
-   mLastSimulateCallTime = lSimulateCallTime - lTimeToSimulate;
+   return lTimeToSimulate;
 }
 
 void MR_GameSession::SimulateLateElement( MR_FreeElementHandle pElement, MR_SimulationTime pDuration, int pRoom )

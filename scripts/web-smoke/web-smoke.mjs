@@ -1,8 +1,8 @@
 // Headless-browser smoke test for the web client (docs/web-client-roadmap.md, phase 5).
 //
-//   node web-smoke.mjs <web-dir> <out-dir>
+//   node web-smoke.mjs <web-dir | https://site> <out-dir>
 //
-// Serves <web-dir> (index.html, HoverNet.js/.wasm/.data) with the headers the build needs, drives it in
+// With a URL it tests that live site instead of serving a directory. Serves <web-dir> (index.html, HoverNet.js/.wasm/.data) with the headers the build needs, drives it in
 // headless Chrome as a phone in landscape (844x390, touch), and checks the flow a player takes:
 // load -> driver briefing -> main menu -> local race -> pause (race controls hidden) -> resume.
 // Screenshots go to <out-dir>. Exits 0 on success, 1 on a failed check, 77 if Chrome is not installed.
@@ -29,8 +29,9 @@ const server = http.createServer((req, res) => {
   });
   fs.createReadStream(file).pipe(res);
 });
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const url = `http://127.0.0.1:${server.address().port}/`;
+const isUrl = /^https?:\/\//.test(webDir);
+if (!isUrl) await new Promise((r) => server.listen(0, '127.0.0.1', r));
+const url = isUrl ? webDir : `http://127.0.0.1:${server.address().port}/`;
 
 const port = 9400 + Math.floor(Math.random() * 500);
 const profile = fs.mkdtempSync('/tmp/hn-smoke-');

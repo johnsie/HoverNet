@@ -4,6 +4,21 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.17 - 2026-10-16
+
+### Fixed
+- Web client: wall bounces went the wrong way. A table-angle conversion cast a negative number to an
+  unsigned one, which gives a different (wrong) result in WebAssembly than on the desktop builds, so any
+  wall hit whose angle came out slightly negative bounced off at the wrong angle (and could leave the craft
+  stuck against the wall). Found by the new cross-platform determinism run.
+
+### Added
+- `HoverNetDeterminismRun` and `scripts/test-determinism.sh`: scripted fixed-step races on all seven bundled
+  tracks hashed frame by frame, checked against golden values on Linux (ctest) and on the WebAssembly build
+  (web CI job). `MR_GameSession::SimulateStep` steps the simulation by an exact duration. See docs/determinism.md.
+- `scripts/check-web-deploy.sh` and the `check:web:deployed` job: post-deploy checks of headers, file types and
+  the WebSocket gateway on the live site.
+
 ## 2.0.16 - 2026-10-16
 
 ### Added

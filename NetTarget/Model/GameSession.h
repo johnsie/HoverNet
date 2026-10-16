@@ -63,6 +63,7 @@ class MR_GameSession
       void SimulateFreeElems(    MR_SimulationTime pDuration );
       int  SimulateOneFreeElem(  MR_SimulationTime pTimeToSimulate, MR_FreeElementHandle pElementHandle, int pRoom );
       void SimulateSurfaceElems( MR_SimulationTime pDuration );      
+      MR_SimulationTime SimulateSlices( MR_SimulationTime pTime );
 
       // SimulateFreeElem sub-functions
       void ComputeShapeContactEffects( int                             pCurrentRoom,
@@ -83,6 +84,10 @@ class MR_GameSession
       MR_DllDeclare void SetSimulationTime( MR_SimulationTime );
       MR_DllDeclare MR_SimulationTime GetSimulationTime()const;
       MR_DllDeclare void Simulate();
+      // Advances the simulation by exactly pDurationMs, independent of the wall clock. Simulate()
+      // measures the elapsed real time and calls this; tests and replays call it directly so a run
+      // depends only on its inputs.
+      MR_DllDeclare void SimulateStep( MR_SimulationTime pDurationMs );
       MR_DllDeclare void SimulateLateElement( MR_FreeElementHandle pElement, MR_SimulationTime pDuration, int pRoom );
 
       MR_DllDeclare MR_Level*      GetCurrentLevel();

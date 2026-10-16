@@ -87,7 +87,10 @@ typedef MR_Int16 MR_Angle;
 
 #define MR_NORMALIZE_ANGLE( pAngle ) ( (MR_Angle) (( 2*MR_2PI+(pAngle) )%MR_2PI) )
 
-#define RAD_2_MR_ANGLE( pAngle ) ((MR_Angle)( ((unsigned int)(pAngle*MR_2PI*0.5/3.1415926536)+MR_2PI)%(unsigned int)MR_2PI ))
+// Converts radians (-PI..PI) to a table angle. The double is truncated to a signed int first: casting a
+// negative double straight to unsigned is undefined, and gave 4094 on x86-64 but 0 on WebAssembly, which
+// turned wall bounces in the browser by a few units (found by the cross-platform determinism run).
+#define RAD_2_MR_ANGLE( pAngle ) ((MR_Angle)( (((int)(pAngle*MR_2PI*0.5/3.1415926536))+MR_2PI)%MR_2PI ))
 
 // Temporal unities
 typedef MR_Int32  MR_SimulationTime; // In 1/1000th of seconds
