@@ -25,6 +25,23 @@
 #include <math.h>
 #include "ShapeCollisions.h"
 
+namespace
+{
+// The wall-contact maths was written for 32-bit ints that wrap on overflow, and large community tracks reach it.
+// Signed overflow is undefined behaviour (and differs between compilers), so the wrap is spelled out: the result
+// is the same two's-complement value the original produced.
+inline MR_Int32 WrapMul(MR_Int32 pA, MR_Int32 pB)
+{
+   return static_cast<MR_Int32>(static_cast<MR_UInt32>(pA) * static_cast<MR_UInt32>(pB));
+}
+
+inline MR_Int32 WrapAdd(MR_Int32 pA, MR_Int32 pB)
+{
+   return static_cast<MR_Int32>(static_cast<MR_UInt32>(pA) + static_cast<MR_UInt32>(pB));
+}
+}
+
+
 using std::max;
 using std::min;
 
@@ -567,8 +584,8 @@ void MR_CylinderRoomContact( const MR_CylinderShape* pActor, const MR_PolygonSha
 
             // The sum of the two products can exceed 32 bits on large tracks. The original relied on it
             // wrapping; do the addition unsigned so the wrap is defined and the result is unchanged.
-            const MR_Int32 lLenDistanceX = ((pRoom->X(lP1)-pRoom->X(lCounter))/2)*((pActor->AxisX()-pRoom->X(lCounter))/2);
-            const MR_Int32 lLenDistanceY = ((pRoom->Y(lP1)-pRoom->Y(lCounter))/2)*((pActor->AxisY()-pRoom->Y(lCounter))/2);
+            const MR_Int32 lLenDistanceX = WrapMul((pRoom->X(lP1)-pRoom->X(lCounter))/2, (pActor->AxisX()-pRoom->X(lCounter))/2);
+            const MR_Int32 lLenDistanceY = WrapMul((pRoom->Y(lP1)-pRoom->Y(lCounter))/2, (pActor->AxisY()-pRoom->Y(lCounter))/2);
             MR_Int32 lLenDistance = static_cast<MR_Int32>( static_cast<MR_UInt32>( lLenDistanceX ) + static_cast<MR_UInt32>( lLenDistanceY ) );
             
             lLenDistance /= pRoom->SideLen( lCounter )/4;
@@ -583,8 +600,8 @@ void MR_CylinderRoomContact( const MR_CylinderShape* pActor, const MR_PolygonSha
             {
                if( lLenDistance >= -pActor->RayLen() )
                {
-                  if(  (pRoom->X(lCounter)-pActor->AxisX())*(pRoom->X(lCounter)-pActor->AxisX())
-                      +(pRoom->Y(lCounter)-pActor->AxisY())*(pRoom->Y(lCounter)-pActor->AxisY()) <= pActor->RayLen()*pActor->RayLen() )
+                  if(  WrapAdd( WrapMul(pRoom->X(lCounter)-pActor->AxisX(), pRoom->X(lCounter)-pActor->AxisX()),
+                               WrapMul(pRoom->Y(lCounter)-pActor->AxisY(), pRoom->Y(lCounter)-pActor->AxisY()) ) <= WrapMul(pActor->RayLen(), pActor->RayLen()) )
                   {
                      MR_AddContactWall( lCounter, pAnswer );
                   }
@@ -594,8 +611,8 @@ void MR_CylinderRoomContact( const MR_CylinderShape* pActor, const MR_PolygonSha
             {
                if( lLenDistance <= pActor->RayLen()+pRoom->SideLen( lCounter ) )
                {
-                  if(  (pRoom->X(lP1)-pActor->AxisX())*(pRoom->X(lP1)-pActor->AxisX())
-                      +(pRoom->Y(lP1)-pActor->AxisY())*(pRoom->Y(lP1)-pActor->AxisY()) <= pActor->RayLen()*pActor->RayLen() )
+                  if(  WrapAdd( WrapMul(pRoom->X(lP1)-pActor->AxisX(), pRoom->X(lP1)-pActor->AxisX()),
+                               WrapMul(pRoom->Y(lP1)-pActor->AxisY(), pRoom->Y(lP1)-pActor->AxisY()) ) <= WrapMul(pActor->RayLen(), pActor->RayLen()) )
                   {
                      MR_AddContactWall( lCounter, pAnswer );
                   }

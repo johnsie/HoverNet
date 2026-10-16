@@ -71,6 +71,12 @@ MR_Level::MR_Level( BOOL pAllowRendering )
    mFreeElementNonClassifiedList    = NULL;
    mFreeElementClassifiedByRoomList = NULL;
    mNbPlayer    = 0;
+   // Slots a track does not define must not hold stack garbage: callers (split screen, tools) can still read them.
+   for( int lSlot = 0; lSlot < MR_NB_MAX_PLAYER; lSlot++ )
+   {
+      mStartingRoom[ lSlot ]        = -1;
+      mStartingOrientation[ lSlot ] = 0;
+   }
 
    mElementCreationBroadcastHook  = NULL;
    mPermElementStateBroadcastHook = NULL;

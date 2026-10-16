@@ -111,7 +111,9 @@ int main(int argc, char** argv)
     }
 
     MR_RecordFile* track = new MR_RecordFile;
-    const std::string path = "NetTarget/Tracks/" + trackName + ".trk";
+    // A bundled track name, or a path to any .trk file (used to sweep the community library).
+    const bool isPath = trackName.find('/') != std::string::npos;
+    const std::string path = isPath ? trackName : "NetTarget/Tracks/" + trackName + ".trk";
     if (!track->OpenForRead(path.c_str())) {
         std::fprintf(stderr, "Could not open %s\n", path.c_str());
         delete track;
@@ -139,7 +141,8 @@ int main(int argc, char** argv)
     }
     // A second craft on the next grid slot, so collisions between craft and missile hits are covered too.
     MR_MainCharacter* rival = MR_MainCharacter::New(5, TRUE);
-    const int rivalRoom = level->GetStartingRoom(1);
+    // Tracks with a single start slot have no second grid position.
+    const int rivalRoom = level->GetPlayerCount() > 1 ? level->GetStartingRoom(1) : -1;
     if (rival != nullptr && rivalRoom >= 0 && rivalRoom < level->GetRoomCount()) {
         rival->mPosition = level->GetStartingPos(1);
         rival->SetOrientation(level->GetStartingOrientation(1));

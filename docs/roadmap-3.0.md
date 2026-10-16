@@ -84,7 +84,7 @@ These are what made 2.0 work; keep them.
 
 Run the experiments that decide the architecture before building on it.
 
-- **Cross-platform determinism experiment (first task).** *Status: started, see [determinism.md](determinism.md): Linux, Debug/Release and WebAssembly now replay identically on all seven bundled tracks after one real divergence was fixed; Windows, weapons and multi-craft runs are still to do.* Record the inputs of full races
+- **Cross-platform determinism experiment (first task).** *Status: started, see [determinism.md](determinism.md): Linux, Debug/Release and WebAssembly now replay identically on all seven bundled tracks after one real divergence was fixed; weapons and two-craft runs are done, and the whole 1,012-track community library runs UBSan-clean with identical results in plain and sanitizer builds (two more bugs fixed); Windows is still to do.* Record the inputs of full races
   (all seven bundled tracks plus a sample of community tracks), hash the whole game state
   every frame, and replay the same inputs on Linux, Windows x64, and Win32. Report the
   first frame where any hash differs. Audit the likely causes: platform maths-library

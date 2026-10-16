@@ -13,6 +13,11 @@ and how to roll one back.
   every race, including races started again from the menu.
 
 ### Fixed
+- Tracks with a single start position left the unused start slots uninitialised, so a second craft or split screen
+  read garbage there; the slots are now initialised.
+- Wall contact on very large community arenas relied on signed integer overflow (undefined behaviour); the wrap is now
+  explicit, with identical results. All 1,012 community tracks now replay the same in plain and sanitizer builds with no
+  sanitizer errors (`scripts/sweep-community-determinism.sh`).
 - CI: pushes to `main` now run the GitLab pipeline (the project's default branch is not `main`); the web smoke
   test job passes when the runner has no Chrome; the post-deploy web check runs against the local Apache.
 - Windows build: no C++17 if-initialisers in the client (GitHub's Windows build now compiles).

@@ -27,6 +27,7 @@ it on the WebAssembly build under Node.
 | Native Release (-O2) vs Debug (-O0) | identical on all 7 tracks |
 | Native x86-64 (64-bit) vs WebAssembly (32-bit, different libm and compiler) | identical on all 7 tracks, **after the fix below** |
 | Linux sanitizer build (ASan + UBSan) | clean on all 7 tracks; one signed overflow in the wall-distance maths (`ShapeCollisions.cpp`) was made explicitly wrapping, results unchanged |
+| All 1,012 community tracks, 1,500 frames each, plain Debug build vs ASan + UBSan build | identical hashes on every track and no sanitizer errors, **after the two fixes below** (`scripts/sweep-community-determinism.sh`) |
 | Windows x64 and Win32 | not run yet |
 
 ### Divergence found and fixed
@@ -39,9 +40,22 @@ in the browser. The macro now truncates to a signed `int` first, which keeps the
 hashes did not change) and makes WebAssembly match. This was very probably behind the browser bugs reported as
 "crashing into walls" and "sometimes stuck instead of bouncing".
 
+### Community-track sweep: uninitialised start slots and wall-contact overflow
+
+The first sweep found two problems that the seven bundled tracks do not reach:
+
+- **Uninitialised start slots.** Tracks with a single start position (3 of 1,012) never set the second slot's room,
+  position or orientation in `MR_Level`; anything reading slot 1 (the second craft here, split screen in the game)
+  got stack garbage, so the same run gave different results in different builds. The slots are now initialised
+  (room -1, orientation 0), and the runner only adds a second craft when the track defines a second slot.
+- **Signed overflow in the wall-contact maths** (`ShapeCollisions.cpp`, three expressions, 12 tracks). Large arenas
+  overflow 32-bit products there. The code relied on wrapping, which is undefined behaviour; the wrap is now explicit
+  (unsigned multiply and add), giving the same two's-complement values. No hash changed on any of the 1,012 tracks or
+  the seven golden ones.
+
 ## What this does not prove
 
-- Two local craft and one input script per craft; remote (replicated) players and network effects are not covered.
+- Two local craft and one input script per craft (1,500 frames on community tracks, 3000 on bundled ones); remote (replicated) players and network effects are not covered.
 - The clock-driven `Simulate()` path (what the game uses) is not deterministic by nature; this run replaces it with
   fixed steps, which is the Stage 1 direction.
 - The Windows builds have not been compared (needs the Windows runner), and the rasterizer is not part of the hash.
