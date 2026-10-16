@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "SimHarness.h"
+#include "../Authority/ReplayFormat.h"
 #include "../Model/StateSnapshot.h"
 #ifdef __EMSCRIPTEN__
 void HoverNetInitializeWebFactory();
@@ -29,7 +30,7 @@ using SimHarness::World;
 
 namespace
 {
-constexpr std::uint32_t kRules = 4;
+constexpr std::uint32_t kRules = ReplayFormat::kSimulationRules;
 
 std::vector<MR_FreeElement*> Externals(const World& world)
 {

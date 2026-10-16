@@ -43,6 +43,7 @@ struct World
             c->mPosition = level->GetStartingPos(i);
             c->SetOrientation(level->GetStartingOrientation(i));
             c->mRoom = room;
+            c->SetHoverId(i);   // hover id = grid slot, as in the game and on the server
             if (level->InsertElement(c, room, FALSE) == nullptr) return false;
             craft.push_back(c);
         }

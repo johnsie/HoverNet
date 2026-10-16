@@ -12,7 +12,7 @@ namespace ReplayFormat
 constexpr int kFrameMs = 16;
 constexpr std::uint32_t kCheckpointTicks = 250;
 constexpr std::uint16_t kVersion = 1;
-constexpr std::uint32_t kSimulationRules = 4;  // bump when a deliberate change alters the golden hashes
+constexpr std::uint32_t kSimulationRules = 5;  // bump when a deliberate change alters the golden hashes
 constexpr std::uint32_t kMaxTicks = 2u * 60 * 60 * 1000 / kFrameMs;  // two hours
 constexpr int kMaxPlayers = 8;
 

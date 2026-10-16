@@ -48,6 +48,7 @@ bool AuthoritativeRace::Start( const RaceConfig& config, std::string& error )
         lCraft->mPosition = lLevel->GetStartingPos( lPlayer );
         lCraft->SetOrientation( lLevel->GetStartingOrientation( lPlayer ) );
         lCraft->mRoom = lRoom;
+        lCraft->SetHoverId( lPlayer );   // hover id = grid slot: missiles and hits are attributed to it
         if( lLevel->InsertElement( lCraft, lRoom, FALSE ) == NULL ) { error = "cannot place a craft"; return false; }
         mCraft.push_back( lCraft );
     }
