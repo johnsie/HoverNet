@@ -142,7 +142,7 @@ differences from 2.0 are documented design decisions.
 - A versioned protocol 3.0 independent of native memory layouts, building on 2.0's explicit
   encoding, with authenticated encryption and secure session establishment.
 - The server is authoritative for starts, movement, collisions, weapons, pickups, laps,
-  finishes, and results. Prediction, reconciliation, interpolation, reconnect, and
+  finishes, and results. *Status: the authoritative race core is built and tested at eight players on all bundled tracks on Linux and Windows, see [authoritative-race.md](authoritative-race.md); the socket server, protocol framing, encryption, reconnect and observability are not.* Prediction, reconciliation, interpolation, reconnect, and
   spectator snapshots on the client.
 - Bandwidth budgets, packet prioritisation, compression, rate limiting, and abuse
   protection (extending 2.0's limits and fuzzing).

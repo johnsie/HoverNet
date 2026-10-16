@@ -166,6 +166,9 @@ add_library(HoverNetSim STATIC
     NetTarget/ObjFac1/FuelSource.cpp
     NetTarget/ObjFac1/DoubleSpeedSource.cpp
     NetTarget/ObjFac1/FinishLine.cpp
+    NetTarget/Authority/ReplayFormat.cpp
+    NetTarget/Authority/AuthoritativeRace.cpp
+    NetTarget/LinuxClient/Sha256.cpp
 )
 
 target_link_libraries(HoverNetSim PUBLIC HoverNetModelCore HoverNetPortableUtil)
@@ -302,6 +305,11 @@ else()
     )
     target_link_libraries(HoverNetFrameRateTest PRIVATE HoverNetSim)
 
+    add_executable(HoverNetAuthorityTest
+        NetTarget/LinuxClient/AuthorityTest.cpp
+    )
+    target_link_libraries(HoverNetAuthorityTest PRIVATE HoverNetSim)
+
     add_executable(HoverNetSnapshotTest
         NetTarget/LinuxClient/SnapshotTest.cpp
     )
@@ -309,7 +317,6 @@ else()
 
     add_executable(HoverNetReplay
         NetTarget/LinuxClient/ReplayTool.cpp
-        NetTarget/LinuxClient/Sha256.cpp
     )
     target_link_libraries(HoverNetReplay PRIVATE HoverNetSim)
 endif()
@@ -633,6 +640,9 @@ if(BUILD_TESTING AND NOT WIN32)
     set_tests_properties(HoverNetFrameRateIndependence PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetSnapshotFuzz COMMAND HoverNetSnapshotTest Steeplechase 400 900 --fuzz 1500)
     set_tests_properties(HoverNetSnapshotFuzz PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetAuthority COMMAND HoverNetAuthorityTest ClassicH 8)
+    add_test(NAME HoverNetAuthorityRiver COMMAND HoverNetAuthorityTest "The River" 8)
+    set_tests_properties(HoverNetAuthority HoverNetAuthorityRiver PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

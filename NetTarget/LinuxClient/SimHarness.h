@@ -28,7 +28,7 @@ struct World
     std::unique_ptr<MR_GameSession> session;
     std::vector<MR_MainCharacter*> craft;
 
-    bool Build(const std::string& path, const std::string& name, int players)
+    bool Build(const std::string& path, const std::string& name, int players, int laps = 5, bool weapons = true)
     {
         MR_RecordFile* track = new MR_RecordFile;
         if (!track->OpenForRead(path.c_str())) { delete track; return false; }
@@ -38,7 +38,7 @@ struct World
         if (level->GetPlayerCount() < players) return false;
         for (int i = 0; i < players; ++i) {
             const int room = level->GetStartingRoom(i);
-            MR_MainCharacter* c = MR_MainCharacter::New(5, TRUE);
+            MR_MainCharacter* c = MR_MainCharacter::New(laps, weapons ? TRUE : FALSE);
             if (c == nullptr || room < 0 || room >= level->GetRoomCount()) return false;
             c->mPosition = level->GetStartingPos(i);
             c->SetOrientation(level->GetStartingOrientation(i));

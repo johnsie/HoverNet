@@ -13,7 +13,7 @@ All integers are little-endian and unsigned. There is no padding and no host-nat
 | --- | ---: | --- |
 | magic | 4 | ASCII `HNRP` |
 | version | 2 | `1`. A reader rejects any other value |
-| flags | 2 | `0` in v1; reserved |
+| flags | 2 | Race settings: low byte = laps (1 to 255), bit 8 = weapons enabled; `0` (older files) means 5 laps with weapons; any other bit is refused |
 | rules | 4 | Simulation rules version the race was recorded under (`1` for the first portable simulation, `2` once the original missile speed was restored, `3` once the hash covered the full simulation state, `4` since the snapshot field list). Bumped when a deliberate change alters the golden hashes ([determinism.md](../determinism.md)) |
 | tick_ms | 4 | Tick length in milliseconds. `16` in v1 |
 | track name | 1 + n | Length byte, then the name as the game knows it (bytes, no terminator) |
