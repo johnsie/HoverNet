@@ -5582,9 +5582,9 @@ int RunClient(int argc, char** argv)
     const std::string replayPath = ParseStringArg(argc, argv, "--replay");
     replay.hashMode = HasArgument(argc, argv, "--replay-hash");
     replay.watch = std::atoi(ParseStringArg(argc, argv, "--replay-player").c_str());
+    const std::string authServer = ParseStringArg(argc, argv, "--auth-connect");     // host:port of an authoritative server
 #if !defined(HOVERNET_WEB)
     AuthOnline auth;
-    const std::string authServer = ParseStringArg(argc, argv, "--auth-connect");     // host:port of an authoritative server
     auth.verify = HasArgument(argc, argv, "--auth-verify");
     auth.scripted = HasArgument(argc, argv, "--auth-script");
     auth.dropAfter = static_cast<unsigned>(std::atoi(ParseStringArg(argc, argv, "--auth-drop").c_str()));
