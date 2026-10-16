@@ -4,6 +4,13 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## Unreleased
+
+### Changed
+- CI split: GitLab now only builds, tests and deploys the web client and the Linux race server. GitHub Actions
+  builds the Windows and Linux clients and servers, runs the full tests (nightly under ASan/UBSan), makes every
+  package and installer, and publishes the GitHub release. A 64-bit Windows race server zip is now packaged too.
+
 ## 2.0.18 - 2026-10-16
 
 ### Changed

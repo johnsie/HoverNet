@@ -8,6 +8,9 @@ on:
       - 'community-tracks-*'
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Nightly: the whole test suite under AddressSanitizer and UndefinedBehaviorSanitizer.
+    - cron: '17 3 * * *'
 
 permissions:
   contents: read
@@ -29,6 +32,7 @@ jobs:
 
   linux:
     name: Linux game, race server and DEBs
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -86,6 +90,7 @@ jobs:
 
   raceserver-sanitizers:
     name: RaceServer ASan and UBSan
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -107,8 +112,30 @@ jobs:
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: ctest --test-dir build/sanitize --output-on-failure -R 'HoverNetRaceServer(ClientSmoke|ProtocolStrictSmoke|LifecycleSmoke|ProtocolFuzz)'
 
+  sanitizers-full:
+    name: Full test suite under ASan and UBSan
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential cmake libsdl2-dev
+      - name: Configure sanitizer build
+        run: cmake -S . -B build/sanitize -DCMAKE_BUILD_TYPE=RelWithDebInfo -DHOVERNET_WARNINGS=ON -DHOVERNET_SANITIZE=ON
+      - name: Build
+        run: cmake --build build/sanitize --parallel 2
+      - name: Run every test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build/sanitize --output-on-failure
+
   windows:
     name: Windows game and setup EXE
+    if: github.event_name != 'schedule'
     runs-on: windows-2022
     timeout-minutes: 45
 
@@ -377,11 +404,18 @@ jobs:
           Copy-Item "NetTarget\CommunityTracks.tsv" "stage\raceserver\CommunityTracks.tsv" -Force
           Compress-Archive -Path "stage\raceserver\*" -DestinationPath "hovernet-raceserver_${version}_win32.zip" -Force
 
+          # The 64-bit race server built with the shared x64 client.
+          New-Item -ItemType Directory -Force -Path "stage\raceserver-x64" | Out-Null
+          Copy-Item "build\windows-shared\Release\RaceServer.exe" "stage\raceserver-x64\RaceServer.exe" -Force
+          Copy-Item "NetTarget\RaceServer\config.xml" "stage\raceserver-x64\config.xml" -Force
+          Copy-Item "NetTarget\CommunityTracks.tsv" "stage\raceserver-x64\CommunityTracks.tsv" -Force
+          Compress-Archive -Path "stage\raceserver-x64\*" -DestinationPath "hovernet-raceserver_${version}_win64.zip" -Force
+
       - name: Upload Windows race server
         uses: actions/upload-artifact@v4
         with:
           name: hovernet-windows-raceserver
-          path: hovernet-raceserver_*_win32.zip
+          path: hovernet-raceserver_*.zip
           if-no-files-found: error
           retention-days: 30
 
