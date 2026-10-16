@@ -89,6 +89,6 @@ not a Stage 1 one.
 ## Open questions
 
 1. Fixed-point `double` speeds, or pinned IEEE rules? Needs a quick prototype on the golden suite.
-2. Snapshot cost of the free-element lists: measure in the netcode prototype before Stage 2 depends on it.
+2. Snapshot cost of the free-element lists: the [netcode prototype](../netcode-prototype.md) shows rollback by replay costs about 7 microseconds per tick, so snapshots are an optimisation, not a prerequisite. Still needed for server-side weapon lag compensation.
 3. Does the corpus sweep become a CI job (it takes minutes) or a nightly? Proposal: nightly plus a 50-track sample per
    push.

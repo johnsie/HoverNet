@@ -269,6 +269,12 @@ else()
 
     add_dependencies(HoverNetDeterminismRun HoverNetHeadlessObjFac1)
     target_link_libraries(HoverNetDeterminismRun PRIVATE HoverNetMainCharacter)
+
+    add_executable(HoverNetNetcodeProto
+        NetTarget/LinuxClient/NetcodeProto.cpp
+    )
+    add_dependencies(HoverNetNetcodeProto HoverNetHeadlessObjFac1)
+    target_link_libraries(HoverNetNetcodeProto PRIVATE HoverNetMainCharacter)
 endif()
 
 add_executable(HoverNetMainCharacterRenderSmoke
@@ -571,6 +577,11 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetDeterminism
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-determinism.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    # Netcode prototype at the roadmap's two latency targets (120 ms / 2% loss, 250 ms / 5% loss): both clients must
+    # converge to the ideal run bit for bit.
+    add_test(NAME HoverNetNetcodeTarget120 COMMAND HoverNetNetcodeProto ClassicH 1200 120 2 --jitter=10)
+    add_test(NAME HoverNetNetcodeTarget250 COMMAND HoverNetNetcodeProto "The River" 1200 250 5 --jitter=25)
+    set_tests_properties(HoverNetNetcodeTarget120 HoverNetNetcodeTarget250 PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
