@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <fstream>
+#include <vector>
 
 namespace {
 
@@ -122,9 +123,10 @@ std::string Sha256::HashFile(const std::string& pPath)
         return std::string();
     }
     Sha256 lHash;
-    char lChunk[65536];
-    while (lFile.read(lChunk, sizeof(lChunk)) || lFile.gcount() > 0) {
-        lHash.Update(lChunk, static_cast<std::size_t>(lFile.gcount()));
+    // On the heap: WebAssembly's default stack is 64 KB, and a 64 KB buffer on it overflows into memory access errors.
+    std::vector<char> lChunk(65536);
+    while (lFile.read(lChunk.data(), static_cast<std::streamsize>(lChunk.size())) || lFile.gcount() > 0) {
+        lHash.Update(lChunk.data(), static_cast<std::size_t>(lFile.gcount()));
     }
     return lHash.Finish();
 }
