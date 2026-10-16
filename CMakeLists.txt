@@ -571,6 +571,9 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetDeterminism
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-determinism.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetPhysicsGolden
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_hovernet_root_test(HoverNetMainCharacterRenderSmoke)
     add_hovernet_root_test(HoverNetClientSessionSmoke)
     add_hovernet_root_test(HoverNetObserverSmoke)

@@ -94,7 +94,7 @@ Run the experiments that decide the architecture before building on it.
   state, and signed overflow.
 - **Keep the simulation free of undefined behaviour under UBSan** across the whole corpus
   of 1,009 community tracks (the rasterizer's exemption is already removed).
-- **Golden physics suite.** Capture reference behaviour from 2.0: acceleration, steering,
+- **Golden physics suite.** *Status: first version done, see [determinism.md](determinism.md): nine isolated scenarios on two tracks with expected hashes, in ctest and web CI; pickups, collisions between craft and Windows reference runs still to add.* Capture reference behaviour from 2.0: acceleration, steering,
   jumps, collisions, weapons, pickups, and full races, as inputs plus expected hashes.
 - **Netcode prototype** under artificial latency, loss, jitter and reordering:
   prediction, reconciliation, interpolation, and lag compensation for weapons.

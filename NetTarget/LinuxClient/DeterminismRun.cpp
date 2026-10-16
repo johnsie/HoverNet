@@ -10,6 +10,10 @@
 //   HoverNetDeterminismRun --tables 0                      prints the trigonometry tables
 //   HoverNetDeterminismRun <track-name> <frames> --state   prints the raw state instead of hashes
 //
+//   HoverNetDeterminismRun <track-name> <frames> --scenario=<name>
+//                                                          one craft alone, driven by one isolated input pattern
+//                                                          (the golden physics suite, scripts/test-physics.sh)
+//
 //   <track> <frames> <chain-hash>          (the whole run folded into one 64-bit hash)
 //
 // and, with --trace, one "<frame> <hash>" line per frame before it, so the first frame where two runs
@@ -56,6 +60,28 @@ void MixDouble(std::uint64_t& hash, double value)
     Mix(hash, bits);
 }
 
+// Golden physics scenarios: one craft alone, one behaviour at a time, so a change in handling shows up in the
+// scenario that owns it. Returns -1 for an unknown name.
+int ScenarioControls(const std::string& name, int frame)
+{
+    const int motor = MR_MainCharacter::eMotorOn;
+    if (name == "accelerate") return motor;
+    if (name == "idle") return 0;
+    if (name == "steer-left") return motor | MR_MainCharacter::eLeft;
+    if (name == "steer-right") return motor | MR_MainCharacter::eRight;
+    if (name == "slalom") return motor | (((frame / 60) % 2) == 0 ? MR_MainCharacter::eLeft : MR_MainCharacter::eRight);
+    if (name == "jump") return motor | ((frame % 200 >= 100 && frame % 200 < 112) ? MR_MainCharacter::eJump : 0);
+    if (name == "brake") return frame < 200 ? motor : (motor | MR_MainCharacter::eBreakDirection);
+    if (name == "missile") return motor | (frame % 50 == 10 ? MR_MainCharacter::eFire : 0);
+    if (name == "weapons") {
+        int controls = motor;
+        if (frame % 120 == 5) controls |= MR_MainCharacter::eSelectWeapon;
+        if (frame % 40 == 20) controls |= MR_MainCharacter::eFire;
+        return controls;
+    }
+    return -1;
+}
+
 // The player's inputs for a frame: a pure function of the frame number, so every run sees the same.
 int ControlsForFrame(int frame, int craft)
 {
@@ -86,7 +112,15 @@ int ControlsForFrame(int frame, int craft)
 int main(int argc, char** argv)
 {
     if (argc < 3) {
-        std::fprintf(stderr, "usage: %s <track-name> <frames> [--trace]\n", argv[0]);
+        std::fprintf(stderr, "usage: %s <track-name> <frames> [--trace|--state|--scenario=<name>]\n", argv[0]);
+        return 2;
+    }
+    std::string scenario;
+    for (int i = 3; i < argc; ++i) {
+        if (std::strncmp(argv[i], "--scenario=", 11) == 0) scenario = argv[i] + 11;
+    }
+    if (!scenario.empty() && ScenarioControls(scenario, 0) < 0) {
+        std::fprintf(stderr, "Unknown scenario %s\n", scenario.c_str());
         return 2;
     }
     const std::string trackName = argv[1];
@@ -140,7 +174,7 @@ int main(int argc, char** argv)
         return 1;
     }
     // A second craft on the next grid slot, so collisions between craft and missile hits are covered too.
-    MR_MainCharacter* rival = MR_MainCharacter::New(5, TRUE);
+    MR_MainCharacter* rival = scenario.empty() ? MR_MainCharacter::New(5, TRUE) : nullptr;
     // Tracks with a single start slot have no second grid position.
     const int rivalRoom = level->GetPlayerCount() > 1 ? level->GetStartingRoom(1) : -1;
     if (rival != nullptr && rivalRoom >= 0 && rivalRoom < level->GetRoomCount()) {
@@ -157,7 +191,8 @@ int main(int argc, char** argv)
     std::uint64_t chain = kFnvOffset;
     int maxElements = 0;
     for (int frame = 0; frame < frames; ++frame) {
-        player->SetControlState(ControlsForFrame(frame, 0), session.GetSimulationTime());
+        player->SetControlState(scenario.empty() ? ControlsForFrame(frame, 0) : ScenarioControls(scenario, frame),
+                                session.GetSimulationTime());
         if (rival != nullptr) rival->SetControlState(ControlsForFrame(frame, 1), session.GetSimulationTime());
         session.SimulateStep(kFrameMs);
 

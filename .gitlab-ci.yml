@@ -125,6 +125,7 @@ build:game:web:
         # hashes as the committed (native) golden values. See docs/determinism.md.
         cmake --build "$WEB_BUILD_DIR" --target HoverNetDeterminismRun --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
         scripts/test-determinism.sh "node $WEB_BUILD_DIR/HoverNetDeterminismRun.js"
+        scripts/test-physics.sh "node $WEB_BUILD_DIR/HoverNetDeterminismRun.js"
         mkdir -p dist/web
         cp "$WEB_BUILD_DIR/HoverNet.html" dist/web/index.html
         cp "$WEB_BUILD_DIR/HoverNet.js" "$WEB_BUILD_DIR/HoverNet.wasm" "$WEB_BUILD_DIR/HoverNet.data" dist/web/

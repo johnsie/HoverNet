@@ -19,6 +19,15 @@ the per-frame hashes and `--state` the raw values, so the first frame where two 
 [determinism-golden.txt](determinism-golden.txt). It runs as the `HoverNetDeterminism` ctest, and the web CI job runs
 it on the WebAssembly build under Node.
 
+## Golden physics suite
+
+`scripts/test-physics.sh` (ctest `HoverNetPhysicsGolden`, and the web CI job under Node) runs one craft alone through
+nine isolated scenarios (`--scenario=`: idle, accelerate, steer-left, steer-right, slalom, jump, brake, missile,
+weapons) for 1,500 frames on ClassicH and The River and compares the hash chains with
+[physics-golden.txt](physics-golden.txt). A handling change shows up in the scenario that owns it. The hashes are the
+2.0 reference; update them (`--update`) only for an intended, documented change. Native Debug and the ASan+UBSan build
+agree on all 18.
+
 ## Results
 
 | Comparison | Result |
