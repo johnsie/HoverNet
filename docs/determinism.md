@@ -37,7 +37,7 @@ agree on all 18.
 | Native x86-64 (64-bit) vs WebAssembly (32-bit, different libm and compiler) | identical on all 7 tracks, **after the fix below** |
 | Linux sanitizer build (ASan + UBSan) | clean on all 7 tracks; one signed overflow in the wall-distance maths (`ShapeCollisions.cpp`) was made explicitly wrapping, results unchanged |
 | All 1,012 community tracks, 1,500 frames each, plain Debug build vs ASan + UBSan build | identical hashes on every track and no sanitizer errors, **after the two fixes below** (`scripts/sweep-community-determinism.sh`) |
-| Windows x64 and Win32 | not run yet |
+| Windows x64 and Win32 (MSVC 14.44, Release, built with CMake on the Windows runner) | identical on all 7 golden tracks and all 18 physics scenarios (16 October 2026) |
 
 ### Divergence found and fixed
 
@@ -67,4 +67,4 @@ The first sweep found two problems that the seven bundled tracks do not reach:
 - Two local craft and one input script per craft (1,500 frames on community tracks, 3000 on bundled ones); remote (replicated) players and network effects are not covered.
 - The clock-driven `Simulate()` path (what the game uses) is not deterministic by nature; this run replaces it with
   fixed steps, which is the Stage 1 direction.
-- The Windows builds have not been compared (needs the Windows runner), and the rasterizer is not part of the hash.
+- The Windows comparison was run by hand on the runner, not yet in CI, and only for the bundled tracks and the physics suite (not the community sweep or Debug builds); the rasterizer is not part of the hash.

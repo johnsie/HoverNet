@@ -24,6 +24,9 @@
 #include <cstring>
 #include <string>
 
+// MFC (Windows) or its portable stand-in (elsewhere) must come before the model headers.
+#include "../MainCharacter/StdAfx.h"
+
 // The run reads the craft's raw speeds, which are private; this is a test tool, not shipping code.
 #define protected public
 #define private public
