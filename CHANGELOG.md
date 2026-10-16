@@ -4,6 +4,19 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.20 - 2026-10-16
+
+### Added
+- Every race now tells the player how to open the pause menu as it begins: "Press Esc for the pause menu" on
+  desktop (and in the browser), "Tap MENU for the pause menu" on touch devices, plus "Left/Right: pick your craft"
+  (your own steering keys; "Drag stick: pick your craft" on touch) during the countdown. It shows for the first part of
+  every race, including races started again from the menu.
+
+### Fixed
+- CI: pushes to `main` now run the GitLab pipeline (the project's default branch is not `main`); the web smoke
+  test job passes when the runner has no Chrome; the post-deploy web check runs against the local Apache.
+- Windows build: no C++17 if-initialisers in the client (GitHub's Windows build now compiles).
+
 ## 2.0.19 - 2026-10-16
 
 ### Changed

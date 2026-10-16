@@ -6010,6 +6010,8 @@ int RunClient(int argc, char** argv)
     // eRSMsgChatMessage handling below) -- text input only actually does
     // anything once online, but it's harmless to leave enabled for local play.
     std::string chatBuffer;
+    bool pauseHintShown = false;
+    MR_SimulationTime lastRaceClock = -100000;
     std::vector<uint8_t> vrEyes; // VR: left+right eye RGBA, reused between frames
     SDL_StartTextInput();
 #ifdef HOVERNET_WEB
@@ -6262,6 +6264,29 @@ int RunClient(int argc, char** argv)
 #endif
 
         if (playerMode && mainCharacter != nullptr && level != nullptr) {
+#ifdef HOVERNET_GAME2_PLAYER
+            {
+                // Tell the player how to reach the pause menu as each race begins (the simulation clock
+                // starts a race well below zero and counts up, so a big backwards jump means a new race).
+                const MR_SimulationTime raceClock = session.GetSimulationTime();
+                if (raceClock + 1000 < lastRaceClock) pauseHintShown = false;
+                lastRaceClock = raceClock;
+                if (!pauseHintShown && raceClock < 0) {
+                    pauseHintShown = true;
+                    // Shown newest first, so the craft hint is added first and sits below the pause hint.
+                    if (HoverNetIsTouchDevice()) {
+                        session.AddMessage("Drag stick: pick your craft");
+                        session.AddMessage("Tap MENU for the pause menu");
+                    }
+                    else {
+                        const std::string craftHint = std::string(SDL_GetScancodeName(gKeyboardBindings.steerLeft)) + "/" +
+                            SDL_GetScancodeName(gKeyboardBindings.steerRight) + ": pick your craft";
+                        session.AddMessage(craftHint.c_str());
+                        session.AddMessage("Press Esc for the pause menu");
+                    }
+                }
+            }
+#endif
             int controlState = 0;
             if (autoPlay || moveForward) controlState |= MR_MainCharacter::eMotorOn;
             if (turnLeft) controlState |= MR_MainCharacter::eLeft;
