@@ -150,6 +150,12 @@ int main(int argc, char** argv)
                 std::printf("race over after %u ticks, final hash %016llx\n", host->Race().CurrentTick(), static_cast<unsigned long long>(host->Race().StateHash()));
                 for (const auto& r : results) std::printf("  player %d: rank %d, laps %d%s\n", r.player, r.rank, r.laps, r.finished ? ", finished" : "");
                 std::fflush(stdout);
+                const RaceHost::Metrics& m = host->GetMetrics();
+                std::printf("metrics: connections %llu accepted / %llu closed, %llu frames in (%llu bytes), %llu frames out (%llu bytes), %llu invalid, %llu ticks, inputs %llu accepted / %llu late / %llu too far, %llu snapshots\n",
+                            (unsigned long long)m.connectionsAccepted, (unsigned long long)m.connectionsClosed, (unsigned long long)m.framesIn, (unsigned long long)m.bytesIn,
+                            (unsigned long long)m.framesOut, (unsigned long long)m.bytesOut, (unsigned long long)m.invalidMessages, (unsigned long long)m.ticksSimulated,
+                            (unsigned long long)m.inputsAccepted, (unsigned long long)m.inputsLate, (unsigned long long)m.inputsTooFar, (unsigned long long)m.snapshotsServed);
+                std::fflush(stdout);
                 if (once) break;
                 for (auto& p : peers) { host->Disconnect(p->connection); AuthNet::CloseSocket(p->socket); }
                 peers.clear();

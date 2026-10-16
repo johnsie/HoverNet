@@ -278,6 +278,19 @@ void TestRace(const std::string& track, int players)
     Check(allPlayers, "each connection got its own player slot");
     Check(noDivergence, "every client rebuilt the race from Tick messages with matching state hashes");
     Check(enough, "every client followed (almost) every tick");
+    // Bandwidth budget: what one player costs the server in each direction, measured over the race above.
+    {
+        const RaceHost::Metrics& m = host.GetMetrics();
+        const double seconds = host.Race().CurrentTick() * 0.016;
+        const double downPerPlayer = static_cast<double>(m.tickBytesOut) / players / seconds;
+        const double upPerPlayer = static_cast<double>(m.bytesIn) / players / seconds;
+        std::fprintf(stderr, "  bandwidth per player: %.0f B/s down (Tick stream), %.0f B/s up (inputs); %llu inputs late, %llu accepted\n", downPerPlayer, upPerPlayer,
+                     (unsigned long long)m.inputsLate, (unsigned long long)m.inputsAccepted);
+        Check(downPerPlayer < 3000, "the Tick stream costs less than 3 KB/s per player at eight players");
+        Check(upPerPlayer < 4000, "a player's inputs cost less than 4 KB/s up");
+        Check(m.ticksSimulated == host.Race().CurrentTick(), "the tick counter matches the race");
+        Check(m.invalidMessages == 0, "an honest race has no invalid messages");
+    }
     // The replay of what the server ran verifies.
     ReplayFormat::Replay r;
     Check(ReplayFormat::Decode(host.Race().ReplayBytes(), r, error), "the host's replay decodes");
@@ -304,6 +317,103 @@ void TestRace(const std::string& track, int players)
 }
 
 // ---- abuse ---------------------------------------------------------------------------------------------------------
+// A player drops out mid-race and comes back with its resume token: the slot is kept, the craft carries on with its last
+// input, and the player fetches a snapshot and follows the Tick stream from there with every state hash matching.
+void TestReconnect(const std::string& track)
+{
+    HostConfig cfg = MakeConfig(track, 2);
+    cfg.startDelayMs = 0;
+    RaceHost host(cfg);
+    std::string error;
+    host.Init(error);
+    const int a = host.Connect(0), b = host.Connect(0);
+    Send(host, a, HelloFrame("a"), 0);
+    Send(host, b, HelloFrame("b"), 0);
+    Inbox ib;
+    ib.Take(host, b);
+    std::uint64_t token = 0;
+    for (const Inbox::Frame& f : ib.frames) if (f.type == Protocol3::kHelloAck) { Protocol3::HelloAck ack; if (Protocol3::Decode(f.payload, ack)) token = ack.resumeToken; }
+    Check(token != 0, "the HelloAck carries a resume token");
+
+    // Stage 1: both play to tick 300; b drops; a plays on to tick 450.
+    auto play = [&](int upto, std::uint32_t from, bool bPlays) {
+        for (std::uint32_t t = from; t < static_cast<std::uint32_t>(upto); ++t) {
+            const std::int64_t now = static_cast<std::int64_t>(t) * 16;
+            Protocol3::Input ia; ia.firstTick = t; ia.controls = {SimHarness::ScriptedInput(0, t)};
+            Send(host, a, Protocol3::EncodeFrame(Protocol3::kInput, Protocol3::Encode(ia)), now);
+            if (bPlays) {
+                Protocol3::Input in; in.firstTick = t; in.controls = {SimHarness::ScriptedInput(1, t)};
+                Send(host, b, Protocol3::EncodeFrame(Protocol3::kInput, Protocol3::Encode(in)), now);
+            }
+            host.Advance(now);
+        }
+    };
+    play(300, 0, true);
+    host.Disconnect(b);
+    Check(host.IsClosed(b), "player b dropped");
+    play(450, 300, false);
+
+    // A wrong token and a token before the start are refused.
+    const int bad = host.Connect(450 * 16);
+    Protocol3::Resume wrong; wrong.token = token ^ 0xFFFF;
+    Send(host, bad, Protocol3::EncodeFrame(Protocol3::kResume, Protocol3::Encode(wrong)), 450 * 16);
+    Check(host.IsClosed(bad), "a wrong resume token closes the connection");
+    {
+        RaceHost fresh(cfg); fresh.Init(error);
+        const int c = fresh.Connect(0);
+        Protocol3::Resume early; early.token = token;
+        Send(fresh, c, Protocol3::EncodeFrame(Protocol3::kResume, Protocol3::Encode(early)), 0);
+        Check(fresh.IsClosed(c), "a resume before the race starts is refused");
+    }
+
+    // Stage 2: b comes back.
+    const int b2 = host.Connect(450 * 16);
+    Protocol3::Resume resume; resume.token = token;
+    Send(host, b2, Protocol3::EncodeFrame(Protocol3::kResume, Protocol3::Encode(resume)), 450 * 16);
+    Protocol3::SnapshotRequest request; request.id = 5;
+    Send(host, b2, Protocol3::EncodeFrame(Protocol3::kSnapshotRequest, Protocol3::Encode(request)), 450 * 16);
+    Check(!host.IsClosed(b2), "the resumed connection stays open");
+    Inbox back;
+    back.Take(host, b2);
+    int slot = -1;
+    std::vector<Protocol3::SnapshotChunk> chunks;
+    for (const Inbox::Frame& f : back.frames) {
+        if (f.type == Protocol3::kHelloAck) { Protocol3::HelloAck ack; if (Protocol3::Decode(f.payload, ack)) slot = ack.player; }
+        if (f.type == Protocol3::kSnapshotChunk) { Protocol3::SnapshotChunk ch; if (Protocol3::Decode(f.payload, ch)) chunks.push_back(ch); }
+    }
+    Check(slot == 1, "the resumed connection gets its old slot back");
+    std::vector<std::uint8_t> bytes;
+    for (const auto& ch : chunks) bytes.insert(bytes.end(), ch.data.begin(), ch.data.end());
+    SimHarness::World world;
+    Check(world.Build(SimHarness::TrackPath(track), track, 2, cfg.race.laps, cfg.race.weapons), "the returning player builds a fresh copy of the race");
+    std::vector<MR_FreeElement*> external(world.craft.begin(), world.craft.end());
+    std::int64_t t0 = 0;
+    Check(!chunks.empty() && MR_RestoreLevelState(world.session->GetCurrentLevel(), bytes.data(), bytes.size(), external, ReplayFormat::kSimulationRules, t0, error), "the returning player restores the snapshot");
+    world.session->SetSimulationTime(static_cast<MR_SimulationTime>(t0));
+    const std::uint32_t snapshotTick = chunks.empty() ? 0 : chunks[0].tick;
+    // Follow the Tick stream from the snapshot tick on.
+    play(700, 450, true);
+    back.Take(host, b2);
+    std::uint32_t next = snapshotTick, matched = 0;
+    bool ok = true;
+    for (const Inbox::Frame& f : back.frames) {
+        if (f.type != Protocol3::kTick) continue;
+        Protocol3::Tick t;
+        if (!Protocol3::Decode(f.payload, t) || t.tick < snapshotTick) continue;
+        if (t.tick != next) { ok = false; break; }
+        world.Step(t.controls.data());
+        if (world.Hash() != t.hash) { ok = false; break; }
+        ++next; ++matched;
+    }
+    Check(ok && matched >= 200, "after the snapshot the returning player matches the server's hash on every tick");
+    std::fprintf(stderr, "  reconnected at tick %u from a %zu-byte snapshot; %u ticks matched afterwards\n", snapshotTick, bytes.size(), matched);
+
+    // The old token still works (last connection wins) and replaces the connection that holds the slot.
+    const int b3 = host.Connect(700 * 16);
+    Send(host, b3, Protocol3::EncodeFrame(Protocol3::kResume, Protocol3::Encode(resume)), 700 * 16);
+    Check(host.IsClosed(b2) && !host.IsClosed(b3), "a second reconnection replaces the first");
+}
+
 // A race with a time limit ends, broadcasts its result, and the late inputs after the end are refused.
 void TestResult(const std::string& track)
 {
@@ -520,6 +630,7 @@ int main(int argc, char** argv)
 
     TestFraming();
     TestRace(track, players);
+    TestReconnect(track);
     TestResult(track);
     TestAbuse(track);
     TestTampering(track);

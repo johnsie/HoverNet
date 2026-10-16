@@ -26,6 +26,7 @@ struct HostConfig
     int invalidWindowMs = 10000;
     int helloTimeoutMs = 5000;        // a connection that has not completed Hello by then is closed
     int snapshotsPerMinute = 6;       // per connection
+    std::uint64_t tokenSeed = 1;      // seeds the reconnect tokens; a production server seeds this from the operating system
 };
 
 class RaceHost
@@ -42,6 +43,20 @@ public:
     bool IsClosed(int connection) const;
     // Runs the race up to the given time (and expires slow connections); broadcasts a Tick for each tick simulated.
     void Advance(std::int64_t nowMs);
+
+    // Counters for observability (the server prints them; a monitoring endpoint can export them).
+    struct Metrics
+    {
+        std::uint64_t connectionsAccepted = 0, connectionsClosed = 0;
+        std::uint64_t bytesIn = 0, bytesOut = 0;
+        std::uint64_t framesIn = 0, framesOut = 0;
+        std::uint64_t invalidMessages = 0, rejectedConnections = 0;
+        std::uint64_t ticksSimulated = 0;
+        std::uint64_t inputsAccepted = 0, inputsLate = 0, inputsTooFar = 0;
+        std::uint64_t snapshotsServed = 0;
+        std::uint64_t tickBytesOut = 0;        // bytes of Tick frames, summed over recipients
+    };
+    const Metrics& GetMetrics() const { return mMetrics; }
 
     bool Started() const { return mStarted; }
     bool RaceFinished() const { return mRace.Finished(); }
@@ -72,7 +87,12 @@ private:
     std::int64_t mStartMs;       // server time of tick 0
     std::uint32_t mSimulated;
     int mInvalidTotal;
+    Metrics mMetrics;
     std::string mTrackSha256;
+    std::vector<std::uint64_t> mTokens;   // reconnect token per player slot (0 = none yet)
+    std::uint64_t mTokenState;
+    std::uint64_t NextToken();
+    void SendHelloAck(Connection& c);
 };
 }
 

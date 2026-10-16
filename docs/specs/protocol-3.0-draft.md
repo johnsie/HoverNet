@@ -62,9 +62,10 @@ No lobby, race or gameplay frame is processed before step 2 succeeds.
 | Type | Name | Direction | Payload |
 | ---: | --- | --- | --- |
 | 1 | Hello | client to server | magic `HN3\0`, major, minor, capabilities, max frame, player name (1 to 32 bytes of UTF-8) |
-| 2 | HelloAck | server to client | version, capabilities, negotiated max frame, your player slot, players, tick length, rules version, track name and SHA-256, laps, weapons |
+| 2 | HelloAck | server to client | version, capabilities, negotiated max frame, your player slot, players, tick length, rules version, track name and SHA-256, laps, weapons, resume token |
 | 3 | Reject | server to client | reason (version, full, bad message, rate limited, not in race), short message; the connection is then closed |
 | 4 | Start | server to client | countdown in ms before tick 0 |
+| 5 | Resume | client to server | the resume token from the HelloAck (replaces Hello when rejoining a running race; answered with a HelloAck for the same slot) |
 | 10 | Input | client to server | first tick, 1 to 32 control words (the newest are for the future, the older repeat earlier ones for loss) |
 | 11 | Tick | server to client | tick number, state hash after it, the control word each player used (so a client or spectator can re-simulate the race exactly) |
 | 12, 13 | SnapshotRequest, SnapshotChunk | client to server, server to client | request id; chunks of up to 900 bytes with index, count and the tick |

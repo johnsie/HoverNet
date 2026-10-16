@@ -115,7 +115,7 @@ std::vector<std::uint8_t> Encode(const HelloAck& m)
 {
     Out o;
     o.U16(m.major); o.U16(m.minor); o.U32(m.capabilities); o.U16(m.maxFrame);
-    o.U8(m.player); o.U8(m.players); o.U8(m.tickMs); o.U32(m.rules); o.Str(m.track); o.Str(m.trackSha256); o.U8(m.laps); o.U8(m.weapons ? 1 : 0);
+    o.U8(m.player); o.U8(m.players); o.U8(m.tickMs); o.U32(m.rules); o.Str(m.track); o.Str(m.trackSha256); o.U8(m.laps); o.U8(m.weapons ? 1 : 0); o.U64(m.resumeToken);
     return o.b;
 }
 bool Decode(const std::vector<std::uint8_t>& p, HelloAck& m)
@@ -125,11 +125,15 @@ bool Decode(const std::vector<std::uint8_t>& p, HelloAck& m)
     m.maxFrame = static_cast<std::uint16_t>(in.U16()); m.player = static_cast<std::uint8_t>(in.U8()); m.players = static_cast<std::uint8_t>(in.U8());
     m.tickMs = static_cast<std::uint8_t>(in.U8()); m.rules = in.U32(); m.track = in.Str(64); m.trackSha256 = in.Str(64); m.laps = static_cast<std::uint8_t>(in.U8());
     const std::uint32_t w = in.U8(); m.weapons = w != 0;
+    m.resumeToken = in.U64();
     return in.Done() && w <= 1 && m.players >= 1 && m.players <= 8 && m.player < m.players && m.tickMs >= 5;
 }
 
 std::vector<std::uint8_t> Encode(const Reject& m) { Out o; o.U8(m.reason); o.Str(m.message); return o.b; }
 bool Decode(const std::vector<std::uint8_t>& p, Reject& m) { In in(p); m.reason = static_cast<std::uint8_t>(in.U8()); m.message = in.Str(120); return in.Done(); }
+
+std::vector<std::uint8_t> Encode(const Resume& m) { Out o; o.U64(m.token); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, Resume& m) { In in(p); m.token = in.U64(); return in.Done() && m.token != 0; }
 
 std::vector<std::uint8_t> Encode(const Start& m) { Out o; o.U32(m.countdownMs); return o.b; }
 bool Decode(const std::vector<std::uint8_t>& p, Start& m) { In in(p); m.countdownMs = in.U32(); return in.Done(); }

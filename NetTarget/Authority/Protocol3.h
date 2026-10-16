@@ -24,6 +24,7 @@ enum Type : std::uint8_t
     kHelloAck = 2,
     kReject = 3,
     kStart = 4,
+    kResume = 5,
     kInput = 10,
     kTick = 11,
     kSnapshotRequest = 12,
@@ -51,6 +52,7 @@ class FrameParser
 public:
     explicit FrameParser(std::uint16_t maxFrame = kDefaultMaxFrame) : mMaxFrame(maxFrame), mFailed(false) {}
     void SetMaxFrame(std::uint16_t maxFrame) { mMaxFrame = maxFrame; }
+    std::uint16_t MaxFrame() const { return mMaxFrame; }
     void Feed(const std::uint8_t* data, std::size_t size);
     // True and fills type and payload when a whole frame is ready. After a framing error (length 0 or above the maximum)
     // Failed() is true and nothing more is returned: the connection must be closed.
@@ -67,8 +69,9 @@ private:
 // ---- messages ----------------------------------------------------------------------------------------------
 struct Hello { std::uint16_t major = kMajor, minor = kMinor; std::uint32_t capabilities = 0; std::uint16_t maxFrame = kDefaultMaxFrame; std::string name; };
 struct HelloAck { std::uint16_t major = kMajor, minor = kMinor; std::uint32_t capabilities = 0; std::uint16_t maxFrame = kDefaultMaxFrame;
-                  std::uint8_t player = 0, players = 0, tickMs = 16; std::uint32_t rules = 0; std::string track; std::string trackSha256; std::uint8_t laps = 0; bool weapons = true; };
+                  std::uint8_t player = 0, players = 0, tickMs = 16; std::uint32_t rules = 0; std::string track; std::string trackSha256; std::uint8_t laps = 0; bool weapons = true; std::uint64_t resumeToken = 0; };
 struct Reject { std::uint8_t reason = 0; std::string message; };
+struct Resume { std::uint64_t token = 0; };
 struct Start { std::uint32_t countdownMs = 0; };
 struct Input { std::uint32_t firstTick = 0; std::vector<std::uint16_t> controls; };            // controls[i] is for tick firstTick + i
 struct Tick { std::uint32_t tick = 0; std::uint64_t hash = 0; std::vector<std::uint16_t> controls; };   // the inputs used by every player at `tick`; hash is after it
@@ -83,6 +86,7 @@ std::vector<std::uint8_t> Encode(const Hello&);
 std::vector<std::uint8_t> Encode(const HelloAck&);
 std::vector<std::uint8_t> Encode(const Reject&);
 std::vector<std::uint8_t> Encode(const Start&);
+std::vector<std::uint8_t> Encode(const Resume&);
 std::vector<std::uint8_t> Encode(const Input&);
 std::vector<std::uint8_t> Encode(const Tick&);
 std::vector<std::uint8_t> Encode(const SnapshotRequest&);
@@ -96,6 +100,7 @@ bool Decode(const std::vector<std::uint8_t>& payload, Hello&);
 bool Decode(const std::vector<std::uint8_t>& payload, HelloAck&);
 bool Decode(const std::vector<std::uint8_t>& payload, Reject&);
 bool Decode(const std::vector<std::uint8_t>& payload, Start&);
+bool Decode(const std::vector<std::uint8_t>& payload, Resume&);
 bool Decode(const std::vector<std::uint8_t>& payload, Input&);
 bool Decode(const std::vector<std::uint8_t>& payload, Tick&);
 bool Decode(const std::vector<std::uint8_t>& payload, SnapshotRequest&);

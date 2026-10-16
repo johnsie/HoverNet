@@ -24,11 +24,19 @@ struct RaceHost::Connection
 };
 
 RaceHost::RaceHost(const HostConfig& config)
-    : mConfig(config), mNextId(1), mRaceLoaded(false), mStarted(false), mResultSent(false), mStartMs(0), mSimulated(0), mInvalidTotal(0) {}
+    : mConfig(config), mNextId(1), mRaceLoaded(false), mStarted(false), mResultSent(false), mStartMs(0), mSimulated(0), mInvalidTotal(0), mTokenState(config.tokenSeed * 0x9E3779B97F4A7C15ULL + 0x1234567ULL) {}
 RaceHost::~RaceHost() {}
+
+std::uint64_t RaceHost::NextToken()
+{
+    mTokenState ^= mTokenState >> 12; mTokenState ^= mTokenState << 25; mTokenState ^= mTokenState >> 27;
+    const std::uint64_t t = mTokenState * 2685821657736338717ULL;
+    return t == 0 ? 1 : t;
+}
 
 bool RaceHost::Init(std::string& error)
 {
+    mTokens.assign(static_cast<std::size_t>(mConfig.race.players), 0);
     mTrackSha256 = Sha256::HashFile(mConfig.race.trackPath);
     if (mTrackSha256.empty()) { error = "cannot read the track"; return false; }
     // Loading the race here makes configuration errors visible at start-up rather than when the last player arrives.
@@ -55,6 +63,7 @@ int RaceHost::Connect(std::int64_t nowMs)
     c->connectedMs = nowMs;
     c->lastRefillMs = nowMs;
     c->inputTokens = 8;
+    ++mMetrics.connectionsAccepted;
     const int id = c->id;
     mConnections.push_back(std::move(c));
     return id;
@@ -62,7 +71,8 @@ int RaceHost::Connect(std::int64_t nowMs)
 
 void RaceHost::Disconnect(int connection)
 {
-    if (Connection* c = Find(connection)) c->closed = true;
+    Connection* c = Find(connection);
+    if (c != nullptr && !c->closed) { c->closed = true; ++mMetrics.connectionsClosed; }
 }
 
 bool RaceHost::IsClosed(int connection) const
@@ -86,9 +96,30 @@ int RaceHost::ConnectedPlayers() const
     return n;
 }
 
+void RaceHost::SendHelloAck(Connection& c)
+{
+    Protocol3::HelloAck a;
+    a.maxFrame = std::min<std::uint16_t>(static_cast<std::uint16_t>(c.parser.MaxFrame()), Protocol3::kDefaultMaxFrame);
+    a.player = static_cast<std::uint8_t>(c.player);
+    a.players = static_cast<std::uint8_t>(mConfig.race.players);
+    a.tickMs = ReplayFormat::kFrameMs;
+    a.rules = ReplayFormat::kSimulationRules;
+    a.track = mConfig.race.trackName;
+    a.trackSha256 = mTrackSha256;
+    a.laps = static_cast<std::uint8_t>(mConfig.race.laps);
+    a.weapons = mConfig.race.weapons;
+    a.resumeToken = mTokens[static_cast<std::size_t>(c.player)];
+    Send(c, Protocol3::EncodeFrame(Protocol3::kHelloAck, Protocol3::Encode(a)));
+}
+
 void RaceHost::Send(Connection& c, const std::vector<std::uint8_t>& frame)
 {
-    if (!c.closed) c.out.insert(c.out.end(), frame.begin(), frame.end());
+    if (!c.closed) {
+        c.out.insert(c.out.end(), frame.begin(), frame.end());
+        mMetrics.bytesOut += frame.size();
+        ++mMetrics.framesOut;
+        if (frame.size() > 2 && frame[2] == Protocol3::kTick) mMetrics.tickBytesOut += frame.size();
+    }
 }
 
 void RaceHost::Broadcast(const std::vector<std::uint8_t>& frame)
@@ -104,11 +135,14 @@ void RaceHost::Close(Connection& c, std::uint8_t reason, const std::string& mess
     r.message = message;
     Send(c, Protocol3::EncodeFrame(Protocol3::kReject, Protocol3::Encode(r)));
     c.closed = true;
+    ++mMetrics.rejectedConnections;
+    ++mMetrics.connectionsClosed;
 }
 
 void RaceHost::Invalid(Connection& c, std::int64_t nowMs, const char* why)
 {
     ++mInvalidTotal;
+    ++mMetrics.invalidMessages;
     c.invalidTimes.push_back(nowMs);
     c.invalidTimes.erase(std::remove_if(c.invalidTimes.begin(), c.invalidTimes.end(),
                                         [&](std::int64_t t) { return nowMs - t > mConfig.invalidWindowMs; }), c.invalidTimes.end());
@@ -121,9 +155,10 @@ void RaceHost::Receive(int connection, const std::uint8_t* data, std::size_t siz
     Connection* c = Find(connection);
     if (c == nullptr || c->closed) return;
     c->parser.Feed(data, size);
+    mMetrics.bytesIn += size;
     std::uint8_t type = 0;
     std::vector<std::uint8_t> payload;
-    while (!c->closed && c->parser.Next(type, payload)) Handle(*c, type, payload, nowMs);
+    while (!c->closed && c->parser.Next(type, payload)) { ++mMetrics.framesIn; Handle(*c, type, payload, nowMs); }
     if (!c->closed && c->parser.Failed()) Close(*c, Protocol3::kBadMessage, "bad frame");
 }
 
@@ -151,18 +186,25 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
         for (const auto& o : mConnections) if (!o->closed && o->player >= 0) used[static_cast<std::size_t>(o->player)] = true;
         for (int slot = 0; slot < mConfig.race.players; ++slot) if (!used[static_cast<std::size_t>(slot)]) { c.player = slot; break; }
         c.parser.SetMaxFrame(std::min<std::uint16_t>(h.maxFrame, kDefaultMaxFrame));
-        HelloAck a;
-        a.maxFrame = std::min<std::uint16_t>(h.maxFrame, kDefaultMaxFrame);
-        a.player = static_cast<std::uint8_t>(c.player);
-        a.players = static_cast<std::uint8_t>(mConfig.race.players);
-        a.tickMs = ReplayFormat::kFrameMs;
-        a.rules = ReplayFormat::kSimulationRules;
-        a.track = mConfig.race.trackName;
-        a.trackSha256 = mTrackSha256;
-        a.laps = static_cast<std::uint8_t>(mConfig.race.laps);
-        a.weapons = mConfig.race.weapons;
-        Send(c, EncodeFrame(kHelloAck, Encode(a)));
+        mTokens[static_cast<std::size_t>(c.player)] = NextToken();
+        SendHelloAck(c);
         BeginRaceIfFull(nowMs);
+        return;
+    }
+
+    if (type == kResume) {
+        Resume m;
+        if (c.helloDone) { Invalid(c, nowMs, "resume after hello"); return; }
+        if (!Decode(payload, m)) { Close(c, kBadMessage, "malformed resume"); return; }
+        int slot = -1;
+        for (std::size_t i = 0; i < mTokens.size(); ++i) if (mTokens[i] == m.token) slot = static_cast<int>(i);
+        if (slot < 0 || !mStarted) { Close(c, kNotInRace, "unknown resume token"); return; }
+        // Whoever holds the token is the player: a previous connection for the slot, if still open, is replaced.
+        for (auto& o : mConnections) if (o.get() != &c && !o->closed && o->player == slot) Close(*o, kNotInRace, "replaced by a reconnection");
+        c.helloDone = true;
+        c.player = slot;
+        c.parser.SetMaxFrame(kDefaultMaxFrame);
+        SendHelloAck(c);
         return;
     }
 
@@ -178,8 +220,14 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
         if (c.inputTokens < 1) { Invalid(c, nowMs, "rate"); return; }
         c.inputTokens -= 1;
         if (!mStarted) return;   // inputs before the start are ignored, not errors
-        for (std::size_t i = 0; i < in.controls.size(); ++i)
-            mRace.SubmitInput(c.player, in.firstTick + static_cast<std::uint32_t>(i), in.controls[i]);
+        for (std::size_t i = 0; i < in.controls.size(); ++i) {
+            const InputResult r = mRace.SubmitInput(c.player, in.firstTick + static_cast<std::uint32_t>(i), in.controls[i]);
+            if (r == InputResult::Accepted || r == InputResult::Replaced) ++mMetrics.inputsAccepted;
+            // Only a message's newest input says whether the client is sending far enough ahead; the older ones repeat
+            // earlier inputs on purpose (loss cover) and are expected to be late.
+            else if (r == InputResult::Late && i + 1 == in.controls.size()) ++mMetrics.inputsLate;
+            else if (r == InputResult::TooFarAhead) ++mMetrics.inputsTooFar;
+        }
         return;
     }
     case kPing: {
@@ -197,6 +245,7 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
         if (static_cast<int>(c.snapshotTimes.size()) >= mConfig.snapshotsPerMinute) { Close(c, kRateLimited, "too many snapshot requests"); return; }
         if (!mStarted) { Invalid(c, nowMs, "snapshot before start"); return; }
         c.snapshotTimes.push_back(nowMs);
+        ++mMetrics.snapshotsServed;
         SendSnapshot(c, r.id);
         return;
     }
@@ -256,6 +305,7 @@ void RaceHost::Advance(std::int64_t nowMs)
         const std::uint32_t tick = mRace.CurrentTick();
         mRace.AdvanceTick();
         ++mSimulated;
+        ++mMetrics.ticksSimulated;
         Protocol3::Tick t;
         t.tick = tick;
         t.hash = mRace.StateHash();

@@ -73,6 +73,27 @@ over time, which is fine), a full server, a late joiner, an input flood that clo
 snapshot limit, and 3,000 connections of random bytes. Passes on all seven bundled tracks at eight players on Linux (also under
 ASan/UBSan) and Windows x64.
 
+## Reconnect, tampering, bandwidth and metrics
+
+- **Reconnect.** The HelloAck carries a random resume token for the player's slot. A player who drops keeps the slot (the craft
+  carries on with its last input); a new connection sends `Resume(token)` instead of Hello, gets the slot back, asks for a
+  snapshot and follows the Tick stream from the snapshot's tick, matching the server's state hash on every tick
+  (`TestReconnect`). A wrong token, or a resume before the race starts, closes the connection; the latest connection holding the
+  token replaces an earlier one. Tokens come from a seeded generator (`HostConfig.tokenSeed`); a production server must seed it
+  from the operating system, and until the session is encrypted the token is only as private as the connection.
+- **Tampering.** Player 1 of a two-player race sends everything it should not: a forged Tick, Result, HelloAck and Start, an
+  input 1,000 ticks ahead, inputs for ticks already simulated, an unknown type, and undefined control bits. All of it is
+  counted as invalid and ignored, and the official state hash, results and replay (byte for byte) are exactly those of the honest
+  run with the same legitimate inputs (`TestTampering`). A client can change the outcome only through its own control words for
+  future ticks, which is the game.
+- **Bandwidth budget** (eight players, measured in the test): the Tick stream costs 2.0 KB/s per player down, a player's inputs
+  2.8 KB/s up (each message repeats the last 16 inputs, so loss never stalls); the test fails above 3 KB/s and 4 KB/s. A snapshot
+  for eight players is about 3.2 KB. Delta coding of the Tick stream and trimming the input redundancy are the obvious next
+  savings; neither is needed to meet the budget.
+- **Metrics.** `RaceHost::GetMetrics()` counts connections, bytes and frames each way, invalid messages, rejected connections,
+  ticks, inputs accepted, late and too far ahead (only a message's newest input is judged, since older ones repeat on purpose),
+  snapshots served and Tick bytes; `HoverNetAuthServer` prints them when a race ends.
+
 ## A dedicated server over TCP
 
 `HoverNetAuthServer` wraps `RaceHost` in a one-thread, non-blocking TCP server and `HoverNetAuthBot` is a scripted player
