@@ -59,6 +59,19 @@ you race other players **online**.
 
 That is all there is to it. No accounts, no setup, no extra downloads to start.
 
+## &#127760; Play in your browser
+
+No install needed: open **https://hovernet.outiva.com** and race on a PC, Mac, phone or tablet.
+
+- **Phones and tablets:** touch controls appear in a race. Drag the **steering knob** left or right to
+  steer (drag it **up** to jump), and use GO, BRAKE, FIRE, JUMP and WEAPON on the right. Menus, the
+  Driver Briefing and the Internet Meeting Room are laid out for small screens, and the race frame is
+  widescreen on phones. Phones in portrait are asked to turn sideways; iPads and tablets can stay put.
+- **Desktop:** pick the gameplay size in **Settings &rarr; Game Size** without resizing the window.
+- **VR (Meta Quest 2/3 browser):** press **ENTER VR** for stereo 3D on a big virtual screen. Drive with
+  the controllers (stick steers, trigger GO, grip BRAKE, A fire, B jump, left X switches between the
+  chase and cockpit views, left Y pauses) and point and click menus with the right controller.
+
 ## &#127918; Controls
 
 You can change every key in **Settings**, and game controllers work too.
@@ -145,18 +158,6 @@ Want your own server? Install the `hovernet-raceserver` package (Linux) or use t
 | **I found a bug** | [Open an issue](../../issues) and tell us your version, your system, and what you did. |
 
 Your settings are kept when you update or uninstall, so you can safely try a new version.
-
-## &#127793; Also in the works: OpenHover
-
-HoverNet keeps the classic HoverRace game alive. I'm also working on a **fully open
-clone** of the game, built from scratch with original code and assets, so that nobody
-needs a special licence to play, fork or build on it.
-
-**[OpenHover](https://github.com/johnsie/OpenHover)** is an independent, clean-room
-hovercraft racer in C++ with SDL2 and OpenGL. It is dual-licensed MIT / Apache-2.0
-(assets CC BY 4.0), and it is still early: you can already drive a hovercraft around a
-3D arena with lap timing and checkpoints. HoverNet and OpenHover are separate projects,
-and OpenHover does not reuse any HoverRace code or assets.
 
 ## &#128295; For developers and server operators
 
