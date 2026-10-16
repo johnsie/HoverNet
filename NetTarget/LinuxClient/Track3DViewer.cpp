@@ -5,6 +5,9 @@
 
 #include "TrackCatalog.h"
 #include "TrackDownloader.h"
+#include "Sha256.h"
+#include "../Authority/ReplayFormat.h"
+#include "../Model/StateHash.h"
 #include "../GraphicsSDL2/SDL2Graphics.h"
 #include "../Game2/ClientSession.h"
 #ifdef HOVERNET_GAME2_PLAYER
@@ -5389,6 +5392,52 @@ int RunDownloadCommand(int argc, char** argv)
 }
 #endif
 
+#ifdef HOVERNET_GAME2_PLAYER
+// Replay playback (docs/specs/replay-format.md): the race is re-simulated from the recorded inputs, tick by tick, with the
+// ordinary renderer, so a replay looks exactly as the race did. The watched player's craft is the session's main craft.
+struct ReplayPlayback
+{
+    ReplayFormat::Replay data;
+    bool active = false;
+    bool hashMode = false;       // test mode: fixed number of ticks per frame, print the final state hash and leave
+    bool paused = false;
+    bool finished = false;
+    int watch = 0;
+    std::uint32_t tick = 0;      // the next tick to simulate
+    double carryMs = 0;
+    int speedStep = 2;           // index into kReplaySpeeds
+    Uint32 lastTicks = 0;
+    std::vector<MR_MainCharacter*> craft;   // by player slot
+};
+const double kReplaySpeeds[] = {0.25, 0.5, 1.0, 2.0, 4.0};
+
+std::string ParseStringArg(int argc, char** argv, const char* name)
+{
+    for (int argument = 1; argument + 1 < argc; ++argument) {
+        if (std::strcmp(argv[argument], name) == 0) return argv[argument + 1];
+    }
+    return std::string();
+}
+
+bool ReadWholeFile(const std::string& path, std::vector<std::uint8_t>& out)
+{
+    std::ifstream f(path.c_str(), std::ios::binary);
+    if (!f) return false;
+    out.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    return true;
+}
+
+void ReplayTickHook(void* pData, unsigned pTick)
+{
+    ReplayPlayback* replay = static_cast<ReplayPlayback*>(pData);
+    if (pTick >= replay->data.ticks) return;
+    for (int p = 0; p < replay->data.players; ++p) {
+        replay->craft[static_cast<std::size_t>(p)]->SetControlState(
+            replay->data.inputs[static_cast<std::size_t>(pTick) * replay->data.players + p], pTick * 16);
+    }
+}
+#endif
+
 int RunClient(int argc, char** argv)
 {
 #ifdef HOVERNET_GAME2_PLAYER
@@ -5454,6 +5503,12 @@ int RunClient(int argc, char** argv)
     MR_ClientSession session;
     // Whole 16 ms simulation ticks whatever the frame rate; off by default (see MR_ClientSession::SetFixedStep).
     session.SetFixedStep((HasArgument(argc, argv, "--fixed-step") || std::getenv("HOVERNET_FIXED_STEP") != nullptr) ? TRUE : FALSE);
+#ifdef HOVERNET_GAME2_PLAYER
+    ReplayPlayback replay;
+    const std::string replayPath = ParseStringArg(argc, argv, "--replay");
+    replay.hashMode = HasArgument(argc, argv, "--replay-hash");
+    replay.watch = std::atoi(ParseStringArg(argc, argv, "--replay-player").c_str());
+#endif
     const BOOL allowWeapons = playerMode ? TRUE : FALSE;
     const MR_Level* level = nullptr;
     MR_MainCharacter* mainCharacter = nullptr;
@@ -5825,7 +5880,58 @@ int RunClient(int argc, char** argv)
         return FatalClientError("Could not load the menu font from ObjFac1.dat.");
     }
     if (playerMode) {
-        if (HasArgument(argc, argv, "--online-race-host-smoke")) {
+        if (!replayPath.empty()) {
+            std::vector<std::uint8_t> bytes;
+            std::string error;
+            if (!ReadWholeFile(replayPath, bytes)) return FatalClientError("Could not read the replay file " + replayPath);
+            if (!ReplayFormat::Decode(bytes, replay.data, error)) return FatalClientError("This is not a valid replay: " + error);
+            if (replay.data.rules != ReplayFormat::kSimulationRules) {
+                return FatalClientError("This replay was recorded with a different version of the game rules and cannot be shown.");
+            }
+            const std::string trackPath = Tracks().PathFor(replay.data.track);
+            if (trackPath.empty() || Sha256::HashFile(trackPath) != replay.data.trackSha256) {
+                return FatalClientError("The track '" + replay.data.track + "' on this computer is not the one the replay was recorded on.");
+            }
+            if (replay.watch < 0 || replay.watch >= replay.data.players) replay.watch = 0;
+            if (!loadLocalRace(replay.data.track, replay.data.laps, replay.data.weapons)) {
+                return FatalClientError("Could not load the replay's track.");
+            }
+            MR_Level* raceLevel = session.Level();
+            replay.craft.assign(static_cast<std::size_t>(replay.data.players), nullptr);
+            // Every craft is created as the harness and the server create them: its grid slot, hover id = slot, model 0.
+            for (int slot = 0; slot < replay.data.players; ++slot) {
+                const int startRoom = raceLevel->GetStartingRoom(slot);
+                if (startRoom < 0 || startRoom >= raceLevel->GetRoomCount()) return FatalClientError("The replay has more players than the track has start positions.");
+                MR_MainCharacter* craft = (slot == replay.watch) ? mainCharacter : MR_MainCharacter::New(replay.data.laps, replay.data.weapons ? TRUE : FALSE);
+                if (craft == nullptr) return FatalClientError("Could not create a craft for the replay.");
+                craft->mPosition = raceLevel->GetStartingPos(slot);
+                craft->SetOrientation(raceLevel->GetStartingOrientation(slot));
+                craft->mRoom = startRoom;
+                craft->SetHoverId(slot);
+                craft->SetHoverModel(0);
+                replay.craft[static_cast<std::size_t>(slot)] = craft;
+                if (slot != replay.watch && session.InsertSimulatedCharacter(craft, startRoom) == nullptr) {
+                    return FatalClientError("Could not place a craft for the replay.");
+                }
+            }
+            // List order inside a room matters to the simulation: put the craft back in slot order, as the recorder had them.
+            for (int slot = 0; slot < replay.data.players; ++slot) {
+                for (int roomIndex = 0; roomIndex < raceLevel->GetRoomCount(); ++roomIndex) {
+                    for (MR_FreeElementHandle handle = raceLevel->GetFirstFreeElement(roomIndex); handle != nullptr;
+                         handle = MR_Level::GetNextFreeElement(handle)) {
+                        if (MR_Level::GetFreeElement(handle) == replay.craft[static_cast<std::size_t>(slot)]) {
+                            raceLevel->MoveElement(handle, roomIndex);
+                            break;
+                        }
+                    }
+                }
+            }
+            session.SetSimulationTime(0);
+            replay.active = true;
+            replay.lastTicks = SDL_GetTicks();
+            session.AddMessage("Replay: P pauses, 1-5 sets the speed, Esc leaves");
+        }
+        else if (HasArgument(argc, argv, "--online-race-host-smoke")) {
             if (!joinOnlineRace(true, false, true)) {
                 return FatalClientError("Online host acceptance could not start a joined race.");
             }
@@ -5895,7 +6001,7 @@ int RunClient(int argc, char** argv)
         else if (frameLimit < 0 && !HasCompletedOnboarding()) {
             if (RunOnboardingScreen(graphics, frameLimit)) SaveOnboardingComplete();
         }
-        bool pickingMode = !g_QuitConfirmed;
+        bool pickingMode = !g_QuitConfirmed && !replay.active;
         while (pickingMode) {
             pickingMode = false;
             const MenuChoice choice = RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
@@ -6297,6 +6403,9 @@ int RunClient(int argc, char** argv)
             if (fire) controlState |= MR_MainCharacter::eFire;
             if (jump) controlState |= MR_MainCharacter::eJump;
             if (selectWeapon) controlState |= MR_MainCharacter::eSelectWeapon;
+#ifdef HOVERNET_GAME2_PLAYER
+            if (!replay.active)
+#endif
             session.SetControlState(controlState, 0);
 #ifdef HOVERNET_WEB
             // The simulation steps by wall-clock time, so after a browser stall (hidden tab, a
@@ -6312,7 +6421,45 @@ int RunClient(int argc, char** argv)
                 lastSimTicks = nowTicks;
             }
 #endif
+#ifdef HOVERNET_GAME2_PLAYER
+            if (replay.active) {
+                // Replay clock: real time scaled by the chosen speed, in whole 16 ms ticks (or a fixed number per frame in test mode).
+                const Uint32 nowTicks = SDL_GetTicks();
+                const Uint32 elapsed = nowTicks - replay.lastTicks;
+                replay.lastTicks = nowTicks;
+                int ticks = 0;
+                if (replay.hashMode) {
+                    ticks = 8;
+                }
+                else if (!replay.paused) {
+                    replay.carryMs += std::min<double>(elapsed, 250.0) * kReplaySpeeds[replay.speedStep];
+                    ticks = static_cast<int>(replay.carryMs / 16.0);
+                    replay.carryMs -= ticks * 16.0;
+                }
+                ticks = std::min<int>(ticks, static_cast<int>(replay.data.ticks - replay.tick));
+                if (ticks > 0) {
+                    session.StepTicks(ticks, ReplayTickHook, &replay);
+                    replay.tick += static_cast<std::uint32_t>(ticks);
+                }
+                if (replay.tick >= replay.data.ticks && !replay.finished) {
+                    replay.finished = true;
+                    session.AddMessage("End of the replay");
+                    if (replay.hashMode) {
+                        std::printf("replay hash %016llx ticks %u\n",
+                                    static_cast<unsigned long long>(MR_HashLevelState(session.Level(), session.GetSimulationTime())), replay.tick);
+                        std::fflush(stdout);
+                        return 0;
+                    }
+                }
+                if (keyboard[SDL_SCANCODE_P]) { replay.paused = !replay.paused; SDL_Delay(200); }
+                for (int step = 0; step < 5; ++step) if (keyboard[SDL_SCANCODE_1 + step]) replay.speedStep = step;
+            }
+            else {
+                session.Process();
+            }
+#else
             session.Process();
+#endif
 
 #ifdef HOVERNET_GAME2_PLAYER
             if (wasOnlineConnected && !onlineClient.IsConnected()) {

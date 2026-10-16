@@ -83,6 +83,14 @@ class MR_ClientSession
       // which is what networked prediction and replays need. Off by default: the classic loop is smoother on screen
       // until the renderer interpolates between ticks (docs/adr/0001-simulation-core.md, step 6).
       void SetFixedStep( BOOL pOn ) { mFixedStep = pOn; mLastProcessTime = 0; }
+
+      // Replays and the authoritative client drive the simulation tick by tick: StepTicks runs exactly pTicks whole ticks,
+      // calling pHook(pData, tick) before each so the caller can set every craft's controls for that tick.
+      typedef void (*TickHook)( void* pData, unsigned pTick );
+      void StepTicks( int pTicks, TickHook pHook, void* pData );
+      // Adds a craft that this session simulates itself (a replayed player), shown like a remote player in lists and ranks.
+      MR_FreeElementHandle InsertSimulatedCharacter( MR_MainCharacter* pCharacter, int pRoom );
+      MR_Level* Level() { return mSession.GetCurrentLevel(); }
       virtual void Process( int pSpeedFactor = 1 );    // Simulation, speed factor can be used to reduce processing speed to create AVI files
 
 

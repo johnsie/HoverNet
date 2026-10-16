@@ -344,6 +344,34 @@ MR_FreeElementHandle MR_ClientSession::InsertRemoteCharacter( MR_MainCharacter* 
    return lHandle;
 }
 
+MR_FreeElementHandle MR_ClientSession::InsertSimulatedCharacter( MR_MainCharacter* pCharacter, int pRoom )
+{
+   MR_Level* lCurrentLevel = mSession.GetCurrentLevel();
+   if( pCharacter == NULL || lCurrentLevel == NULL || pRoom < 0 || pRoom >= lCurrentLevel->GetRoomCount() )
+   {
+      return NULL;
+   }
+
+   pCharacter->SetNbLapForRace( mNbLap );
+   pCharacter->mRoom = pRoom;
+   MR_FreeElementHandle lHandle = lCurrentLevel->InsertElement( pCharacter, pRoom, FALSE );
+   if( lHandle != NULL )
+   {
+      mRemoteCharacters.push_back( pCharacter );
+   }
+   return lHandle;
+}
+
+void MR_ClientSession::StepTicks( int pTicks, TickHook pHook, void* pData )
+{
+   for( int lTick = 0; lTick < pTicks; ++lTick )
+   {
+      const MR_SimulationTime lTime = mSession.GetSimulationTime();
+      if( pHook != NULL ) pHook( pData, lTime < 0 ? 0u : (unsigned)( lTime / 16 ) );
+      mSession.SimulateStep( 16 );
+   }
+}
+
 MR_FreeElementHandle MR_ClientSession::InsertRemoteElement( MR_FreeElement* pElement, int pRoom )
 {
    MR_Level* lCurrentLevel = mSession.GetCurrentLevel();

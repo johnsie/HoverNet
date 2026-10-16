@@ -1,0 +1,40 @@
+# Replays: recording, verifying and watching
+
+A replay is a small file (about 4 bytes per tick per player) holding a race's track identity, its settings and every player's
+input on every tick. Because the simulation is deterministic, any HoverNet client on any platform plays it back exactly as the
+race happened; a state hash every 250 ticks lets anything detect a replay that no longer reproduces. The format is in
+[specs/replay-format.md](specs/replay-format.md).
+
+## Watching one in the game
+
+    HoverNet --replay race.hnr [--replay-player N]
+
+(`HoverNetGame2Player` on Linux.) The game plays the race back with its normal renderer, from the point of view of player `N`
+(default 0, the first on the grid). **P** pauses, **1** to **5** set the speed (a quarter, a half, normal, double, four times),
+**Esc** opens the pause menu. The game refuses a replay recorded under different game rules, or on a different version of the
+track, and says so; it never plays something that would not reproduce.
+
+## Where replays come from
+
+- **The dedicated server** writes one for every race when started with `--replay-dir DIR`: the official record of the race,
+  made from the inputs the server actually simulated (`HoverNetAuthServer`, [authoritative-race.md](authoritative-race.md)).
+- **The replay tool** records scripted races for testing: `HoverNetReplay record <track> <ticks> <out.hnr> [--players=N]`.
+
+## Checking and debugging
+
+- `HoverNetReplay verify race.hnr` re-simulates it and compares every checkpoint; `info` prints the header.
+- `HoverNetReplay trace race.hnr` prints every tick's state hash and `dump race.hnr <tick>` the whole state at a tick; diffing the
+  output from two platforms finds the first tick and the field that differ ([determinism.md](determinism.md)).
+
+## How it is tested
+
+`scripts/test-replay-viewer.sh` (ctest `HoverNetReplayViewer`) records replays on several tracks with 2, 4 and 8 players, plays
+each through the real game client in a headless window, and requires the client's final state hash to equal the replay tool's, for
+different watched players. It passes on Linux (also under ASan/UBSan) and on Windows x64, and the hashes are identical on both,
+so a replay made on one platform is the same race on the other.
+
+## Not yet
+
+A replay browser in the menus, saving a replay of a race you played yourself (the local game is not run on the fixed 16 ms tick
+yet, see [ADR 0001](adr/0001-simulation-core.md) step 6), seeking and rewinding (the snapshot format makes this possible; a
+future replay version can carry snapshots), switching the watched player during playback, and a free camera.

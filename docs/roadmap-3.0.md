@@ -218,7 +218,7 @@ convert, with every failure explained.
 Depends on Stage 1's determinism.
 
 - Compact deterministic replays (versioned inputs, events, periodic snapshots) that
-  re-verify against the server's recorded result.
+  re-verify against the server's recorded result. *Status (16 October 2026): replay format v1 (inputs and periodic hashes), the server's official replay, verification, and in-game playback with the real renderer are done and tested on Linux and Windows, see [replays.md](replays.md); events and embedded snapshots are not.*
 - Seeking, camera controls, timeline markers, and export-friendly playback.
 - Delayed live spectating (protects competitive integrity) using the server's spectator
   snapshots.

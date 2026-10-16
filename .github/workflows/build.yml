@@ -209,7 +209,8 @@ jobs:
           "$bin/HoverNetFrameRateTest.exe" ClassicH 1500
           "$bin/HoverNetAuthorityTest.exe" ClassicH 8
           "$bin/HoverNetProtocolTest.exe" ClassicH 8
-          scripts/test-authserver.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 8 500
+          HOVERNET_REPLAY_TOOL="$bin/HoverNetReplay.exe" scripts/test-authserver.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 8 500
+          scripts/test-replay-viewer.sh "$bin/HoverNetReplay.exe" "$bin/HoverNet.exe"
 
       - name: Smoke-test shared x64 SDL2 client
         shell: pwsh

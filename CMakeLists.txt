@@ -509,6 +509,7 @@ add_executable(HoverNetGame2Player
     NetTarget/LinuxClient/TrackDownloader.cpp
     NetTarget/LinuxClient/Gunzip.cpp
     NetTarget/LinuxClient/Sha256.cpp
+    NetTarget/Authority/ReplayFormat.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
 )
 
@@ -676,9 +677,13 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetAuthServerTcp
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-authserver.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> 8 500
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    set_tests_properties(HoverNetAuthServerTcp PROPERTIES ENVIRONMENT "HOVERNET_REPLAY_TOOL=$<TARGET_FILE:HoverNetReplay>")
     add_test(NAME HoverNetPrediction120 COMMAND HoverNetPredictionTest ClassicH 8 60)
     add_test(NAME HoverNetPrediction250 COMMAND HoverNetPredictionTest "The Alley2" 8 125)
     set_tests_properties(HoverNetPrediction120 HoverNetPrediction250 PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetReplayViewer
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-replay-viewer.sh $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

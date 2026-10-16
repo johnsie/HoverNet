@@ -1,7 +1,7 @@
 // HoverNetAuthServer -- a dedicated server for authoritative races over TCP (protocol 3.0 framing, no encryption yet).
 //
 //   HoverNetAuthServer --track ClassicH --players 8 [--laps 3] [--port 9610] [--bind 127.0.0.1] [--once]
-//                      [--limit-ticks N] [--start-delay-ms 3000] [--max-connections 64]
+//                      [--limit-ticks N] [--start-delay-ms 3000] [--max-connections 64] [--replay-dir DIR]
 //
 // It hosts one race at a time (RaceHost) and starts a fresh one when the race ends. It binds to the loopback address unless
 // told otherwise: exposing it is a deliberate act, and until the encrypted session exists it should sit behind TLS
@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <map>
 #include <memory>
 #include <string>
@@ -62,6 +63,7 @@ int main(int argc, char** argv)
     int port = 9610, maxConnections = 64;
     std::string bind = "127.0.0.1";
     bool once = false;
+    std::string replayDir;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto value = [&]() -> const char* { return i + 1 < argc ? argv[++i] : ""; };
@@ -74,6 +76,7 @@ int main(int argc, char** argv)
         else if (a == "--limit-ticks") cfg.race.maxTicks = static_cast<std::uint32_t>(std::atol(value()));
         else if (a == "--start-delay-ms") cfg.startDelayMs = std::atoi(value());
         else if (a == "--max-connections") maxConnections = std::atoi(value());
+        else if (a == "--replay-dir") replayDir = value();
         else if (a == "--no-weapons") cfg.race.weapons = false;
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     }
@@ -156,6 +159,18 @@ int main(int argc, char** argv)
                             (unsigned long long)m.framesOut, (unsigned long long)m.bytesOut, (unsigned long long)m.invalidMessages, (unsigned long long)m.ticksSimulated,
                             (unsigned long long)m.inputsAccepted, (unsigned long long)m.inputsLate, (unsigned long long)m.inputsTooFar, (unsigned long long)m.snapshotsServed);
                 std::fflush(stdout);
+                if (!replayDir.empty()) {
+                    // The official record of the race: a replay anyone can verify and watch.
+                    char name[128];
+                    std::snprintf(name, sizeof(name), "/%s-%lld.hnr", cfg.race.trackName.c_str(), static_cast<long long>(std::time(nullptr)));
+                    const std::string path = replayDir + name;
+                    const std::vector<std::uint8_t> bytes = host->Race().ReplayBytes();
+                    FILE* f = std::fopen(path.c_str(), "wb");
+                    if (f != nullptr && std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size()) std::printf("replay saved to %s (%zu bytes)\n", path.c_str(), bytes.size());
+                    else std::fprintf(stderr, "cannot write the replay to %s\n", path.c_str());
+                    if (f != nullptr) std::fclose(f);
+                    std::fflush(stdout);
+                }
                 if (once) break;
                 for (auto& p : peers) { host->Disconnect(p->connection); AuthNet::CloseSocket(p->socket); }
                 peers.clear();
