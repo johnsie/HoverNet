@@ -4055,11 +4055,12 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         DrawHoverNetScreenBackdrop(mainViewport);
 
+        const bool phoneHeader = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneHeader ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
+        ImGui::BeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(1.35f);
+        ImGui::SetWindowFontScale(phoneHeader ? 1.1f : 1.35f);
         ImGui::TextUnformatted("SETTINGS");
         ImGui::SetWindowFontScale(1.0f);
         ImGui::PopStyleColor();
@@ -4073,7 +4074,8 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
         // Fill the available height so added accessibility/audio controls do not
         // force scrolling while the screen still has unused space below.
-        ImGui::BeginChild("SettingsPanel", ImVec2(centerWidth, 0), true);
+        // Phones: the Save/Cancel row is pinned under the scrolling panel so it never needs a scroll.
+        ImGui::BeginChild("SettingsPanel", ImVec2(centerWidth, phoneHeader ? -52.0f : 0.0f), true);
 
         ImGui::TextUnformatted("Display Name");
         ImGui::PushItemWidth(-1.0f);
@@ -4246,18 +4248,34 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Spacing();
 
         const bool canSave = !usernameBlank && !hostBlank && portValid;
-        ImGui::BeginDisabled(!canSave);
-        if (HoverNetButton("Save", ImVec2(-FLT_MIN, 40))) {
-            running = false;
-        }
-        ImGui::EndDisabled();
-        ImGui::Spacing();
-        if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, 36))) {
-            cancelled = true;
-            running = false;
+        if (!phoneHeader) {
+            ImGui::BeginDisabled(!canSave);
+            if (HoverNetButton("Save", ImVec2(-FLT_MIN, 40))) {
+                running = false;
+            }
+            ImGui::EndDisabled();
+            ImGui::Spacing();
+            if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, 36))) {
+                cancelled = true;
+                running = false;
+            }
         }
 
         ImGui::EndChild();
+        if (phoneHeader) {
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
+            const float half = (centerWidth - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+            ImGui::BeginDisabled(!canSave);
+            if (HoverNetButton("Save", ImVec2(half, 40))) {
+                running = false;
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (HoverNetButton("Cancel", ImVec2(half, 40))) {
+                cancelled = true;
+                running = false;
+            }
+        }
         ImGui::End();
 
         ImGui::Render();
@@ -4703,11 +4721,12 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
 
         DrawHoverNetScreenBackdrop(mainViewport);
 
+        const bool phoneHeader = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, 76), false);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneHeader ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
+        ImGui::BeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(1.35f);
+        ImGui::SetWindowFontScale(phoneHeader ? 1.1f : 1.35f);
         ImGui::TextUnformatted("CONTROLS");
         ImGui::SetWindowFontScale(1.0f);
         ImGui::PopStyleColor();
@@ -5456,6 +5475,15 @@ int RunClient(int argc, char** argv)
     viewport.Setup(&buffer, 0, 0, kWidth, kHeight, 800);
 #ifdef HOVERNET_GAME2_PLAYER
     MR_Observer* observer = playerMode ? MR_Observer::New() : nullptr;
+    if (observer != nullptr) {
+        // Wide frames show less above and below the horizon than 4:3, which cut the hovercraft off
+        // at the bottom. Nudge the view (each step is 1/8 of the frame height) -- by environment
+        // for experiments, otherwise by how much wider than 4:3 the frame is.
+        const double frameAspect = static_cast<double>(kWidth) / kHeight;
+        int scroll = frameAspect >= 2.0 ? -2 : frameAspect > 1.5 ? -1 : 0;
+        if (const char* testScroll = std::getenv("HOVERNET_TEST_SCROLL")) scroll = std::atoi(testScroll);
+        observer->Scroll(scroll);
+    }
     bool debugView = playerMode && HasArgument(argc, argv, "--debug");
     if (playerMode && observer == nullptr) {
         return FatalClientError("Could not create the race observer.");
@@ -5991,6 +6019,12 @@ int RunClient(int argc, char** argv)
     } inRaceFlag;
 #endif
     while (running && (frameLimit < 0 || framesRendered < frameLimit)) {
+#ifdef HOVERNET_WEB
+        // The page shows the on-screen race controls only while this is set. It is cleared before
+        // any menu screen opened from here (pause menu and what it leads to, results) and set
+        // again at the top of every race frame.
+        gHoverNetInRace = 1;
+#endif
         gameController.Refresh();
         bool sceneChanged = renderStats.actorsRendered > 0;
         bool horizontalMovement = false;
@@ -6033,6 +6067,9 @@ int RunClient(int argc, char** argv)
             else if ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) ||
                      (event.type == SDL_CONTROLLERBUTTONDOWN &&
                       event.cbutton.button == SDL_CONTROLLER_BUTTON_START)) {
+#ifdef HOVERNET_WEB
+                gHoverNetInRace = 0;
+#endif
 #ifdef HOVERNET_GAME2_PLAYER
                 // Used to only show this menu online -- offline play just quit
                 // immediately on Escape, with no way back to it short of
@@ -6257,6 +6294,9 @@ int RunClient(int argc, char** argv)
             }
             if (!finishAnnounced && mainCharacter->HasFinish()) {
                 finishAnnounced = true;
+#ifdef HOVERNET_WEB
+                gHoverNetInRace = 0;
+#endif
                 const PostRaceChoice resultChoice = RunPostRaceScreen(
                     graphics, buffer, viewport, *menuFontHandle->GetSprite(),
                     mainCharacter->GetTotalTime(), mainCharacter->GetBestLapDuration(),
