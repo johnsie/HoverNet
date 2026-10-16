@@ -104,7 +104,7 @@ Run the experiments that decide the architecture before building on it.
 - **Win32 inventory.** *Status: done, see [win32-client-inventory.md](win32-client-inventory.md); open decisions are split screen, a settings importer and private rooms.* List every feature only the Win32 client has, and assign each to
   migrate, replace, or retire, so its retirement is a dated decision.
 - **Format and protocol specifications** for the simulation state, replay, track, and
-  network protocol 3.0 (versioned, explicit, portable).
+  network protocol 3.0 (versioned, explicit, portable). *Status: [replay format v1](specs/replay-format.md) is implemented and tested (a Linux recording verifies on Windows); [simulation state](specs/simulation-state.md) and [protocol 3.0](specs/protocol-3.0-draft.md) are drafts; the versioned track container is still to write (Stage 4 owns the new format; today's is [track-format.md](track-format.md)).*
 - **Web determinism and parity baseline.** WebAssembly is already in the determinism comparison; keep it in every gate below, and use the web parity matrix ([web-parity-matrix.md](web-parity-matrix.md)) as the Stage 3 starting point.
 - **Agree the targets** that later gates use. Proposal to confirm: playable at 120 ms round
   trip with 2% loss, and stable at 250 ms with 5%; eight players per race.
