@@ -168,6 +168,8 @@ add_library(HoverNetSim STATIC
     NetTarget/ObjFac1/FinishLine.cpp
     NetTarget/Authority/ReplayFormat.cpp
     NetTarget/Authority/AuthoritativeRace.cpp
+    NetTarget/Authority/Protocol3.cpp
+    NetTarget/Authority/RaceHost.cpp
     NetTarget/LinuxClient/Sha256.cpp
 )
 
@@ -309,6 +311,11 @@ else()
         NetTarget/LinuxClient/AuthorityTest.cpp
     )
     target_link_libraries(HoverNetAuthorityTest PRIVATE HoverNetSim)
+
+    add_executable(HoverNetProtocolTest
+        NetTarget/LinuxClient/ProtocolTest.cpp
+    )
+    target_link_libraries(HoverNetProtocolTest PRIVATE HoverNetSim)
 
     add_executable(HoverNetSnapshotTest
         NetTarget/LinuxClient/SnapshotTest.cpp
@@ -643,6 +650,8 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetAuthority COMMAND HoverNetAuthorityTest ClassicH 8)
     add_test(NAME HoverNetAuthorityRiver COMMAND HoverNetAuthorityTest "The River" 8)
     set_tests_properties(HoverNetAuthority HoverNetAuthorityRiver PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetProtocol COMMAND HoverNetProtocolTest ClassicH 8)
+    set_tests_properties(HoverNetProtocol PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

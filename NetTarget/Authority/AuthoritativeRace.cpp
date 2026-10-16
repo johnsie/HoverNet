@@ -119,13 +119,23 @@ bool AuthoritativeRace::AdvanceTick()
 
     bool lAllDone = true;
     for( std::size_t lPlayer = 0; lPlayer < mCraft.size(); ++lPlayer ) lAllDone = lAllDone && mCraft[ lPlayer ]->HasFinish();
-    if( lAllDone || mTick >= ReplayFormat::kMaxTicks ) mFinished = true;
+    const std::uint32_t lLimit = ( mConfig.maxTicks > 0 && mConfig.maxTicks < ReplayFormat::kMaxTicks ) ? mConfig.maxTicks : ReplayFormat::kMaxTicks;
+    if( lAllDone || mTick >= lLimit ) mFinished = true;
     return !mFinished;
 }
 
 std::uint64_t AuthoritativeRace::StateHash() const
 {
     return MR_HashLevelState( mSession->GetCurrentLevel(), mSession->GetSimulationTime() );
+}
+
+std::vector<std::uint16_t> AuthoritativeRace::InputsAt( std::uint32_t tick ) const
+{
+    std::vector<std::uint16_t> lInputs;
+    if( tick >= mTick ) return lInputs;
+    const std::size_t lFirst = static_cast<std::size_t>( tick ) * mConfig.players;
+    lInputs.assign( mHistory.begin() + static_cast<std::ptrdiff_t>( lFirst ), mHistory.begin() + static_cast<std::ptrdiff_t>( lFirst + mConfig.players ) );
+    return lInputs;
 }
 
 std::vector<PlayerResult> AuthoritativeRace::Results() const

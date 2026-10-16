@@ -1,8 +1,10 @@
 # Network protocol 3.0 (draft)
 
-Status: **draft for review**; Stage 2 implements and hardens it. It builds on the implemented
+Status: **draft for review**; the framing, the message set and the host's rules are now implemented and tested without sockets
+(`NetTarget/Authority/Protocol3.*`, `RaceHost.*`, [authoritative-race.md](../authoritative-race.md)); encryption and the real transports
+are not. Stage 2 implements the rest and hardens it. It builds on the implemented
 [2.0 baseline](../2.0-network-protocol.md) (explicit little-endian encoding, hello negotiation, frame limits, rate limits)
-and on what the [netcode prototype](../netcode-prototype.md) showed the simulation needs. Nothing here is implemented yet.
+and on what the [netcode prototype](../netcode-prototype.md) showed the simulation needs. Where this draft and the code differ, the code and its tests are authoritative; the differences are noted in the message list below.
 
 ## Principles
 

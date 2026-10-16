@@ -26,6 +26,7 @@ struct RaceConfig
     int laps = 3;
     bool weapons = true;
     int maxFutureTicks = 64;    // an input for a tick further ahead than this is refused
+    std::uint32_t maxTicks = 0; // time limit in ticks; 0 = the replay format's limit (two hours)
 };
 
 enum class InputResult
@@ -68,6 +69,9 @@ public:
     bool Finished() const { return mFinished; }
     std::uint64_t StateHash() const;                              // MR_HashLevelState of the whole race
     std::vector<PlayerResult> Results() const;
+
+    // The control words every player's craft used at a tick that has been simulated (empty if not yet).
+    std::vector<std::uint16_t> InputsAt(std::uint32_t tick) const;
 
     // The race so far as a verifiable replay file (docs/specs/replay-format.md) and as a state snapshot.
     std::vector<std::uint8_t> ReplayBytes() const;
