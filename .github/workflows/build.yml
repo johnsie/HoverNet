@@ -200,13 +200,16 @@ jobs:
         run: |
           # The same golden hashes, replay and snapshot bytes as Linux and WebAssembly (docs/determinism.md): any
           # difference between platforms fails here.
-          cmake --build build/windows-shared --target HoverNetDeterminismRun HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest --config Release --parallel 2
+          cmake --build build/windows-shared --target HoverNetDeterminismRun HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetAuthServer HoverNetAuthBot --config Release --parallel 2
           bin=build/windows-shared/Release
           scripts/test-determinism.sh "$bin/HoverNetDeterminismRun.exe"
           scripts/test-physics.sh "$bin/HoverNetDeterminismRun.exe"
           scripts/test-replay.sh "$bin/HoverNetReplay.exe"
           scripts/test-snapshot.sh "$bin/HoverNetSnapshotTest.exe"
           "$bin/HoverNetFrameRateTest.exe" ClassicH 1500
+          "$bin/HoverNetAuthorityTest.exe" ClassicH 8
+          "$bin/HoverNetProtocolTest.exe" ClassicH 8
+          scripts/test-authserver.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 8 500
 
       - name: Smoke-test shared x64 SDL2 client
         shell: pwsh

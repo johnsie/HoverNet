@@ -1,0 +1,166 @@
+// HoverNetAuthServer -- a dedicated server for authoritative races over TCP (protocol 3.0 framing, no encryption yet).
+//
+//   HoverNetAuthServer --track ClassicH --players 8 [--laps 3] [--port 9610] [--bind 127.0.0.1] [--once]
+//                      [--limit-ticks N] [--start-delay-ms 3000] [--max-connections 64]
+//
+// It hosts one race at a time (RaceHost) and starts a fresh one when the race ends. It binds to the loopback address unless
+// told otherwise: exposing it is a deliberate act, and until the encrypted session exists it should sit behind TLS
+// termination or on a trusted network. One thread, non-blocking sockets, no allocation per tick beyond the host's own.
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <map>
+#include <memory>
+#include <string>
+#include <thread>
+#include <vector>
+
+#include "AuthSocket.h"
+#include "SimHarness.h"
+#include "../Authority/RaceHost.h"
+#include "../ObjFac1/SimElements.h"
+
+using namespace Authority;
+
+namespace
+{
+struct Peer
+{
+    AuthSocket socket = kInvalidSocket;
+    int connection = 0;
+    std::vector<std::uint8_t> pending;   // bytes not yet accepted by the socket
+    std::string address;
+};
+
+std::int64_t NowMs()
+{
+    static const auto start = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+}
+
+bool FlushPeer(Peer& p)
+{
+    while (!p.pending.empty()) {
+        const int sent = static_cast<int>(send(p.socket, reinterpret_cast<const char*>(p.pending.data()), static_cast<int>(p.pending.size()), 0));
+        if (sent > 0) { p.pending.erase(p.pending.begin(), p.pending.begin() + sent); continue; }
+        if (sent < 0 && AuthNet::WouldBlock()) return true;
+        return false;
+    }
+    return true;
+}
+}
+
+int main(int argc, char** argv)
+{
+    HostConfig cfg;
+    cfg.race.trackName = "ClassicH";
+    cfg.race.players = 2;
+    cfg.race.laps = 3;
+    cfg.startDelayMs = 3000;
+    int port = 9610, maxConnections = 64;
+    std::string bind = "127.0.0.1";
+    bool once = false;
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        auto value = [&]() -> const char* { return i + 1 < argc ? argv[++i] : ""; };
+        if (a == "--track") cfg.race.trackName = value();
+        else if (a == "--players") cfg.race.players = std::atoi(value());
+        else if (a == "--laps") cfg.race.laps = std::atoi(value());
+        else if (a == "--port") port = std::atoi(value());
+        else if (a == "--bind") bind = value();
+        else if (a == "--once") once = true;
+        else if (a == "--limit-ticks") cfg.race.maxTicks = static_cast<std::uint32_t>(std::atol(value()));
+        else if (a == "--start-delay-ms") cfg.startDelayMs = std::atoi(value());
+        else if (a == "--max-connections") maxConnections = std::atoi(value());
+        else if (a == "--no-weapons") cfg.race.weapons = false;
+        else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
+    }
+    cfg.race.trackPath = SimHarness::TrackPath(cfg.race.trackName);
+
+    MR_InitTrigoTables();
+    MR_MainCharacter::RegisterFactory();
+    MR_RegisterSimElements();
+    MR_DllObjectFactory::MR_DllObjectFactoryCleanup factoryCleanup;
+    if (!AuthNet::Startup()) { std::fprintf(stderr, "network start-up failed\n"); return 1; }
+
+    int boundPort = 0;
+    AuthSocket listener = AuthNet::Listen(bind, port, boundPort);
+    if (listener == kInvalidSocket) { std::fprintf(stderr, "cannot listen on %s:%d\n", bind.c_str(), port); return 1; }
+
+    std::unique_ptr<RaceHost> host(new RaceHost(cfg));
+    std::string error;
+    if (!host->Init(error)) { std::fprintf(stderr, "cannot host the race: %s\n", error.c_str()); return 1; }
+    std::printf("listening on %s:%d, %s, %d players, %d laps\n", bind.c_str(), boundPort, cfg.race.trackName.c_str(), cfg.race.players, cfg.race.laps);
+    std::fflush(stdout);
+
+    std::vector<std::unique_ptr<Peer>> peers;
+    std::int64_t raceEndedAt = -1;
+    for (;;) {
+        // Accept.
+        for (;;) {
+            sockaddr_in from;
+            socklen_t len = sizeof(from);
+            AuthSocket s = accept(listener, reinterpret_cast<sockaddr*>(&from), &len);
+            if (s == kInvalidSocket) break;
+            char text[64] = "?";
+            inet_ntop(AF_INET, &from.sin_addr, text, sizeof(text));
+            int sameAddress = 0;
+            for (const auto& p : peers) if (p->address == text) ++sameAddress;
+            if (static_cast<int>(peers.size()) >= maxConnections || sameAddress >= 16) { AuthNet::CloseSocket(s); continue; }   // a cap per address and overall
+            AuthNet::SetNonBlocking(s);
+            int one = 1;
+            setsockopt(s, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&one), sizeof(one));
+            std::unique_ptr<Peer> p(new Peer);
+            p->socket = s;
+            p->address = text;
+            p->connection = host->Connect(NowMs());
+            peers.push_back(std::move(p));
+        }
+        // Read.
+        std::uint8_t buffer[4096];
+        for (auto& p : peers) {
+            if (p->socket == kInvalidSocket) continue;
+            for (int rounds = 0; rounds < 8; ++rounds) {
+                const int n = static_cast<int>(recv(p->socket, reinterpret_cast<char*>(buffer), sizeof(buffer), 0));
+                if (n > 0) { host->Receive(p->connection, buffer, static_cast<std::size_t>(n), NowMs()); continue; }
+                if (n == 0 || !AuthNet::WouldBlock()) host->Disconnect(p->connection);
+                break;
+            }
+        }
+        host->Advance(NowMs());
+        // Write and reap.
+        for (auto& p : peers) {
+            if (p->socket == kInvalidSocket) continue;
+            const std::vector<std::uint8_t> out = host->TakeOutput(p->connection);
+            p->pending.insert(p->pending.end(), out.begin(), out.end());
+            const bool ok = FlushPeer(*p);
+            if (!ok || (host->IsClosed(p->connection) && p->pending.empty())) { AuthNet::CloseSocket(p->socket); p->socket = kInvalidSocket; }
+            else if (p->pending.size() > (1u << 20)) { host->Disconnect(p->connection); }     // a client that does not read is dropped
+        }
+        peers.erase(std::remove_if(peers.begin(), peers.end(), [](const std::unique_ptr<Peer>& p) { return p->socket == kInvalidSocket; }), peers.end());
+
+        if (host->RaceFinished()) {
+            if (raceEndedAt < 0) raceEndedAt = NowMs();
+            bool flushed = true;
+            for (const auto& p : peers) flushed = flushed && p->pending.empty();
+            if (flushed && NowMs() - raceEndedAt > 300) {
+                const std::vector<Authority::PlayerResult> results = host->Race().Results();
+                std::printf("race over after %u ticks, final hash %016llx\n", host->Race().CurrentTick(), static_cast<unsigned long long>(host->Race().StateHash()));
+                for (const auto& r : results) std::printf("  player %d: rank %d, laps %d%s\n", r.player, r.rank, r.laps, r.finished ? ", finished" : "");
+                std::fflush(stdout);
+                if (once) break;
+                for (auto& p : peers) { host->Disconnect(p->connection); AuthNet::CloseSocket(p->socket); }
+                peers.clear();
+                host.reset(new RaceHost(cfg));
+                if (!host->Init(error)) { std::fprintf(stderr, "cannot host the next race: %s\n", error.c_str()); return 1; }
+                raceEndedAt = -1;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    for (auto& p : peers) AuthNet::CloseSocket(p->socket);
+    AuthNet::CloseSocket(listener);
+    return 0;
+}

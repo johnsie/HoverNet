@@ -317,6 +317,20 @@ else()
     )
     target_link_libraries(HoverNetProtocolTest PRIVATE HoverNetSim)
 
+    # A dedicated server for authoritative races over TCP and a scripted player that checks every tick it is sent.
+    add_executable(HoverNetAuthServer
+        NetTarget/LinuxClient/AuthServer.cpp
+    )
+    target_link_libraries(HoverNetAuthServer PRIVATE HoverNetSim)
+    add_executable(HoverNetAuthBot
+        NetTarget/LinuxClient/AuthBot.cpp
+    )
+    target_link_libraries(HoverNetAuthBot PRIVATE HoverNetSim)
+    if(WIN32)
+        target_link_libraries(HoverNetAuthServer PRIVATE ws2_32)
+        target_link_libraries(HoverNetAuthBot PRIVATE ws2_32)
+    endif()
+
     add_executable(HoverNetSnapshotTest
         NetTarget/LinuxClient/SnapshotTest.cpp
     )
@@ -652,6 +666,9 @@ if(BUILD_TESTING AND NOT WIN32)
     set_tests_properties(HoverNetAuthority HoverNetAuthorityRiver PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetProtocol COMMAND HoverNetProtocolTest ClassicH 8)
     set_tests_properties(HoverNetProtocol PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetAuthServerTcp
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-authserver.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> 8 500
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

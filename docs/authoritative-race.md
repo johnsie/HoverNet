@@ -73,8 +73,23 @@ over time, which is fine), a full server, a late joiner, an input flood that clo
 snapshot limit, and 3,000 connections of random bytes. Passes on all seven bundled tracks at eight players on Linux (also under
 ASan/UBSan) and Windows x64.
 
+## A dedicated server over TCP
+
+`HoverNetAuthServer` wraps `RaceHost` in a one-thread, non-blocking TCP server and `HoverNetAuthBot` is a scripted player
+(`NetTarget/LinuxClient/AuthServer.cpp`, `AuthBot.cpp`, `AuthSocket.h`: POSIX sockets and Winsock). It hosts one race at a time and starts
+a new one when the race ends (`--once` for tests). Options: `--track`, `--players`, `--laps`, `--port` (0 picks a free one),
+`--limit-ticks`, `--start-delay-ms`, `--max-connections`, `--no-weapons`.
+
+- **It listens on 127.0.0.1 unless `--bind` says otherwise.** Exposing it is a deliberate act: until the encrypted session
+  exists it belongs behind TLS termination or on a trusted network. It also caps connections overall (64) and per address (16),
+  drops a client that stops reading (1 MB of unsent output), and closes anything that fails the host's rules.
+- **`scripts/test-authserver.sh`** (ctest `HoverNetAuthServerTcp`) starts a server and eight bots on the loopback interface; each
+  bot sends its input 12 ticks ahead every 16 ms, rebuilds the race from the Tick stream and checks the state hash of every tick,
+  and must receive the Result. It passes on Linux (also under ASan/UBSan) and on Windows x64 over Winsock. Running it with a
+  large tick count (for example `... 8 200000`, about an hour) is the soak test of the Stage 2 exit gate; it is not in CI.
+
 ## Not built yet
 
-Sockets and a server executable around `RaceHost` (many races, the lobby, the WebSocket gateway), authenticated encryption and
+Many races at once and the lobby around `RaceHost`, the WebSocket gateway, authenticated encryption and
 server identity, account/guest identity, reconnect (snapshot plus the Tick log since), observability (health, metrics,
 tracing, crash reports), compression and bandwidth budgets, and the soak, load and abuse suites of the Stage 2 exit gate.
