@@ -43,19 +43,17 @@ the two simulate their own copy of each missile, so the copies drift apart by up
 state update corrects them (missile positions are relayed). Races between shared clients, including the browser, agree with
 each other exactly, which is what the golden hashes verify.
 
-## Decision needed
+## Decision and resolution
 
-Which missile is the 3.0 missile?
+Decided 16 October 2026: **restore the legacy missile**, because it is the original game design and it played well. The
+portable plug-in's missile now uses the legacy maths exactly (a `double` speed of 21 x 2222 / 1000 = 46.662, double x and
+y speeds, the same 5 ms slices and halving search, the double speed times 256 as the impact impulse).
 
-- **Restore the legacy missile** (46.662, `double` speeds), because it is the original game design and what the legacy client
-  still plays. This changes the missile hashes in the golden suite once (bump the rules version) and makes a missile
-  about 1.4% faster than the 2.0 shared client's. Cleanest for fidelity and for the Stage 3 retirement of the legacy
-  client, since it ends the duplicate.
-- **Keep the 46 missile** as the 3.0 reference and record it as a design change from the original. No hash changes now,
-  but the server-authoritative simulation then differs from the game as originally built.
-
-Recommendation: restore the legacy values in Stage 1, in the same change that moves the elements behind the simulation
-boundary (below), since both change the golden hashes and should be reviewed once. Until decided, nothing changes.
+Effect on the golden suite: only the scenarios that involve a missile changed (`missile` and `weapons` on both tracks)
+and all seven full-race hashes; idle, accelerate, steer, slalom, jump and brake did not move, as expected. The replay
+rules version went from 1 to 2. The result was then re-verified: plain and ASan+UBSan builds agree on all 1,012 community
+tracks with no sanitizer findings, and Windows x64 and Win32 reproduce the new golden hashes and verify a replay recorded
+on Linux. The WebAssembly comparison runs in the web CI job.
 
 ## What this means for the architecture
 

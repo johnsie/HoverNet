@@ -4,6 +4,15 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## Unreleased
+
+### Fixed
+- Missiles fly at the original game's speed again. The shared client had been rounding the missile speed down from
+  46.66 to 46 units per millisecond, so its missiles were about 1.4% slower than the original game's and ended a few
+  metres short; they also hit with a slightly different impulse. Missiles now use the original maths exactly, which
+  also makes them agree with the legacy Windows client. Replays recorded before this change are marked as an older
+  simulation version and are not verified against it.
+
 ## 2.0.20 - 2026-10-16
 
 ### Added

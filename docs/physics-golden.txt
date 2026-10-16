@@ -5,8 +5,8 @@ steer-right ClassicH 1500 9850900752bb5de5
 slalom ClassicH 1500 c0fe6675e6c4905e
 jump ClassicH 1500 edcfd59591bd4f23
 brake ClassicH 1500 a3c2c233bd610902
-missile ClassicH 1500 b76837cc83de41ac
-weapons ClassicH 1500 0662f9040af03b66
+missile ClassicH 1500 dd5a52dc643acda3
+weapons ClassicH 1500 f04b203ba16da030
 idle The River 1500 788a1b65d4605522
 accelerate The River 1500 c5ca23bab1cbc116
 steer-left The River 1500 5c46bf17633dd369
@@ -14,5 +14,5 @@ steer-right The River 1500 86d0edc75e625375
 slalom The River 1500 c231c7a115e8578e
 jump The River 1500 4003fc5c260cd2af
 brake The River 1500 c8cb4896f2199efc
-missile The River 1500 ec98b8e061a9bee6
-weapons The River 1500 88863135e42f0ef1
+missile The River 1500 82f5de134d650aab
+weapons The River 1500 dfe7785267eb3735

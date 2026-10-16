@@ -557,8 +557,8 @@ protected:
             return nullptr;
         }
         collisionEffect.mWeight = 100;
-        collisionEffect.mXSpeed = 21 * 2222 * MR_Cos[mOrientation] / (1000 * MR_TRIGO_FRACT) * 256;
-        collisionEffect.mYSpeed = 21 * 2222 * MR_Sin[mOrientation] / (1000 * MR_TRIGO_FRACT) * 256;
+        collisionEffect.mXSpeed = xSpeed * 256;
+        collisionEffect.mYSpeed = ySpeed * 256;
         collisionEffect.mZSpeed = 0;
         return &effects;
     }
@@ -598,49 +598,74 @@ protected:
         MR_SoundServer::Play(ContinuousSound(MR_SND_MISSILE_MOTOR), 1, decibels, 1.0, pan);
     }
 
+    // Movement is the legacy missile's, exactly (Missile.cpp): 5 ms slices, a double speed of 21 * 2222 / 1000 =
+    // 46.662 units per ms, and the same halving search for the furthest free position. An earlier version of this
+    // plug-in truncated the speed to 46 (docs/legacy-element-differences.md).
+    int InternalSimulate(MR_SimulationTime duration, MR_Level* level, int room)
+    {
+        lived += duration;
+
+        const double steadySpeed = 21.0 * 2222.0 / 1000.0;
+        double speed = steadySpeed;
+        if (lived > 7500) {
+            speed = (1200 - lived - 7500) * steadySpeed / 1200;
+            if (speed < 0) {
+                speed = 0;
+            }
+        }
+
+        MR_Cylinder shape;
+        shape.mRayLen = 1;
+        shape.mZMin = mPosition.mZ - 300;
+        shape.mZMax = mPosition.mZ + 300;
+
+        xSpeed = speed * MR_Cos[mOrientation] / MR_TRIGO_FRACT;
+        ySpeed = speed * MR_Sin[mOrientation] / MR_TRIGO_FRACT;
+
+        MR_2DCoordinate translation;
+        translation.mX = duration * xSpeed;
+        translation.mY = duration * ySpeed;
+
+        MR_ObstacleCollisionReport report;
+        MR_SimulationTime attemptedDuration = duration;
+        shape.mAxis.mX = mPosition.mX + translation.mX;
+        shape.mAxis.mY = mPosition.mY + translation.mY;
+
+        while (true) {
+            bool success = false;
+            report.GetContactWithObstacles(level, &shape, room, this);
+            if (report.IsInMaze() && !report.HaveContact()) {
+                mPosition.mX = shape.mAxis.mX;
+                mPosition.mY = shape.mAxis.mY;
+                room = report.Room();
+                success = true;
+            }
+
+            if (attemptedDuration < 6) {
+                break;
+            }
+            if (success) {
+                if (attemptedDuration == duration) {
+                    break;
+                }
+                attemptedDuration /= 2;
+                shape.mAxis.mX += attemptedDuration * translation.mX / duration;
+                shape.mAxis.mY += attemptedDuration * translation.mY / duration;
+            }
+            else {
+                attemptedDuration /= 2;
+                shape.mAxis.mX -= attemptedDuration * translation.mX / duration;
+                shape.mAxis.mY -= attemptedDuration * translation.mY / duration;
+            }
+        }
+        return room;
+    }
+
     int Simulate(MR_SimulationTime duration, MR_Level* level, int room) override
     {
-        MR_SimulationTime remainingDuration = duration;
-        while (remainingDuration > 0) {
-            const MR_SimulationTime timeSlice = std::min<MR_SimulationTime>(remainingDuration, 5);
-            lived += timeSlice;
-            if (lived < 7500 && level != nullptr) {
-                const MR_Int32 speed = 21 * 2222 / 1000;
-                const MR_Int32 xTranslation = timeSlice * speed * MR_Cos[mOrientation] / MR_TRIGO_FRACT;
-                const MR_Int32 yTranslation = timeSlice * speed * MR_Sin[mOrientation] / MR_TRIGO_FRACT;
-                MR_Cylinder shape;
-                shape.mRayLen = 1;
-                shape.mZMin = ZMin();
-                shape.mZMax = ZMax();
-                shape.mAxis.mX = mPosition.mX + xTranslation;
-                shape.mAxis.mY = mPosition.mY + yTranslation;
-
-                MR_ObstacleCollisionReport report;
-                MR_SimulationTime attemptedDuration = timeSlice;
-                while (true) {
-                    report.GetContactWithObstacles(level, &shape, room, this);
-                    if (report.IsInMaze() && !report.HaveContact()) {
-                        mPosition.mX = shape.mAxis.mX;
-                        mPosition.mY = shape.mAxis.mY;
-                        room = report.Room();
-                        if (attemptedDuration == timeSlice) {
-                            break;
-                        }
-                        attemptedDuration /= 2;
-                        shape.mAxis.mX += attemptedDuration * xTranslation / timeSlice;
-                        shape.mAxis.mY += attemptedDuration * yTranslation / timeSlice;
-                    }
-                    else {
-                        if (attemptedDuration < 6) {
-                            break;
-                        }
-                        attemptedDuration /= 2;
-                        shape.mAxis.mX -= attemptedDuration * xTranslation / timeSlice;
-                        shape.mAxis.mY -= attemptedDuration * yTranslation / timeSlice;
-                    }
-                }
-            }
-            remainingDuration -= timeSlice;
+        while (duration > 0) {
+            room = InternalSimulate(duration > 5 ? 5 : duration, level, room);
+            duration -= 5;
         }
 
         const MR_ResActor* actor = resourceLib ? resourceLib->GetActor(MR_MISSILE) : nullptr;
@@ -667,6 +692,8 @@ protected:
 private:
     int hoverId;
     MR_SimulationTime lived;
+    double xSpeed = 0;
+    double ySpeed = 0;
     int currentSequence;
     int currentFrame;
     BOOL bounceSoundEvent;

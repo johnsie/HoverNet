@@ -28,6 +28,11 @@ weapons) for 1,500 frames on ClassicH and The River and compares the hash chains
 2.0 reference; update them (`--update`) only for an intended, documented change. Native Debug and the ASan+UBSan build
 agree on all 18.
 
+**Rules version 2 (16 October 2026).** The golden hashes were regenerated once, when the missile was restored to the
+original game's speed (46.662, double) instead of the truncated 46 the portable plug-in had been using
+([legacy-element-differences.md](legacy-element-differences.md)). Hashes quoted in older notes below are from rules
+version 1; all current tables and files are version 2.
+
 ## Results
 
 | Comparison | Result |

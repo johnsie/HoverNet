@@ -14,7 +14,7 @@ All integers are little-endian and unsigned. There is no padding and no host-nat
 | magic | 4 | ASCII `HNRP` |
 | version | 2 | `1`. A reader rejects any other value |
 | flags | 2 | `0` in v1; reserved |
-| rules | 4 | Simulation rules version the race was recorded under (`1` for the 2.0 simulation). Bumped when a deliberate change alters the golden hashes ([determinism.md](../determinism.md)) |
+| rules | 4 | Simulation rules version the race was recorded under (`1` for the first portable simulation, `2` since the original missile speed was restored). Bumped when a deliberate change alters the golden hashes ([determinism.md](../determinism.md)) |
 | tick_ms | 4 | Tick length in milliseconds. `16` in v1 |
 | track name | 1 + n | Length byte, then the name as the game knows it (bytes, no terminator) |
 | track sha256 | 1 + 64 | Length byte (`64`), then lower-case hex SHA-256 of the `.trk` file (the manifest hash) |
