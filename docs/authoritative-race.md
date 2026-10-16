@@ -99,6 +99,30 @@ At the Stage 0 targets the prediction is within a few centimetres on average; th
 unpredicted input changes a collision or a weapon hit. Every tick's hash matched on every run. Cost: one snapshot per confirmed
 tick, and one restore plus 5 to 20 ticks of simulation per frame (the whole eight-player 1,500-tick run takes about 0.7 s).
 
+## The game client on an authoritative server
+
+    HoverNet --auth-connect HOST:PORT
+
+(`HoverNetGame2Player` on Linux; native builds only, the browser needs a WebSocket path first.) The game connects, says Hello with
+the name from its settings, waits for the race to fill and start, checks that its copy of the track is the server's (by SHA-256) and
+that the game rules match, and then plays: your controls go to the server a few ticks ahead of where the race is, the server's Tick
+messages keep an exact copy of the race, and what is drawn is that copy plus a prediction run forward from it (the lead follows the
+measured round trip). It uses the game's normal renderer, HUD, craft and camera; the other craft are simulated by the client
+exactly as the server simulates them.
+
+- **How the prediction is drawn.** Each frame the newest confirmed snapshot is restored into the game's own rendered session and
+  stepped forward with your inputs and the others' last confirmed ones (`RenderedWorld`, `PredictingClient::PredictOn`).
+- **Reconnect.** If the connection drops, the game reconnects with the resume token once a second for 15 seconds, asks for a
+  snapshot and carries on; the craft kept going with its last input meanwhile.
+- **Resynchronisation.** A Tick whose state hash does not match, or one out of order, makes the client ask for a snapshot.
+- **Test modes:** `--auth-script` (the scripted input of the test tools instead of the keyboard), `--auth-verify` (also check every
+  frame that restoring the confirmed snapshot into the rendered session reproduces the confirmed state exactly, print a summary and
+  leave when the Result arrives) and `--auth-drop N` (close the connection after N ticks to exercise the reconnect).
+
+`scripts/test-authclient.sh` (ctest `HoverNetAuthClient`, `HoverNetAuthClientReconnect`) starts a server, seven scripted bots and the
+real game client in a headless window: the client verifies every Tick's hash and about 230 restore checks per race with no
+failures, on four tracks at eight players, with a forced disconnect and reconnect, on Linux (also under ASan/UBSan).
+
 ## Reconnect, tampering, bandwidth and metrics
 
 - **Reconnect.** The HelloAck carries a random resume token for the player's slot. A player who drops keeps the slot (the craft
@@ -137,6 +161,8 @@ a new one when the race ends (`--once` for tests). Options: `--track`, `--player
 
 ## Not built yet
 
-Many races at once and the lobby around `RaceHost`, the WebSocket gateway, authenticated encryption and
-server identity, account/guest identity, reconnect (snapshot plus the Tick log since), observability (health, metrics,
-tracing, crash reports), compression and bandwidth budgets, and the soak, load and abuse suites of the Stage 2 exit gate.
+Many races at once and a lobby around `RaceHost`; screens in the game for choosing a server (today it is a command line option); the
+WebSocket gateway and a browser path for protocol 3.0; authenticated encryption and server identity; account or guest identity;
+a monitoring endpoint, tracing and crash reports (the counters exist); delta coding and compression of the Tick stream; the
+multi-day soak and load runs of the Stage 2 exit gate (the TCP test with a large tick count is the soak); regional pools and rolling
+deployment; and the 2.0 fallback path.

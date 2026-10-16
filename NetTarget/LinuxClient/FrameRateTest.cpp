@@ -13,9 +13,7 @@
 #include <vector>
 
 #include "SimHarness.h"
-#ifndef __EMSCRIPTEN__
 #include "../ObjFac1/SimElements.h"
-#endif
 
 using SimHarness::World;
 
@@ -50,9 +48,7 @@ int main(int argc, char** argv)
 
     MR_InitTrigoTables();
     MR_MainCharacter::RegisterFactory();
-#ifndef __EMSCRIPTEN__
     MR_RegisterSimElements();
-#endif
     MR_DllObjectFactory::MR_DllObjectFactoryCleanup factoryCleanup;
     const std::string path = SimHarness::TrackPath(track);
 

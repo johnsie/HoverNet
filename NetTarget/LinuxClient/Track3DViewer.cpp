@@ -8,6 +8,12 @@
 #include "Sha256.h"
 #include "../Authority/ReplayFormat.h"
 #include "../Model/StateHash.h"
+#include "../Model/StateSnapshot.h"
+#if !defined(HOVERNET_WEB)
+#include "AuthConnection.h"
+#include "../Authority/PredictingClient.h"
+#include "../Authority/Protocol3.h"
+#endif
 #include "../GraphicsSDL2/SDL2Graphics.h"
 #include "../Game2/ClientSession.h"
 #ifdef HOVERNET_GAME2_PLAYER
@@ -5427,6 +5433,74 @@ bool ReadWholeFile(const std::string& path, std::vector<std::uint8_t>& out)
     return true;
 }
 
+#if !defined(HOVERNET_WEB)
+// The game's own rendered session as a prediction target: the confirmed snapshot is restored into it and it is stepped
+// forward, so what is drawn is the prediction (docs/authoritative-race.md).
+class RenderedWorld : public Authority::PredictedWorld
+{
+public:
+    RenderedWorld(MR_ClientSession& session, std::vector<MR_MainCharacter*>& craft) : mSession(session), mCraft(craft) {}
+    bool RestoreSnapshot(const std::vector<std::uint8_t>& bytes, std::string& error) override
+    {
+        std::vector<MR_FreeElement*> external(mCraft.begin(), mCraft.end());
+        std::int64_t time = 0;
+        if (!MR_RestoreLevelState(mSession.Level(), bytes.data(), bytes.size(), external, ReplayFormat::kSimulationRules, time, error)) return false;
+        mSession.SetSimulationTime(static_cast<MR_SimulationTime>(time));
+        return true;
+    }
+    void StepTick(const std::uint16_t* controls) override
+    {
+        const MR_SimulationTime now = mSession.GetSimulationTime();
+        for (std::size_t i = 0; i < mCraft.size(); ++i) mCraft[i]->SetControlState(controls[i], now);
+        mSession.StepTicks(1, nullptr, nullptr);
+    }
+private:
+    MR_ClientSession& mSession;
+    std::vector<MR_MainCharacter*>& mCraft;
+};
+
+// The scripted input the test tools use for a player (so a test client plays a known game).
+inline std::uint16_t SimHarnessScripted(int player, std::uint32_t tick)
+{
+    int c = MR_MainCharacter::eMotorOn;
+    const int period = 37 + 16 * player;
+    const int phase = static_cast<int>(tick / period) % 3;
+    if (phase == 0) c |= MR_MainCharacter::eLeft;
+    else if (phase == 1) c |= MR_MainCharacter::eRight;
+    const std::uint32_t jumpPeriod = 190 + 40 * player;
+    if (tick % jumpPeriod >= 150 && tick % jumpPeriod < 160) c |= MR_MainCharacter::eJump;
+    if (tick % (70 + 20 * player) == 30) c |= MR_MainCharacter::eFire;
+    if (tick % (410 + 30 * player) == 350) c |= MR_MainCharacter::eSelectWeapon;
+    return static_cast<std::uint16_t>(c);
+}
+
+struct AuthOnline
+{
+    bool active = false;
+    bool verify = false;         // test mode: check that restoring into the rendered session reproduces the confirmed state
+    bool scripted = false;       // test mode: the scripted input of the other tools instead of the keyboard
+    bool lost = false;
+    bool resultReceived = false;
+    bool needSnapshot = false;
+    unsigned dropAfter = 0;      // test mode: close the connection after this many verified ticks, to exercise the reconnect
+    bool dropped = false, reconnected = false;
+    AuthConnection conn;
+    std::string host;
+    int port = 9610;
+    std::string name;
+    Authority::PredictingClient predictor;
+    Protocol3::HelloAck ack;
+    std::vector<MR_MainCharacter*> craft;
+    std::unique_ptr<RenderedWorld> world;
+    std::uint32_t lead = 12;     // ticks ahead of the confirmed tick that the client aims its inputs at
+    Uint32 lastSend = 0, lastPing = 0, lastSnapshotRequest = 0, lastReconnect = 0;
+    int reconnectAttempts = 0;
+    std::vector<Protocol3::SnapshotChunk> chunks;
+    std::vector<AuthFrame> backlog;
+    unsigned verified = 0, tickFailures = 0, restoreChecks = 0, restoreFailures = 0;
+};
+#endif
+
 void ReplayTickHook(void* pData, unsigned pTick)
 {
     ReplayPlayback* replay = static_cast<ReplayPlayback*>(pData);
@@ -5508,6 +5582,13 @@ int RunClient(int argc, char** argv)
     const std::string replayPath = ParseStringArg(argc, argv, "--replay");
     replay.hashMode = HasArgument(argc, argv, "--replay-hash");
     replay.watch = std::atoi(ParseStringArg(argc, argv, "--replay-player").c_str());
+#if !defined(HOVERNET_WEB)
+    AuthOnline auth;
+    const std::string authServer = ParseStringArg(argc, argv, "--auth-connect");     // host:port of an authoritative server
+    auth.verify = HasArgument(argc, argv, "--auth-verify");
+    auth.scripted = HasArgument(argc, argv, "--auth-script");
+    auth.dropAfter = static_cast<unsigned>(std::atoi(ParseStringArg(argc, argv, "--auth-drop").c_str()));
+#endif
 #endif
     const BOOL allowWeapons = playerMode ? TRUE : FALSE;
     const MR_Level* level = nullptr;
@@ -5876,6 +5957,39 @@ int RunClient(int argc, char** argv)
         return true;
     };
 
+    // Puts every craft of a replayed or authoritative race on the grid as the recorder and the server have them: a craft per
+    // slot with hover id = slot and the basic model, the watched slot being the session's main craft, and the craft in
+    // slot order in each room's list (list order matters to the simulation). Returns an error message or an empty string.
+    auto placeRaceCraft = [&](int players, int laps, bool weapons, int watch, std::vector<MR_MainCharacter*>& craftOut) -> std::string {
+        MR_Level* raceLevel = session.Level();
+        craftOut.assign(static_cast<std::size_t>(players), nullptr);
+        for (int slot = 0; slot < players; ++slot) {
+            const int startRoom = raceLevel->GetStartingRoom(slot);
+            if (startRoom < 0 || startRoom >= raceLevel->GetRoomCount()) return "The race has more players than the track has start positions.";
+            MR_MainCharacter* craft = (slot == watch) ? mainCharacter : MR_MainCharacter::New(laps, weapons ? TRUE : FALSE);
+            if (craft == nullptr) return "Could not create a craft for the race.";
+            craft->mPosition = raceLevel->GetStartingPos(slot);
+            craft->SetOrientation(raceLevel->GetStartingOrientation(slot));
+            craft->mRoom = startRoom;
+            craft->SetHoverId(slot);
+            craft->SetHoverModel(0);
+            craftOut[static_cast<std::size_t>(slot)] = craft;
+            if (slot != watch && session.InsertSimulatedCharacter(craft, startRoom) == nullptr) return "Could not place a craft for the race.";
+        }
+        for (int slot = 0; slot < players; ++slot) {
+            for (int roomIndex = 0; roomIndex < raceLevel->GetRoomCount(); ++roomIndex) {
+                for (MR_FreeElementHandle handle = raceLevel->GetFirstFreeElement(roomIndex); handle != nullptr;
+                     handle = MR_Level::GetNextFreeElement(handle)) {
+                    if (MR_Level::GetFreeElement(handle) == craftOut[static_cast<std::size_t>(slot)]) {
+                        raceLevel->MoveElement(handle, roomIndex);
+                        break;
+                    }
+                }
+            }
+        }
+        return std::string();
+    };
+
     if (playerMode && menuFontHandle == nullptr) {
         return FatalClientError("Could not load the menu font from ObjFac1.dat.");
     }
@@ -5896,40 +6010,64 @@ int RunClient(int argc, char** argv)
             if (!loadLocalRace(replay.data.track, replay.data.laps, replay.data.weapons)) {
                 return FatalClientError("Could not load the replay's track.");
             }
-            MR_Level* raceLevel = session.Level();
-            replay.craft.assign(static_cast<std::size_t>(replay.data.players), nullptr);
-            // Every craft is created as the harness and the server create them: its grid slot, hover id = slot, model 0.
-            for (int slot = 0; slot < replay.data.players; ++slot) {
-                const int startRoom = raceLevel->GetStartingRoom(slot);
-                if (startRoom < 0 || startRoom >= raceLevel->GetRoomCount()) return FatalClientError("The replay has more players than the track has start positions.");
-                MR_MainCharacter* craft = (slot == replay.watch) ? mainCharacter : MR_MainCharacter::New(replay.data.laps, replay.data.weapons ? TRUE : FALSE);
-                if (craft == nullptr) return FatalClientError("Could not create a craft for the replay.");
-                craft->mPosition = raceLevel->GetStartingPos(slot);
-                craft->SetOrientation(raceLevel->GetStartingOrientation(slot));
-                craft->mRoom = startRoom;
-                craft->SetHoverId(slot);
-                craft->SetHoverModel(0);
-                replay.craft[static_cast<std::size_t>(slot)] = craft;
-                if (slot != replay.watch && session.InsertSimulatedCharacter(craft, startRoom) == nullptr) {
-                    return FatalClientError("Could not place a craft for the replay.");
-                }
-            }
-            // List order inside a room matters to the simulation: put the craft back in slot order, as the recorder had them.
-            for (int slot = 0; slot < replay.data.players; ++slot) {
-                for (int roomIndex = 0; roomIndex < raceLevel->GetRoomCount(); ++roomIndex) {
-                    for (MR_FreeElementHandle handle = raceLevel->GetFirstFreeElement(roomIndex); handle != nullptr;
-                         handle = MR_Level::GetNextFreeElement(handle)) {
-                        if (MR_Level::GetFreeElement(handle) == replay.craft[static_cast<std::size_t>(slot)]) {
-                            raceLevel->MoveElement(handle, roomIndex);
-                            break;
-                        }
-                    }
-                }
-            }
+            const std::string placeError = placeRaceCraft(replay.data.players, replay.data.laps, replay.data.weapons, replay.watch, replay.craft);
+            if (!placeError.empty()) return FatalClientError(placeError);
             session.SetSimulationTime(0);
             replay.active = true;
             replay.lastTicks = SDL_GetTicks();
             session.AddMessage("Replay: P pauses, 1-5 sets the speed, Esc leaves");
+        }
+        else if (!authServer.empty()) {
+#if !defined(HOVERNET_WEB)
+            const std::size_t colon = authServer.rfind(':');
+            auth.host = colon == std::string::npos ? authServer : authServer.substr(0, colon);
+            auth.port = colon == std::string::npos ? 9610 : std::atoi(authServer.c_str() + colon + 1);
+            auth.name = LoadUsername();
+            if (auth.name.empty()) auth.name = "Player";
+            std::string error;
+            if (!auth.conn.Connect(auth.host, auth.port, error)) return FatalClientError(error);
+            Protocol3::Hello hello;
+            hello.name = auth.name.substr(0, 32);
+            auth.conn.Send(Protocol3::kHello, Protocol3::Encode(hello));
+            bool gotAck = false, gotStart = false;
+            const Uint32 waitStart = SDL_GetTicks();
+            while (!(gotAck && gotStart)) {
+                SDL_PumpEvents();
+                std::vector<AuthFrame> frames;
+                const bool open = auth.conn.Pump(frames);
+                for (const AuthFrame& f : frames) {
+                    if (f.type == Protocol3::kHelloAck) gotAck = Protocol3::Decode(f.payload, auth.ack);
+                    else if (f.type == Protocol3::kStart) gotStart = true;
+                    else if (f.type == Protocol3::kReject) {
+                        Protocol3::Reject r;
+                        Protocol3::Decode(f.payload, r);
+                        return FatalClientError("The server refused the connection: " + r.message);
+                    }
+                    else if (gotAck) auth.backlog.push_back(f);   // ticks that arrive while the race is being set up
+                }
+                if (!open && !(gotAck && gotStart)) return FatalClientError("The connection to the server was lost before the race started.");
+                if (SDL_GetTicks() - waitStart > 120000) return FatalClientError("Timed out waiting for the race to fill and start.");
+                SDL_Delay(5);
+            }
+            const std::string authTrackPath = Tracks().PathFor(auth.ack.track);
+            if (authTrackPath.empty() || Sha256::HashFile(authTrackPath) != auth.ack.trackSha256) {
+                return FatalClientError("The track '" + auth.ack.track + "' on this computer is not the one the server is using.");
+            }
+            if (auth.ack.rules != ReplayFormat::kSimulationRules) {
+                return FatalClientError("The server runs different game rules than this version of the game.");
+            }
+            if (!loadLocalRace(auth.ack.track, auth.ack.laps, auth.ack.weapons)) return FatalClientError("Could not load the server's track.");
+            const std::string placeError = placeRaceCraft(auth.ack.players, auth.ack.laps, auth.ack.weapons, auth.ack.player, auth.craft);
+            if (!placeError.empty()) return FatalClientError(placeError);
+            session.SetSimulationTime(0);
+            if (!auth.predictor.Init(authTrackPath, auth.ack, error)) return FatalClientError(error);
+            auth.world.reset(new RenderedWorld(session, auth.craft));
+            auth.active = true;
+            auth.lastSend = auth.lastPing = SDL_GetTicks();
+            session.AddMessage(("Connected: you are player " + std::to_string(auth.ack.player + 1) + " of " + std::to_string(auth.ack.players)).c_str());
+#else
+            return FatalClientError("Authoritative servers are not available in the browser yet.");
+#endif
         }
         else if (HasArgument(argc, argv, "--online-race-host-smoke")) {
             if (!joinOnlineRace(true, false, true)) {
@@ -6002,6 +6140,9 @@ int RunClient(int argc, char** argv)
             if (RunOnboardingScreen(graphics, frameLimit)) SaveOnboardingComplete();
         }
         bool pickingMode = !g_QuitConfirmed && !replay.active;
+#if !defined(HOVERNET_WEB)
+        if (auth.active) pickingMode = false;
+#endif
         while (pickingMode) {
             pickingMode = false;
             const MenuChoice choice = RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
@@ -6128,6 +6269,129 @@ int RunClient(int argc, char** argv)
         ~InRaceFlag() { gHoverNetInRace = 0; }
     } inRaceFlag;
 #endif
+#if defined(HOVERNET_GAME2_PLAYER) && !defined(HOVERNET_WEB)
+    // One frame of an authoritative race: take in the server's messages, send our input, draw the prediction.
+    auto stepAuth = [&](int controlState) -> int {   // returns 0 to carry on, or an exit code + 1 to leave the program
+        std::vector<AuthFrame> frames;
+        frames.swap(auth.backlog);
+        auth.conn.Pump(frames);
+        for (const AuthFrame& f : frames) {
+            using namespace Protocol3;
+            if (f.type == kTick) {
+                Tick t;
+                if (auth.needSnapshot) continue;   // waiting for a snapshot: ticks before it are of no use
+                if (!Decode(f.payload, t) || !auth.predictor.OnTick(t)) { ++auth.tickFailures; auth.needSnapshot = true; }
+                else ++auth.verified;
+            }
+            else if (f.type == kSnapshotChunk) {
+                SnapshotChunk c;
+                if (!Decode(f.payload, c)) continue;
+                if (c.index == 0) auth.chunks.clear();
+                auth.chunks.push_back(c);
+                if (c.index + 1 == c.count && auth.chunks.size() == c.count) {
+                    std::vector<std::uint8_t> bytes;
+                    for (const SnapshotChunk& part : auth.chunks) bytes.insert(bytes.end(), part.data.begin(), part.data.end());
+                    std::string error;
+                    if (auth.predictor.OnSnapshot(bytes, c.tick, error)) auth.needSnapshot = false;
+                    auth.chunks.clear();
+                }
+            }
+            else if (f.type == kPong) {
+                Pong p;
+                if (Decode(f.payload, p)) {
+                    const Uint32 rtt = SDL_GetTicks() - p.token;
+                    auth.lead = std::min<std::uint32_t>(40, std::max<std::uint32_t>(3, rtt / 16 + 3));
+                }
+            }
+            else if (f.type == kResult && !auth.resultReceived) {
+                auth.resultReceived = true;
+                session.AddMessage("The race is over. The server has the final result.");
+            }
+            else if (f.type == kReject) {
+                Reject r;
+                Decode(f.payload, r);
+                session.AddMessage(r.message.empty() ? "The server closed the connection" : r.message.c_str());
+            }
+        }
+
+        const Uint32 now = SDL_GetTicks();
+        if (auth.dropAfter != 0 && !auth.dropped && auth.verified >= auth.dropAfter) {
+            auth.dropped = true;
+            auth.conn.Close();   // test mode: a dropped connection
+        }
+        if (!auth.conn.IsOpen() && !auth.resultReceived) {
+            // Lost the connection: try to take the slot back with the resume token, once a second, for 15 seconds.
+            if (!auth.lost) { auth.lost = true; session.AddMessage("Connection lost - reconnecting..."); auth.lastReconnect = 0; }
+            if (auth.reconnectAttempts < 15 && now - auth.lastReconnect >= 1000) {
+                auth.lastReconnect = now;
+                ++auth.reconnectAttempts;
+                std::string error;
+                if (auth.conn.Connect(auth.host, auth.port, error)) {
+                    Protocol3::Resume resume;
+                    resume.token = auth.ack.resumeToken;
+                    auth.conn.Send(Protocol3::kResume, Protocol3::Encode(resume));
+                    auth.needSnapshot = true;
+                    auth.lastSnapshotRequest = 0;
+                    auth.lost = false;
+                    auth.reconnectAttempts = 0;
+                    auth.reconnected = true;
+                    session.AddMessage("Reconnected");
+                }
+            }
+        }
+        if (auth.conn.IsOpen()) {
+            if (auth.needSnapshot && now - auth.lastSnapshotRequest > 2000) {
+                auth.lastSnapshotRequest = now;
+                Protocol3::SnapshotRequest request;
+                request.id = now;
+                auth.conn.Send(Protocol3::kSnapshotRequest, Protocol3::Encode(request));
+            }
+            if (now - auth.lastPing >= 500) {
+                auth.lastPing = now;
+                Protocol3::Ping ping;
+                ping.clientTick = auth.predictor.ConfirmedTick();
+                ping.token = now;
+                auth.conn.Send(Protocol3::kPing, Protocol3::Encode(ping));
+            }
+            if (now - auth.lastSend >= 16) {
+                auth.lastSend = now;
+                const std::uint32_t target = auth.predictor.ConfirmedTick() + auth.lead;
+                const std::uint16_t input = auth.scripted ? SimHarnessScripted(auth.ack.player, target)
+                                                          : static_cast<std::uint16_t>(controlState & 0xFFFF);
+                auth.predictor.SetLocalInput(target, input);
+                Protocol3::Input in;
+                in.firstTick = target >= 15 ? target - 15 : 0;
+                for (std::uint32_t k = 0; k < 16; ++k) in.controls.push_back(auth.predictor.LocalInput(in.firstTick + k));
+                auth.conn.Send(Protocol3::kInput, Protocol3::Encode(in));
+            }
+        }
+
+        // Draw the prediction: the newest confirmed state, run forward to the tick the player is looking at.
+        if (!auth.needSnapshot) {
+            std::string error;
+            if (auth.verify) {
+                // Test mode: restoring into the rendered session must reproduce the confirmed state exactly.
+                if (auth.world->RestoreSnapshot(auth.predictor.ConfirmedSnapshot(), error)) {
+                    ++auth.restoreChecks;
+                    if (MR_HashLevelState(session.Level(), session.GetSimulationTime()) != auth.predictor.Confirmed().Hash()) ++auth.restoreFailures;
+                }
+                else {
+                    ++auth.restoreFailures;
+                }
+            }
+            auth.predictor.PredictOn(*auth.world, auth.predictor.ConfirmedTick() + (auth.scripted || auth.verify ? 0u : auth.lead), error);
+        }
+        if (auth.resultReceived && auth.verify) {
+            std::printf("auth client: %u ticks verified, %u tick failures, %u restore checks, %u restore failures%s\n", auth.verified, auth.tickFailures,
+                        auth.restoreChecks, auth.restoreFailures, auth.dropAfter != 0 ? (auth.reconnected ? ", reconnected" : ", DID NOT RECONNECT") : "");
+            std::fflush(stdout);
+            const bool reconnectOk = auth.dropAfter == 0 || auth.reconnected;
+            return (auth.tickFailures == 0 && auth.restoreFailures == 0 && auth.verified > 0 && reconnectOk) ? 1 : 2;
+        }
+        return 0;
+    };
+#endif
+
     while (running && (frameLimit < 0 || framesRendered < frameLimit)) {
 #ifdef HOVERNET_WEB
         // The page shows the on-screen race controls only while this is set. It is cleared before
@@ -6404,7 +6668,11 @@ int RunClient(int argc, char** argv)
             if (jump) controlState |= MR_MainCharacter::eJump;
             if (selectWeapon) controlState |= MR_MainCharacter::eSelectWeapon;
 #ifdef HOVERNET_GAME2_PLAYER
-            if (!replay.active)
+            if (!replay.active
+#if !defined(HOVERNET_WEB)
+                && !auth.active
+#endif
+                )
 #endif
             session.SetControlState(controlState, 0);
 #ifdef HOVERNET_WEB
@@ -6454,6 +6722,12 @@ int RunClient(int argc, char** argv)
                 if (keyboard[SDL_SCANCODE_P]) { replay.paused = !replay.paused; SDL_Delay(200); }
                 for (int step = 0; step < 5; ++step) if (keyboard[SDL_SCANCODE_1 + step]) replay.speedStep = step;
             }
+#if !defined(HOVERNET_WEB)
+            else if (auth.active) {
+                const int authExit = stepAuth(controlState);
+                if (authExit != 0) return authExit - 1;
+            }
+#endif
             else {
                 session.Process();
             }

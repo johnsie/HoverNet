@@ -25,9 +25,7 @@
 #undef protected
 #include "../Model/GameSession.h"
 #include "../Model/StateHash.h"
-#ifndef __EMSCRIPTEN__
 #include "../ObjFac1/SimElements.h"
-#endif
 #include "../Util/DllObjectFactory.h"
 #include "../Util/RecordFile.h"
 #include "../Util/WorldCoordinates.h"
@@ -35,9 +33,6 @@
 #include "../Authority/ReplayFormat.h"
 #include "SimHarness.h"
 
-#ifdef __EMSCRIPTEN__
-void HoverNetInitializeWebFactory();
-#endif
 
 namespace
 {
@@ -196,11 +191,7 @@ int main(int argc, char** argv)
     }
     MR_InitTrigoTables();
     MR_MainCharacter::RegisterFactory();
-#ifdef __EMSCRIPTEN__
-    HoverNetInitializeWebFactory();
-#else
     MR_RegisterSimElements();   // no ObjFac1 plug-in or resource file needed
-#endif
     MR_DllObjectFactory::MR_DllObjectFactoryCleanup factoryCleanup;
     const std::string cmd = argv[1];
     if (cmd == "record" && argc >= 5) {

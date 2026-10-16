@@ -20,11 +20,7 @@
 #include "SimHarness.h"
 #include "../Authority/ReplayFormat.h"
 #include "../Model/StateSnapshot.h"
-#ifdef __EMSCRIPTEN__
-void HoverNetInitializeWebFactory();
-#else
 #include "../ObjFac1/SimElements.h"
-#endif
 
 using SimHarness::World;
 
@@ -124,11 +120,7 @@ int main(int argc, char** argv)
 
     MR_InitTrigoTables();
     MR_MainCharacter::RegisterFactory();
-#ifdef __EMSCRIPTEN__
-    HoverNetInitializeWebFactory();
-#else
     MR_RegisterSimElements();
-#endif
     MR_DllObjectFactory::MR_DllObjectFactoryCleanup factoryCleanup;
     const std::string path = SimHarness::TrackPath(track);
 

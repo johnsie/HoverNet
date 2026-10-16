@@ -348,6 +348,30 @@ else()
     )
     target_link_libraries(HoverNetReplay PRIVATE HoverNetSim)
 endif()
+if(EMSCRIPTEN)
+    # The simulation-only tools also run as WebAssembly under Node, so the browser build is held to the same replay, snapshot
+    # and authority checks as the native builds (no plug-in or resource file is involved: they use HoverNetSim alone).
+    foreach(tool HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest)
+        if(tool STREQUAL "HoverNetReplay")
+            set(source ReplayTool.cpp)
+        elseif(tool STREQUAL "HoverNetSnapshotTest")
+            set(source SnapshotTest.cpp)
+        elseif(tool STREQUAL "HoverNetFrameRateTest")
+            set(source FrameRateTest.cpp)
+        elseif(tool STREQUAL "HoverNetAuthorityTest")
+            set(source AuthorityTest.cpp)
+        elseif(tool STREQUAL "HoverNetProtocolTest")
+            set(source ProtocolTest.cpp)
+        else()
+            set(source PredictionTest.cpp)
+        endif()
+        add_executable(${tool} NetTarget/LinuxClient/${source})
+        target_link_libraries(${tool} PRIVATE HoverNetSim)
+        target_link_options(${tool} PRIVATE -sNODERAWFS=1 -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=node)
+        set_target_properties(${tool} PROPERTIES SUFFIX ".js")
+    endforeach()
+endif()
+
 
 add_executable(HoverNetMainCharacterRenderSmoke
     NetTarget/LinuxClient/MainCharacterRenderSmoke.cpp
@@ -512,6 +536,19 @@ add_executable(HoverNetGame2Player
     NetTarget/Authority/ReplayFormat.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
 )
+
+if(NOT EMSCRIPTEN)
+    # The connection to an authoritative server (protocol 3.0) and the client side of its prediction.
+    target_sources(HoverNetGame2Player PRIVATE
+        NetTarget/LinuxClient/AuthConnection.cpp
+        NetTarget/Authority/Protocol3.cpp
+        NetTarget/Authority/RaceWorld.cpp
+        NetTarget/Authority/PredictingClient.cpp
+    )
+    if(WIN32)
+        target_link_libraries(HoverNetGame2Player PRIVATE ws2_32)
+    endif()
+endif()
 
 if(EMSCRIPTEN)
     # The browser cannot dlopen ObjFac1.so. Compile the same factory into the
@@ -684,6 +721,13 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetReplayViewer
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-replay-viewer.sh $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetAuthClient
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-authclient.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetGame2Player> 8 400
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetAuthClientReconnect
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-authclient.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetGame2Player> 4 600 "The River"
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    set_tests_properties(HoverNetAuthClientReconnect PROPERTIES ENVIRONMENT "AUTH_DROP=200")
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

@@ -15,6 +15,9 @@ and how to roll one back.
   (`--replay-dir`). `HoverNetAuthBot` is a scripted player for it. It listens on the loopback address unless told otherwise and does
   not encrypt yet, so do not expose it to the internet. This is the first part of HoverNet 3.0's networking; the game's online play
   still uses the existing race server. See [docs/authoritative-race.md](docs/authoritative-race.md).
+- **Playing on the authoritative server (preview).** `HoverNet --auth-connect HOST:PORT` joins a race on `HoverNetAuthServer` with the normal
+  renderer and controls: the server decides the race, the game shows an exact copy of it plus a prediction of the next few ticks, and
+  reconnects by itself if the connection drops. Command line only for now; see [docs/authoritative-race.md](docs/authoritative-race.md).
 - `--fixed-step` runs the game's simulation in whole 16 ms ticks whatever the frame rate (off by default).
 
 ### Fixed

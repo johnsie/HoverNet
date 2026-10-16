@@ -39,6 +39,31 @@ void PredictingClient::SetLocalInput(std::uint32_t tick, std::uint16_t controls)
     mLocalInputs[tick] = controls;
 }
 
+const std::vector<std::uint8_t>& PredictingClient::ConfirmedSnapshot()
+{
+    if (!mSnapshotValid) {
+        mConfirmedSnapshot = mConfirmed.Snapshot();
+        mSnapshotTick = mConfirmed.Tick();
+        mSnapshotValid = true;
+    }
+    return mConfirmedSnapshot;
+}
+
+int PredictingClient::PredictOn(PredictedWorld& world, std::uint32_t targetTick, std::string& error)
+{
+    const std::vector<std::uint8_t>& snapshot = ConfirmedSnapshot();
+    if (!world.RestoreSnapshot(snapshot, error)) return -1;
+    ++mRebuilds;
+    std::vector<std::uint16_t> controls(static_cast<std::size_t>(mPlayers));
+    int steps = 0;
+    for (std::uint32_t t = mSnapshotTick; t < targetTick; ++t, ++steps) {
+        for (int p = 0; p < mPlayers; ++p) controls[static_cast<std::size_t>(p)] = mLastConfirmed[static_cast<std::size_t>(p)];
+        if (!mLocalInputs.empty()) controls[static_cast<std::size_t>(mPlayer)] = mLocalInputs[t < mLocalInputs.size() ? t : mLocalInputs.size() - 1];
+        world.StepTick(controls.data());
+    }
+    return steps;
+}
+
 const RaceWorld& PredictingClient::Predict(std::uint32_t targetTick)
 {
     if (!mSnapshotValid) {

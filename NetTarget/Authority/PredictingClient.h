@@ -17,6 +17,15 @@
 
 namespace Authority
 {
+// Anything the prediction can be run on: the headless RaceWorld, or the game's own rendered session.
+class PredictedWorld
+{
+public:
+    virtual ~PredictedWorld() {}
+    virtual bool RestoreSnapshot(const std::vector<std::uint8_t>& bytes, std::string& error) = 0;
+    virtual void StepTick(const std::uint16_t* controls) = 0;   // one 16 ms tick; one control word per player
+};
+
 class PredictingClient
 {
 public:
@@ -33,9 +42,14 @@ public:
 
     // What the local player does at a tick (the client sends these; they also drive the prediction).
     void SetLocalInput(std::uint32_t tick, std::uint16_t controls);
+    std::uint16_t LocalInput(std::uint32_t tick) const { return mLocalInputs.empty() ? 0 : mLocalInputs[tick < mLocalInputs.size() ? tick : mLocalInputs.size() - 1]; }
 
     // Rebuilds the predicted world at `targetTick` (>= confirmed tick) and returns it.
     const RaceWorld& Predict(std::uint32_t targetTick);
+    // The same on a world of the caller's (the game's rendered session): restore the confirmed snapshot into it and run it
+    // forward with the predicted inputs. Returns the number of ticks run, or -1 if the restore failed.
+    int PredictOn(PredictedWorld& world, std::uint32_t targetTick, std::string& error);
+    const std::vector<std::uint8_t>& ConfirmedSnapshot();   // of the newest confirmed tick (cached)
 
     const RaceWorld& Confirmed() const { return mConfirmed; }
     std::uint32_t ConfirmedTick() const { return mConfirmed.Tick(); }
