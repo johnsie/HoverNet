@@ -160,6 +160,10 @@ add_library(HoverNetSim STATIC
     NetTarget/MainCharacter/MainCharacter.cpp
     NetTarget/MainCharacter/MainCharacterRenderer.cpp
     NetTarget/MainCharacter/MainCharacterHeadless.cpp
+    NetTarget/ObjFac1/SimElements.cpp
+    NetTarget/ObjFac1/FuelSource.cpp
+    NetTarget/ObjFac1/DoubleSpeedSource.cpp
+    NetTarget/ObjFac1/FinishLine.cpp
 )
 
 target_link_libraries(HoverNetSim PUBLIC HoverNetModelCore HoverNetPortableUtil)
@@ -189,6 +193,7 @@ target_link_libraries(HoverNetObserver PUBLIC HoverNetClientSession HoverNetMain
 
 add_library(HoverNetHeadlessObjFac1 SHARED
     NetTarget/ObjFac1/LinuxPlugin.cpp
+    NetTarget/ObjFac1/SimElements.cpp
     NetTarget/ObjFac1/FuelSource.cpp
     NetTarget/ObjFac1/DoubleSpeedSource.cpp
     NetTarget/ObjFac1/FinishLine.cpp
@@ -269,6 +274,7 @@ if(EMSCRIPTEN)
         NetTarget/LinuxClient/DeterminismRun.cpp
         NetTarget/LinuxClient/WebFactory.cpp
         NetTarget/ObjFac1/LinuxPlugin.cpp
+        NetTarget/ObjFac1/SimElements.cpp
         NetTarget/ObjFac1/FuelSource.cpp
         NetTarget/ObjFac1/DoubleSpeedSource.cpp
         NetTarget/ObjFac1/FinishLine.cpp
@@ -282,20 +288,17 @@ else()
         NetTarget/LinuxClient/DeterminismRun.cpp
     )
 
-    add_dependencies(HoverNetDeterminismRun HoverNetHeadlessObjFac1)
     target_link_libraries(HoverNetDeterminismRun PRIVATE HoverNetSim)
 
     add_executable(HoverNetNetcodeProto
         NetTarget/LinuxClient/NetcodeProto.cpp
     )
-    add_dependencies(HoverNetNetcodeProto HoverNetHeadlessObjFac1)
     target_link_libraries(HoverNetNetcodeProto PRIVATE HoverNetSim)
 
     add_executable(HoverNetReplay
         NetTarget/LinuxClient/ReplayTool.cpp
         NetTarget/LinuxClient/Sha256.cpp
     )
-    add_dependencies(HoverNetReplay HoverNetHeadlessObjFac1)
     target_link_libraries(HoverNetReplay PRIVATE HoverNetSim)
 endif()
 
@@ -468,6 +471,7 @@ if(EMSCRIPTEN)
     target_sources(HoverNetGame2Player PRIVATE
         NetTarget/LinuxClient/WebFactory.cpp
         NetTarget/ObjFac1/LinuxPlugin.cpp
+        NetTarget/ObjFac1/SimElements.cpp
         NetTarget/ObjFac1/FuelSource.cpp
         NetTarget/ObjFac1/DoubleSpeedSource.cpp
         NetTarget/ObjFac1/FinishLine.cpp

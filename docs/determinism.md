@@ -19,6 +19,11 @@ the per-frame hashes and `--state` the raw values, so the first frame where two 
 [determinism-golden.txt](determinism-golden.txt). It runs as the `HoverNetDeterminism` ctest, and the web CI job runs
 it on the WebAssembly build under Node.
 
+The runner, the replay tool and the netcode prototype register the simulation's own element classes
+(`MR_RegisterSimElements`) and need no ObjFac1 plug-in, resource file or SDL. Their output is identical to the
+plug-in-based runs: the golden hashes, the physics suite and all 1,012 community tracks (checked by comparing the two
+builds track by track).
+
 ## Golden physics suite
 
 `scripts/test-physics.sh` (ctest `HoverNetPhysicsGolden`, and the web CI job under Node) runs one craft alone through

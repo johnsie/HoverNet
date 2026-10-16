@@ -1,6 +1,7 @@
 #include "../ObjFacTools/ResourceLib.h"
 #include "../ObjFacTools/ResSound.h"
 #include "../ObjFac1/ObjFac1Res.h"
+#include "../ObjFac1/SimElements.h"
 #include "../Util/RecordFile.h"
 #include "../VideoServices/SoundServer.h"
 
@@ -28,6 +29,13 @@ int main()
     if (resources.GetBitmapCount() == 0 || resources.GetActorCount() == 0 ||
         resources.GetBitmap(-1) != nullptr || resources.GetActor(-1) != nullptr) {
         std::fprintf(stderr, "ObjFac1 resource file did not expose valid resource collections\n");
+        return 1;
+    }
+    // The simulation hard-codes the bumper gate's animation length because its collision shape follows it.
+    const MR_ResActor* bumperGate = resources.GetActor(MR_BUMPERGATE);
+    if (bumperGate == nullptr || bumperGate->GetSequenceCount() < 1 || bumperGate->GetFrameCount(0) != kBumperGateFrames) {
+        std::fprintf(stderr, "Bumper gate has %d frames but SimElements.h assumes %d\n",
+                     bumperGate ? bumperGate->GetFrameCount(0) : -1, kBumperGateFrames);
         return 1;
     }
     const MR_ResShortSound* fireSound = resources.GetShortSound(MR_SND_FIRE);

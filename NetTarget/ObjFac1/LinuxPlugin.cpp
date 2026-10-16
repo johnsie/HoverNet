@@ -23,6 +23,7 @@
 #include "FinishLine.h"
 #include "FuelSource.h"
 #include "ObjFac1Res.h"
+#include "SimElements.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -88,39 +89,16 @@ MR_ContinuousSound* ContinuousSound(int resourceId)
     return sound ? sound->GetSound() : nullptr;
 }
 
-class HeadlessBitmapSurface : public MR_SurfaceElement
+class HeadlessBitmapSurface : public MR_SimSurface
 {
 public:
     HeadlessBitmapSurface(const MR_ObjectFromFactoryId& id, MR_ResBitmap* bitmap,
                           MR_ResBitmap* alternateBitmap = nullptr, int rotationSpeed = 0,
                           int rotationLength = 1, int maximumHeight = 0)
-        : MR_SurfaceElement(id), bitmap(bitmap), alternateBitmap(alternateBitmap ? alternateBitmap : bitmap),
+        : MR_SimSurface(id), bitmap(bitmap), alternateBitmap(alternateBitmap ? alternateBitmap : bitmap),
           rotationSpeed(rotationSpeed), rotationLength(rotationLength), maximumHeight(maximumHeight) {}
 
-    // Mirrors MR_BitmapSurface::GetEffectList() (ObjFacTools/BitmapSurface.cpp), the
-    // class this headless reimplementation stands in for on Linux: every textured
-    // wall/floor surface carries an infinite-weight MR_PhysicalCollision so
-    // MainCharacter::ApplyEffect() (MainCharacter.cpp) bounces off it. Without this
-    // override the base MR_Element::GetEffectList() returns NULL, GameSession's
-    // ComputeShapeContactEffects() has nothing to dispatch, and craft never bounce
-    // off walls at all -- they just stop dead, since MainCharacter's own collision
-    // loop (InternalSimulate) only blocks movement, it never reflects velocity.
-    const MR_ContactEffectList* GetEffectList() override
-    {
-        static MR_PhysicalCollision sEffect;
-        static MR_ContactEffectList sEffectList;
-        static bool sInitialized = false;
-        if (!sInitialized) {
-            sInitialized = true;
-            sEffect.mWeight = MR_InertialMoment::eInfiniteWeight;
-            sEffect.mXSpeed = 0;
-            sEffect.mYSpeed = 0;
-            sEffect.mZSpeed = 0;
-            sEffectList.AddTail(&sEffect);
-        }
-        return &sEffectList;
-    }
-
+    // The collision behaviour (every wall and floor bounces craft) is MR_SimSurface's; this class only draws.
     void RenderWallSurface(MR_3DViewPort* destination, const MR_3DCoordinate& upperLeft,
                            const MR_3DCoordinate& lowerRight, MR_Int32 length,
                            MR_SimulationTime time) override
@@ -225,30 +203,16 @@ private:
 // actor (the "electro car" and "demo fighter" models) that classic community
 // tracks scatter around as moving obstacles. It falls under gravity, steps up
 // small ledges, is shoved by craft and missiles, and loops its animation.
-class HeadlessTestElement : public MR_FreeElement
+// The elements below are the game client's presentation of the simulation classes in SimElements.h: they add drawing,
+// animation frames and sound, and nothing that affects the race.
+
+class HeadlessTestElement : public MR_SimTestElement
 {
-    class Cylinder : public MR_CylinderShape
-    {
-    public:
-        MR_Int32 mRay = 0;
-        MR_3DCoordinate mPosition;
-
-        MR_Int32 ZMin() const override { return mPosition.mZ; }
-        MR_Int32 ZMax() const override { return mPosition.mZ + 1800; }
-        MR_Int32 AxisX() const override { return mPosition.mX; }
-        MR_Int32 AxisY() const override { return mPosition.mY; }
-        MR_Int32 RayLen() const override { return mRay; }
-    };
-
 public:
     HeadlessTestElement(const MR_ObjectFromFactoryId& id, int actorResource)
-        : MR_FreeElement(id)
+        : MR_SimTestElement(id)
     {
         actor = resourceLib ? resourceLib->GetActor(actorResource) : nullptr;
-        collisionShape.mRay = 250;
-        contactShape.mRay = 300;
-        contactEffect.mWeight = 90;
-        contactEffectList.AddTail(&contactEffect);
     }
 
     void Render(MR_3DViewPort* destination, MR_SimulationTime) override
@@ -276,81 +240,7 @@ public:
                 }
             }
         }
-
-        const MR_3DCoordinate translation((xSpeed * static_cast<int>(duration)) / 256,
-                                          (ySpeed * static_cast<int>(duration)) / 256,
-                                          (-2 * 256 * static_cast<int>(duration)) / 256);
-        MR_3DCoordinate newPosition = mPosition;
-        newPosition.mX += translation.mX;
-        newPosition.mY += translation.mY;
-        newPosition.mZ += translation.mZ;
-
-        Cylinder shape;
-        shape.mRay = collisionShape.mRay;
-        shape.mPosition = newPosition;
-
-        MR_ObstacleCollisionReport report;
-        report.GetContactWithObstacles(level, &shape, room, this);
-        if (report.IsInMaze()) {
-            if (!report.HaveContact()) {
-                mPosition = newPosition;
-                room = report.Room();
-            }
-            else if (report.SpaceToCeiling() > 0 && report.StepHeight() < 100) {
-                newPosition.mZ += report.StepHeight() + 1;
-                shape.mPosition = newPosition;
-                report.GetContactWithObstacles(level, &shape, room, this);
-                if (report.IsInMaze() && !report.HaveContact()) {
-                    mPosition = newPosition;
-                    room = report.Room();
-                }
-            }
-        }
-        return room;
-    }
-
-    const MR_ShapeInterface* GetObstacleShape() override
-    {
-        collisionShape.mPosition = mPosition;
-        return &collisionShape;
-    }
-
-    void ApplyEffect(const MR_ContactEffect* effect, MR_SimulationTime, MR_SimulationTime,
-                     BOOL validDirection, MR_Angle horizontalDirection, MR_Int32, MR_Int32,
-                     MR_Level*) override
-    {
-        const MR_PhysicalCollision* collision =
-            dynamic_cast<const MR_PhysicalCollision*>(effect);
-        if (collision != nullptr && validDirection) {
-            MR_InertialMoment moment;
-            moment.mWeight = 90;
-            moment.mXSpeed = xSpeed;
-            moment.mYSpeed = ySpeed;
-            moment.mZSpeed = 0;
-            moment.ComputeCollision(collision, horizontalDirection);
-            xSpeed = moment.mXSpeed;
-            ySpeed = moment.mYSpeed;
-        }
-    }
-
-    const MR_ContactEffectList* GetEffectList() override
-    {
-        contactEffect.mXSpeed = xSpeed;
-        contactEffect.mYSpeed = ySpeed;
-        contactEffect.mZSpeed = 0;
-        return &contactEffectList;
-    }
-
-    const MR_ShapeInterface* GetReceivingContactEffectShape() override
-    {
-        collisionShape.mPosition = mPosition;
-        return &collisionShape;
-    }
-
-    const MR_ShapeInterface* GetGivingContactEffectShape() override
-    {
-        contactShape.mPosition = mPosition;
-        return &contactShape;
+        return MR_SimTestElement::Simulate(duration, level, room);
     }
 
 private:
@@ -358,23 +248,12 @@ private:
     int currentSequence = 0;
     int currentFrame = 0;
     MR_SimulationTime elapsedFrameTime = 0;
-    int xSpeed = 0;
-    int ySpeed = 0;
-    Cylinder collisionShape;
-    Cylinder contactShape;
-    MR_PhysicalCollision contactEffect;
-    MR_ContactEffectList contactEffectList;
 };
 
-class HeadlessPowerUp : public MR_FreeElement, protected MR_CylinderShape
+class HeadlessPowerUp : public MR_SimPowerUp
 {
 public:
-    explicit HeadlessPowerUp(const MR_ObjectFromFactoryId& id)
-        : MR_FreeElement(id)
-    {
-        effect.mElementPermId = -1;
-        effects.AddTail(&effect);
-    }
+    explicit HeadlessPowerUp(const MR_ObjectFromFactoryId& id) : MR_SimPowerUp(id) {}
 
     void Render(MR_3DViewPort* destination, MR_SimulationTime) override
     {
@@ -389,49 +268,12 @@ public:
             actor->Draw(destination, matrix, 0, 0);
         }
     }
-
-protected:
-    MR_Int32 ZMin() const override { return mPosition.mZ - 550; }
-    MR_Int32 ZMax() const override { return mPosition.mZ + 550; }
-    MR_Int32 AxisX() const override { return mPosition.mX; }
-    MR_Int32 AxisY() const override { return mPosition.mY; }
-    MR_Int32 RayLen() const override { return 550; }
-
-    const MR_ContactEffectList* GetEffectList() override { return &effects; }
-    const MR_ShapeInterface* GetReceivingContactEffectShape() override { return this; }
-
-    int Simulate(MR_SimulationTime duration, MR_Level*, int room) override
-    {
-        if (duration != 0) {
-            mOrientation = MR_NORMALIZE_ANGLE(mOrientation + duration);
-        }
-        return room;
-    }
-
-    BOOL AssignPermNumber(int number) override
-    {
-        effect.mElementPermId = number;
-        return TRUE;
-    }
-
-private:
-    MR_PowerUpEffect effect;
-    MR_ContactEffectList effects;
 };
 
-class HeadlessBumperGate : public MR_FreeElement, protected MR_CylinderShape
+class HeadlessBumperGate : public MR_SimBumperGate
 {
 public:
-    explicit HeadlessBumperGate(const MR_ObjectFromFactoryId& id)
-        : MR_FreeElement(id), timeSinceLastCollision(1000000), lastState(0), currentFrame(0)
-    {
-        const MR_ResActor* actor = resourceLib ? resourceLib->GetActor(MR_BUMPERGATE) : nullptr;
-        if (actor != nullptr && actor->GetSequenceCount() > 0) {
-            lastState = actor->GetFrameCount(0) - 1;
-        }
-        currentFrame = lastState;
-        effects.AddTail(&collisionEffect);
-    }
+    explicit HeadlessBumperGate(const MR_ObjectFromFactoryId& id) : MR_SimBumperGate(id) {}
 
     void Render(MR_3DViewPort* destination, MR_SimulationTime) override
     {
@@ -443,277 +285,64 @@ public:
 
         MR_PositionMatrix matrix;
         if (destination->ComputePositionMatrix(matrix, mPosition, mOrientation, 2500)) {
-            actor->Draw(destination, matrix, 0, currentFrame);
+            actor->Draw(destination, matrix, 0, CurrentFrame());
         }
     }
-
-protected:
-    MR_Int32 ZMin() const override { return mPosition.mZ + 2; }
-    MR_Int32 ZMax() const override
-    {
-        return mPosition.mZ + 1500 + currentFrame * (3000 - 1500) / std::max(1, lastState);
-    }
-    MR_Int32 AxisX() const override { return mPosition.mX; }
-    MR_Int32 AxisY() const override { return mPosition.mY; }
-    MR_Int32 RayLen() const override
-    {
-        return 200 + currentFrame * (2500 - 200) / std::max(1, lastState);
-    }
-
-    const MR_ContactEffectList* GetEffectList() override
-    {
-        collisionEffect.mWeight = MR_PhysicalCollision::eInfiniteWeight;
-        collisionEffect.mXSpeed = 0;
-        collisionEffect.mYSpeed = 0;
-        collisionEffect.mZSpeed = 0;
-        return &effects;
-    }
-
-    const MR_ShapeInterface* GetGivingContactEffectShape() override { return nullptr; }
-    const MR_ShapeInterface* GetReceivingContactEffectShape() override { return this; }
-
-    int Simulate(MR_SimulationTime duration, MR_Level*, int room) override
-    {
-        if (duration >= 0) {
-            timeSinceLastCollision += duration;
-            if (timeSinceLastCollision < 1500) {
-                currentFrame = (1500 - timeSinceLastCollision) * lastState / 1500;
-            }
-            else if (timeSinceLastCollision < 9000) {
-                currentFrame = 0;
-            }
-            else if (timeSinceLastCollision < 13000) {
-                currentFrame = (timeSinceLastCollision - 9000) * lastState / 4000;
-            }
-            else {
-                currentFrame = lastState;
-            }
-        }
-        return room;
-    }
-
-    void ApplyEffect(const MR_ContactEffect* effect, MR_SimulationTime, MR_SimulationTime,
-                     BOOL, MR_Angle, MR_Int32, MR_Int32, MR_Level*) override
-    {
-        if (dynamic_cast<const MR_PhysicalCollision*>(effect) == nullptr) {
-            return;
-        }
-        timeSinceLastCollision = currentFrame >= lastState || lastState == 0
-            ? 0
-            : 1500 - 1500 * currentFrame / lastState;
-    }
-
-private:
-    MR_SimulationTime timeSinceLastCollision;
-    int lastState;
-    int currentFrame;
-    MR_PhysicalCollision collisionEffect;
-    MR_ContactEffectList effects;
 };
 
-class HeadlessMissile : public MR_FreeElement, protected MR_CylinderShape
+class HeadlessMissile : public MR_SimMissile
 {
 public:
-    explicit HeadlessMissile(const MR_ObjectFromFactoryId& id)
-        : MR_FreeElement(id), hoverId(-1), lived(0), currentSequence(0), currentFrame(0), bounceSoundEvent(FALSE)
-    {
-        effects.AddTail(&collisionEffect);
-        effects.AddTail(&lostOfControlEffect);
-        lostOfControlEffect.mType = MR_LostOfControl::eMissile;
-        lostOfControlEffect.mElementId = -1;
-        lostOfControlEffect.mHoverId = hoverId;
-    }
+    explicit HeadlessMissile(const MR_ObjectFromFactoryId& id) : MR_SimMissile(id) {}
 
     void Render(MR_3DViewPort* destination, MR_SimulationTime) override
     {
         const MR_ResActor* actor = resourceLib ? resourceLib->GetActor(MR_MISSILE) : nullptr;
-        if (destination == nullptr || actor == nullptr || currentSequence >= actor->GetSequenceCount() ||
-            currentFrame >= actor->GetFrameCount(currentSequence)) {
+        if (destination == nullptr || actor == nullptr) {
+            return;
+        }
+
+        // Ignition animation, then the flying loop, then the burn-out after the missile stops.
+        const MR_SimulationTime lived = Lived();
+        int sequence = 0;
+        int frame = 0;
+        if (lived > 7500 && actor->GetSequenceCount() > 2) {
+            sequence = 2;
+            const int frameCount = actor->GetFrameCount(sequence);
+            frame = frameCount > 0 ? std::min<int>(frameCount - 1, frameCount * (lived - 7500) / 1200) : 0;
+        }
+        else if (lived < 525) {
+            const int frameCount = actor->GetFrameCount(sequence);
+            frame = frameCount > 0 ? std::min<int>(frameCount - 1, frameCount * lived / 525) : 0;
+        }
+        else if (actor->GetSequenceCount() > 1) {
+            sequence = 1;
+            const int frameCount = actor->GetFrameCount(sequence);
+            frame = frameCount > 0 ? (lived / 256) % frameCount : 0;
+        }
+        if (sequence >= actor->GetSequenceCount() || frame >= actor->GetFrameCount(sequence)) {
             return;
         }
 
         MR_PositionMatrix matrix;
         if (destination->ComputePositionMatrix(matrix, mPosition, mOrientation, 300)) {
-            actor->Draw(destination, matrix, currentSequence, currentFrame);
-        }
-    }
-
-protected:
-    MR_Int32 ZMin() const override { return mPosition.mZ - 300; }
-    MR_Int32 ZMax() const override { return mPosition.mZ + 300; }
-    MR_Int32 AxisX() const override { return mPosition.mX; }
-    MR_Int32 AxisY() const override { return mPosition.mY; }
-    MR_Int32 RayLen() const override { return 300; }
-
-    void SetOwnerId(int owner) override
-    {
-        hoverId = owner;
-        lostOfControlEffect.mHoverId = owner;
-    }
-
-    const MR_ContactEffectList* GetEffectList() override
-    {
-        if (lived <= 175) {
-            return nullptr;
-        }
-        collisionEffect.mWeight = 100;
-        collisionEffect.mXSpeed = xSpeed * 256;
-        collisionEffect.mYSpeed = ySpeed * 256;
-        collisionEffect.mZSpeed = 0;
-        return &effects;
-    }
-
-    const MR_ShapeInterface* GetGivingContactEffectShape() override { return this; }
-    const MR_ShapeInterface* GetReceivingContactEffectShape() override { return this; }
-
-    void ApplyEffect(const MR_ContactEffect* effect, MR_SimulationTime, MR_SimulationTime,
-                     BOOL validDirection, MR_Angle horizontalDirection, MR_Int32, MR_Int32,
-                     MR_Level*) override
-    {
-        const MR_PhysicalCollision* collision = dynamic_cast<const MR_PhysicalCollision*>(effect);
-        if (collision == nullptr || !validDirection) {
-            return;
-        }
-
-        if (collision->mWeight < MR_PhysicalCollision::eInfiniteWeight) {
-            if (lived >= 175) {
-                lived = 8700;
-            }
-            return;
-        }
-
-        const MR_Angle difference = MR_NORMALIZE_ANGLE(horizontalDirection - mOrientation + MR_PI);
-        if (difference < MR_PI / 2 || difference > MR_PI + MR_PI / 2) {
-            mOrientation = MR_NORMALIZE_ANGLE(horizontalDirection + difference);
-            bounceSoundEvent = TRUE;
+            actor->Draw(destination, matrix, sequence, frame);
         }
     }
 
     void PlayExternalSounds(int decibels, int pan) override
     {
-        if (bounceSoundEvent) {
+        if (TakeBounceEvent()) {
             MR_SoundServer::Play(ShortSound(MR_SND_MISSILE_BOUNCE), decibels, 1.0, pan);
-            bounceSoundEvent = FALSE;
         }
         MR_SoundServer::Play(ContinuousSound(MR_SND_MISSILE_MOTOR), 1, decibels, 1.0, pan);
     }
-
-    // Movement is the legacy missile's, exactly (Missile.cpp): 5 ms slices, a double speed of 21 * 2222 / 1000 =
-    // 46.662 units per ms, and the same halving search for the furthest free position. An earlier version of this
-    // plug-in truncated the speed to 46 (docs/legacy-element-differences.md).
-    int InternalSimulate(MR_SimulationTime duration, MR_Level* level, int room)
-    {
-        lived += duration;
-
-        const double steadySpeed = 21.0 * 2222.0 / 1000.0;
-        double speed = steadySpeed;
-        if (lived > 7500) {
-            speed = (1200 - lived - 7500) * steadySpeed / 1200;
-            if (speed < 0) {
-                speed = 0;
-            }
-        }
-
-        MR_Cylinder shape;
-        shape.mRayLen = 1;
-        shape.mZMin = mPosition.mZ - 300;
-        shape.mZMax = mPosition.mZ + 300;
-
-        xSpeed = speed * MR_Cos[mOrientation] / MR_TRIGO_FRACT;
-        ySpeed = speed * MR_Sin[mOrientation] / MR_TRIGO_FRACT;
-
-        MR_2DCoordinate translation;
-        translation.mX = duration * xSpeed;
-        translation.mY = duration * ySpeed;
-
-        MR_ObstacleCollisionReport report;
-        MR_SimulationTime attemptedDuration = duration;
-        shape.mAxis.mX = mPosition.mX + translation.mX;
-        shape.mAxis.mY = mPosition.mY + translation.mY;
-
-        while (true) {
-            bool success = false;
-            report.GetContactWithObstacles(level, &shape, room, this);
-            if (report.IsInMaze() && !report.HaveContact()) {
-                mPosition.mX = shape.mAxis.mX;
-                mPosition.mY = shape.mAxis.mY;
-                room = report.Room();
-                success = true;
-            }
-
-            if (attemptedDuration < 6) {
-                break;
-            }
-            if (success) {
-                if (attemptedDuration == duration) {
-                    break;
-                }
-                attemptedDuration /= 2;
-                shape.mAxis.mX += attemptedDuration * translation.mX / duration;
-                shape.mAxis.mY += attemptedDuration * translation.mY / duration;
-            }
-            else {
-                attemptedDuration /= 2;
-                shape.mAxis.mX -= attemptedDuration * translation.mX / duration;
-                shape.mAxis.mY -= attemptedDuration * translation.mY / duration;
-            }
-        }
-        return room;
-    }
-
-    int Simulate(MR_SimulationTime duration, MR_Level* level, int room) override
-    {
-        while (duration > 0) {
-            room = InternalSimulate(duration > 5 ? 5 : duration, level, room);
-            duration -= 5;
-        }
-
-        const MR_ResActor* actor = resourceLib ? resourceLib->GetActor(MR_MISSILE) : nullptr;
-        if (actor != nullptr) {
-            if (lived > 7500 && actor->GetSequenceCount() > 2) {
-                currentSequence = 2;
-                const int frameCount = actor->GetFrameCount(currentSequence);
-                currentFrame = frameCount > 0 ? std::min(frameCount - 1, frameCount * (lived - 7500) / 1200) : 0;
-            }
-            else if (lived < 525) {
-                currentSequence = 0;
-                const int frameCount = actor->GetFrameCount(currentSequence);
-                currentFrame = frameCount > 0 ? std::min(frameCount - 1, frameCount * lived / 525) : 0;
-            }
-            else if (actor->GetSequenceCount() > 1) {
-                currentSequence = 1;
-                const int frameCount = actor->GetFrameCount(currentSequence);
-                currentFrame = frameCount > 0 ? (lived / 256) % frameCount : 0;
-            }
-        }
-        return lived >= 8700 ? MR_Level::eMustBeDeleted : room;
-    }
-
-private:
-    int hoverId;
-    MR_SimulationTime lived;
-    double xSpeed = 0;
-    double ySpeed = 0;
-    int currentSequence;
-    int currentFrame;
-    BOOL bounceSoundEvent;
-    MR_PhysicalCollision collisionEffect;
-    MR_LostOfControl lostOfControlEffect;
-    MR_ContactEffectList effects;
 };
 
-class HeadlessMine : public MR_FreeElement, protected MR_CylinderShape
+class HeadlessMine : public MR_SimMine
 {
 public:
-    explicit HeadlessMine(const MR_ObjectFromFactoryId& id)
-        : MR_FreeElement(id), onGround(FALSE)
-    {
-        effects.AddTail(&lostOfControlEffect);
-        lostOfControlEffect.mType = MR_LostOfControl::eMine;
-        lostOfControlEffect.mElementId = -1;
-        lostOfControlEffect.mHoverId = -1;
-        mOrientation = 0;
-    }
+    explicit HeadlessMine(const MR_ObjectFromFactoryId& id) : MR_SimMine(id) {}
 
     void Render(MR_3DViewPort* destination, MR_SimulationTime time) override
     {
@@ -728,49 +357,8 @@ public:
             actor->Draw(destination, matrix, 0, (time >> 9) % actor->GetFrameCount(0));
         }
     }
-
-protected:
-    MR_Int32 ZMin() const override { return mPosition.mZ; }
-    MR_Int32 ZMax() const override { return mPosition.mZ + 140; }
-    MR_Int32 AxisX() const override { return mPosition.mX; }
-    MR_Int32 AxisY() const override { return mPosition.mY; }
-    MR_Int32 RayLen() const override { return 400; }
-
-    const MR_ContactEffectList* GetEffectList() override { return onGround ? &effects : nullptr; }
-    const MR_ShapeInterface* GetGivingContactEffectShape() override { return nullptr; }
-    const MR_ShapeInterface* GetReceivingContactEffectShape() override { return this; }
-
-    BOOL AssignPermNumber(int number) override
-    {
-        lostOfControlEffect.mElementId = number;
-        return TRUE;
-    }
-
-    int Simulate(MR_SimulationTime duration, MR_Level* level, int room) override
-    {
-        if (room == -1) {
-            onGround = FALSE;
-        }
-        else if (!onGround && duration > 0 && level != nullptr) {
-            mPosition.mZ -= duration * 0.6;
-            MR_ObstacleCollisionReport report;
-            report.GetContactWithObstacles(level, this, room, this);
-            if (!report.IsInMaze()) {
-                onGround = TRUE;
-            }
-            else if (report.HaveContact()) {
-                mPosition.mZ += report.StepHeight();
-                onGround = TRUE;
-            }
-        }
-        return room;
-    }
-
-private:
-    BOOL onGround;
-    MR_LostOfControl lostOfControlEffect;
-    MR_ContactEffectList effects;
 };
+
 
 MR_ResBitmap* BitmapForClass(MR_UInt16 classId)
 {

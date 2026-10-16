@@ -24,6 +24,9 @@
 #undef private
 #undef protected
 #include "../Model/GameSession.h"
+#ifndef __EMSCRIPTEN__
+#include "../ObjFac1/SimElements.h"
+#endif
 #include "../Util/DllObjectFactory.h"
 #include "../Util/RecordFile.h"
 #include "../Util/WorldCoordinates.h"
@@ -326,6 +329,8 @@ int main(int argc, char** argv)
     MR_MainCharacter::RegisterFactory();
 #ifdef __EMSCRIPTEN__
     HoverNetInitializeWebFactory();
+#else
+    MR_RegisterSimElements();   // no ObjFac1 plug-in or resource file needed
 #endif
     MR_DllObjectFactory::MR_DllObjectFactoryCleanup factoryCleanup;
     const std::string cmd = argv[1];

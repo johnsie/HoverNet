@@ -57,8 +57,8 @@ on Linux. The WebAssembly comparison runs in the web CI job.
 
 ## What this means for the architecture
 
-[ADR 0001](adr/0001-simulation-core.md) step 2 (replace the dynamically loaded factory with a static registry) is also the
-chance to end the duplication: one implementation of each element's *simulation* (shared by the server, replay, tests and
-client) and a separate presentation class per element, the way the hovercraft was just split. The portable plug-in's
-`Headless*` classes are the better base, because they already compile everywhere; the missile maths is the one thing to
-bring back from the legacy code.
+Done on 16 October 2026 ([ADR 0001](adr/0001-simulation-core.md) step 2): each element's simulation is now one class in
+`NetTarget/ObjFac1/SimElements.cpp`, built into the `HoverNetSim` library, and the portable plug-in's classes derive from
+it and only add presentation (the way the hovercraft was split). A bumper gate's collision shape follows its animation, so
+its frame count (10) is simulation data, pinned by `kBumperGateFrames` and checked against the resource file by
+`HoverNetResourceSmoke`. The only remaining duplicate is the legacy Win32 plug-in, which is retired with the legacy client.
