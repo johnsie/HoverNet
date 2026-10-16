@@ -1,7 +1,7 @@
 workflow:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $HOVERNET_MAIN_BRANCH'
     - if: '$CI_COMMIT_TAG'
 
 stages:
@@ -18,6 +18,8 @@ variables:
   WEB_EMSDK_VERSION: "3.1.74"
   SERVER_RUNNER_TAG: "race-server"
   CMAKE_BUILD_PARALLEL_LEVEL: "4"
+  # This project's GitLab default branch is not `main`, so branch rules name the release branch explicitly.
+  HOVERNET_MAIN_BRANCH: "main"
 
 default:
   interruptible: true
@@ -128,7 +130,7 @@ build:game:web:
         cp "$WEB_BUILD_DIR/HoverNet.js" "$WEB_BUILD_DIR/HoverNet.wasm" "$WEB_BUILD_DIR/HoverNet.data" dist/web/
       ) 8>"${WEB_BUILD_DIR}.lock"
     - tar -czf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web index.html HoverNet.js HoverNet.wasm HoverNet.data
-    - 'if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then sudo /usr/local/sbin/hovernet-web-deploy "dist/hovernet-web-${CI_COMMIT_SHORT_SHA}.tar.gz"; fi'
+    - 'if [ "$CI_COMMIT_BRANCH" = "$HOVERNET_MAIN_BRANCH" ]; then sudo /usr/local/sbin/hovernet-web-deploy "dist/hovernet-web-${CI_COMMIT_SHORT_SHA}.tar.gz"; fi'
   artifacts:
     name: "hovernet-web-${CI_COMMIT_REF_SLUG}"
     expire_in: 30 days
@@ -143,7 +145,7 @@ build:game:web:
         - packaging/web/**/*
         - CMakeLists.txt
         - .gitlab-ci.yml
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $HOVERNET_MAIN_BRANCH'
       changes: *web_inputs
     - if: '$CI_COMMIT_TAG'
 
@@ -170,7 +172,7 @@ test:web:smoke:
     - !reference [.no_schedule, rules]
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: *web_inputs
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $HOVERNET_MAIN_BRANCH'
       changes: *web_inputs
     - if: '$CI_COMMIT_TAG'
 
@@ -189,7 +191,7 @@ check:web:deployed:
     - HOVERNET_CHECK_LOCAL=1 scripts/check-web-deploy.sh https://hovernet.outiva.com
   rules:
     - !reference [.no_schedule, rules]
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $HOVERNET_MAIN_BRANCH'
       changes: *web_inputs
     - if: '$CI_COMMIT_TAG'
 
