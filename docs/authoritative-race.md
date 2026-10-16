@@ -73,6 +73,32 @@ over time, which is fine), a full server, a late joiner, an input flood that clo
 snapshot limit, and 3,000 connections of random bytes. Passes on all seven bundled tracks at eight players on Linux (also under
 ASan/UBSan) and Windows x64.
 
+## The predicting client
+
+`PredictingClient` (transport-free, `NetTarget/Authority/PredictingClient.*`, built on `RaceWorld`) is the client half of the design in
+[netcode-prototype.md](netcode-prototype.md), now using the real snapshots instead of replaying from the start:
+
+- a **confirmed world** advances only with the server's Tick messages (the inputs every player used), so it is exactly the server's
+  race, and every Tick's state hash is checked against it (a mismatch means "resynchronise from a snapshot");
+- a **predicted world** is what the player sees. Each frame it is restored from a snapshot of the newest confirmed state and run
+  forward to the tick on screen with the player's own inputs (known) and every other player's last confirmed input (a guess). A
+  wrong guess is repaired by the next frame's rebuild; nothing has to be unwound.
+
+`HoverNetPredictionTest` runs it against a live host with eight players over a delayed path and compares each frame's prediction
+with the server's true positions at that tick (error = distance on the ground, in millimetres; a craft is several metres long):
+
+| Track | One way | Own craft, predicted: mean (max) | Other craft, predicted: mean (max) | Drawing the confirmed state: mean |
+| --- | --- | --- | --- | --- |
+| ClassicH | 60 ms (120 ms round trip) | 0 mm (0) | 3 mm (1.5 m) | 1.8 m to 2.6 m |
+| ClassicH | 125 ms (250 ms round trip) | 6 mm (1.0 m) | 16 mm (1.3 m) | 4.4 m to 4.7 m |
+| The Alley2 | 125 ms | 6 mm (1.0 m) | 61 mm (11.9 m) | 3.9 m to 6.8 m |
+| Tidal Causeway | 125 ms | 14 mm (1.4 m) | 19 mm (4.5 m) | 4.5 m to 5.1 m |
+| ClassicH | 200 ms (400 ms round trip) | 24 mm (2.4 m) | 101 mm (5.9 m) | 4.3 m to 6.9 m |
+
+At the Stage 0 targets the prediction is within a few centimetres on average; the maxima are the moments another craft's
+unpredicted input changes a collision or a weapon hit. Every tick's hash matched on every run. Cost: one snapshot per confirmed
+tick, and one restore plus 5 to 20 ticks of simulation per frame (the whole eight-player 1,500-tick run takes about 0.7 s).
+
 ## Reconnect, tampering, bandwidth and metrics
 
 - **Reconnect.** The HelloAck carries a random resume token for the player's slot. A player who drops keeps the slot (the craft

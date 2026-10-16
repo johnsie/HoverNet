@@ -169,6 +169,8 @@ add_library(HoverNetSim STATIC
     NetTarget/Authority/ReplayFormat.cpp
     NetTarget/Authority/AuthoritativeRace.cpp
     NetTarget/Authority/Protocol3.cpp
+    NetTarget/Authority/RaceWorld.cpp
+    NetTarget/Authority/PredictingClient.cpp
     NetTarget/Authority/RaceHost.cpp
     NetTarget/LinuxClient/Sha256.cpp
 )
@@ -330,6 +332,11 @@ else()
         target_link_libraries(HoverNetAuthServer PRIVATE ws2_32)
         target_link_libraries(HoverNetAuthBot PRIVATE ws2_32)
     endif()
+
+    add_executable(HoverNetPredictionTest
+        NetTarget/LinuxClient/PredictionTest.cpp
+    )
+    target_link_libraries(HoverNetPredictionTest PRIVATE HoverNetSim)
 
     add_executable(HoverNetSnapshotTest
         NetTarget/LinuxClient/SnapshotTest.cpp
@@ -669,6 +676,9 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetAuthServerTcp
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-authserver.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> 8 500
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetPrediction120 COMMAND HoverNetPredictionTest ClassicH 8 60)
+    add_test(NAME HoverNetPrediction250 COMMAND HoverNetPredictionTest "The Alley2" 8 125)
+    set_tests_properties(HoverNetPrediction120 HoverNetPrediction250 PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

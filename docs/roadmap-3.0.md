@@ -142,7 +142,7 @@ differences from 2.0 are documented design decisions.
 - A versioned protocol 3.0 independent of native memory layouts, building on 2.0's explicit
   encoding, with authenticated encryption and secure session establishment.
 - The server is authoritative for starts, movement, collisions, weapons, pickups, laps,
-  finishes, and results. *Status: the authoritative race core is built and tested at eight players on all bundled tracks on Linux and Windows, see [authoritative-race.md](authoritative-race.md); the socket server, protocol framing, encryption, reconnect and observability are not.* Prediction, reconciliation, interpolation, reconnect, and
+  finishes, and results. *Status (16 October 2026), see [authoritative-race.md](authoritative-race.md): the authoritative race, protocol 3.0 framing and messages, a transport-free race host (negotiation, slots, rate limits, snapshot service, results, reconnect with resume tokens, metrics), a dedicated TCP server and scripted players, and a predicting client are built and tested at eight players on all seven bundled tracks on Linux and Windows x64 (also under ASan/UBSan), including a tampering test, a bandwidth budget and the prediction error at the Stage 0 latency targets. Not built: encryption and server identity, accounts, the lobby and many races at once, the WebSocket gateway for protocol 3.0, the client UI, regional pools, deployment, and the multi-day soak.* Prediction, reconciliation, interpolation, reconnect, and
   spectator snapshots on the client.
 - Bandwidth budgets, packet prioritisation, compression, rate limiting, and abuse
   protection (extending 2.0's limits and fuzzing).
