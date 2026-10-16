@@ -10,12 +10,12 @@ Configure protected runners with these tags, or override the CI variables in Git
 - `windows`: PowerShell, Visual Studio MSBuild with the **C++ CMake tools for Windows** component, all client dependencies, and Inno Setup (`iscc` on `PATH`).
 - `race-server` also runs the browser build. If `EMSDK` is unset, the web job installs the pinned SDK under the runner user's cache and reuses it on later builds.
 
-Mark the `race-server` runner and production environments as protected. The RaceServer deploy remains manual and tag-only. The web deploy runs automatically from the protected default branch and remains manual for tags.
+Mark the `race-server` runner and production environments as protected. The RaceServer deploy runs automatically on protected version tags. The web deploy runs automatically from the protected default branch and for tags.
 
 The browser client is built by `build:game:web` and packaged as a standalone
 static artifact. `deploy:web` runs from the default branch after the web build
-and has its own `production-web` resource group. Tagged web deployments remain
-manual. On `192.168.10.181`, install
+and has its own `production-web` resource group. Tagged web deployments run
+automatically too. On `192.168.10.181`, install
 `packaging/web/hovernet-web-deploy` as the root-owned
 `/usr/local/sbin/hovernet-web-deploy` wrapper and permit the `gitlab-runner`
 account to invoke only that wrapper with passwordless sudo. The wrapper
@@ -62,12 +62,20 @@ git remote add gitlab https://gitlab.outiva.com/devteam/hovernet.git
 git push --set-upstream gitlab feat/gitlab-cross-platform-delivery
 ```
 
-Merge through a protected default branch and create a protected version tag to expose the manual production deployment job.
+Merge through a protected default branch and create a protected version tag to run the production deployment jobs automatically.
 
 ### Pipeline speed
 
 Build jobs use `needs: []` so Linux, Windows and web builds start immediately and
-in parallel instead of waiting for earlier stages. `build:game:web` keeps its CMake
+in parallel instead of waiting for earlier stages. The web job stays in the first
+(`web`) stage so it is queued ahead of the native builds when runner slots are scarce. `build:game:web` keeps its CMake
 tree in `~/.cache/hovernet-web-build` on the runner (guarded by `flock`), so
 pipelines rebuild only changed sources; delete that directory to force a clean
 build. Web builds are skipped for changes that touch no web inputs (docs only).
+
+### Nightly sanitizers
+
+`build:game:linux:sanitizers` (ASan + UBSan build and full `ctest`) is slow, so it runs
+only from a nightly pipeline schedule, not on pushes, merge requests or tags. Every other
+job skips scheduled pipelines (`.no_schedule`). Create the schedule once on the GitLab
+server with `sudo bash packaging/web/gitlab-nightly-schedule.sh` (02:00 Europe/London).

@@ -118,6 +118,7 @@ class MR_MainCharacter:public MR_FreeElement
       double                    mYSpeed;
       double                    mZSpeed;
       double                    mXSpeedBeforeCollision;
+      int                       mBlockedSteps;           // consecutive moves rejected by walls (stuck guard)
       double                    mYSpeedBeforeCollision;
       
       BOOL                      mOnFloor;

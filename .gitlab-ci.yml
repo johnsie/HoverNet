@@ -1,11 +1,13 @@
 workflow:
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
     - if: '$CI_COMMIT_TAG'
 
 stages:
   - validate
+  - web
   - build
   - package
   - publish
@@ -23,8 +25,17 @@ variables:
 default:
   interruptible: true
 
+# Scheduled (nightly) pipelines run only the sanitizer job; everything else skips them.
+.no_schedule:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
+
 lint:gitlab-ci:
   stage: validate
+  rules:
+    - !reference [.no_schedule, rules]
+    - when: on_success
   tags: ["$LINUX_RUNNER_TAG"]
   script:
     - test -f .gitlab-ci.yml
@@ -45,6 +56,9 @@ lint:gitlab-ci:
 
 build:raceserver:linux:
   stage: build
+  rules:
+    - !reference [.no_schedule, rules]
+    - when: on_success
   needs: []
   tags: ["$LINUX_RUNNER_TAG"]
   script:
@@ -58,6 +72,9 @@ build:raceserver:linux:
 
 build:game:linux:
   stage: build
+  rules:
+    - !reference [.no_schedule, rules]
+    - when: on_success
   needs: []
   tags: ["$LINUX_RUNNER_TAG"]
   script:
@@ -71,7 +88,7 @@ build:game:linux:
       - build/linux/ObjFac1.so
 
 build:game:web:
-  stage: build
+  stage: web
   needs: []
   tags: ["$WEB_RUNNER_TAG"]
   script:
@@ -130,6 +147,7 @@ build:game:web:
     paths:
       - dist/hovernet-web-*.tar.gz
   rules:
+    - !reference [.no_schedule, rules]
     # Docs-only changes cannot alter the web artifact, so skip the rebuild.
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: &web_inputs
@@ -158,9 +176,14 @@ build:game:linux:sanitizers:
     expire_in: 7 days
     paths:
       - build/sanitize/build.log
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
 
 package:raceserver:deb:
   stage: package
+  rules:
+    - !reference [.no_schedule, rules]
+    - when: on_success
   tags: ["$LINUX_RUNNER_TAG"]
   needs:
     - job: build:raceserver:linux
@@ -176,6 +199,9 @@ package:raceserver:deb:
 
 package:game:deb:
   stage: package
+  rules:
+    - !reference [.no_schedule, rules]
+    - when: on_success
   tags: ["$LINUX_RUNNER_TAG"]
   needs:
     - job: build:game:linux
@@ -208,6 +234,7 @@ build:game:windows:shared-x64:
       - build/windows-shared/Release/SDL2.dll
       - build/windows-shared/Release/RaceServer.exe
   rules:
+    - !reference [.no_schedule, rules]
     - if: '$CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 package:game:windows:shared-x64:
@@ -228,6 +255,7 @@ package:game:windows:shared-x64:
     paths:
       - dist/*-windows-x64-setup.exe
   rules:
+    - !reference [.no_schedule, rules]
     - if: '$CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 build:game:windows:
@@ -242,6 +270,7 @@ build:game:windows:
     paths:
       - Release/
   rules:
+    - !reference [.no_schedule, rules]
     - if: '$CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 package:game:windows:
@@ -260,6 +289,7 @@ package:game:windows:
     paths:
       - dist/*-win32-setup.exe
   rules:
+    - !reference [.no_schedule, rules]
     - if: '$CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 build:raceserver:windows:
@@ -274,6 +304,7 @@ build:raceserver:windows:
     paths:
       - NetTarget/RaceServer/Release/RaceServer.exe
   rules:
+    - !reference [.no_schedule, rules]
     - if: '$CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 package:raceserver:windows:
@@ -295,6 +326,7 @@ package:raceserver:windows:
     paths:
       - dist/*.zip
   rules:
+    - !reference [.no_schedule, rules]
     - if: '$CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 publish:github-release:
@@ -327,6 +359,7 @@ publish:github-release:
       esac
       gh release create "$CI_COMMIT_TAG" $prerelease dist/SHA256SUMS dist/*.deb dist/*-win32-setup.exe dist/*-windows-x64-setup.exe dist/*.zip --repo johnsie/HoverNet --title "$CI_COMMIT_TAG" --notes "Automated release for $CI_COMMIT_TAG"
   rules:
+    - !reference [.no_schedule, rules]
     - if: '$CI_COMMIT_TAG'
 
 deploy:raceserver:
@@ -342,9 +375,8 @@ deploy:raceserver:
   script:
     - sudo /usr/local/sbin/hovernet-deploy dist/hovernet-raceserver_*.deb
   rules:
+    - !reference [.no_schedule, rules]
     - if: '$CI_COMMIT_TAG'
-      when: manual
-      allow_failure: false
 
 deploy:web:
   stage: deploy
@@ -359,6 +391,5 @@ deploy:web:
   script:
     - sudo /usr/local/sbin/hovernet-web-deploy "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz"
   rules:
+    - !reference [.no_schedule, rules]
     - if: '$CI_COMMIT_TAG'
-      when: manual
-      allow_failure: false

@@ -17,8 +17,8 @@ How a release is made, verified, upgraded to, and rolled back.
    public GitHub release only after **every** package job succeeds. If a job
    fails, no release is published; fix it and use a **new** tag (do not move or
    reuse a tag that has been pushed).
-5. The race server is **never** deployed by a release. `deploy:raceserver` is a
-   manual GitLab job on a protected tag.
+5. The race server is deployed automatically by the tag pipeline: `deploy:raceserver`
+   runs on the protected tag after its package job succeeds, as does `deploy:web`.
 6. Community track downloads are hosted separately (see
    [Community tracks](community-tracks.md)); a release does not change them.
 
@@ -66,7 +66,7 @@ against corruption and mirroring mistakes; they are not a signature, so get
 - **Linux server:** `sudo dpkg -i hovernet-raceserver_<older>.deb` then
   `sudo systemctl restart hovernet-raceserver`; configuration is preserved. The
   previous package is attached to its own GitHub release and is also a GitLab
-  artifact of that tag's pipeline (re-run its manual `deploy:raceserver` job to
+  artifact of that tag's pipeline (re-run its `deploy:raceserver` job to
   redeploy it through the normal, audited path).
 - **Windows:** run the older release's installer over the current one, or uninstall
   first; settings are kept either way.

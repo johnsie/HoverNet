@@ -4,6 +4,148 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.15 - 2026-10-16
+
+### Changed
+- Web client: tablets (iPad and similar) keep their desktop menu layouts and are no longer asked
+  to rotate in portrait; only phones are.
+- Web client on phones: Settings and Controls have a slim header, and Settings keeps Save and
+  Cancel pinned under the scrolling options.
+- Web client on phones: the wide race frame is nudged so the whole hovercraft stays in view.
+
+### Fixed
+- Web client: the on-screen race controls no longer float over the screens opened from the pause
+  menu (New Local Race, Settings, Controls) or the results screen.
+- README describes the browser, phone, tablet and VR play.
+
+## 2.0.14 - 2026-10-16
+
+### Added
+- Web client: VR mode for the Meta Quest browser. An ENTER VR button (shown only in a headset
+  browser) puts the game on a big virtual screen with real stereo 3D in races -- the game renders
+  one view per eye -- and a controller to drive, fire, jump and switch between the chase and
+  cockpit views; menus are pointed at and clicked with the controller. Desktop and phone
+  browsers are unaffected.
+
+### Fixed
+- A hovercraft could stop dead against a wall or platform instead of bouncing (most often at
+  high speed): the bounce is triggered by a contact ring slightly wider than the space the craft
+  may move in, so it could rest just outside it. A craft whose moves keep being refused is now
+  bounced back.
+
+## 2.0.13 - 2026-10-16
+
+### Fixed
+- Web client: after a browser stall (hidden tab, long pause, slow phone frame) the race no longer
+  replays the whole gap at once, which threw hovercraft into walls and platforms and let
+  missiles skip past targets.
+
+## 2.0.12 - 2026-10-15
+
+### Changed
+- Web client on phones: dragging the steering knob up jumps (the JUMP button still works).
+
+## 2.0.11 - 2026-10-15
+
+### Changed
+- Web client on phones: the two steering arrows are replaced by a steering slider -- drag the
+  knob left or right to steer. The other race controls are unchanged.
+
+### Fixed
+- Web client on phones: the pause menu's top buttons (Resume, New Local Race, Online
+  Multiplayer) could not be tapped because the race controls floated over them; the race
+  controls are now hidden while paused.
+
+## 2.0.10 - 2026-10-15
+
+### Added
+- Web client (desktop): a "Game Size" setting sizes the gameplay area inside the browser
+  window (Fit, or 800x600 up to 1920x1080) without resizing the browser. Remembered per browser.
+
+### Changed
+- Web client (phones): the race frame matches the screen's shape (960 wide, about 2.2:1 in
+  landscape) instead of a letterboxed 4:3 frame.
+
+### Fixed
+- Wide framebuffers were stretched horizontally because the 3D projection assumed a 4:3 screen;
+  pixels are now square at every resolution (4:3 output is unchanged).
+- Web client on phones: less flicker -- frames are paced to the display and the canvas is no
+  longer resized when iOS toolbars slide in and out.
+
+## 2.0.9 - 2026-10-15
+
+### Changed
+- Web client on phones: holding the phone in portrait now shows a full-screen "Rotate your
+  phone" prompt on every screen (including loading and the menus), with a
+  "Continue in portrait" option for the rest of the session.
+
+## 2.0.8 - 2026-10-15
+
+### Changed
+- Phone layouts for the web client: the main menu (portrait stack and compact landscape),
+  the Driver Briefing (auto-sized cards, touch-control page on touch devices), the Internet
+  Meeting Room (tabs for games/race, chat and users) and Local Race Setup (slim header,
+  reachable buttons).
+
+### Fixed
+- The main menu footer showed the version as "vv2.0.7".
+
+## 2.0.7 - 2026-10-15
+
+### Fixed
+- Web client on phones no longer gets stuck on the loading screen: startup used `eval`, which
+  the site's Content-Security-Policy blocks, so the game stopped before drawing its first frame.
+- Windows x64 installer packaging in GitHub Actions now stages every client asset
+  (tutorial image, fonts and licences) and the package validator checks for them.
+
+## 2.0.6 - 2026-10-15
+
+### Fixed
+- Web client on phones: real startup errors are no longer overwritten by "Still loading…",
+  stray page errors no longer break the loader, the last startup log lines are shown while
+  loading, and a browser that draws no frame within 25 seconds falls back to the software
+  renderer automatically.
+
+## 2.0.5 - 2026-10-15
+
+### Fixed
+- Web client: sliders and clicks now follow the pointer at any window size (SDL no longer
+  rescales mouse events into 1024x768 while a frame sleeps).
+
+### Changed
+- The online lobby screen is titled "Internet Meeting Room".
+
+## 2.0.4 - 2026-10-15
+
+### Fixed
+- Web client: menus, sliders and text boxes are no longer laggy. The browser build now
+  renders with WebGL instead of the CPU software renderer (falling back to software if
+  WebGL is unavailable), and frames are paced to a 16 ms budget.
+
+## 2.0.3 - 2026-10-15
+
+### Fixed
+- Web client: the desktop GUI no longer appears stretched, and phones no longer show a
+  blank screen after the download (the loader stays up until the first frame is drawn,
+  and startup errors are shown on the page).
+- The sanitizer job runs only from a nightly schedule.
+
+## 2.0.2 - 2026-10-15
+
+### Changed
+- Every CI deploy is automatic: version tags deploy both the web client and the RaceServer.
+- The web build is queued ahead of native builds, and the runner allows three concurrent jobs.
+
+## 2.0.1 - 2026-10-15
+
+### Fixed
+- Web client on phones: menu text boxes (username, chat, server) can now be typed
+  into on iOS; the race controls appear only during a race; the page fits above the
+  on-screen keyboard and inside the notch/safe area; phones default to a tighter UI scale.
+
+### Changed
+- CI builds run in parallel, the web build is incremental, and docs-only changes skip it.
+
 ## 2.0.0 - 2026-10-02
 
 HoverNet 2.0, the first stable release of the 2.0 line (it follows the public beta).

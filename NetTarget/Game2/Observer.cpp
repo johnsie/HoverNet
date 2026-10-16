@@ -72,6 +72,8 @@ CString gFinalLapStr     = "Race %d:%02d.%02d  FINAL LAP";
 MR_Observer::MR_Observer()
 {
    mLastCameraPosValid = FALSE;
+   mEyeOffset = 0;
+   mReuseCamera = FALSE;
    mScroll = 0;
    mApperture = MR_PI/2;
 
@@ -560,7 +562,11 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
       lCameraPos.mY  = pViewingCharacter->mPosition.mY -lDist*MR_Sin[ lOrientation ]/MR_TRIGO_FRACT;
       lCameraPos.mZ  = pViewingCharacter->mPosition.mZ + 1700;
 
-      if( mLastCameraPosValid )
+      if( mReuseCamera && mLastCameraPosValid )
+      {
+         lCameraPos = mLastCameraPos;
+      }
+      else if( mLastCameraPosValid )
       {
          lCameraPos.mX = (3*lCameraPos.mX + mLastCameraPos.mX )/4;
          lCameraPos.mY = (3*lCameraPos.mY + mLastCameraPos.mY )/4;
@@ -570,6 +576,15 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
 
    mLastCameraPos = lCameraPos;
    mLastCameraPosValid = TRUE;
+
+   // VR: shift the camera sideways for the left/right eye (not stored, so the smoothed chase
+   // camera above stays the shared centre point).
+   if( mEyeOffset != 0 )
+   {
+      const MR_Angle lSide = MR_NORMALIZE_ANGLE( lOrientation + MR_PI/2 );
+      lCameraPos.mX += mEyeOffset*MR_Cos[ lSide ]/MR_TRIGO_FRACT;
+      lCameraPos.mY += mEyeOffset*MR_Sin[ lSide ]/MR_TRIGO_FRACT;
+   }
 
    __try {
       m3DView.SetupCameraPosition( lCameraPos, lOrientation, mScroll );
@@ -877,7 +892,11 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
       lCameraPos.mY  = pViewingCharacter->mPosition.mY -lDist*MR_Sin[ lOrientation ]/MR_TRIGO_FRACT;
       lCameraPos.mZ  = pViewingCharacter->mPosition.mZ + 1700;
 
-      if( mLastCameraPosValid )
+      if( mReuseCamera && mLastCameraPosValid )
+      {
+         lCameraPos = mLastCameraPos;
+      }
+      else if( mLastCameraPosValid )
       {
          lCameraPos.mX = (3*lCameraPos.mX + mLastCameraPos.mX )/4;
          lCameraPos.mY = (3*lCameraPos.mY + mLastCameraPos.mY )/4;
@@ -887,6 +906,15 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
 
    mLastCameraPos = lCameraPos;
    mLastCameraPosValid = TRUE;
+
+   // VR: shift the camera sideways for the left/right eye (not stored, so the smoothed chase
+   // camera above stays the shared centre point).
+   if( mEyeOffset != 0 )
+   {
+      const MR_Angle lSide = MR_NORMALIZE_ANGLE( lOrientation + MR_PI/2 );
+      lCameraPos.mX += mEyeOffset*MR_Cos[ lSide ]/MR_TRIGO_FRACT;
+      lCameraPos.mY += mEyeOffset*MR_Sin[ lSide ]/MR_TRIGO_FRACT;
+   }
 
 
    m3DView.SetupCameraPosition( lCameraPos,

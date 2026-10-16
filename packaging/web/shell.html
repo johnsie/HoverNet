@@ -30,6 +30,9 @@
     @media (prefers-reduced-motion: reduce) { #bar.indeterminate > i { animation: none; width: 100%; opacity: .5; } }
     #status { margin: 0; min-height: 1.4em; color: #b7c6da; font-size: .95rem; }
     #status.error { color: #ff9b9b; }
+    #startlog { margin: 0; max-width: 90vw; max-height: 7em; overflow: hidden; color: #6f86a8; font: 11px/1.35 ui-monospace, monospace;
+      text-align: left; white-space: pre-wrap; word-break: break-all; }
+    #startlog:empty { display: none; }
     #loader .hint { margin: 0; max-width: 28em; color: #6f86a8; font-size: .8rem; }
     #loader.error #bar { display: none; }
     #retry { display: none; min-height: 44px; padding: 0 1.4rem; border-radius: 10px; border: 1px solid #9bbcf0;
@@ -57,6 +60,7 @@
     #hn-util .hn-btn { position: static; display: flex; min-width: 44px; min-height: 44px; opacity: .8; }
     body.touch.running.in-race #hn-util { display: flex; }
     body.touch.running.in-race.controls-on #hn-pad .hn-btn { display: flex; }
+    body.touch.running.in-race.controls-on #hn-steer { display: block; }
     /* Real input that receives the soft keyboard for the canvas's ImGui text fields.
        Must stay "visible" and selectable or iOS Safari refuses to focus/type into it. */
     #hn-text { position: fixed; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; margin: 0;
@@ -64,9 +68,24 @@
       -webkit-user-select: text; user-select: text; touch-action: manipulation; pointer-events: none; z-index: -1; }
     #hn-pad .left { left: max(14px, env(safe-area-inset-left)); }
     #hn-pad .right { right: max(14px, env(safe-area-inset-right)); }
-    #hn-steer-l, #hn-steer-r { bottom: max(18px, env(safe-area-inset-bottom)); width: 84px; height: 84px; font-size: 28px; }
-    #hn-steer-l { left: max(14px, env(safe-area-inset-left)); }
-    #hn-steer-r { left: calc(max(14px, env(safe-area-inset-left)) + 96px); }
+    /* Steering slider: drag the knob left/right of centre to steer. */
+    #hn-steer { position: fixed; z-index: 5; display: none; box-sizing: border-box; touch-action: none;
+      left: max(14px, env(safe-area-inset-left)); bottom: max(18px, env(safe-area-inset-bottom));
+      width: 192px; height: 140px; border-radius: 42px; border: 2px solid rgba(160, 200, 255, .55);
+      background: rgba(20, 34, 60, .45); }
+    #hn-steer::before { content: ''; position: absolute; left: 50%; top: 14px; bottom: 14px; width: 2px;
+      margin-left: -1px; background: rgba(160, 200, 255, .3); }
+    #hn-steer::after { content: '\25B2'; position: absolute; left: 50%; top: 8px; margin-left: -8px;
+      font-size: 14px; color: rgba(160, 200, 255, .5); }
+    #hn-knob { position: absolute; left: 50%; bottom: 8px; width: 64px; height: 64px; margin-left: -32px;
+      border-radius: 50%; border: 2px solid rgba(160, 200, 255, .8); background: rgba(90, 160, 255, .45);
+      transform: translateX(0); pointer-events: none; }
+    /* VR entry: shown only in a VR-capable headset browser (Meta Quest), never on desktop or phones. */
+    #hn-vr { position: fixed; z-index: 7; display: none; left: 50%; bottom: max(16px, env(safe-area-inset-bottom));
+      transform: translateX(-50%); padding: .8rem 1.6rem; border-radius: 28px; border: 2px solid #fff;
+      background: rgba(227, 43, 66, .92); color: #fff; font: 700 18px system-ui, sans-serif; letter-spacing: .06em; cursor: pointer; }
+    body.vr-capable.running #hn-vr { display: block; }
+    #hn-steer.active { background: rgba(20, 34, 60, .65); }
     #hn-go, #hn-brake, #hn-fire, #hn-jump, #hn-weapon { width: 84px; height: 84px; border-radius: 50%; }
     #hn-go { right: max(14px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); width: 104px; height: 104px; }
     #hn-brake { right: calc(max(14px, env(safe-area-inset-right)) + 116px); bottom: max(18px, env(safe-area-inset-bottom)); }
@@ -75,15 +94,20 @@
     #hn-menu { top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); min-height: 44px; opacity: .8; }
     #hn-weapon { right: calc(max(14px, env(safe-area-inset-right)) + 184px); bottom: calc(max(18px, env(safe-area-inset-bottom)) + 100px); width: 60px; height: 60px; font-size: 11px; }
 
-    /* Slim hint instead of a full-screen block: menus are usable in portrait. */
-    #hn-rotate { position: fixed; left: 8px; right: 8px; z-index: 10; display: none; align-items: center; gap: .6rem;
-      bottom: max(8px, env(safe-area-inset-bottom)); padding: .5rem .8rem; box-sizing: border-box; border-radius: 12px;
-      background: rgba(8, 12, 20, .92); border: 1px solid rgba(160, 200, 255, .4); font-size: 14px; }
-    #hn-rotate .icon { font-size: 22px; }
-    #hn-rotate .msg { flex: 1; }
-    #hn-rotate button { min-width: 44px; min-height: 44px; padding: 0 .8rem; border-radius: 10px; border: 1px solid #9bbcf0;
-      background: transparent; color: inherit; font: inherit; }
-    body.touch.running.in-race.portrait:not(.rotate-dismissed) #hn-rotate { display: flex; }
+    /* Phones in portrait are asked to rotate: every screen is laid out for landscape first. The
+       prompt covers loading and menus too, and can be dismissed for the rest of the session. */
+    #hn-rotate { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column; align-items: center;
+      justify-content: center; gap: 1.1rem; padding: 2rem 1.5rem; box-sizing: border-box; text-align: center;
+      background: radial-gradient(ellipse at 50% 35%, #14213a 0%, #080c14 75%); }
+    #hn-rotate .icon { font-size: 64px; line-height: 1; display: inline-block; animation: hn-turn 2.6s ease-in-out infinite; }
+    @keyframes hn-turn { 0%, 25% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
+    @media (prefers-reduced-motion: reduce) { #hn-rotate .icon { animation: none; transform: rotate(-90deg); } }
+    #hn-rotate h2 { margin: 0; font: 800 1.35rem/1.2 system-ui, sans-serif; letter-spacing: .06em; color: #eaf2ff; }
+    #hn-rotate p { margin: 0; max-width: 22em; color: #9fb4d2; font-size: .95rem; line-height: 1.45; }
+    #hn-rotate .small { color: #6f86a8; font-size: .8rem; }
+    #hn-rotate button { min-height: 44px; padding: 0 1.3rem; border-radius: 10px; border: 1px solid #9bbcf0;
+      background: transparent; color: inherit; font: inherit; cursor: pointer; }
+    body.touch.portrait:not(.rotate-dismissed) #hn-rotate { display: flex; }
     @media (max-height: 420px) { #hn-steer-l, #hn-steer-r { width: 72px; height: 72px; } #hn-steer-r { left: calc(max(14px, env(safe-area-inset-left)) + 84px); } }
   </style>
 </head>
@@ -93,6 +117,7 @@
     <p class="tag">Hovercraft racing in your browser</p>
     <div id="bar" class="indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Loading"><i></i></div>
     <p id="status" role="status" aria-live="polite">Loading HoverNet…</p>
+    <pre id="startlog" aria-hidden="true"></pre>
     <button id="retry" type="button" onclick="location.reload()">Try again</button>
     <p class="hint" id="hint">First visit downloads about 13&nbsp;MB of tracks and graphics; it is cached for next time.</p>
   </div>
@@ -100,9 +125,9 @@
     <button class="hn-btn" id="hn-toggle" type="button" aria-label="Toggle on-screen controls" aria-pressed="true">&#127918;</button>
     <button class="hn-btn" id="hn-fs" type="button" aria-label="Toggle fullscreen">&#9974;</button>
   </div>
+  <button id="hn-vr" type="button">ENTER VR</button>
   <div id="hn-pad" aria-label="On-screen race controls">
-    <button class="hn-btn" id="hn-steer-l" type="button" data-bit="1" aria-label="Steer left">&#9664;</button>
-    <button class="hn-btn" id="hn-steer-r" type="button" data-bit="2" aria-label="Steer right">&#9654;</button>
+    <div id="hn-steer" aria-label="Steering: drag the knob left or right"><div id="hn-knob"></div></div>
     <button class="hn-btn" id="hn-brake" type="button" data-bit="8" aria-label="Brake">BRAKE</button>
     <button class="hn-btn" id="hn-go" type="button" data-bit="4" aria-label="Accelerate">GO</button>
     <button class="hn-btn" id="hn-fire" type="button" data-bit="16" aria-label="Fire missile">FIRE</button>
@@ -110,10 +135,12 @@
     <button class="hn-btn" id="hn-menu" type="button" aria-label="Pause menu">MENU</button>
     <button class="hn-btn" id="hn-weapon" type="button" data-bit="64" aria-label="Select weapon">WEAPON</button>
   </div>
-  <div id="hn-rotate" role="status">
-    <div class="icon" aria-hidden="true">&#128241;&#8635;</div>
-    <div class="msg">Racing is best in landscape &mdash; rotate your device.</div>
-    <button type="button" id="hn-rotate-ok" aria-label="Dismiss">OK</button>
+  <div id="hn-rotate" role="dialog" aria-label="Rotate your device">
+    <div class="icon" aria-hidden="true">&#128241;</div>
+    <h2>ROTATE YOUR PHONE</h2>
+    <p>HoverNet is built for landscape. Turn your phone sideways for the best view and controls.</p>
+    <p class="small">If it won't turn, switch off Portrait Orientation Lock in Control Centre.</p>
+    <button type="button" id="hn-rotate-ok">Continue in portrait</button>
   </div>
   <input id="hn-text" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off"
          autocapitalize="off" spellcheck="false" aria-label="Text entry" tabindex="-1">
@@ -136,11 +163,19 @@
       loaderNode.classList.add('error');
       document.getElementById('hint').textContent = 'Check your connection and try again.';
     }
+    // Last few game/startup log lines, shown while loading so a stall can be diagnosed on a phone.
+    var logLines = [];
+    function logLine(text) {
+      if (document.body.classList.contains('running')) return;  // game is up; stop collecting
+      logLines.push(String(text).slice(0, 160));
+      if (logLines.length > 5) logLines.shift();
+      document.getElementById('startlog').textContent = logLines.join('\n');
+    }
     function mb(n) { return (n / 1048576).toFixed(1); }
     var Module = {
       canvas: document.getElementById('canvas'),
-      print: function(text) { console.log(text); },
-      printErr: function(text) { console.error(text); },
+      print: function(text) { console.log(text); logLine(text); },
+      printErr: function(text) { console.error(text); logLine(text); },
       // Emscripten reports "Downloading data... (loaded/total)", then
       // "Preparing... (done/total)", then an empty string when finished.
       setStatus: function(text) {
@@ -160,15 +195,74 @@
           setProgress(null);
         }
       },
+      // The wasm runtime is ready long before the game has drawn anything (main() still loads the
+      // resource library and tracks). Keep the loader up until a frame is actually on the canvas,
+      // otherwise phones show a blank page after the download finishes.
       onRuntimeInitialized: function() {
-        document.body.classList.add('running');
+        statusNode.textContent = 'Starting HoverNet…';
+        setProgress(null);
         this.canvas.focus();
+        waitForFirstFrame();
       },
       onAbort: function(reason) {
         showError('HoverNet could not start: ' + reason);
       }
     };
     Module.canvas.addEventListener('pointerdown', function() { Module.canvas.focus(); });
+
+    // Frames drawn so far, reported by the game (never read the canvas itself: asking for a 2D
+    // context would stop SDL creating its WebGL renderer).
+    function framesDrawn() {
+      try { return Module.ccall ? Module.ccall('hovernet_frames', 'number', [], []) : 0; } catch (e) { return -1; }
+    }
+    function waitForFirstFrame() {
+      var started = Date.now();
+      (function check() {
+        if (loaderNode.classList.contains('error')) return;  // a real error is showing; leave it
+        var frames = framesDrawn();
+        if (frames >= 2 || (frames < 0 && Date.now() - started > 4000) || Date.now() - started > 60000) {
+          document.body.classList.add('running');
+          Module.canvas.focus();
+          if (store.get('hn-gamesize')) applyGameSize();  // restore the chosen game size (desktop)
+          return;
+        }
+        var waited = Date.now() - started;
+        if (waited > 12000) statusNode.textContent = 'Still loading…';
+        // No frame after a long wait: assume this browser's WebGL path is stuck. Remember that and
+        // reload once so the game starts with the software renderer instead.
+        if (waited > 25000 && store.get('hn-renderer') !== 'software') {
+          store.set('hn-renderer', 'software');
+          statusNode.textContent = 'Switching to compatibility mode…';
+          location.reload();
+          return;
+        }
+        setTimeout(check, 150);
+      })();
+    }
+    // Stray page errors during startup are shown in the on-screen log but are not treated as fatal:
+    // genuinely fatal ones reach us through Module.onAbort / setStatus.
+    window.addEventListener('error', function(e) {
+      if (/unwind/.test(String(e.message))) return;  // Emscripten's normal Asyncify control flow
+      logLine('error: ' + (e.message || 'unknown'));
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      logLine('rejection: ' + (e.reason && e.reason.message || e.reason));
+    });
+
+    // SDL sizes its window when main() runs and only follows the canvas's CSS size on a window
+    // resize event, so on load the 1024x768 backbuffer would be stretched to fill the page. Nudge
+    // SDL until the backbuffer matches the displayed size (it then keeps following real resizes).
+    var resizeNudges = 0, lastClient = '';
+    window.setInterval(function() {
+      var c = Module.canvas;
+      if (!document.body.classList.contains('running') || !c.clientWidth) return;
+      var client = c.clientWidth + 'x' + c.clientHeight;
+      if (client !== lastClient) { lastClient = client; resizeNudges = 0; }  // page size changed: allow fresh nudges
+      if ((c.width !== c.clientWidth || c.height !== c.clientHeight) && resizeNudges < 4) {
+        resizeNudges++;  // a few nudges only: every resize clears the canvas
+        window.dispatchEvent(new Event('resize'));
+      }
+    }, 250);
 
     // ---- Mobile support ----
     var isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
@@ -177,7 +271,9 @@
       set: function(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
     };
     function updateOrientation() {
-      document.body.classList.toggle('portrait', window.innerHeight > window.innerWidth);
+      // Only phones are asked to rotate; iPads and other tablets are roomy enough in portrait
+      // (their menus use the desktop layouts and the race frame is 4:3).
+      document.body.classList.toggle('portrait', window.innerHeight > window.innerWidth && window.innerWidth < 700);
     }
     if (isTouch) {
       document.body.classList.add('touch');
@@ -190,29 +286,46 @@
         document.addEventListener(n, function(e) { e.preventDefault(); });
       });
       document.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+      // Remember "continue in portrait" for this browser session only; the prompt returns next visit.
+      var rotateKey = 'hn-rotate-dismissed';
+      try { if (sessionStorage.getItem(rotateKey)) document.body.classList.add('rotate-dismissed'); } catch (e) {}
       document.getElementById('hn-rotate-ok').addEventListener('click', function() {
         document.body.classList.add('rotate-dismissed');
+        try { sessionStorage.setItem(rotateKey, '1'); } catch (e) {}
+      });
+      // Back in landscape: clear the dismissal so turning portrait again asks again.
+      window.addEventListener('resize', function() {
+        if (window.innerWidth > window.innerHeight) document.body.classList.remove('rotate-dismissed');
       });
     }
 
-    // Track the *visual* viewport: on iOS the keyboard shrinks it without resizing the window,
-    // which would leave the focused field hidden behind the keyboard. Resize the page to the
-    // visible area and tell SDL (it listens for window resize) so menus re-lay out above the keyboard.
-    var lastVV = '';
+    // Track the *visual* viewport, but only while the on-screen keyboard is open: it shrinks the
+    // visual viewport without resizing the window, hiding the focused field. Resizing the page to
+    // the visible area (and telling SDL via a resize event) keeps it in view. When the keyboard is
+    // closed the CSS viewport units are left alone: iOS also changes the visual viewport as its
+    // toolbars slide in and out, and resizing the canvas for that clears it (visible flicker).
+    var keyboardFit = false, fitTimer = 0;
     function fitViewport() {
       var vv = window.visualViewport;
+      if (!vv) return;
+      var keyboardOpen = vv.height < window.innerHeight - 140;
       var root = document.documentElement.style;
-      if (vv) {
+      if (keyboardOpen) {
         root.setProperty('--vh', Math.round(vv.height) + 'px');
         root.setProperty('--vt', Math.round(vv.offsetTop) + 'px');
+      } else if (keyboardFit) {
+        root.removeProperty('--vh');
+        root.removeProperty('--vt');
+      } else {
+        return;  // nothing to change
       }
-      var key = vv ? vv.width + 'x' + vv.height + '@' + vv.offsetTop : '';
-      if (key !== lastVV) { lastVV = key; window.dispatchEvent(new Event('resize')); }
+      keyboardFit = keyboardOpen;
+      clearTimeout(fitTimer);
+      fitTimer = setTimeout(function() { window.dispatchEvent(new Event('resize')); }, 120);
     }
     if (isTouch && window.visualViewport) {
       visualViewport.addEventListener('resize', fitViewport);
-      visualViewport.addEventListener('scroll', function() { window.scrollTo(0, 0); fitViewport(); });
-      fitViewport();
+      visualViewport.addEventListener('scroll', function() { if (keyboardFit) { window.scrollTo(0, 0); fitViewport(); } });
     }
 
     // ---- Soft keyboard bridge (see hovernet_wants_text in Track3DViewer.cpp) ----
@@ -266,11 +379,40 @@
       if (document.activeElement === textNode && Date.now() - textFocusedAt > 600 && !gameWantsText()) textNode.blur();
     }, 200);
 
+    // ---- Game size (desktop) ----
+    // The page owns the canvas size and SDL follows it on resize events. "Fit" fills the window;
+    // a fixed size is a smaller, centred area (never larger than the window), so the player can
+    // resize the gameplay without resizing the browser. Chosen from Settings in the game.
+    function applyGameSize() {
+      var c = Module.canvas, m = /^(\d+)x(\d+)$/.exec(store.get('hn-gamesize') || '');
+      if (m && !isTouch) {
+        c.style.width = Math.min(+m[1], window.innerWidth) + 'px';
+        c.style.height = Math.min(+m[2], window.innerHeight) + 'px';
+      } else {
+        c.style.width = '';
+        c.style.height = '';
+      }
+      window.dispatchEvent(new Event('resize'));
+    }
+    window.hnSetGameSize = function(w, h) {
+      store.set('hn-gamesize', w > 0 && h > 0 ? w + 'x' + h : '');
+      applyGameSize();
+    };
+    // A saved size that no longer fits (smaller window) is clamped by applyGameSize; reapply on resize.
+    window.addEventListener('resize', function() {
+      var m = /^(\d+)x(\d+)$/.exec(store.get('hn-gamesize') || '');
+      if (m && !isTouch) {
+        var c = Module.canvas, w = Math.min(+m[1], window.innerWidth), h = Math.min(+m[2], window.innerHeight);
+        if (c.style.width !== w + 'px' || c.style.height !== h + 'px') { c.style.width = w + 'px'; c.style.height = h + 'px'; }
+      }
+    });
+
     // Held on-screen buttons are published to the game as a bitmask, so the game
     // combines them with keyboard/gamepad input and remapped keys are irrelevant.
     var touchMask = 0;
     function publishMask() {
-      if (Module.ccall) Module.ccall('hovernet_set_touch_mask', null, ['number'], [touchMask]);
+      var vrBits = (window.hnVR && window.hnVR.mask) || 0;
+      if (Module.ccall) Module.ccall('hovernet_set_touch_mask', null, ['number'], [touchMask | vrBits]);
     }
     // MENU is not a held control: it taps Escape, which opens the pause menu.
     function tapEscape() {
@@ -309,11 +451,282 @@
       });
       btn.addEventListener('contextmenu', function(e) { e.preventDefault(); });
     });
-    // Never leave a key stuck if the page loses focus mid-press.
-    window.addEventListener('blur', function() { Object.keys(held).forEach(release); });
-    document.addEventListener('visibilitychange', function() {
-      if (document.visibilityState === 'hidden') Object.keys(held).forEach(release);
+    // Steering stick: the knob follows the finger; past the dead zone it holds steer-left
+    // (bit 1) or steer-right (bit 2), and dragging it up holds jump (bit 32).
+    var steer = document.getElementById('hn-steer'), knob = document.getElementById('hn-knob');
+    var steerId = null;
+    function steerSet(bits, dx, dy) {
+      touchMask = (touchMask & ~35) | bits;
+      knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      publishMask();
+    }
+    function steerMove(e) {
+      var r = steer.getBoundingClientRect();
+      var travel = r.width / 2 - 34;
+      var dx = Math.max(-travel, Math.min(travel, e.clientX - (r.left + r.width / 2)));
+      // Up from the knob's resting spot (near the bottom) jumps; the knob only travels upward.
+      var rest = r.bottom - 8 - 32;
+      var travelY = r.height - 16 - 64;
+      var dy = Math.max(-travelY, Math.min(0, e.clientY - rest));
+      steerSet((dx < -travel * 0.2 ? 1 : dx > travel * 0.2 ? 2 : 0) | (dy < -travelY * 0.5 ? 32 : 0), dx, dy);
+    }
+    function steerEnd(e) {
+      if (e.pointerId !== steerId) return;
+      steerId = null;
+      steer.classList.remove('active');
+      steerSet(0, 0, 0);
+    }
+    steer.addEventListener('pointerdown', function(e) {
+      if (steerId !== null) return;
+      e.preventDefault();
+      steerId = e.pointerId;
+      try { steer.setPointerCapture(e.pointerId); } catch (x) {}
+      steer.classList.add('active');
+      steerMove(e);
+      if (navigator.vibrate) navigator.vibrate(8);
     });
+    steer.addEventListener('pointermove', function(e) { if (e.pointerId === steerId) steerMove(e); });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(n) { steer.addEventListener(n, steerEnd); });
+    steer.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+    function releaseSteer() { if (steerId !== null) steerEnd({ pointerId: steerId }); }
+    // Never leave a key stuck if the page loses focus mid-press.
+    window.addEventListener('blur', function() { Object.keys(held).forEach(release); releaseSteer(); });
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'hidden') { Object.keys(held).forEach(release); releaseSteer(); }
+    });
+
+
+    // ---- VR (Meta Quest browser, WebXR) ----
+    // The race is a CPU-rasterised 3D view. In VR the game renders it twice (one image per eye,
+    // from cameras a little apart) and this code shows the two images on a big virtual screen in
+    // front of the player; menus show the page canvas on the same screen, pointed at with a
+    // controller. Nothing here runs unless the player presses ENTER VR, and the button only
+    // exists in a headset browser, so desktop and phone browsers are unaffected.
+    (function() {
+      var vr = window.hnVR = { active: false, mask: 0, waiters: [], submitMono: function() {}, submitStereo: function() {} };
+      var forced = /[?&]vr=1\b/.test(location.search);
+      if (!(forced || /OculusBrowser|Quest/i.test(navigator.userAgent)) || !navigator.xr || !navigator.xr.isSessionSupported) return;
+      navigator.xr.isSessionSupported('immersive-vr').then(function(ok) {
+        if (ok) document.body.classList.add('vr-capable');
+      }).catch(function() {});
+      var btn = document.getElementById('hn-vr');
+      var DIST = 2.2, SCREEN_H = 2.1;
+      var session = null, gl = null, layer = null, refSpace = null, prog = null, loc = null;
+      var texMono = null, texL = null, texR = null;
+      var monoAspect = 16 / 9, stereoAspect = 4 / 3, stereo = false;
+      var pointer = { on: false, u: 0, v: 0, down: false };
+      var lastMenuHeld = false;
+
+      function makeTex() {
+        var t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([8, 8, 14, 255]));
+        return t;
+      }
+      function shader(type, src) {
+        var sh = gl.createShader(type);
+        gl.shaderSource(sh, src);
+        gl.compileShader(sh);
+        return sh;
+      }
+      function setupGL() {
+        prog = gl.createProgram();
+        gl.attachShader(prog, shader(gl.VERTEX_SHADER,
+          'attribute vec2 aPos; uniform mat4 uProj; uniform mat4 uView; uniform vec2 uSize; varying vec2 vUv;' +
+          'void main() { vUv = vec2(aPos.x * 0.5 + 0.5, 0.5 - aPos.y * 0.5);' +
+          ' gl_Position = uProj * uView * vec4(aPos.x * uSize.x * 0.5, aPos.y * uSize.y * 0.5, -' + DIST.toFixed(2) + ', 1.0); }'));
+        gl.attachShader(prog, shader(gl.FRAGMENT_SHADER,
+          'precision mediump float; uniform sampler2D uTex; uniform vec2 uDot; uniform float uDotOn; uniform float uAspect; varying vec2 vUv;' +
+          'void main() { vec4 c = texture2D(uTex, vUv);' +
+          ' if (uDotOn > 0.5 && length((vUv - uDot) * vec2(uAspect, 1.0)) < 0.014) c = vec4(1.0, 0.25, 0.3, 1.0);' +
+          ' gl_FragColor = c; }'));
+        gl.linkProgram(prog);
+        loc = {
+          pos: gl.getAttribLocation(prog, 'aPos'), proj: gl.getUniformLocation(prog, 'uProj'),
+          view: gl.getUniformLocation(prog, 'uView'), size: gl.getUniformLocation(prog, 'uSize'),
+          tex: gl.getUniformLocation(prog, 'uTex'), dot: gl.getUniformLocation(prog, 'uDot'),
+          dotOn: gl.getUniformLocation(prog, 'uDotOn'), aspect: gl.getUniformLocation(prog, 'uAspect')
+        };
+        var buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+        texMono = makeTex(); texL = makeTex(); texR = makeTex();
+      }
+
+      vr.submitMono = function() {
+        if (!gl) return;
+        stereo = false;
+        try {
+          gl.bindTexture(gl.TEXTURE_2D, texMono);
+          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, Module.canvas);
+          if (Module.canvas.height) monoAspect = Module.canvas.width / Module.canvas.height;
+        } catch (e) {}
+      };
+      vr.submitStereo = function(left, right, w, h) {
+        if (!gl) return;
+        stereo = true;
+        stereoAspect = w / h;
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.bindTexture(gl.TEXTURE_2D, texL);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, left);
+        gl.bindTexture(gl.TEXTURE_2D, texR);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, right);
+      };
+
+      function mouse(type, x, y, buttons) {
+        Module.canvas.dispatchEvent(new MouseEvent(type, {
+          bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0, buttons: buttons
+        }));
+      }
+
+      // Controllers. In a race: right stick/left stick steer, trigger GO, grip BRAKE, right A FIRE,
+      // right B JUMP, right stick click WEAPON, left X chase/cockpit view, left Y pause menu.
+      // Elsewhere: the right (or any) controller's laser points at the screen and its trigger clicks.
+      function readControllers(frame) {
+        var inRace = document.body.classList.contains('in-race');
+        var mask = 0, steer = 0, menuHeld = false, ray = null, trigger = false;
+        var sources = session.inputSources;
+        for (var i = 0; i < sources.length; i++) {
+          var src = sources[i], gp = src.gamepad;
+          if (!gp) continue;
+          var b = gp.buttons, pressed = function(n) { return !!(b[n] && b[n].pressed); };
+          if (pressed(0)) { mask |= 4; trigger = true; }
+          if (pressed(1)) mask |= 8;
+          if (src.handedness === 'right') {
+            if (pressed(4)) mask |= 16;
+            if (pressed(5)) mask |= 32;
+            if (pressed(3)) mask |= 64;
+          } else if (src.handedness === 'left') {
+            if (pressed(4)) mask |= 128;
+            if (pressed(5)) menuHeld = true;
+          }
+          var x = gp.axes.length >= 4 ? gp.axes[2] : (gp.axes[0] || 0);
+          if (Math.abs(x) > Math.abs(steer)) steer = x;
+          if (src.targetRaySpace && (!ray || src.handedness === 'right')) {
+            var p = frame.getPose(src.targetRaySpace, refSpace);
+            if (p) ray = p.transform.matrix;
+            if (src.handedness === 'right' && p) ray = p.transform.matrix;
+          }
+        }
+        if (steer < -0.35) mask |= 1; else if (steer > 0.35) mask |= 2;
+        if (inRace) {
+          vr.mask = mask;
+          if (menuHeld && !lastMenuHeld) {
+            ['keydown', 'keyup'].forEach(function(type) {
+              var ev = new KeyboardEvent(type, { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true });
+              Object.defineProperty(ev, 'keyCode', { get: function() { return 27; } });
+              Object.defineProperty(ev, 'which', { get: function() { return 27; } });
+              document.dispatchEvent(ev);
+            });
+          }
+          pointer.on = false;
+        } else {
+          vr.mask = 0;
+          pointer.on = false;
+          if (ray) {
+            var dz = -ray[10];
+            if (dz < -0.0001) {
+              var t = (-DIST - ray[14]) / dz;
+              // ray direction is -Z of the controller: (-ray[8], -ray[9], -ray[10])
+              var hx = ray[12] + t * (-ray[8]), hy = ray[13] + t * (-ray[9]);
+              var H = SCREEN_H, W = Math.min(3.6, H * monoAspect);
+              if (t > 0 && Math.abs(hx) <= W / 2 && Math.abs(hy) <= H / 2) {
+                pointer.on = true;
+                pointer.u = hx / W + 0.5;
+                pointer.v = 0.5 - hy / H;
+              }
+            }
+          }
+          if (pointer.on) {
+            var r = Module.canvas.getBoundingClientRect();
+            var cx = r.left + pointer.u * r.width, cy = r.top + pointer.v * r.height;
+            mouse('mousemove', cx, cy, pointer.down ? 1 : 0);
+            if (trigger && !pointer.down) { pointer.down = true; mouse('mousedown', cx, cy, 1); }
+          }
+          if (!trigger && pointer.down) {
+            pointer.down = false;
+            var r2 = Module.canvas.getBoundingClientRect();
+            mouse('mouseup', r2.left + pointer.u * r2.width, r2.top + pointer.v * r2.height, 0);
+          }
+        }
+        lastMenuHeld = menuHeld;
+        publishMask();
+      }
+
+      function onFrame(t, frame) {
+        if (!session) return;
+        session.requestAnimationFrame(onFrame);
+        var w = vr.waiters; vr.waiters = [];
+        for (var i = 0; i < w.length; i++) w[i]();
+        var pose = frame.getViewerPose(refSpace);
+        if (!pose) return;
+        try { readControllers(frame); } catch (e) {}
+        gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
+        gl.clearColor(0.01, 0.01, 0.03, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.useProgram(prog);
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.getParameter(gl.ARRAY_BUFFER_BINDING));
+        gl.enableVertexAttribArray(loc.pos);
+        gl.vertexAttribPointer(loc.pos, 2, gl.FLOAT, false, 0, 0);
+        var aspect = stereo ? stereoAspect : monoAspect;
+        var sw = Math.min(3.6, SCREEN_H * aspect);
+        for (var v = 0; v < pose.views.length; v++) {
+          var view = pose.views[v], vp = layer.getViewport(view);
+          gl.viewport(vp.x, vp.y, vp.width, vp.height);
+          gl.uniformMatrix4fv(loc.proj, false, view.projectionMatrix);
+          gl.uniformMatrix4fv(loc.view, false, view.transform.inverse.matrix);
+          gl.uniform2f(loc.size, sw, SCREEN_H);
+          gl.uniform1f(loc.aspect, aspect);
+          gl.uniform1f(loc.dotOn, !stereo && pointer.on ? 1 : 0);
+          gl.uniform2f(loc.dot, pointer.u, pointer.v);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, stereo ? (view.eye === 'right' ? texR : texL) : texMono);
+          gl.uniform1i(loc.tex, 0);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        }
+      }
+
+      function end() {
+        vr.active = false; vr.mask = 0; stereo = false; session = null; gl = null;
+        pointer.on = false; pointer.down = false;
+        var w = vr.waiters; vr.waiters = []; w.forEach(function(f) { f(); });
+        btn.textContent = 'ENTER VR';
+        publishMask();
+        Module.canvas.focus();
+      }
+
+      btn.addEventListener('click', function() {
+        if (vr.active && session) { session.end(); return; }
+        navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] }).then(function(s) {
+          var c = document.createElement('canvas');
+          var g = c.getContext('webgl2', { xrCompatible: true, antialias: false, alpha: false }) ||
+                  c.getContext('webgl', { xrCompatible: true, antialias: false, alpha: false });
+          if (!g) { s.end(); btn.textContent = 'VR NEEDS WEBGL'; return; }
+          var ready = g.makeXRCompatible ? g.makeXRCompatible() : Promise.resolve();
+          return ready.then(function() {
+            gl = g; session = s;
+            setupGL();
+            layer = new XRWebGLLayer(s, gl);
+            s.updateRenderState({ baseLayer: layer });
+            s.addEventListener('end', end);
+            return s.requestReferenceSpace('local');
+          }).then(function(space) {
+            refSpace = space;
+            vr.active = true;
+            btn.textContent = 'EXIT VR';
+            s.requestAnimationFrame(onFrame);
+          });
+        }).catch(function(e) {
+          btn.textContent = 'VR FAILED';
+          setTimeout(function() { btn.textContent = 'ENTER VR'; }, 2500);
+        });
+      });
+    })();
 
     document.getElementById('hn-toggle').addEventListener('click', function() {
       var on = document.body.classList.toggle('controls-on');

@@ -68,7 +68,11 @@ int MR_VideoBuffer::GetLineLen() const { return mLineLen; }
 int MR_VideoBuffer::GetZLineLen() const { return mXRes; }
 MR_UInt8* MR_VideoBuffer::GetBuffer() { return mBuffer; }
 MR_UInt16* MR_VideoBuffer::GetZBuffer() { return mZBuffer; }
-int MR_VideoBuffer::GetXPixelMeter() const { return mXRes * 3; }
+// Pixel shape for the 3D projection (x and y pixel "meters"). The original code assumed a 4:3 screen
+// (3 * width : 4 * height), which stretches any framebuffer that is not 4:3. The SDL clients scale
+// the framebuffer to the window preserving its aspect, so pixels are square at every resolution.
+// For 1024x768 both values are still 3072, so 4:3 output is unchanged.
+int MR_VideoBuffer::GetXPixelMeter() const { return mYRes * 4; }
 int MR_VideoBuffer::GetYPixelMeter() const { return mYRes * 4; }
 void MR_VideoBuffer::Clear(MR_UInt8 color)
 {

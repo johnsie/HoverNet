@@ -40,6 +40,9 @@ public:
     bool Present(const uint8_t* buffer, int width, int height);
     bool Clear(uint8_t color);
 
+    // Palette-expand an indexed frame to RGBA (VR eye images); out must hold width*height*4 bytes.
+    bool ConvertToRGBA(const uint8_t* buffer, int width, int height, uint8_t* out) const;
+
     // Properties
     int GetWidth() const { return m_width; }
     int GetHeight() const { return m_height; }

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Tune the existing shell runner for a 4-core / 8-GB HoverNet host.
+# Tune the existing shell runner for a 8-core / 16-GB HoverNet host.
 set -Eeuo pipefail
 
 CONFIG=/etc/gitlab-runner/config.toml
-SLOTS=2
+SLOTS=${SLOTS:-3}
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "Run as root: sudo bash $0" >&2

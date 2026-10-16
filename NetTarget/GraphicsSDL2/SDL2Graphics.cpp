@@ -1,4 +1,12 @@
 #include "SDL2Graphics.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+// EM_JS compiles these into the page's script. emscripten_run_script*() would eval() a string,
+// which the site's Content-Security-Policy forbids (it throws EvalError and stops startup).
+EM_JS(int, hovernet_js_force_software, (), {
+    try { return localStorage.getItem('hn-renderer') === 'software' ? 1 : 0; } catch (e) { return 0; }
+});
+#endif
 
 #ifdef _HAVE_SDL2
 #include <cstring>
@@ -61,7 +69,23 @@ bool SDL2GraphicsBackend::Initialize(void* windowHandle, int width, int height)
 
     // Create renderer with VSYNC enabled to synchronize with monitor refresh rate
     // This prevents flickering by ensuring Present() waits for the next vertical blank
-    m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_SOFTWARE | SDL_RENDERER_PRESENTVSYNC);
+#ifdef __EMSCRIPTEN__
+    // In the browser the software renderer rasterises every pixel on the CPU and copies the whole
+    // canvas each frame, which is far too slow for a page-sized canvas. Use the WebGL renderer
+    // (SDL converts the RGB24 game texture itself); fall back to software on a fresh window if
+    // WebGL is unavailable. No vsync flag: the browser paces presents.
+    // The page sets localStorage "hn-renderer" = "software" when WebGL failed to produce a frame
+    // on this browser (see shell.html), so such browsers skip the accelerated renderer.
+    const bool forceSoftware = hovernet_js_force_software() != 0;
+    if (!forceSoftware) m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED);
+    if (!m_renderer && !forceSoftware) {
+        SDL_DestroyWindow(m_window);
+        m_window = SDL_CreateWindow(windowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                    width, height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+        if (!m_window) { SDL_QuitSubSystem(SDL_INIT_VIDEO); return false; }
+    }
+#endif
+    if (!m_renderer) m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_SOFTWARE | SDL_RENDERER_PRESENTVSYNC);
     if (!m_renderer) { 
         // Fallback: try without VSYNC
         m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_SOFTWARE);
@@ -123,6 +147,20 @@ bool SDL2GraphicsBackend::SetPalette(const uint8_t* palette, int paletteSize)
     
     memcpy(m_paletteRGB, palette, 768);
     return CreateSDLPalette(); 
+}
+
+bool SDL2GraphicsBackend::ConvertToRGBA(const uint8_t* buffer, int width, int height, uint8_t* out) const
+{
+    if (!m_paletteRGB || !buffer || !out) return false;
+    const size_t count = static_cast<size_t>(width) * height;
+    for (size_t i = 0; i < count; ++i) {
+        const uint8_t* rgb = m_paletteRGB + buffer[i] * 3;
+        out[i * 4 + 0] = rgb[0];
+        out[i * 4 + 1] = rgb[1];
+        out[i * 4 + 2] = rgb[2];
+        out[i * 4 + 3] = 255;
+    }
+    return true;
 }
 
 bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height)
@@ -235,5 +273,6 @@ void SDL2GraphicsBackend::FreeBuffer(uint8_t* buffer) {}
 bool SDL2GraphicsBackend::SetPalette(const uint8_t* palette, int paletteSize) { return false; }
 bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height) { return false; }
 bool SDL2GraphicsBackend::Clear(uint8_t color) { return false; }
+bool SDL2GraphicsBackend::ConvertToRGBA(const uint8_t*, int, int, uint8_t*) const { return false; }
 bool SDL2GraphicsBackend::CreateSDLPalette() { return false; }
 #endif
