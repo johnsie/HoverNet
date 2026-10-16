@@ -4,6 +4,12 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.16 - 2026-10-16
+
+### Added
+- `scripts/test-web-client.sh` and the `test:web:smoke` CI job: a headless-browser test of the web
+  client (load, briefing, menu, local race, pause and resume) with screenshots kept as artifacts.
+
 ## 2.0.15 - 2026-10-16
 
 ### Changed

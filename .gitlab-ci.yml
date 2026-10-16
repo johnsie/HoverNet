@@ -159,6 +159,33 @@ build:game:web:
       changes: *web_inputs
     - if: '$CI_COMMIT_TAG'
 
+test:web:smoke:
+  stage: package
+  needs:
+    - job: build:game:web
+      artifacts: true
+  tags: ["$WEB_RUNNER_TAG"]
+  # Drives the built client in headless Chrome (menus, a local race, pause and resume). Skips itself
+  # (exit 77) when the runner has no Chrome, and never blocks the deploy.
+  allow_failure:
+    exit_codes: 77
+  script:
+    - mkdir -p dist/web-unpacked
+    - tar -xzf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web-unpacked
+    - scripts/test-web-client.sh dist/web-unpacked dist/web-smoke
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - dist/web-smoke/
+  rules:
+    - !reference [.no_schedule, rules]
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *web_inputs
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      changes: *web_inputs
+    - if: '$CI_COMMIT_TAG'
+
 build:game:linux:sanitizers:
   stage: build
   needs: []
