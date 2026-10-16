@@ -167,11 +167,20 @@ jobs:
           cmake -S . -B build/windows-shared -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="$toolchain" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
-            -DBUILD_TESTING=OFF
-          if ($LASTEXITCODE -ne 0) { throw "Shared x64 client configure failed" }
+            -DBUILD_TESTING=OFF 2>&1 | Tee-Object -FilePath configure-windows-shared.log
+          if ($LASTEXITCODE -ne 0) {
+            $errors = (Select-String -Path configure-windows-shared.log -Pattern "Error" | Select-Object -First 12 | ForEach-Object { $_.Line.Trim() }) -join "%0A"
+            Write-Host "::error title=Shared x64 configure errors::$errors"
+            throw "Shared x64 client configure failed"
+          }
 
-          cmake --build build/windows-shared --target HoverNetGame2Player RaceServer --config Release --parallel 2
-          if ($LASTEXITCODE -ne 0) { throw "Shared x64 client or RaceServer build failed" }
+          cmake --build build/windows-shared --target HoverNetGame2Player RaceServer --config Release --parallel 2 2>&1 | Tee-Object -FilePath build-windows-shared.log
+          if ($LASTEXITCODE -ne 0) {
+            # Put the compiler errors in the run's annotations, where they can be read without downloading logs.
+            $errors = (Select-String -Path build-windows-shared.log -Pattern "error " | Select-Object -First 12 | ForEach-Object { $_.Line.Trim() }) -join "%0A"
+            Write-Host "::error title=Shared x64 build errors::$errors"
+            throw "Shared x64 client or RaceServer build failed"
+          }
 
           $required = @(
             "build\windows-shared\Release\HoverNet.exe",
