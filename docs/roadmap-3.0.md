@@ -23,6 +23,7 @@ checking) remove several stages of work the first draft of this roadmap assumed.
 | Client | One shared SDL2/ImGui client for Windows x64 and Linux: menus, settings, remapping, controllers, display and audio options, accessibility options, onboarding. The legacy Win32/MFC client still ships as a compatibility fallback. |
 | Network | Versioned protocol 2.0 with explicit field encoding (no native struct layouts), negotiation, rate limits, input validation, fuzzing, lifecycle tests, and cross-platform races verified Windows to Linux in both directions. The server is a relay; clients run physics locally. |
 | Content | Seven validated bundled tracks, about 1,000 community tracks played unmodified, a command-line compiler and validator, a manifest with sizes and SHA-256 hashes, and a verified on-demand downloader. |
+| Web client | The shared client also runs in browsers (WebAssembly) at hovernet.outiva.com: desktop, phone and tablet touch play, and a Meta Quest stereo "big screen" VR mode; online play goes through a WebSocket gateway to the same RaceServer. See [web-client-roadmap.md](web-client-roadmap.md). Screen-by-screen parity is still being accepted. |
 | Quality gates | Sanitizer builds (ASan, UBSan), a headless screenshot-test pattern for UI, Windows acceptance in CI, a compile-time guard that stops platform-dependent types in file formats, an x64 audit, and a runtime-dependency check. |
 | Release engineering | Reproducible packages, `SHA256SUMS`, pre-release handling, changelog, third-party notices, and written upgrade and rollback procedures. |
 
@@ -33,8 +34,8 @@ checking) remove several stages of work the first draft of this roadmap assumed.
   unfinished and unused.
 - **Determinism is unproven.** The physics is fixed-point integer maths, which helps,
   but 2.0's sanitizer work found real signed-overflow and undefined behaviour that only
-  worked by accident, and one file (the software rasterizer) is still exempt from the
-  overflow check. Whether two platforms stay bit-identical over a long race has never
+  worked by accident (the software rasterizer's last overflow exemption was removed
+  in 2.0.x; its wraparound is now explicit). Whether two platforms stay bit-identical over a long race has never
   been measured.
 - **Rendering and gameplay are entangled,** and the renderer is a 1990s software
   rasterizer with 4096-scaled coordinates.
@@ -51,8 +52,9 @@ checking) remove several stages of work the first draft of this roadmap assumed.
 
 HoverNet 3.0 should deliver:
 
-- deterministic, server-authoritative online racing;
-- a modern renderer and UI on the shared client, with no legacy client at runtime;
+- deterministic, server-authoritative online racing, on desktop and in the browser alike;
+- a modern renderer and UI on the shared client, with no legacy client at runtime, and the web client at full parity with it (same build, same simulation, same protocol);
+- real head-tracked VR on the web client, once the renderer can support it;
 - first-class replays, spectating, and time trials;
 - a supported visual track editor and a versioned content pipeline, with every classic
   track converted or explained;
@@ -70,7 +72,7 @@ These are what made 2.0 work; keep them.
 1. **Measure before claiming.** Every "it works" has a test or a captured result. Exit
    gates below are numbers and commands, not intentions.
 2. **Sanitizers and fuzzing are part of the definition of done,** and exemptions (like
-   the rasterizer's) are tracked and removed, not forgotten.
+   the rasterizer's, now gone) are tracked and removed, not forgotten.
 3. **Verify UI changes visually.** Headless screenshot tests catch what reasoning misses.
 4. **Real machines in the loop.** Cross-platform behaviour is tested on real Windows and
    Linux, and that rehearsal is automated wherever possible.
@@ -90,8 +92,8 @@ Run the experiments that decide the architecture before building on it.
   first frame where any hash differs. Audit the likely causes: platform maths-library
   results in table construction, floating-point use in the simulation, uninitialised
   state, and signed overflow.
-- **Remove the rasterizer's sanitizer exemption** and make the simulation free of
-  undefined behaviour under UBSan across the whole corpus of 1,009 community tracks.
+- **Keep the simulation free of undefined behaviour under UBSan** across the whole corpus
+  of 1,009 community tracks (the rasterizer's exemption is already removed).
 - **Golden physics suite.** Capture reference behaviour from 2.0: acceleration, steering,
   jumps, collisions, weapons, pickups, and full races, as inputs plus expected hashes.
 - **Netcode prototype** under artificial latency, loss, jitter and reordering:
@@ -103,6 +105,7 @@ Run the experiments that decide the architecture before building on it.
   migrate, replace, or retire, so its retirement is a dated decision.
 - **Format and protocol specifications** for the simulation state, replay, track, and
   network protocol 3.0 (versioned, explicit, portable).
+- **Web determinism and parity baseline.** WebAssembly is already in the determinism comparison; keep it in every gate below, and use the web parity matrix ([web-parity-matrix.md](web-parity-matrix.md)) as the Stage 3 starting point.
 - **Agree the targets** that later gates use. Proposal to confirm: playable at 120 ms round
   trip with 2% loss, and stable at 250 ms with 5%; eight players per race.
 
@@ -128,13 +131,14 @@ the architecture decision is written down; and the simulation is clean under UBS
   headless test runner.
 
 **Exit gate:** representative races, including every bundled track and a fixed sample of
-community tracks, replay bit-identically on all supported platforms in CI, and remaining
+community tracks, replay bit-identically on all supported platforms in CI (WebAssembly included), and remaining
 differences from 2.0 are documented design decisions.
 
 ## Stage 2: Authoritative networking and dedicated server
 
 **Months 6 to 11**
 
+- The browser client speaks the same protocol 3.0 through the WebSocket gateway (secure session establishment must work over `wss://`), with the gateway in the load, soak, and abuse tests.
 - A versioned protocol 3.0 independent of native memory layouts, building on 2.0's explicit
   encoding, with authenticated encryption and secure session establishment.
 - The server is authoritative for starts, movement, collisions, weapons, pickups, laps,
@@ -169,12 +173,13 @@ one.
 - Accessibility carried forward and extended: colour-safe indicators, reduced flashing,
   camera controls, configurable assists, scalable text.
 - Performance budgets with automated frame-time and frame-capture regression tests.
+- **Web client on the new renderer.** The browser build moves to the same renderer and UI as native, keeps phone/tablet touch layouts, and meets its own frame-time budget on reference phones and a Quest. The Quest VR mode, today a stereo virtual screen, becomes head-tracked VR with a look-around view (head-pose camera first, then a wide or cubemap render) once the new renderer can afford it.
 - **Win32 client retirement,** per the Stage 0 inventory: migrate or retire each exclusive
   feature, run a deprecation period with a visible notice, and remove it from 3.0
   packages. The final 2.x release stays downloadable as the legacy build.
 
-**Exit gate:** every supported flow works on every supported platform with no legacy UI
-dependency, the classic preset matches 2.0 captures within an agreed tolerance, and
+**Exit gate:** every supported flow works on every supported platform (desktop and web) with no legacy UI
+dependency, the web parity matrix is fully accepted, the classic preset matches 2.0 captures within an agreed tolerance, and
 frame-time budgets hold on the reference hardware list.
 
 ## Stage 4: Content pipeline and the HoverCad successor
@@ -249,6 +254,7 @@ action is authenticated and auditable. **6b** has its own review.
 
 - Conversion tools and reports for every bundled and community track (Stage 4).
 - Preserve 2.x as an installable legacy release; keep its servers visibly separate.
+- Web deployment as a release artifact: versioned, rollback-able, and checked after deploy (extends the existing post-deploy check).
 - Dedicated-server images, configuration schemas, and upgrade guidance, using the packaging
   and rollback process already proven in 2.0.
 - Public beta cycles for creators, server operators, competitive players, and accessibility,
@@ -284,7 +290,7 @@ Ship 3.0 only when:
   a clean UBSan run with no exemptions;
 - the server is authoritative for every result-affecting action, backed by a tampering suite;
 - the eight-player target passes latency, loss, multi-day soak, and adversarial tests;
-- the complete game runs without the legacy client or any legacy UI dependency;
+- the complete game runs without the legacy client or any legacy UI dependency, and the web client matches it with the parity matrix accepted;
 - replays reproduce official results and remain readable across supported patch versions;
 - every bundled track is converted and validated, and at least 95% of the community library
   converts, with each failure explained;
@@ -302,7 +308,7 @@ Outside 3.0 unless additional staffing and a separate business case justify them
 - user-supplied native-code plug-ins (the 2.0 `ObjFac1` model is closed and retired, not extended);
 - peer-to-peer authoritative multiplayer (traffic keeps routing through servers);
 - pay-to-win progression or gameplay-affecting purchases;
-- virtual reality, and mobile or console releases before desktop operations are stable;
+- native-app mobile or console releases (the browser client's phone and tablet support stays), and head-tracked VR beyond the web client's, before desktop operations are stable;
 - procedurally generated tracks at the expense of the supported editor;
 - unlimited backward compatibility inside the new simulation;
 - ratings, matchmaking, tournaments, and sanctions (Stage 6b), unless pulled in deliberately.

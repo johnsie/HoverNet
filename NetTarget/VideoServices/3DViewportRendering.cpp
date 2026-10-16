@@ -25,6 +25,14 @@
 #include "3DViewport.h"
 #include "../Util/Profiler.h"
 
+// The fixed-point rasterizer (4096- and 16384-scaled coordinates) was written for 32-bit wraparound:
+// far off-screen geometry overflows these products, and the rendered result depends on them wrapping.
+// These helpers make that explicit (unsigned arithmetic, the same bits the old x86 code produced) so
+// the file passes the signed-overflow check without changing a rendered pixel.
+static inline MR_Int32 WrapAdd( MR_Int32 pA, MR_Int32 pB ) { return static_cast<MR_Int32>( static_cast<MR_UInt32>(pA)+static_cast<MR_UInt32>(pB) ); }
+static inline MR_Int32 WrapSub( MR_Int32 pA, MR_Int32 pB ) { return static_cast<MR_Int32>( static_cast<MR_UInt32>(pA)-static_cast<MR_UInt32>(pB) ); }
+static inline MR_Int32 WrapMul( MR_Int32 pA, MR_Int32 pB ) { return static_cast<MR_Int32>( static_cast<MR_UInt32>(pA)*static_cast<MR_UInt32>(pB) ); }
+
 
 // #pragma optimize( "atw", on )
 
@@ -288,15 +296,15 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
    // Precomput surface contour
    int lDYTop_4096;       // Slope of the top of the wall
    int lDYBottom_4096;    // slope of the bottom of the wall
-   int lYTop_4096     = lScreenY0Top*4096;
-   int lYBottom_4096  = lScreenY0Bottom*4096;
+   int lYTop_4096     = WrapMul(lScreenY0Top,4096);
+   int lYBottom_4096  = WrapMul(lScreenY0Bottom,4096);
 
    MR_Int32 lRatioVariationPerColumn_16384;
 
    if( lScreenX1 > lScreenX0 )
    {
-      lDYTop_4096    = ((lScreenY1Top-lScreenY0Top)*4096)/(lScreenX1-lScreenX0 /*-1*/);
-      lDYBottom_4096 = ((lScreenY1Bottom-lScreenY0Bottom)*4096)/(lScreenX1-lScreenX0/*-1*/);
+      lDYTop_4096    = WrapMul(lScreenY1Top-lScreenY0Top,4096)/(lScreenX1-lScreenX0 /*-1*/);
+      lDYBottom_4096 = WrapMul(lScreenY1Bottom-lScreenY0Bottom,4096)/(lScreenX1-lScreenX0/*-1*/);
       
       const MR_Int32 lProjectedHeight0 = lScreenY0Bottom-lScreenY0Top;
       const MR_Int32 lProjectedHeight1 = lScreenY1Bottom-lScreenY1Top;
@@ -364,11 +372,11 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
    MR_Int32 lXWallVariationPerMM_16384 = (16384*(lRotated1.mX-lRotated0.mX))/pLen;
    MR_Int32 lYWallVariationPerMM_16384 = (16384*(lRotated1.mY-lRotated0.mY))/pLen;
 
-   MR_Int32 lHVarPerDInc_X0Wall_16384        = (mHVarPerDInc_16384*lRotated0.mX);
+   MR_Int32 lHVarPerDInc_X0Wall_16384        = WrapMul(mHVarPerDInc_16384,lRotated0.mX);
    MR_Int32 lHVarPerDInc_XWallVarPerMM_16384 = -(mHVarPerDInc_16384*lXWallVariationPerMM_16384)/(16384);
 
-   MR_Int32 lColumn_HVarPerDInc_X0Wall_Y0Wall_16384               = (lScreenX0-mXRes/2)*lHVarPerDInc_X0Wall_16384 - lRotated0.mY*16384;
-   MR_Int32 lColumn_HVarPerDInc_XWallVarPerMM_YWallVarPerMM_16384 = (lScreenX0-mXRes/2)*lHVarPerDInc_XWallVarPerMM_16384 + lYWallVariationPerMM_16384;
+   MR_Int32 lColumn_HVarPerDInc_X0Wall_Y0Wall_16384               = WrapSub(WrapMul(lScreenX0-mXRes/2,lHVarPerDInc_X0Wall_16384), WrapMul(lRotated0.mY,16384));
+   MR_Int32 lColumn_HVarPerDInc_XWallVarPerMM_YWallVarPerMM_16384 = WrapAdd(WrapMul(lScreenX0-mXRes/2,lHVarPerDInc_XWallVarPerMM_16384), lYWallVariationPerMM_16384);
 
 
    if( lDYTop_4096 < 0 )
@@ -408,7 +416,7 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
    }
 
    MR_Int32 lBitmapHeight_256            = MulDiv(lYBottom_4096-lYTop_4096, 256, lNbBitmapInHeight_4096 );
-   MR_Int32 lBitmapHeightVar_256         = (lDYBottom_4096-lDYTop_4096)*256/lNbBitmapInHeight_4096;
+   MR_Int32 lBitmapHeightVar_256         = WrapMul(WrapSub(lDYBottom_4096,lDYTop_4096),256)/lNbBitmapInHeight_4096;
 
    int lPrevColumn = -1;
 
@@ -496,7 +504,7 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
                gsColumnBltParam.mBitmap         = pBitmap->GetColumnBuffer( lSelectedBitmap, lBitmapColumn );
             }
 
-            gsColumnBltParam.mPixelStep      = (lNbBitmapInHeight_BitmapYRes*64/((lYBottom_4096-lYTop_4096)/64) )>>pBitmap->GetYResShiftFactor( lSelectedBitmap );
+            gsColumnBltParam.mPixelStep      = (WrapMul(lNbBitmapInHeight_BitmapYRes,64)/(WrapSub(lYBottom_4096,lYTop_4096)/64) )>>pBitmap->GetYResShiftFactor( lSelectedBitmap );
             gsColumnBltParam.mBitmapColMask  = pBitmap->GetXRes( lSelectedBitmap)-1;
             BltColumn();
          }
@@ -509,8 +517,8 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
       lYTop_4096    += lDYTop_4096;
       lYBottom_4096 += lDYBottom_4096;
 
-      lColumn_HVarPerDInc_X0Wall_Y0Wall_16384               += lHVarPerDInc_X0Wall_16384;
-      lColumn_HVarPerDInc_XWallVarPerMM_YWallVarPerMM_16384 += lHVarPerDInc_XWallVarPerMM_16384;
+      lColumn_HVarPerDInc_X0Wall_Y0Wall_16384               = WrapAdd(lColumn_HVarPerDInc_X0Wall_Y0Wall_16384, lHVarPerDInc_X0Wall_16384);
+      lColumn_HVarPerDInc_XWallVarPerMM_YWallVarPerMM_16384 = WrapAdd(lColumn_HVarPerDInc_XWallVarPerMM_YWallVarPerMM_16384, lHVarPerDInc_XWallVarPerMM_16384);
 
       lBitmapHeight_256  += lBitmapHeightVar_256;
    }
@@ -1658,7 +1666,7 @@ void BltTriangle()
    {
       if( lDiffY[lCounter] != 0 )
       {
-         lDXDY_4096[ lCounter ] = lDiffX[ lCounter ]*4096/lDiffY[ lCounter ];
+         lDXDY_4096[ lCounter ] = WrapMul(lDiffX[ lCounter ],4096)/lDiffY[ lCounter ];
       }
       else
       {
@@ -1825,23 +1833,23 @@ void BltTriangle()
    int lDZ_PerPixel_4096;
 
 
-   int lUOnMiddle = gsTriangleBltParam.mBitmapCol_4096[ lTop ] 
-                   + (gsTriangleBltParam.mBitmapCol_4096[ lBottom ]-gsTriangleBltParam.mBitmapCol_4096[ lTop ])
-                    *(lMiddleLine-lTopLine)/(lBottomLine-lTopLine);
+   int lUOnMiddle = WrapAdd(gsTriangleBltParam.mBitmapCol_4096[ lTop ],
+                   WrapMul(WrapSub(gsTriangleBltParam.mBitmapCol_4096[ lBottom ],gsTriangleBltParam.mBitmapCol_4096[ lTop ]),
+                              lMiddleLine-lTopLine)/(lBottomLine-lTopLine));
 
-   int lVOnMiddle = gsTriangleBltParam.mBitmapRow_4096[ lTop ] 
-                   + (gsTriangleBltParam.mBitmapRow_4096[ lBottom ]-gsTriangleBltParam.mBitmapRow_4096[ lTop ])
-                    *(lMiddleLine-lTopLine)/(lBottomLine-lTopLine);
+   int lVOnMiddle = WrapAdd(gsTriangleBltParam.mBitmapRow_4096[ lTop ],
+                   WrapMul(WrapSub(gsTriangleBltParam.mBitmapRow_4096[ lBottom ],gsTriangleBltParam.mBitmapRow_4096[ lTop ]),
+                              lMiddleLine-lTopLine)/(lBottomLine-lTopLine));
 
-   int lZOnMiddle = gsRotatedPatch[ gsTriangleBltParam.mVertexList[lTop] ].mX*4096
-                   + (gsRotatedPatch[ gsTriangleBltParam.mVertexList[lBottom] ].mX - gsRotatedPatch[ gsTriangleBltParam.mVertexList[lTop] ].mX )*4096
-                    *(lMiddleLine-lTopLine)/(lBottomLine-lTopLine);
+   int lZOnMiddle = WrapAdd(WrapMul(gsRotatedPatch[ gsTriangleBltParam.mVertexList[lTop] ].mX,4096),
+                   WrapMul(WrapMul(WrapSub(gsRotatedPatch[ gsTriangleBltParam.mVertexList[lBottom] ].mX, gsRotatedPatch[ gsTriangleBltParam.mVertexList[lTop] ].mX), 4096),
+                             lMiddleLine-lTopLine)/(lBottomLine-lTopLine));
 
-   int lXOnMiddle = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]]*4096
-                   + (gsScreenXPatch[ gsTriangleBltParam.mVertexList[lBottom]]-gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]])*4096
-                    *(lMiddleLine-lTopLine)/(lBottomLine-lTopLine);
+   int lXOnMiddle = WrapAdd(WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]],4096),
+                   WrapMul(WrapMul(WrapSub(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lBottom]],gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]]), 4096),
+                             lMiddleLine-lTopLine)/(lBottomLine-lTopLine));
  
-   int lOnMiddleLen = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]]*4096 - lXOnMiddle;
+   int lOnMiddleLen = WrapSub(WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]],4096), lXOnMiddle);
 
 
    if( lOnMiddleLen/1024 == 0 )
@@ -1853,7 +1861,7 @@ void BltTriangle()
    
    lDU_PerPixel_4096 = (gsTriangleBltParam.mBitmapCol_4096[ lMiddle ] - lUOnMiddle )*4/(lOnMiddleLen/1024);
    lDV_PerPixel_4096 = (gsTriangleBltParam.mBitmapRow_4096[ lMiddle ] - lVOnMiddle )*4/(lOnMiddleLen/1024);
-   lDZ_PerPixel_4096 = (gsRotatedPatch[ gsTriangleBltParam.mVertexList[lMiddle] ].mX*4096 - lZOnMiddle )*64/(lOnMiddleLen/64);
+   lDZ_PerPixel_4096 = (WrapMul(gsRotatedPatch[ gsTriangleBltParam.mVertexList[lMiddle] ].mX,4096) - lZOnMiddle )*64/(lOnMiddleLen/64);
 
 
    if( lMiddleShouldBeOnRight )
@@ -1903,11 +1911,11 @@ void BltTriangle()
 
             lCurrentLine = lTopLine;
 
-            lXLeft_4096 = lXRight_4096 = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]]*4096;
+            lXLeft_4096 = lXRight_4096 = WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]],4096);
 
             lU_4096 = gsTriangleBltParam.mBitmapCol_4096[ lTop ];
             lV_4096 = gsTriangleBltParam.mBitmapRow_4096[ lTop ];
-            lZ_4096 = gsRotatedPatch[ gsTriangleBltParam.mVertexList[lTop] ].mX*4096;
+            lZ_4096 = WrapMul(gsRotatedPatch[ gsTriangleBltParam.mVertexList[lTop] ].mX,4096);
 
             if( !lMiddleShouldBeOnRight )
             {
@@ -1919,12 +1927,12 @@ void BltTriangle()
 
             if( lCurrentLine < 0 )
             {
-               lXLeft_4096  += -lCurrentLine*lLeftSlope;
-               lXRight_4096 += -lCurrentLine*lRightSlope;
+               lXLeft_4096 = WrapAdd(lXLeft_4096, WrapMul(-lCurrentLine,lLeftSlope));
+               lXRight_4096 = WrapAdd(lXRight_4096, WrapMul(-lCurrentLine,lRightSlope));
 
-               lU_4096      += -lCurrentLine*lDU_PerLine_4096;
-               lV_4096      += -lCurrentLine*lDV_PerLine_4096;
-               lZ_4096      += -lCurrentLine*lDZ_PerLine_4096;
+               lU_4096 = WrapAdd(lU_4096, WrapMul(-lCurrentLine,lDU_PerLine_4096));
+               lV_4096 = WrapAdd(lV_4096, WrapMul(-lCurrentLine,lDV_PerLine_4096));
+               lZ_4096 = WrapAdd(lZ_4096, WrapMul(-lCurrentLine,lDZ_PerLine_4096));
 
                lCurrentLine = 0;              
 
@@ -1954,9 +1962,9 @@ void BltTriangle()
 
                   if( lXLeft < 0 )
                   {
-                     lLocalU_4096 += -lXLeft*lDU_PerPixel_4096;
-                     lLocalV_4096 += -lXLeft*lDV_PerPixel_4096;
-                     lLocalZ_4096 += -lXLeft*lDZ_PerPixel_4096;
+                     lLocalU_4096 = WrapAdd(lLocalU_4096, WrapMul(-lXLeft,lDU_PerPixel_4096));
+                     lLocalV_4096 = WrapAdd(lLocalV_4096, WrapMul(-lXLeft,lDV_PerPixel_4096));
+                     lLocalZ_4096 = WrapAdd(lLocalZ_4096, WrapMul(-lXLeft,lDZ_PerPixel_4096));
                      lXLeft   = 0;
                   }
 
@@ -1973,9 +1981,9 @@ void BltTriangle()
                      }
 
                      lXLeft++;
-                     lLocalU_4096 += lDU_PerPixel_4096;
-                     lLocalV_4096 += lDV_PerPixel_4096;
-                     lLocalZ_4096 += lDZ_PerPixel_4096;
+                     lLocalU_4096 = WrapAdd(lLocalU_4096, lDU_PerPixel_4096);
+                     lLocalV_4096 = WrapAdd(lLocalV_4096, lDV_PerPixel_4096);
+                     lLocalZ_4096 = WrapAdd(lLocalZ_4096, lDZ_PerPixel_4096);
 
                   }
                
@@ -1985,12 +1993,12 @@ void BltTriangle()
                lLineBuffer  += gsTriangleBltParam.mLineLen;
                lLineZBuffer += gsTriangleBltParam.mZLineLen;
 
-               lXLeft_4096  += lLeftSlope;
-               lXRight_4096 += lRightSlope;
+               lXLeft_4096 = WrapAdd(lXLeft_4096, lLeftSlope);
+               lXRight_4096 = WrapAdd(lXRight_4096, lRightSlope);
 
-               lU_4096 += lDU_PerLine_4096;
-               lV_4096 += lDV_PerLine_4096;                    
-               lZ_4096 += lDZ_PerLine_4096;                    
+               lU_4096 = WrapAdd(lU_4096, lDU_PerLine_4096);
+               lV_4096 = WrapAdd(lV_4096, lDV_PerLine_4096);                    
+               lZ_4096 = WrapAdd(lZ_4096, lDZ_PerLine_4096);                    
 
                }
             }
@@ -2004,7 +2012,7 @@ void BltTriangle()
                {
                   lU_4096 = gsTriangleBltParam.mBitmapCol_4096[ lMiddle ];
                   lV_4096 = gsTriangleBltParam.mBitmapRow_4096[ lMiddle ];
-                  lZ_4096 = gsRotatedPatch[ gsTriangleBltParam.mVertexList[lMiddle] ].mX*4096;
+                  lZ_4096 = WrapMul(gsRotatedPatch[ gsTriangleBltParam.mVertexList[lMiddle] ].mX,4096);
 
 
                   lDU_PerLine_4096 = ( gsTriangleBltParam.mBitmapCol_4096[ lBottom ] - gsTriangleBltParam.mBitmapCol_4096[ lMiddle ] )/(lBottomLine-lMiddleLine);
@@ -2014,12 +2022,12 @@ void BltTriangle()
 
                if( lMiddleShouldBeOnRight )
                {
-                  lXRight_4096 = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]]*4096;
+                  lXRight_4096 = WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]],4096);
                   lRightSlope = lBottomSlope;
                }
                else
                {
-                  lXLeft_4096  = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]]*4096;
+                  lXLeft_4096  = WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]],4096);
                   lLeftSlope = lBottomSlope;
                }
             }
@@ -2037,14 +2045,14 @@ void BltTriangle()
                {
                   lU_4096 = gsTriangleBltParam.mBitmapCol_4096[ lTop ];
                   lV_4096 = gsTriangleBltParam.mBitmapRow_4096[ lTop ];
-                  lZ_4096 = gsRotatedPatch[ gsTriangleBltParam.mVertexList[lTop] ].mX*4096;
+                  lZ_4096 = WrapMul(gsRotatedPatch[ gsTriangleBltParam.mVertexList[lTop] ].mX,4096);
 
                }
                else
                {
                   lU_4096 = gsTriangleBltParam.mBitmapCol_4096[ lMiddle ];
                   lV_4096 = gsTriangleBltParam.mBitmapRow_4096[ lMiddle ];
-                  lZ_4096 = gsRotatedPatch[ gsTriangleBltParam.mVertexList[lMiddle] ].mX*4096;
+                  lZ_4096 = WrapMul(gsRotatedPatch[ gsTriangleBltParam.mVertexList[lMiddle] ].mX,4096);
 
 
                   lDU_PerLine_4096 = ( gsTriangleBltParam.mBitmapCol_4096[ lBottom ] - gsTriangleBltParam.mBitmapCol_4096[ lMiddle ] )/(lBottomLine-lMiddleLine);
@@ -2055,15 +2063,15 @@ void BltTriangle()
 
                if( lMiddleShouldBeOnRight )
                {
-                  lXLeft_4096  = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]]*4096;
-                  lXRight_4096 = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]]*4096;
+                  lXLeft_4096  = WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]],4096);
+                  lXRight_4096 = WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]],4096);
 
                   lRightSlope = lBottomSlope;
                }
                else
                {
-                  lXLeft_4096  = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]]*4096;
-                  lXRight_4096 = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]]*4096;
+                  lXLeft_4096  = WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]],4096);
+                  lXRight_4096 = WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]],4096);
 
                   lLeftSlope = lBottomSlope;
                }
@@ -2080,50 +2088,50 @@ void BltTriangle()
          {
             lU_4096  = gsTriangleBltParam.mBitmapCol_4096[ lTop ];
             lV_4096  = gsTriangleBltParam.mBitmapRow_4096[ lTop ];
-            lZ_4096 = gsRotatedPatch[ gsTriangleBltParam.mVertexList[lTop] ].mX*4096;
+            lZ_4096 = WrapMul(gsRotatedPatch[ gsTriangleBltParam.mVertexList[lTop] ].mX,4096);
 
-            lU_4096 += -lTopLine*lDU_PerLine_4096;
-            lV_4096 += -lTopLine*lDV_PerLine_4096;
-            lZ_4096 += -lTopLine*lDZ_PerLine_4096;
+            lU_4096 = WrapAdd(lU_4096, WrapMul(-lTopLine,lDU_PerLine_4096));
+            lV_4096 = WrapAdd(lV_4096, WrapMul(-lTopLine,lDV_PerLine_4096));
+            lZ_4096 = WrapAdd(lZ_4096, WrapMul(-lTopLine,lDZ_PerLine_4096));
 
          }
          else
          {
             lU_4096 = gsTriangleBltParam.mBitmapCol_4096[ lMiddle ];
             lV_4096 = gsTriangleBltParam.mBitmapRow_4096[ lMiddle ];
-            lZ_4096 = gsRotatedPatch[ gsTriangleBltParam.mVertexList[lMiddle] ].mX*4096;
+            lZ_4096 = WrapMul(gsRotatedPatch[ gsTriangleBltParam.mVertexList[lMiddle] ].mX,4096);
 
             lDU_PerLine_4096 = ( gsTriangleBltParam.mBitmapCol_4096[ lBottom ] - gsTriangleBltParam.mBitmapCol_4096[ lMiddle ] )/(lBottomLine-lMiddleLine);
             lDV_PerLine_4096 = ( gsTriangleBltParam.mBitmapRow_4096[ lBottom ] - gsTriangleBltParam.mBitmapRow_4096[ lMiddle ] )/(lBottomLine-lMiddleLine);
             lDZ_PerLine_4096 = ( gsRotatedPatch[ gsTriangleBltParam.mVertexList[lBottom] ].mX - gsRotatedPatch[ gsTriangleBltParam.mVertexList[lMiddle] ].mX )*4096/(lBottomLine-lMiddleLine);
 
-            lU_4096 += -lMiddleLine*lDU_PerLine_4096;
-            lV_4096 += -lMiddleLine*lDV_PerLine_4096;
-            lZ_4096 += -lMiddleLine*lDZ_PerLine_4096;
+            lU_4096 = WrapAdd(lU_4096, WrapMul(-lMiddleLine,lDU_PerLine_4096));
+            lV_4096 = WrapAdd(lV_4096, WrapMul(-lMiddleLine,lDV_PerLine_4096));
+            lZ_4096 = WrapAdd(lZ_4096, WrapMul(-lMiddleLine,lDZ_PerLine_4096));
 
          }
 
 
          if( lMiddleShouldBeOnRight )
          {
-            lXLeft_4096  = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]]*4096;
-            lXRight_4096 = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]]*4096;
+            lXLeft_4096  = WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]],4096);
+            lXRight_4096 = WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]],4096);
 
             lRightSlope = lBottomSlope;
 
-            lXLeft_4096  += -lTopLine*lLeftSlope;
-            lXRight_4096 += -lMiddleLine*lRightSlope;
+            lXLeft_4096 = WrapAdd(lXLeft_4096, WrapMul(-lTopLine,lLeftSlope));
+            lXRight_4096 = WrapAdd(lXRight_4096, WrapMul(-lMiddleLine,lRightSlope));
 
          }
          else
          {
-            lXLeft_4096  = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]]*4096;
-            lXRight_4096 = gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]]*4096;
+            lXLeft_4096  = WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lMiddle]],4096);
+            lXRight_4096 = WrapMul(gsScreenXPatch[ gsTriangleBltParam.mVertexList[lTop]],4096);
 
             lLeftSlope = lBottomSlope;
 
-            lXLeft_4096  += -lMiddleLine*lLeftSlope;
-            lXRight_4096 += -lTopLine*lRightSlope;
+            lXLeft_4096 = WrapAdd(lXLeft_4096, WrapMul(-lMiddleLine,lLeftSlope));
+            lXRight_4096 = WrapAdd(lXRight_4096, WrapMul(-lTopLine,lRightSlope));
          }
       }
 
@@ -2154,9 +2162,9 @@ void BltTriangle()
 
             if( lXLeft < 0 )
             {
-               lLocalU_4096 += -lXLeft*lDU_PerPixel_4096;
-               lLocalV_4096 += -lXLeft*lDV_PerPixel_4096;
-               lLocalZ_4096 += -lXLeft*lDZ_PerPixel_4096;
+               lLocalU_4096 = WrapAdd(lLocalU_4096, WrapMul(-lXLeft,lDU_PerPixel_4096));
+               lLocalV_4096 = WrapAdd(lLocalV_4096, WrapMul(-lXLeft,lDV_PerPixel_4096));
+               lLocalZ_4096 = WrapAdd(lLocalZ_4096, WrapMul(-lXLeft,lDZ_PerPixel_4096));
                lXLeft   = 0;
             }
 
@@ -2174,9 +2182,9 @@ void BltTriangle()
 
 
                lXLeft++;
-               lLocalU_4096 += lDU_PerPixel_4096;
-               lLocalV_4096 += lDV_PerPixel_4096;                    
-               lLocalZ_4096 += lDZ_PerPixel_4096;                    
+               lLocalU_4096 = WrapAdd(lLocalU_4096, lDU_PerPixel_4096);
+               lLocalV_4096 = WrapAdd(lLocalV_4096, lDV_PerPixel_4096);                    
+               lLocalZ_4096 = WrapAdd(lLocalZ_4096, lDZ_PerPixel_4096);                    
             }
                
          }
@@ -2185,12 +2193,12 @@ void BltTriangle()
          lLineBuffer  += gsTriangleBltParam.mLineLen;
          lLineZBuffer += gsTriangleBltParam.mZLineLen;
 
-         lXLeft_4096  += lLeftSlope;
-         lXRight_4096 += lRightSlope;
+         lXLeft_4096 = WrapAdd(lXLeft_4096, lLeftSlope);
+         lXRight_4096 = WrapAdd(lXRight_4096, lRightSlope);
 
-         lU_4096 += lDU_PerLine_4096;
-         lV_4096 += lDV_PerLine_4096;                    
-         lZ_4096 += lDZ_PerLine_4096;                    
+         lU_4096 = WrapAdd(lU_4096, lDU_PerLine_4096);
+         lV_4096 = WrapAdd(lV_4096, lDV_PerLine_4096);                    
+         lZ_4096 = WrapAdd(lZ_4096, lDZ_PerLine_4096);                    
 
       }
    }

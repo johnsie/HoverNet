@@ -29,13 +29,6 @@ if(NOT MSVC)
     if(HOVERNET_SANITIZE)
         add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
         add_link_options(-fsanitize=address,undefined)
-        # The 1990s fixed-point software rasterizer (4096-scaled coordinates)
-        # relies on 32-bit wraparound when the clipper hands it far off-screen
-        # geometry. Auditing every site risks changing rendered output, so only
-        # this file skips the signed-overflow check; bounds, shift, alignment
-        # and memory checks stay on. Tracked in docs/roadmap-2.0.md.
-        set_source_files_properties(NetTarget/VideoServices/3DViewportRendering.cpp
-            PROPERTIES COMPILE_OPTIONS -fno-sanitize=signed-integer-overflow)
     endif()
 endif()
 

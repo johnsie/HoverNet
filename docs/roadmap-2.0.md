@@ -629,10 +629,10 @@ GitLab job runs the full 52-test suite under both. The first run found and fixed
 an out-of-bounds trig-table read from negative camera/object orientations, a
 `delete`/`delete[]` mismatch in MazeCompiler, 32-bit overflows in the wall
 renderer, a negative left shift in line drawing, and leaks on the client's quit
-path and in MazeCompiler's DLL cache. Remaining gap: the fixed-point triangle
-rasterizer (`3DViewportRendering.cpp`) still overflows 32-bit arithmetic on far
-off-screen geometry, so that one file is excluded from the signed-overflow check
-only; auditing it needs rendering regression captures first.
+path and in MazeCompiler's DLL cache. The fixed-point rasterizer (`3DViewportRendering.cpp`) formerly had to be excluded from
+the signed-overflow check; its wraparound products now go through explicit unsigned
+`WrapAdd`/`WrapSub`/`WrapMul` helpers (the same bits the 32-bit x86 code produced), the
+exemption is gone, and the whole suite is UBSan-clean with no exemptions.
 
 Release engineering (1 October 2026): Debian packages are reproducible (pinned
 `SOURCE_DATE_EPOCH`; binaries were already identical across build directories),
