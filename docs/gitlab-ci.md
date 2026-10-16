@@ -79,3 +79,11 @@ build. Web builds are skipped for changes that touch no web inputs (docs only).
 only from a nightly pipeline schedule, not on pushes, merge requests or tags. Every other
 job skips scheduled pipelines (`.no_schedule`). Create the schedule once on the GitLab
 server with `sudo bash packaging/web/gitlab-nightly-schedule.sh` (02:00 Europe/London).
+
+## Web smoke test
+
+`test:web:smoke` (stage `package`) unpacks the web artifact and runs `scripts/test-web-client.sh`, which serves it
+and drives it in headless Chrome as a phone: first frames, briefing, main menu, local race, pause (race controls
+must hide), resume, and the setup screen opened from the pause menu. Screenshots are kept as job artifacts. It needs
+Node and Chrome/Chromium on the web runner; without them the job exits 77, which is allowed, and the deploy never
+waits for it.

@@ -12,7 +12,7 @@ Deliver a playable browser client at **https://hovernet.outiva.com**, served by 
 - The web build statically links the same `ObjFac1` factory and packages the shared resource library, tracks, manifest, and menu assets. Browser startup and persistence use the shared SDL2/ImGui client with an IndexedDB-backed settings directory.
 - The browser client frames the existing RaceServer protocol over WebSocket. A bounded gateway relays those messages to the existing TCP service, and Apache proxies the WebSocket endpoint.
 - Browser persistence, window sizing, controller access, audio start policy, fullscreen, and keyboard focus still need screen-by-screen comparison with the Windows x64 experience.
-- GitLab CI now builds and deploys the web artifact from the protected default branch; tag deployments remain manual.
+- GitLab CI builds and deploys the web artifact from the protected default branch, and deploys it automatically on version tags together with the RaceServer.
 
 ## Implementation status
 
@@ -23,6 +23,12 @@ an Apache virtual-host template, and a validating web artifact deploy wrapper.
 Emscripten 3.1.74 builds the shared client locally. The server's Apache vhost
 and origin TLS certificate are installed, and the WebSocket gateway is active.
 The default-branch CI deploy is configured to publish the first release.
+
+Since then the client has also gained phone and tablet play (touch controls with a steering
+stick, phone layouts for every screen, a widescreen phone race frame, a rotate prompt for phones
+only), a desktop Game Size setting, and a Meta Quest VR mode (stereo race view, controllers,
+chase/cockpit views). `scripts/test-web-client.sh` drives the built client in headless Chrome
+(briefing, menu, local race, pause, resume) and runs in CI as `test:web:smoke`.
 
 Screen-by-screen parity, browser online-race interoperability, and clean-profile
 browser behavior remain open acceptance items. The first live release must be
@@ -35,7 +41,7 @@ to the Windows x64 version.
 
 1. Record the x64 client reference build and capture every screen and flow: onboarding, main menu, local race setup, race, pause, results, settings, controls, online lobby, hosting/joining, chat, and track download.
 2. Turn the x64 product contract and `docs/linux-client.md` into a per-feature parity matrix with screenshots, input steps, and expected results.
-3. Choose supported desktop browsers and minimum versions. Define desktop viewport, keyboard, mouse, and controller expectations; mobile support is a separate decision.
+3. Choose supported desktop browsers and minimum versions. Define desktop viewport, keyboard, mouse, and controller expectations. Phones and tablets are supported with touch controls (a Bluetooth game controller is recommended); the Meta Quest browser is supported through VR mode.
 4. Agree that the first browser release requires network access for online play and specify behavior when audio, storage, or controller permission is unavailable.
 
 **Exit:** the web acceptance matrix is approved and covers every x64 core flow.
@@ -73,8 +79,8 @@ to the Windows x64 version.
 
 ### 5. CI, Apache, and production delivery
 
-1. Add a Linux CI job that installs/pins Emscripten, configures the web target, builds the assets, and publishes a versioned static artifact. Add automated smoke checks for required output files, asset URLs, MIME types, and a headless browser startup/local-race scenario where runner capacity permits.
-2. Keep merge-request builds non-deploying. Deploy the protected default branch after its web build, and keep tag deployments manual. Serialize releases with a `production-web` resource group and retain the previous release for rollback.
+1. Add a Linux CI job that installs/pins Emscripten, configures the web target, builds the assets, and publishes a versioned static artifact. Add automated smoke checks for required output files, asset URLs, MIME types, and a headless browser startup/local-race scenario where runner capacity permits. *(Headless browser scenario done: `test:web:smoke`; file, MIME and asset checks still to add.)*
+2. Keep merge-request builds non-deploying. Deploy the protected default branch after its web build, and deploy tags automatically. Serialize releases with a `production-web` resource group and retain the previous release for rollback.
 3. Add a narrowly scoped root-owned deployment wrapper, analogous to `packaging/debian/hovernet-deploy`, for the web artifact. It should validate the artifact and version, unpack to a new immutable release directory, then atomically switch the Apache document root symlink. Do not grant the runner general passwordless sudo.
 4. Configure Apache name-based TLS virtual hosting for `hovernet.outiva.com`, with document root pointing at the active release. Public TLS terminates at HAProxy; Apache uses a self-signed origin certificate for the HTTPS backend. Confirm DNS and routing to HAProxy before release.
 5. Enable required Apache modules (`ssl`, `headers`, `proxy`, `proxy_http`, `proxy_wstunnel`, and compression as appropriate). Serve `.wasm` as `application/wasm`, JavaScript with a JavaScript MIME type, and apply immutable caching to versioned assets. Keep the HTML entry point revalidated so releases take effect promptly. Proxy the WebSocket path to the gateway with TLS and suitable idle/read timeouts.

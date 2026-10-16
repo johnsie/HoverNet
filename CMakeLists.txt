@@ -253,6 +253,31 @@ add_executable(HoverNetMainCharacterSmoke
 add_dependencies(HoverNetMainCharacterSmoke HoverNetHeadlessObjFac1)
 target_link_libraries(HoverNetMainCharacterSmoke PRIVATE HoverNetMainCharacter)
 
+if(EMSCRIPTEN)
+    # The same run as a WebAssembly program for Node, with the object factory linked in (the browser
+    # build does the same), so its hashes can be compared with the native build's: the first
+    # cross-platform determinism check.
+    add_executable(HoverNetDeterminismRun
+        NetTarget/LinuxClient/DeterminismRun.cpp
+        NetTarget/LinuxClient/WebFactory.cpp
+        NetTarget/ObjFac1/LinuxPlugin.cpp
+        NetTarget/ObjFac1/FuelSource.cpp
+        NetTarget/ObjFac1/DoubleSpeedSource.cpp
+        NetTarget/ObjFac1/FinishLine.cpp
+    )
+    target_compile_definitions(HoverNetDeterminismRun PRIVATE HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    target_link_libraries(HoverNetDeterminismRun PRIVATE HoverNetMainCharacter HoverNetModelCore HoverNetResourceCore HoverNetPortableUtil)
+    target_link_options(HoverNetDeterminismRun PRIVATE -sNODERAWFS=1 -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=node)
+    set_target_properties(HoverNetDeterminismRun PROPERTIES SUFFIX ".js")
+else()
+    add_executable(HoverNetDeterminismRun
+        NetTarget/LinuxClient/DeterminismRun.cpp
+    )
+
+    add_dependencies(HoverNetDeterminismRun HoverNetHeadlessObjFac1)
+    target_link_libraries(HoverNetDeterminismRun PRIVATE HoverNetMainCharacter)
+endif()
+
 add_executable(HoverNetMainCharacterRenderSmoke
     NetTarget/LinuxClient/MainCharacterRenderSmoke.cpp
 )
@@ -550,6 +575,9 @@ if(BUILD_TESTING AND NOT WIN32)
     add_hovernet_root_test(HoverNetInRaceChatSmoke "$<TARGET_FILE:RaceServer>")
     add_hovernet_root_test(HoverNetObserverChatRenderSmoke)
     add_hovernet_root_test(HoverNetMainCharacterSmoke)
+    add_test(NAME HoverNetDeterminism
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-determinism.sh $<TARGET_FILE:HoverNetDeterminismRun>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_hovernet_root_test(HoverNetMainCharacterRenderSmoke)
     add_hovernet_root_test(HoverNetClientSessionSmoke)
     add_hovernet_root_test(HoverNetObserverSmoke)
