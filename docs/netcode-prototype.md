@@ -45,7 +45,7 @@ errors of a few centimetres to half a metre are small; the 400 ms case is where 
    late input reproduces the ideal state exactly. Nothing about the design needed to change for correctness.
 2. **Rollback is cheap even without snapshots.** Re-simulating costs about 7 microseconds per tick in a Debug build
    (including rebuilding the session), so a 9-tick correction at the 120 ms target is far below a frame. The
-   from-scratch replay used here grows with race length (about 20 ms at 2,000 ticks, about 12 ms per rollback on
+   from-scratch replay used here grows with race length (about 14 ms for a full 2,000-tick replay, 8 ms per rollback on
    average over this run), which is fine for a prototype and for 3-minute races but should be replaced by periodic
    checkpoints. The ADR's open question about snapshot cost is therefore **not blocking**: the first
    implementation can checkpoint by rebuilding from a saved input log, and a real snapshot is an optimisation.
