@@ -28,6 +28,8 @@
 MR_ClientSession::MR_ClientSession()
                  :mSession( TRUE )
 {
+   mFixedStep           = FALSE;
+   mLastProcessTime     = 0;
    mMainCharacter1      = NULL;
    mMainCharacter2      = NULL;
    mBackImage           = NULL;
@@ -51,7 +53,17 @@ MR_ClientSession::~MR_ClientSession()
 
 void MR_ClientSession::Process( int pSpeedFactor )
 {
-   mSession.Simulate();
+   if( mFixedStep )
+   {
+      const DWORD lNow = timeGetTime();
+      const DWORD lElapsed = (mLastProcessTime == 0) ? 0 : lNow - mLastProcessTime;
+      mLastProcessTime = lNow;
+      mSession.SimulateElapsed( (MR_SimulationTime)lElapsed );   // a stall longer than 16 ticks (256 ms) is dropped, not replayed
+   }
+   else
+   {
+      mSession.Simulate();
+   }
 }
 
 void MR_ClientSession::ReadLevelAttrib( MR_RecordFile* pRecordFile, MR_VideoBuffer* pVideo )

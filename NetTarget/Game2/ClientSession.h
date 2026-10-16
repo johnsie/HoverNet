@@ -50,6 +50,8 @@ class MR_ClientSession
 
 
       MR_GameSession    mSession;
+      BOOL              mFixedStep;
+      DWORD             mLastProcessTime;
       MR_MainCharacter* mMainCharacter1;
       MR_MainCharacter* mMainCharacter2;
       std::vector<MR_MainCharacter*> mRemoteCharacters;
@@ -77,6 +79,10 @@ class MR_ClientSession
       virtual ~MR_ClientSession();
 
       // Simulation control
+      // Fixed-step mode runs the simulation in whole 16 ms ticks whatever the frame rate (MR_GameSession::SimulateElapsed),
+      // which is what networked prediction and replays need. Off by default: the classic loop is smoother on screen
+      // until the renderer interpolates between ticks (docs/adr/0001-simulation-core.md, step 6).
+      void SetFixedStep( BOOL pOn ) { mFixedStep = pOn; mLastProcessTime = 0; }
       virtual void Process( int pSpeedFactor = 1 );    // Simulation, speed factor can be used to reduce processing speed to create AVI files
 
 

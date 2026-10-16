@@ -5452,6 +5452,8 @@ int RunClient(int argc, char** argv)
         return FatalClientError("Could not create the 3D framebuffer.");
     }
     MR_ClientSession session;
+    // Whole 16 ms simulation ticks whatever the frame rate; off by default (see MR_ClientSession::SetFixedStep).
+    session.SetFixedStep((HasArgument(argc, argv, "--fixed-step") || std::getenv("HOVERNET_FIXED_STEP") != nullptr) ? TRUE : FALSE);
     const BOOL allowWeapons = playerMode ? TRUE : FALSE;
     const MR_Level* level = nullptr;
     MR_MainCharacter* mainCharacter = nullptr;

@@ -42,6 +42,7 @@ MR_GameSession::MR_GameSession( BOOL pAllowRendering )
    mCurrentLevelNumber = -1;
 
    mSimulationTime  = -3000; // 3 sec countdown
+   mFixedStepCarry  = 0;
    mLastSimulateCallTime = timeGetTime();
 
 }
@@ -234,6 +235,7 @@ BOOL MR_GameSession::LoadNew( const char* pTitle, MR_RecordFile* pMazeFile )
 void MR_GameSession::SetSimulationTime( MR_SimulationTime pTime )
 {
    mSimulationTime       = pTime;
+   mFixedStepCarry       = 0;
    mLastSimulateCallTime = timeGetTime();
 }
 
@@ -263,6 +265,27 @@ void MR_GameSession::Simulate()
    SimulateSurfaceElems( lSimulateCallTime-lRemainder-mLastSimulateCallTime );
 
    mLastSimulateCallTime = lSimulateCallTime - lRemainder;
+}
+
+int MR_GameSession::SimulateElapsed( MR_SimulationTime pElapsedMs, MR_SimulationTime pTickMs, int pMaxTicks )
+{
+   if( pTickMs < MR_MINIMUM_SIMULATION_SLICE ) pTickMs = MR_MINIMUM_SIMULATION_SLICE;
+   if( pElapsedMs < 0 ) pElapsedMs = 0;
+
+   mFixedStepCarry += pElapsedMs;
+   int lTicks = 0;
+   while( mFixedStepCarry >= pTickMs )
+   {
+      if( lTicks >= pMaxTicks )
+      {
+         mFixedStepCarry %= pTickMs;   // drop the rest of a long stall
+         break;
+      }
+      SimulateStep( pTickMs );
+      mFixedStepCarry -= pTickMs;
+      ++lTicks;
+   }
+   return lTicks;
 }
 
 void MR_GameSession::SimulateStep( MR_SimulationTime pDurationMs )

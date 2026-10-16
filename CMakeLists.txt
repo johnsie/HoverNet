@@ -297,6 +297,11 @@ else()
     )
     target_link_libraries(HoverNetNetcodeProto PRIVATE HoverNetSim)
 
+    add_executable(HoverNetFrameRateTest
+        NetTarget/LinuxClient/FrameRateTest.cpp
+    )
+    target_link_libraries(HoverNetFrameRateTest PRIVATE HoverNetSim)
+
     add_executable(HoverNetSnapshotTest
         NetTarget/LinuxClient/SnapshotTest.cpp
     )
@@ -624,6 +629,8 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetSnapshot
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-snapshot.sh $<TARGET_FILE:HoverNetSnapshotTest>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetFrameRateIndependence COMMAND HoverNetFrameRateTest ClassicH 1500)
+    set_tests_properties(HoverNetFrameRateIndependence PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

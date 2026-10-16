@@ -53,9 +53,9 @@ Reasons, in order of weight:
    with a pinned rule set (no FMA contraction, SSE2/strict IEEE, no `-ffast-math`, enforced in CMake and checked
    by the golden hashes on every platform). The golden suite makes either change measurable: a conversion is
    accepted only if the hashes change in a documented, explainable way or not at all.
-5. **Inputs as the only way in.** Control state per tick, as a plain struct (the determinism tool already works this
+5. **Inputs as the only way in.** *Already true in practice: `SetControlState` takes one control word per craft and the simulation reads nothing else (no clock, no random numbers); the replay, netcode and snapshot tools drive it that way.*   Control state per tick, as a plain struct (the determinism tool already works this
    way through `SetControlState`), so the server, a replay, and a client all feed the same stream.
-6. **Keep `SimulateStep` as the one entry point**, remove the wall-clock `Simulate()` path from the client in favour
+6. **Keep `SimulateStep` as the one entry point** *(`MR_GameSession::SimulateElapsed` is the fixed-step entry for a game loop: whole 16 ms ticks whatever the frame rate, proven by `HoverNetFrameRateTest` across 1 ms to 1 s frames. The client has it behind `--fixed-step` / `HOVERNET_FIXED_STEP`, off by default because 16 ms ticks on a 60 Hz display put an extra tick in about one frame in 25 and look slightly uneven until the renderer interpolates between ticks; it becomes the default with the renderer work in Stage 3 or with the authoritative server, whichever comes first)*, remove the wall-clock `Simulate()` path from the client in favour
    of a fixed-step accumulator with render interpolation.
 
 ## Alternatives considered

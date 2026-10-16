@@ -54,6 +54,7 @@ class MR_GameSession
       MR_Level*          mCurrentLevel;
       
       MR_SimulationTime  mSimulationTime;       // Time simulated since the session start
+      MR_SimulationTime  mFixedStepCarry;       // Elapsed time not yet worth a whole tick (SimulateElapsed)
       DWORD              mLastSimulateCallTime; // Time in ms obtainend by timeGetTime
 
 
@@ -88,6 +89,11 @@ class MR_GameSession
       // measures the elapsed real time and calls this; tests and replays call it directly so a run
       // depends only on its inputs.
       MR_DllDeclare void SimulateStep( MR_SimulationTime pDurationMs );
+      // Fixed-step advance for a caller that measures real time itself (a game loop): adds pElapsedMs to a carried
+      // remainder and runs whole ticks of exactly pTickMs, so the simulation sees the same sequence of steps whatever
+      // the frame rate. At most pMaxTicks run per call; time beyond that is dropped (a stalled tab or a debugger pause
+      // must not replay seconds of race in one frame). Returns the number of ticks run. Uses no clock.
+      MR_DllDeclare int  SimulateElapsed( MR_SimulationTime pElapsedMs, MR_SimulationTime pTickMs = 16, int pMaxTicks = 16 );
       MR_DllDeclare void SimulateLateElement( MR_FreeElementHandle pElement, MR_SimulationTime pDuration, int pRoom );
 
       MR_DllDeclare MR_Level*      GetCurrentLevel();
