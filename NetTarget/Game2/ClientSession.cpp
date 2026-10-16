@@ -55,7 +55,7 @@ void MR_ClientSession::Process( int pSpeedFactor )
 {
    if( mFixedStep )
    {
-      const DWORD lNow = timeGetTime();
+      const DWORD lNow = GetTickCount();
       const DWORD lElapsed = (mLastProcessTime == 0) ? 0 : lNow - mLastProcessTime;
       mLastProcessTime = lNow;
       mSession.SimulateElapsed( (MR_SimulationTime)lElapsed );   // a stall longer than 16 ticks (256 ms) is dropped, not replayed
