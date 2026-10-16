@@ -30,6 +30,7 @@
 #include "../Util/DllObjectFactory.h"
 #include "../VideoServices/ColorPalette.h"
 #include "../MainCharacter/MainCharacter.h"
+#include "../MainCharacter/MainCharacterRenderer.h"
 #include "../Util/FuzzyLogic.h"
 #include "../Util/Profiler.h"
 #include "../Util/StrRes.h"

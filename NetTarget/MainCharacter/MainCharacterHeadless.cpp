@@ -8,6 +8,10 @@
 
 #include "MainCharacter.h"
 
+void MR_MainCharacter::ReleaseRenderer()
+{
+}
+
 void MR_MainCharacter::QueueSound( eSoundEvent, BOOL, BOOL )
 {
 }

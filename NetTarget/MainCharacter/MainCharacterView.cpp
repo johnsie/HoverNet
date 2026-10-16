@@ -12,6 +12,7 @@
 #include <math.h>
 
 #include "MainCharacter.h"
+#include "MainCharacterRenderer.h"
 #include "../ObjFacTools/ResActor.h"
 
 #define MR_NB_HOVER_MODEL 8
@@ -23,6 +24,12 @@
 #define MR_EON_CRAFT  19
 #define MR_MANTA_CRAFT 24
 #define MR_SELECTABLE_HOVER_MODEL_COUNT 5
+
+void MR_MainCharacter::ReleaseRenderer()
+{
+   delete mRenderer;
+   mRenderer = NULL;
+}
 
 // Records a sound for the presentation layer. Nothing is queued without a renderer (headless runs).
 void MR_MainCharacter::QueueSound( eSoundEvent pSound, BOOL pInternal, BOOL pExternal )

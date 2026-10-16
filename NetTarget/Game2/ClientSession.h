@@ -27,6 +27,7 @@
 
 #include "../Model/GameSession.h"
 #include "../MainCharacter/MainCharacter.h"
+#include "../MainCharacter/MainCharacterRenderer.h"
 #include "../VideoServices/Sprite.h"
 
 #include <vector>

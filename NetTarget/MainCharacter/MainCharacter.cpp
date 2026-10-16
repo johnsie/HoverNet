@@ -220,7 +220,7 @@ MR_MainCharacter::MR_MainCharacter( const MR_ObjectFromFactoryId& pId )
 
 MR_MainCharacter::~MR_MainCharacter()
 {
-   delete mRenderer;
+   ReleaseRenderer();
 }
 
 void MR_MainCharacter::SetAsMaster()

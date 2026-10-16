@@ -25,8 +25,14 @@
 #define MAIN_CHARACTER_H
 
 
-#include "MainCharacterRenderer.h"
+// The simulation sees the presentation only through these forward declarations; the real definitions are in
+// MainCharacterRenderer.h, which includes the video and sound headers (docs/adr/0001-simulation-core.md).
+class MR_MainCharacterRenderer;
+class MR_3DViewPort;
+class MR_ShortSound;
+
 #include "../Model/MazeElement.h"
+#include "../Util/DllObjectFactory.h"
 #include "../Model/PhysicalCollision.h"
 #include "../Util/FastFifo.h"
 #include "../Util/BitPacking.h"
@@ -207,6 +213,7 @@ class MR_MainCharacter:public MR_FreeElement
          eSoundJump, eSoundMisJump, eSoundFire, eSoundBump, eSoundOutOfControl, eSoundFinish, eSoundLineCrossing
       };
       void QueueSound( eSoundEvent pSound, BOOL pInternal, BOOL pExternal );
+      void ReleaseRenderer();              // destroys the presentation object, if any
       double GetNormalisedSpeed() const;   // horizontal speed as a fraction of the base craft's steady speed
 
       MR_DllDeclare void               SetNbLapForRace( int pNbLap );
