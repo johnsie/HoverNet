@@ -4,7 +4,7 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## Unreleased
+## 2.0.19 - 2026-10-16
 
 ### Changed
 - CI split: GitLab now only builds, tests and deploys the web client and the Linux race server. GitHub Actions
