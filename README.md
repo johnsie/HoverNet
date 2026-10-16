@@ -59,6 +59,19 @@ you race other players **online**.
 
 That is all there is to it. No accounts, no setup, no extra downloads to start.
 
+## &#127760; Play in your browser
+
+No install needed: open **https://hovernet.outiva.com** and race on a PC, Mac, phone or tablet.
+
+- **Phones and tablets:** touch controls appear in a race. Drag the **steering knob** left or right to
+  steer (drag it **up** to jump), and use GO, BRAKE, FIRE, JUMP and WEAPON on the right. Menus, the
+  Driver Briefing and the Internet Meeting Room are laid out for small screens, and the race frame is
+  widescreen on phones. Phones in portrait are asked to turn sideways; iPads and tablets can stay put.
+- **Desktop:** pick the gameplay size in **Settings &rarr; Game Size** without resizing the window.
+- **VR (Meta Quest 2/3 browser):** press **ENTER VR** for stereo 3D on a big virtual screen. Drive with
+  the controllers (stick steers, trigger GO, grip BRAKE, A fire, B jump, left X switches between the
+  chase and cockpit views, left Y pauses) and point and click menus with the right controller.
+
 ## &#127918; Controls
 
 You can change every key in **Settings**, and game controllers work too.

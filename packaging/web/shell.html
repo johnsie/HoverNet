@@ -271,7 +271,9 @@
       set: function(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
     };
     function updateOrientation() {
-      document.body.classList.toggle('portrait', window.innerHeight > window.innerWidth);
+      // Only phones are asked to rotate; iPads and other tablets are roomy enough in portrait
+      // (their menus use the desktop layouts and the race frame is 4:3).
+      document.body.classList.toggle('portrait', window.innerHeight > window.innerWidth && window.innerWidth < 700);
     }
     if (isTouch) {
       document.body.classList.add('touch');

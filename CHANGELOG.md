@@ -4,6 +4,20 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.15 - 2026-10-16
+
+### Changed
+- Web client: tablets (iPad and similar) keep their desktop menu layouts and are no longer asked
+  to rotate in portrait; only phones are.
+- Web client on phones: Settings and Controls have a slim header, and Settings keeps Save and
+  Cancel pinned under the scrolling options.
+- Web client on phones: the wide race frame is nudged so the whole hovercraft stays in view.
+
+### Fixed
+- Web client: the on-screen race controls no longer float over the screens opened from the pause
+  menu (New Local Race, Settings, Controls) or the results screen.
+- README describes the browser, phone, tablet and VR play.
+
 ## 2.0.14 - 2026-10-16
 
 ### Added
