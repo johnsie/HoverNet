@@ -230,6 +230,51 @@ int Verify(const std::string& path)
     return 0;
 }
 
+
+// Mutation fuzzing of the decoder: flips, overwrites, truncations and insertions in a valid file, with the CRC repaired
+// afterwards so the parser itself (not just the checksum) is exercised. Passes if nothing crashes, hangs or reads out of
+// bounds (run it under ASan/UBSan) and every accepted file is internally consistent.
+int Fuzz(const std::string& path, int iterations)
+{
+    std::vector<std::uint8_t> original;
+    if (!ReadFile(path, original)) { std::fprintf(stderr, "Could not read %s\n", path.c_str()); return 1; }
+    std::uint64_t state = 0x9E3779B97F4A7C15ULL;
+    auto next = [&state]() { state ^= state >> 12; state ^= state << 25; state ^= state >> 27; return state * 2685821657736338717ULL; };
+    int accepted = 0, rejected = 0;
+    for (int i = 0; i < iterations; ++i) {
+        std::vector<std::uint8_t> bytes = original;
+        const int edits = 1 + static_cast<int>(next() % 4);
+        for (int e = 0; e < edits && bytes.size() > 8; ++e) {
+            const std::size_t at = static_cast<std::size_t>(next() % (bytes.size() - 4));
+            switch (next() % 5) {
+            case 0: bytes[at] ^= static_cast<std::uint8_t>(1u << (next() % 8)); break;
+            case 1: bytes[at] = static_cast<std::uint8_t>(next()); break;
+            case 2: bytes.resize(at + 4); break;                                   // truncate (keeps room for a CRC)
+            case 3: bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(at), static_cast<std::uint8_t>(next())); break;
+            default: for (int k = 0; k < 4 && at + k < bytes.size() - 4; ++k) bytes[at + k] = 0xFF; break;   // huge count
+            }
+        }
+        if (bytes.size() >= 4) {                                                   // repair the CRC
+            const std::uint32_t crc = Crc32(bytes.data(), bytes.size() - 4);
+            for (int b = 0; b < 4; ++b) bytes[bytes.size() - 4 + b] = static_cast<std::uint8_t>(crc >> (b * 8));
+        }
+        Replay r;
+        std::string error;
+        if (Decode(bytes, r, error)) {
+            ++accepted;
+            if (r.inputs.size() != static_cast<std::size_t>(r.ticks) * r.players || r.checkpoints.size() != r.ticks / kCheckpointTicks) {
+                std::fprintf(stderr, "accepted an inconsistent replay (iteration %d)\n", i);
+                return 1;
+            }
+        }
+        else {
+            ++rejected;
+        }
+    }
+    std::printf("fuzz: %d mutations, %d accepted, %d rejected, no crashes\n", iterations, accepted, rejected);
+    return 0;
+}
+
 int Info(const std::string& path)
 {
     std::vector<std::uint8_t> file;
@@ -266,6 +311,7 @@ int main(int argc, char** argv)
     }
     if (cmd == "verify") return Verify(argv[2]);
     if (cmd == "info") return Info(argv[2]);
+    if (cmd == "fuzz" && argc >= 4) return Fuzz(argv[2], std::atoi(argv[3]));
     std::fprintf(stderr, "unknown command\n");
     return 2;
 }

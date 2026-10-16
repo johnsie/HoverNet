@@ -631,6 +631,8 @@ if(BUILD_TESTING AND NOT WIN32)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetFrameRateIndependence COMMAND HoverNetFrameRateTest ClassicH 1500)
     set_tests_properties(HoverNetFrameRateIndependence PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetSnapshotFuzz COMMAND HoverNetSnapshotTest Steeplechase 400 900 --fuzz 1500)
+    set_tests_properties(HoverNetSnapshotFuzz PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

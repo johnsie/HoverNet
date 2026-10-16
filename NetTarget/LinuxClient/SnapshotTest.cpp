@@ -75,6 +75,39 @@ int Fail(const char* what)
     std::fprintf(stderr, "FAIL: %s\n", what);
     return 1;
 }
+
+// Mutation fuzzing of the snapshot reader: damaged snapshots with the checksum repaired, each restored into a fresh race.
+// Passes if nothing crashes or reads out of bounds (run under ASan/UBSan); a refusal or an acceptance are both fine.
+int FuzzSnapshots(const std::string& path, const std::string& track, const std::vector<std::uint8_t>& snapshot, int iterations)
+{
+    std::uint64_t state = 0xD1B54A32D192ED03ULL;
+    auto next = [&state]() { state ^= state >> 12; state ^= state << 25; state ^= state >> 27; return state * 2685821657736338717ULL; };
+    int accepted = 0, rejected = 0;
+    for (int i = 0; i < iterations; ++i) {
+        std::vector<std::uint8_t> bytes = snapshot;
+        const int edits = 1 + static_cast<int>(next() % 3);
+        for (int e = 0; e < edits && bytes.size() > 16; ++e) {
+            const std::size_t at = static_cast<std::size_t>(next() % (bytes.size() - 8));
+            switch (next() % 4) {
+            case 0: bytes[at] ^= static_cast<std::uint8_t>(1u << (next() % 8)); break;
+            case 1: bytes[at] = static_cast<std::uint8_t>(next()); break;
+            case 2: bytes.resize(at + 8); break;
+            default: for (int k = 0; k < 8 && at + k < bytes.size() - 8; ++k) bytes[at + k] = 0xFF; break;
+            }
+        }
+        if (bytes.size() >= 8) {   // repair the trailing checksum so the parser itself is reached
+            std::uint64_t h = 1469598103934665603ULL;
+            for (std::size_t k = 0; k + 8 < bytes.size(); ++k) { h ^= bytes[k]; h *= 1099511628211ULL; }
+            for (int b = 0; b < 8; ++b) bytes[bytes.size() - 8 + b] = static_cast<std::uint8_t>(h >> (b * 8));
+        }
+        World victim;
+        if (!victim.Build(path, track, 2)) return Fail("could not build a race to fuzz");
+        std::string error;
+        if (Restore(victim, bytes, kRules, error)) ++accepted; else ++rejected;
+    }
+    std::printf("fuzz: %d mutations, %d accepted, %d rejected, no crashes\n", iterations, accepted, rejected);
+    return 0;
+}
 }
 
 int main(int argc, char** argv)
@@ -105,6 +138,8 @@ int main(int argc, char** argv)
     const std::uint64_t savedHash = world.Hash();
     const std::vector<std::uint8_t> snapshot = MR_SaveLevelState(world.session->GetCurrentLevel(), world.session->GetSimulationTime(), Externals(world), kRules);
     const int transient = TransientCount(world);
+
+    if (argc > 5 && std::string(argv[4]) == "--fuzz") return FuzzSnapshots(path, track, snapshot, std::atoi(argv[5]));
 
     std::vector<std::uint64_t> chain;
     for (int t = snapshotTick; t < endTick; ++t) {

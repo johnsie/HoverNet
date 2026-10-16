@@ -29,5 +29,10 @@ for n in 0 3 20 100 $((size - 1)); do head -c "$n" "$f" > "$dir/trunc.hnr"; expe
 a=$("$tool" record ClassicH 1000 "$dir/a.hnr" --players=1 | awk '{print $NF}')
 b=$("$tool" record ClassicH 1000 "$dir/b.hnr" --players=2 | awk '{print $NF}')
 if [ "$a" = "$b" ]; then echo "FAIL: different races hashed the same"; fail=1; fi
+# A long race (a 25-minute race is 94,000 ticks): the replay still verifies and stays small.
+expect_ok "$tool" record "The Alley2" 100000 "$dir/long.hnr" --players=2
+expect_ok "$tool" verify "$dir/long.hnr"
+# Mutation fuzzing of the decoder with the CRC repaired (run under the sanitizer build in CI).
+expect_ok "$tool" fuzz "$dir/ClassicH.hnr" 5000
 [ $fail -eq 0 ] && echo "replay: record/verify round trip and corruption checks passed"
 exit $fail

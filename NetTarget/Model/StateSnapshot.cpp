@@ -93,7 +93,7 @@ std::vector<std::uint8_t> MR_SaveLevelState( const MR_Level* pLevel, std::int64_
    return lWriter.mBytes;
 }
 
-bool MR_RestoreLevelState( MR_Level* pLevel, const std::uint8_t* pData, std::size_t pSize,
+static bool RestoreLevelStateUnchecked( MR_Level* pLevel, const std::uint8_t* pData, std::size_t pSize,
                            const std::vector<MR_FreeElement*>& pExternal, std::uint32_t pRules,
                            std::int64_t& pSimulationTime, std::string& pError )
 {
@@ -212,4 +212,20 @@ bool MR_RestoreLevelState( MR_Level* pLevel, const std::uint8_t* pData, std::siz
    }
    pSimulationTime = lTime;
    return true;
+}
+
+// Hostile or damaged data must never take the program down: anything the object factory or an element throws is a refusal.
+bool MR_RestoreLevelState( MR_Level* pLevel, const std::uint8_t* pData, std::size_t pSize,
+                           const std::vector<MR_FreeElement*>& pExternal, std::uint32_t pRules,
+                           std::int64_t& pSimulationTime, std::string& pError )
+{
+   try
+   {
+      return RestoreLevelStateUnchecked( pLevel, pData, pSize, pExternal, pRules, pSimulationTime, pError );
+   }
+   catch( ... )
+   {
+      pError = "the snapshot describes something the simulation cannot create";
+      return false;
+   }
 }
