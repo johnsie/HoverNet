@@ -4,7 +4,7 @@
 
 Deliver a playable browser client at **https://hovernet.outiva.com**, served by Apache on `192.168.10.181`. Match the supported **shared Windows x64 client** (`HoverNet.exe`) in its user-visible menus, settings, controls, tracks, race rules, HUD, and gameplay behavior. The current 64-bit client is the shared SDL2/ImGui client, also built on Linux; it is the reference implementation, not the legacy Win32/MFC client.
 
-“Exactly the same” is the acceptance target for behavior and presentation. Browser constraints still require browser-shaped inputs, storage, audio policy, and networking. These adaptations must preserve the same actions and outcomes; they must not silently remove game features. Publish a parity matrix and get the product owner to accept any unavoidable browser-specific differences before calling the web client complete.
+“Exactly the same” is the acceptance target for behavior and presentation. Browser constraints still require browser-shaped inputs, storage, audio policy, and networking. These adaptations must preserve the same actions and outcomes; they must not silently remove game features. Publish a parity matrix and get the product owner to accept any unavoidable browser-specific differences before calling the web client complete. The matrix is [web-parity-matrix.md](web-parity-matrix.md).
 
 ## Current baseline and main gaps
 

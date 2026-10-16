@@ -565,8 +565,11 @@ void MR_CylinderRoomContact( const MR_CylinderShape* pActor, const MR_PolygonSha
             lOldLenDistance /= pRoom->SideLen( lCounter );
              */
 
-            MR_Int32 lLenDistance =  ((pRoom->X(lP1)-pRoom->X(lCounter))/2)*((pActor->AxisX()-pRoom->X(lCounter))/2)
-                                    +((pRoom->Y(lP1)-pRoom->Y(lCounter))/2)*((pActor->AxisY()-pRoom->Y(lCounter))/2);
+            // The sum of the two products can exceed 32 bits on large tracks. The original relied on it
+            // wrapping; do the addition unsigned so the wrap is defined and the result is unchanged.
+            const MR_Int32 lLenDistanceX = ((pRoom->X(lP1)-pRoom->X(lCounter))/2)*((pActor->AxisX()-pRoom->X(lCounter))/2);
+            const MR_Int32 lLenDistanceY = ((pRoom->Y(lP1)-pRoom->Y(lCounter))/2)*((pActor->AxisY()-pRoom->Y(lCounter))/2);
+            MR_Int32 lLenDistance = static_cast<MR_Int32>( static_cast<MR_UInt32>( lLenDistanceX ) + static_cast<MR_UInt32>( lLenDistanceY ) );
             
             lLenDistance /= pRoom->SideLen( lCounter )/4;
 
