@@ -57,6 +57,25 @@ No lobby, race or gameplay frame is processed before step 2 succeeds.
 | Spectate / replay | subscribe to a race; fetch the finished replay ([replay-format.md](replay-format.md)) | Stage 5 |
 | Keep-alive / time | ping with client tick and server tick, measured round trip | Drives the adaptive input delay |
 
+### What the code does today (message list as implemented)
+
+| Type | Name | Direction | Payload |
+| ---: | --- | --- | --- |
+| 1 | Hello | client to server | magic `HN3\0`, major, minor, capabilities, max frame, player name (1 to 32 bytes of UTF-8) |
+| 2 | HelloAck | server to client | version, capabilities, negotiated max frame, your player slot, players, tick length, rules version, track name and SHA-256, laps, weapons |
+| 3 | Reject | server to client | reason (version, full, bad message, rate limited, not in race), short message; the connection is then closed |
+| 4 | Start | server to client | countdown in ms before tick 0 |
+| 10 | Input | client to server | first tick, 1 to 32 control words (the newest are for the future, the older repeat earlier ones for loss) |
+| 11 | Tick | server to client | tick number, state hash after it, the control word each player used (so a client or spectator can re-simulate the race exactly) |
+| 12, 13 | SnapshotRequest, SnapshotChunk | client to server, server to client | request id; chunks of up to 900 bytes with index, count and the tick |
+| 14, 15 | Ping, Pong | both | client tick and a token; the server adds its tick (drives the adaptive input delay) |
+| 16 | Result | server to client | ticks, final hash, per player: rank, finished, laps, finish and best lap times |
+
+Not in the code yet: the encrypted session (X25519, Ed25519, ChaCha20-Poly1305) and message counters, the lobby and race
+list messages (still the 2.0 relay's), account tokens, and a separate Events group (lap, pickup and hit events are derived
+from the replayed simulation; the Result is the only authoritative announcement so far). The Resync of the draft is
+SnapshotRequest and SnapshotChunk.
+
 ## Timing and prediction
 
 - Tick 16 ms. Clients simulate locally with their own input applied immediately and the others' predicted as "same as last
