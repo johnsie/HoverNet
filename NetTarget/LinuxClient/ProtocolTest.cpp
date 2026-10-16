@@ -335,6 +335,71 @@ void TestResult(const std::string& track)
     Check(!host.IsClosed(a), "an input after the end is ignored, not an error");
 }
 
+// Runs a two-player race through a RaceHost with fixed inputs. With `tamper`, player 1 also sends everything it should not:
+// server-only messages, a forged Tick and Result, undefined control bits, inputs for ticks far ahead and in the past, and
+// garbage. The official outcome (state hash, results, replay) must be exactly that of the honest run with the same inputs.
+struct Outcome { std::uint64_t hash = 0; std::vector<Authority::PlayerResult> results; std::vector<std::uint8_t> replay; int invalid = 0; bool closed = false; };
+
+Outcome RunTampering(const std::string& track, bool tamper)
+{
+    HostConfig cfg = MakeConfig(track, 2);
+    cfg.startDelayMs = 0;
+    cfg.maxInvalidPerWindow = 100000;   // let the tamperer keep trying; closing it is tested elsewhere
+    RaceHost host(cfg);
+    std::string error;
+    host.Init(error);
+    const int a = host.Connect(0), b = host.Connect(0);
+    Send(host, a, HelloFrame("honest"), 0);
+    Send(host, b, HelloFrame("tamperer"), 0);
+    for (std::uint32_t t = 0; t < 600; ++t) {
+        const std::int64_t now = static_cast<std::int64_t>(t) * 16;
+        Protocol3::Input ia; ia.firstTick = t; ia.controls = {SimHarness::ScriptedInput(0, t)};
+        Send(host, a, Protocol3::EncodeFrame(Protocol3::kInput, Protocol3::Encode(ia)), now);
+        Protocol3::Input ib; ib.firstTick = t; ib.controls = {SimHarness::ScriptedInput(1, t)};
+        Send(host, b, Protocol3::EncodeFrame(Protocol3::kInput, Protocol3::Encode(ib)), now);
+        if (tamper) {
+            using namespace Protocol3;
+            Tick forged; forged.tick = t; forged.hash = 0xBAD; forged.controls = {1, 1};
+            Send(host, b, EncodeFrame(kTick, Encode(forged)), now);
+            Result forgedResult; forgedResult.players.resize(2); forgedResult.players[1].rank = 1; forgedResult.players[1].finished = true;
+            Send(host, b, EncodeFrame(kResult, Encode(forgedResult)), now);
+            HelloAck ack; ack.players = 2; ack.player = 0;
+            Send(host, b, EncodeFrame(kHelloAck, Encode(ack)), now);
+            Send(host, b, EncodeFrame(kStart, Encode(Start())), now);
+            Input wild; wild.firstTick = t + 1000; wild.controls = {0xFFFF};          // far in the future
+            Send(host, b, EncodeFrame(kInput, Encode(wild)), now);
+            if (t >= 10) {
+                Input past; past.firstTick = t - 5; past.controls = {0xFFFF, 0xFFFF};          // ticks already simulated
+                Send(host, b, EncodeFrame(kInput, Encode(past)), now);
+            }
+            Send(host, b, EncodeFrame(200, {1, 2, 3}), now);                          // unknown type
+        }
+        host.Advance(now);
+    }
+    Outcome o;
+    o.hash = host.Race().StateHash();
+    o.results = host.Race().Results();
+    o.replay = host.Race().ReplayBytes();
+    o.invalid = host.InvalidTotal();
+    o.closed = host.IsClosed(a);
+    return o;
+}
+
+void TestTampering(const std::string& track)
+{
+    const Outcome honest = RunTampering(track, false);
+    const Outcome tampered = RunTampering(track, true);
+    Check(honest.invalid == 0, "an honest run has no invalid messages");
+    Check(tampered.invalid > 1000, "the tamperer's forged and out-of-window messages were all counted as invalid");
+    Check(!tampered.closed, "the honest player is unaffected");
+    Check(honest.hash == tampered.hash, "forged messages do not change the official state hash");
+    bool sameResults = honest.results.size() == tampered.results.size();
+    for (std::size_t i = 0; sameResults && i < honest.results.size(); ++i)
+        sameResults = honest.results[i].rank == tampered.results[i].rank && honest.results[i].laps == tampered.results[i].laps && honest.results[i].finished == tampered.results[i].finished;
+    Check(sameResults, "forged messages do not change the official results");
+    Check(honest.replay == tampered.replay, "forged messages do not change the official replay, byte for byte");
+}
+
 void TestAbuse(const std::string& track)
 {
     std::string error;
@@ -457,6 +522,7 @@ int main(int argc, char** argv)
     TestRace(track, players);
     TestResult(track);
     TestAbuse(track);
+    TestTampering(track);
     std::printf("%s %d players: %s\n", track.c_str(), players, gFailures == 0 ? "protocol tests passed" : "FAILED");
     return gFailures == 0 ? 0 : 1;
 }
