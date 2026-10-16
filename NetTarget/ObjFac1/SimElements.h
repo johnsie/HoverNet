@@ -12,6 +12,7 @@
 #include "../Model/MazeElement.h"
 #include "../Model/PhysicalCollision.h"
 #include "../Model/RaceEffects.h"
+#include "../Model/StateHash.h"
 
 // Frames of the bumper gate's animation. The gate's collision shape grows with its current frame, so this is
 // simulation data; HoverNetBumperGateFrames (ctest) checks it against the resource file.
@@ -40,6 +41,7 @@ protected:
     const MR_ShapeInterface* GetReceivingContactEffectShape() override;
     int Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, int pRoom ) override;
     BOOL AssignPermNumber( int pNumber ) override;
+    void HashLogicState( MR_StateHasher& pHasher ) const override;
 
 private:
     MR_PowerUpEffect mEffect;
@@ -64,6 +66,7 @@ protected:
     int Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, int pRoom ) override;
     void ApplyEffect( const MR_ContactEffect* pEffect, MR_SimulationTime pTime, MR_SimulationTime pDuration, BOOL pValidDirection,
                       MR_Angle pHorizontalDirection, MR_Int32 pZMin, MR_Int32 pZMax, MR_Level* pLevel ) override;
+    void HashLogicState( MR_StateHasher& pHasher ) const override;
 
 private:
     MR_SimulationTime mTimeSinceLastCollision;
@@ -94,6 +97,7 @@ protected:
     void ApplyEffect( const MR_ContactEffect* pEffect, MR_SimulationTime pTime, MR_SimulationTime pDuration, BOOL pValidDirection,
                       MR_Angle pHorizontalDirection, MR_Int32 pZMin, MR_Int32 pZMax, MR_Level* pLevel ) override;
     int Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, int pRoom ) override;
+    void HashLogicState( MR_StateHasher& pHasher ) const override;
 
 private:
     int InternalSimulate( MR_SimulationTime pDuration, MR_Level* pLevel, int pRoom );
@@ -124,6 +128,7 @@ protected:
     const MR_ShapeInterface* GetReceivingContactEffectShape() override;
     BOOL AssignPermNumber( int pNumber ) override;
     int Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, int pRoom ) override;
+    void HashLogicState( MR_StateHasher& pHasher ) const override;
 
 private:
     BOOL mOnGround;
@@ -160,6 +165,7 @@ protected:
     const MR_ContactEffectList* GetEffectList() override;
     const MR_ShapeInterface* GetReceivingContactEffectShape() override;
     const MR_ShapeInterface* GetGivingContactEffectShape() override;
+    void HashLogicState( MR_StateHasher& pHasher ) const override;
 
 private:
     int mXSpeed;

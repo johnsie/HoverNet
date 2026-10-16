@@ -32,6 +32,7 @@
 #undef private
 #undef protected
 #include "../Model/GameSession.h"
+#include "../Model/StateHash.h"
 #ifndef __EMSCRIPTEN__
 #include "../ObjFac1/SimElements.h"
 #endif
@@ -111,25 +112,7 @@ struct World
         ++tick;
     }
 
-    std::uint64_t Hash() const
-    {
-        std::uint64_t h = 1469598103934665603ULL;
-        auto mix = [&h](std::uint64_t v) {
-            for (int b = 0; b < 8; ++b) { h ^= (v >> (b * 8)) & 0xFF; h *= 1099511628211ULL; }
-        };
-        for (const MR_MainCharacter* c : craft) {
-            mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(c->mPosition.mX)));
-            mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(c->mPosition.mY)));
-            mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(c->mPosition.mZ)));
-            mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(c->mRoom)));
-            mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(c->mOrientation)));
-            std::uint64_t bits;
-            std::memcpy(&bits, &c->mXSpeed, 8); mix(bits);
-            std::memcpy(&bits, &c->mYSpeed, 8); mix(bits);
-            std::memcpy(&bits, &c->mZSpeed, 8); mix(bits);
-        }
-        return h;
-    }
+    std::uint64_t Hash() const { return MR_HashLevelState(session->GetCurrentLevel(), session->GetSimulationTime()); }
 };
 
 struct Packet

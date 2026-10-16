@@ -34,6 +34,7 @@
 #undef private
 #undef protected
 #include "../Model/GameSession.h"
+#include "../Model/StateHash.h"
 #ifndef __EMSCRIPTEN__
 #include "../ObjFac1/SimElements.h"
 #endif
@@ -205,44 +206,15 @@ int main(int argc, char** argv)
         if (rival != nullptr) rival->SetControlState(ControlsForFrame(frame, 1), session.GetSimulationTime());
         session.SimulateStep(kFrameMs);
 
-        std::uint64_t hash = kFnvOffset;
-        Mix(hash, static_cast<std::uint64_t>(session.GetSimulationTime()));
-        Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(player->mPosition.mX)));
-        Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(player->mPosition.mY)));
-        Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(player->mPosition.mZ)));
-        Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(player->mRoom)));
-        Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(player->mOrientation)));
-        Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(player->GetCabinOrientation())));
-        MixDouble(hash, player->mXSpeed);
-        MixDouble(hash, player->mYSpeed);
-        MixDouble(hash, player->mZSpeed);
-        MixDouble(hash, player->GetFuelLevel());
-        Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(player->GetTotalTime())));
-        if (rival != nullptr) {
-            Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(rival->mPosition.mX)));
-            Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(rival->mPosition.mY)));
-            Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(rival->mPosition.mZ)));
-            Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(rival->mRoom)));
-            Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(rival->mOrientation)));
-            MixDouble(hash, rival->mXSpeed);
-            MixDouble(hash, rival->mYSpeed);
-            MixDouble(hash, rival->mZSpeed);
-            MixDouble(hash, rival->GetFuelLevel());
-        }
-        // Every free element in the level (craft, missiles, mines, power-ups) in list order.
+        // The whole state of the race, hashed by the simulation library itself.
+        const std::uint64_t hash = MR_HashLevelState(level, session.GetSimulationTime());
         int elementCount = 0;
         for (int room = -1; room < level->GetRoomCount(); ++room) {
             for (MR_FreeElementHandle handle = level->GetFirstFreeElement(room); handle != nullptr;
                  handle = MR_Level::GetNextFreeElement(handle)) {
-                const MR_FreeElement* element = MR_Level::GetFreeElement(handle);
-                Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(element->mPosition.mX)));
-                Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(element->mPosition.mY)));
-                Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(element->mPosition.mZ)));
-                Mix(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(element->mOrientation)));
                 ++elementCount;
             }
         }
-        Mix(hash, static_cast<std::uint64_t>(elementCount));
         maxElements = elementCount > maxElements ? elementCount : maxElements;
         if (state) {
             std::printf("%d pos=%d,%d,%d room=%d or=%d cab=%d speed=%.17g,%.17g,%.17g fuel=%.17g\n", frame,

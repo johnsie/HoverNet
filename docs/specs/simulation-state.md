@@ -16,9 +16,10 @@ The complete, deterministic state of a race is:
    level's per-room lists *in list order* (order affects results).
 5. **Level logic state:** anything on the track that changes during a race (pickup availability and respawn timers).
 
-*Implemented today:* items 1, 2 and the craft and free-element parts of 3 and 4 are covered by the hash in
-[replay-format.md](replay-format.md). Items 3 (weapons, laps) and 5 are exercised by the golden races but not yet part of
-the hash; adding them changes every golden hash once, deliberately, under a new `rules` version.
+*Implemented (rules version 3):* the hash covers items 1 (by track identity in replays), 2, 3 and 4 completely:
+`MR_HashLevelState` walks the level and each element feeds its own logic state to the hasher
+(`MR_Element::HashLogicState`). Item 5 (level logic such as pickup respawn timers) lives in the elements themselves in
+this simulation, so it is covered the same way; surfaces carry no per-race state.
 
 ## Inputs
 
@@ -28,8 +29,8 @@ No wall clock, no random numbers (there are none in the simulation sources), no 
 ## Hashing
 
 FNV-1a, 64 bit, over the fields above in a fixed order, with floating-point values hashed by exact bit pattern. A one-bit
-difference anywhere is a divergence. The Stage 1 `sim` library will own the hash function; today it is duplicated in the
-test tools (`HoverNetDeterminismRun`, `HoverNetReplay`).
+difference anywhere is a divergence. The hash function lives in the simulation library (`Model/StateHash.*`); the determinism runner, the replay tool and the
+netcode prototype all call it.
 
 ## Numeric rules (proposed)
 

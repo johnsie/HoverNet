@@ -28,6 +28,7 @@
 
 #include "MainCharacter.h"
 #include "../Model/RaceEffects.h"
+#include "../Model/StateHash.h"
 #include "../Model/FreeElementMovingHelper.h"
 #include "../Util/FuzzyLogic.h"
 
@@ -261,6 +262,48 @@ void MR_MainCharacter::SetOrientation( MR_Angle pOrientation )
    mCabinOrientation = pOrientation;
 }
 
+
+// Everything the craft's behaviour depends on, for the state hash (docs/specs/simulation-state.md). Position, room and
+// orientation are hashed by the level; presentation state (renderer, sound queues) is not part of the simulation.
+void MR_MainCharacter::HashLogicState( MR_StateHasher& pHasher ) const
+{
+   pHasher.Int( mRoom );
+   pHasher.Int( mMasterMode );
+   pHasher.Int( mHoverModel );
+   pHasher.Int( mHoverId );
+   pHasher.Int( mControlState );
+   pHasher.Int( mMotorOnState );
+   pHasher.Int( mAllowWeapons );
+   pHasher.Double( mXSpeed );
+   pHasher.Double( mYSpeed );
+   pHasher.Double( mZSpeed );
+   pHasher.Double( mXSpeedBeforeCollision );
+   pHasher.Double( mYSpeedBeforeCollision );
+   pHasher.Int( mBlockedSteps );
+   pHasher.Int( mOnFloor );
+   pHasher.Int( mCabinOrientation );
+   pHasher.Int( mOutOfControlDuration );
+   pHasher.Int( mFireDone );
+   pHasher.Int( mCurrentWeapon );
+   pHasher.Int( mMissileRefillDuration );
+   pHasher.Int( mJumpRefillDuration );
+   pHasher.Int( mMineList.Used() );
+   for( int lIndex = 0; lIndex < mMineList.Used(); ++lIndex ) pHasher.Int( mMineList[ lIndex ] );
+   pHasher.Int( mPowerUpList.Used() );
+   for( int lIndex = 0; lIndex < mPowerUpList.Used(); ++lIndex ) pHasher.Int( mPowerUpList[ lIndex ] );
+   pHasher.Int( mPowerUpLeft );
+   pHasher.Double( mFuelLevel );
+   pHasher.Int( mNbLapForRace );
+   pHasher.Int( mLapCount );
+   pHasher.Int( mLastLapCompletion );
+   pHasher.Int( mLastLapDuration );
+   pHasher.Int( mBestLapDuration );
+   pHasher.Int( mCheckPoint1 );
+   pHasher.Int( mCheckPoint2 );
+   pHasher.Int( mLastHits.Used() );
+   for( int lIndex = 0; lIndex < mLastHits.Used(); ++lIndex ) pHasher.Int( mLastHits[ lIndex ] );
+   pHasher.Int( GetTotalTime() );
+}
 
 double MR_MainCharacter::GetNormalisedSpeed() const
 {

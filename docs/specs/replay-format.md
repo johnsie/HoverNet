@@ -14,7 +14,7 @@ All integers are little-endian and unsigned. There is no padding and no host-nat
 | magic | 4 | ASCII `HNRP` |
 | version | 2 | `1`. A reader rejects any other value |
 | flags | 2 | `0` in v1; reserved |
-| rules | 4 | Simulation rules version the race was recorded under (`1` for the first portable simulation, `2` since the original missile speed was restored). Bumped when a deliberate change alters the golden hashes ([determinism.md](../determinism.md)) |
+| rules | 4 | Simulation rules version the race was recorded under (`1` for the first portable simulation, `2` once the original missile speed was restored, `3` since the hash covers the full simulation state). Bumped when a deliberate change alters the golden hashes ([determinism.md](../determinism.md)) |
 | tick_ms | 4 | Tick length in milliseconds. `16` in v1 |
 | track name | 1 + n | Length byte, then the name as the game knows it (bytes, no terminator) |
 | track sha256 | 1 + 64 | Length byte (`64`), then lower-case hex SHA-256 of the `.trk` file (the manifest hash) |
@@ -31,10 +31,13 @@ All integers are little-endian and unsigned. There is no padding and no host-nat
 `32` brake/reverse direction, `64` jump, `128` fire, `2048` select weapon (`MR_MainCharacter`). Unknown bits must be
 preserved by writers and are ignored by the simulation.
 
-**State hash** is FNV-1a (64-bit) over, in order: for each craft its position (x, y, z), room, orientation, the exact
-bits of its three speeds and fuel, and its race time; then the position and orientation of every free element in the level
-(missiles, mines, power-ups) in list order, and the element count. The hash definition is part of the format: changing it
-requires a new `rules` value. See [simulation-state.md](simulation-state.md).
+**State hash** is `MR_HashLevelState` (`NetTarget/Model/StateHash.cpp`): FNV-1a (64-bit) over the simulation time, then
+every free element of the level in list order (room, factory and class id, position, orientation, and the element's own
+logic state through `MR_Element::HashLogicState`), then the element count. Hovercraft contribute their whole behavioural
+state (speeds and fuel by exact bit pattern, control and weapon state, countdowns, mine and power-up stocks, lap and
+checkpoint progress, the last-hit list, race time); missiles, mines, bumper gates, power-ups and the physical test element
+contribute theirs. The hash definition is part of the format: changing it requires a new `rules` value (current: `3`). See
+[simulation-state.md](simulation-state.md).
 
 ## Reader rules
 

@@ -158,6 +158,9 @@
 				RelativePath=".\ShapeCollisions.cpp">
 			</File>
 			<File
+				RelativePath=".\StateHash.cpp">
+			</File>
+			<File
 				RelativePath=".\Shapes.cpp">
 			</File>
 			<File

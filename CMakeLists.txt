@@ -144,6 +144,7 @@ add_library(HoverNetModelCore STATIC
     NetTarget/Model/PhysicalCollision.cpp
     NetTarget/Model/Shapes.cpp
     NetTarget/Model/ShapeCollisions.cpp
+    NetTarget/Model/StateHash.cpp
 )
 
 target_link_libraries(HoverNetModelCore PUBLIC HoverNetPortableUtil)

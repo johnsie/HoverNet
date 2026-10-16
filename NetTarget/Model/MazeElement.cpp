@@ -56,6 +56,10 @@ BOOL MR_Element::InitString( const char* pInitStr )
    return lReturnValue;
 }
 
+void MR_Element::HashLogicState( MR_StateHasher& /*pHasher*/ ) const
+{
+}
+
 void MR_Element::SerializeLogicState( CArchive& /*pArchive*/ )
 {
    // The default function do notting   

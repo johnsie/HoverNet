@@ -79,6 +79,7 @@
     <ClCompile Include="PhysicalCollision.cpp" />
     <ClCompile Include="ShapeCollisions.cpp" />
     <ClCompile Include="Shapes.cpp" />
+    <ClCompile Include="StateHash.cpp" />
     <ClCompile Include="StdAfx.cpp" />
   </ItemGroup>
   <ItemGroup>

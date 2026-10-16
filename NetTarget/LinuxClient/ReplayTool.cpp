@@ -24,6 +24,7 @@
 #undef private
 #undef protected
 #include "../Model/GameSession.h"
+#include "../Model/StateHash.h"
 #ifndef __EMSCRIPTEN__
 #include "../ObjFac1/SimElements.h"
 #endif
@@ -41,7 +42,7 @@ namespace
 constexpr int kFrameMs = 16;
 constexpr std::uint32_t kCheckpointTicks = 250;
 constexpr std::uint16_t kVersion = 1;
-constexpr std::uint32_t kSimulationRules = 2;  // bump when a deliberate change alters the golden hashes
+constexpr std::uint32_t kSimulationRules = 3;  // bump when a deliberate change alters the golden hashes
 constexpr std::uint32_t kMaxTicks = 2u * 60 * 60 * 1000 / kFrameMs;  // two hours
 constexpr int kMaxPlayers = 8;
 
@@ -194,34 +195,8 @@ struct World
         session->SimulateStep(kFrameMs);
     }
 
-    // Every craft and every free element (missiles, mines, power-ups), with exact floating-point bits.
-    std::uint64_t Hash() const
-    {
-        std::uint64_t h = 1469598103934665603ULL;
-        auto mix = [&h](std::uint64_t v) {
-            for (int b = 0; b < 8; ++b) { h ^= (v >> (b * 8)) & 0xFF; h *= 1099511628211ULL; }
-        };
-        auto mixInt = [&](std::int64_t v) { mix(static_cast<std::uint64_t>(v)); };
-        auto mixDouble = [&](double d) { std::uint64_t bits; std::memcpy(&bits, &d, 8); mix(bits); };
-        for (const MR_MainCharacter* c : craft) {
-            mixInt(c->mPosition.mX); mixInt(c->mPosition.mY); mixInt(c->mPosition.mZ);
-            mixInt(c->mRoom); mixInt(c->mOrientation);
-            mixDouble(c->mXSpeed); mixDouble(c->mYSpeed); mixDouble(c->mZSpeed);
-            mixDouble(c->GetFuelLevel());
-            mixInt(c->GetTotalTime());
-        }
-        const MR_Level* level = session->GetCurrentLevel();
-        int count = 0;
-        for (int room = -1; room < level->GetRoomCount(); ++room) {
-            for (MR_FreeElementHandle e = level->GetFirstFreeElement(room); e != nullptr; e = MR_Level::GetNextFreeElement(e)) {
-                const MR_FreeElement* el = MR_Level::GetFreeElement(e);
-                mixInt(el->mPosition.mX); mixInt(el->mPosition.mY); mixInt(el->mPosition.mZ); mixInt(el->mOrientation);
-                ++count;
-            }
-        }
-        mixInt(count);
-        return h;
-    }
+    // The whole state of the race, hashed by the simulation library (docs/specs/simulation-state.md).
+    std::uint64_t Hash() const { return MR_HashLevelState(session->GetCurrentLevel(), session->GetSimulationTime()); }
 };
 
 std::string TrackPath(const std::string& name)

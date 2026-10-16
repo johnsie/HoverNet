@@ -21,6 +21,7 @@ running the legacy plug-in, which does not build outside Windows.
 | Power-up | Yes: same size, rotation by the elapsed time, same effect |
 | Bumper gate | Yes: same size interpolation, same 1,500 / 9,000 / 13,000 ms timeline |
 | Fuel, speed zones, finish line | Compiled from the same source files in both |
+| Surfaces (classic 1 to 5, track set 50 to 73) | Yes: the legacy classes all derive from `MR_BitmapSurface`, whose only simulation behaviour is one shared infinite-weight, zero-speed collision effect; `MR_SimSurface` is the same |
 | **Missile** | **No** (below) |
 
 ### Missile differences

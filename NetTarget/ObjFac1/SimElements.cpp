@@ -398,6 +398,40 @@ const MR_ShapeInterface* MR_SimTestElement::GetGivingContactEffectShape()
     return &mContactShape;
 }
 
+// ---- state hash (docs/specs/simulation-state.md) ----------------------------------------------------------------
+
+void MR_SimPowerUp::HashLogicState( MR_StateHasher& pHasher ) const
+{
+    pHasher.Int( mEffect.mElementPermId );
+}
+
+void MR_SimBumperGate::HashLogicState( MR_StateHasher& pHasher ) const
+{
+    pHasher.Int( mTimeSinceLastCollision );
+    pHasher.Int( mLastState );
+    pHasher.Int( mCurrentFrame );
+}
+
+void MR_SimMissile::HashLogicState( MR_StateHasher& pHasher ) const
+{
+    pHasher.Int( mHoverId );
+    pHasher.Int( mLived );
+    pHasher.Double( mXSpeed );
+    pHasher.Double( mYSpeed );
+}
+
+void MR_SimMine::HashLogicState( MR_StateHasher& pHasher ) const
+{
+    pHasher.Int( mOnGround );
+    pHasher.Int( mLostOfControlEffect.mElementId );
+}
+
+void MR_SimTestElement::HashLogicState( MR_StateHasher& pHasher ) const
+{
+    pHasher.Int( mXSpeed );
+    pHasher.Int( mYSpeed );
+}
+
 // ---- registry --------------------------------------------------------------------------------------------------
 
 MR_ObjectFromFactory* MR_CreateSimElement( MR_UInt16 pClassId )
