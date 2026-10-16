@@ -69,7 +69,7 @@ class MR_3DViewPort;
 // Renderer bases
 class MR_SurfaceElementRenderer; // used and defines by the Observer module
 class MR_FreeElementRenderer;    // used and defines by the Observer module
-class MR_StateHasher;
+class MR_StateVisitor;
 
 class MR_FreeElementMovingInterface;
 
@@ -91,7 +91,7 @@ class MR_DllDeclare MR_Element: public MR_ObjectFromFactory
       virtual BOOL InitString( const char* pInitStr = NULL );   // Initialisation string used during maze creation
 
       virtual void SerializeLogicState( CArchive& pArchive );          // Serialize the logic component and the body of the component
-      virtual void HashLogicState( MR_StateHasher& pHasher ) const;    // Feed everything the simulation of this element depends on (beyond position and orientation) to the state hash
+      virtual void VisitLogicState( MR_StateVisitor& pVisitor );        // List everything the simulation of this element depends on (beyond position and orientation): hashed, saved and restored through one list
 
       // Contact effect interface
       virtual void ApplyEffect( const MR_ContactEffect* pEffect, MR_SimulationTime pTime, MR_SimulationTime pDuration, BOOL pValidDirection, MR_Angle pHorizontalDirection, MR_Int32 pZMin, MR_Int32 pZMax, MR_Level* pLevel );

@@ -398,38 +398,42 @@ const MR_ShapeInterface* MR_SimTestElement::GetGivingContactEffectShape()
     return &mContactShape;
 }
 
-// ---- state hash (docs/specs/simulation-state.md) ----------------------------------------------------------------
+// ---- logic state (hashed, saved and restored from one list; docs/specs/simulation-state.md) ----------------------
 
-void MR_SimPowerUp::HashLogicState( MR_StateHasher& pHasher ) const
+void MR_SimPowerUp::VisitLogicState( MR_StateVisitor& pVisitor )
 {
-    pHasher.Int( mEffect.mElementPermId );
+    pVisitor.Int( mEffect.mElementPermId );
 }
 
-void MR_SimBumperGate::HashLogicState( MR_StateHasher& pHasher ) const
+void MR_SimBumperGate::VisitLogicState( MR_StateVisitor& pVisitor )
 {
-    pHasher.Int( mTimeSinceLastCollision );
-    pHasher.Int( mLastState );
-    pHasher.Int( mCurrentFrame );
+    pVisitor.Int( mTimeSinceLastCollision );
+    pVisitor.Int( mLastState );
+    pVisitor.Int( mCurrentFrame );
 }
 
-void MR_SimMissile::HashLogicState( MR_StateHasher& pHasher ) const
+void MR_SimMissile::VisitLogicState( MR_StateVisitor& pVisitor )
 {
-    pHasher.Int( mHoverId );
-    pHasher.Int( mLived );
-    pHasher.Double( mXSpeed );
-    pHasher.Double( mYSpeed );
+    pVisitor.Int( mHoverId );
+    pVisitor.Int( mLived );
+    pVisitor.Double( mXSpeed );
+    pVisitor.Double( mYSpeed );
+    pVisitor.Int( mBounceSoundEvent );
+    if( pVisitor.IsLoading() ) {
+        mLostOfControlEffect.mHoverId = mHoverId;
+    }
 }
 
-void MR_SimMine::HashLogicState( MR_StateHasher& pHasher ) const
+void MR_SimMine::VisitLogicState( MR_StateVisitor& pVisitor )
 {
-    pHasher.Int( mOnGround );
-    pHasher.Int( mLostOfControlEffect.mElementId );
+    pVisitor.Int( mOnGround );
+    pVisitor.Int( mLostOfControlEffect.mElementId );
 }
 
-void MR_SimTestElement::HashLogicState( MR_StateHasher& pHasher ) const
+void MR_SimTestElement::VisitLogicState( MR_StateVisitor& pVisitor )
 {
-    pHasher.Int( mXSpeed );
-    pHasher.Int( mYSpeed );
+    pVisitor.Int( mXSpeed );
+    pVisitor.Int( mYSpeed );
 }
 
 // ---- registry --------------------------------------------------------------------------------------------------

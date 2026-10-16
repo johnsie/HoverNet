@@ -552,6 +552,11 @@ void MR_Level::DeleteElement( MR_FreeElementHandle pHandle )
    delete ((FreeElement*)pHandle);
 }
 
+int MR_Level::GetPermanentElementCount()const
+{
+   return mNbPermNetActor;
+}
+
 MR_FreeElementHandle MR_Level::GetPermanentElementHandle( int pElem )const
 {
 

@@ -80,6 +80,7 @@
     <ClCompile Include="ShapeCollisions.cpp" />
     <ClCompile Include="Shapes.cpp" />
     <ClCompile Include="StateHash.cpp" />
+    <ClCompile Include="StateSnapshot.cpp" />
     <ClCompile Include="StdAfx.cpp" />
   </ItemGroup>
   <ItemGroup>

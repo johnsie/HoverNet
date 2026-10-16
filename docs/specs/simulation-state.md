@@ -46,10 +46,29 @@ netcode prototype all call it.
 - Narrowing casts of floating-point values to unsigned types are forbidden (a negative double cast to `unsigned` was the
   one real cross-platform divergence found).
 
-## Snapshots (Stage 1)
+## Snapshots (implemented, rules version 4)
 
-A versioned snapshot is a tagged, explicit-width, little-endian serialisation of items 2 to 5, with a leading
-`snapshot_version`, the `rules` version and a CRC. Requirements: restoring a snapshot then simulating N ticks gives the
-same hash as simulating those N ticks from the original state (property test over the corpus); a snapshot taken on one
-platform restores on every other. Snapshots are needed for mid-race joins, spectators, replay seeking and server-side lag
-compensation; rollback prediction does not need them ([netcode-prototype.md](../netcode-prototype.md)).
+`MR_SaveLevelState` / `MR_RestoreLevelState` (`NetTarget/Model/StateSnapshot.*`). A snapshot is a stream of 8-byte
+little-endian values, the same for every platform: header (magic `HNSS`, snapshot version 1, rules version, simulation time,
+element count), then every free element in list order, then a checksum of everything before it. For each element: its kind,
+a key, room, factory and class id, position, orientation, then its logic state.
+
+- **Kinds.** *Permanent* elements come with the track (power-ups, bumper gates, fuel zones) and are restored in place by
+  index. *External* elements are owned by the program (the craft); the caller passes the same list when saving and
+  restoring. *Transient* elements (missiles, mines) are destroyed and re-created from their class id.
+- **One field list.** Each element lists its behaviourally relevant fields once (`MR_Element::VisitLogicState`), and that
+  list is what the state hash, the snapshot writer and the snapshot reader all use. A field cannot be hashed without being
+  restored, or the reverse.
+- **List order** inside each room is restored, because the simulation order depends on it.
+- **Refusals.** A damaged, truncated, wrong-version or wrong-rules snapshot, or one for a different track (a permanent
+  element that does not exist, a room the level lacks), is refused with a message. After a refusal the level may be partly
+  restored and must be discarded.
+
+**Property test** (`HoverNetSnapshotTest`, ctest `HoverNetSnapshot`, [snapshot-golden.txt](../snapshot-golden.txt)): on the
+seven bundled tracks at ticks 400 and 1,400, with missiles and mines in flight at the snapshot point, the race is
+snapshotted, run on for 2,000 ticks recording the hash each tick, restored in the same session and in a brand new one, and
+must reproduce every one of those hashes; saving again after a restore must give identical bytes; and the snapshot bytes
+must be identical on Linux, Windows x64 and Win32. Removing a field from the list (a missile's age) makes the test fail at
+the tick the missile would have expired.
+
+Not yet: partial snapshots (deltas) for bandwidth, and compression. Snapshot size is 1.2 to 1.6 KB for two craft.

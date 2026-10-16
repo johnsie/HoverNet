@@ -161,6 +161,9 @@
 				RelativePath=".\StateHash.cpp">
 			</File>
 			<File
+				RelativePath=".\StateSnapshot.cpp">
+			</File>
+			<File
 				RelativePath=".\Shapes.cpp">
 			</File>
 			<File

@@ -204,7 +204,7 @@ class MR_MainCharacter:public MR_FreeElement
       void AddRenderer();
       void Render( MR_3DViewPort* pDest, MR_SimulationTime pTime );
 
-      void HashLogicState( MR_StateHasher& pHasher ) const override;
+      void VisitLogicState( MR_StateVisitor& pVisitor ) override;
       MR_DllDeclare MR_ElementNetState GetNetState()const;
       MR_DllDeclare void               SetNetState( int pDataLen, const MR_UInt8* pData );
 

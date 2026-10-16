@@ -263,46 +263,71 @@ void MR_MainCharacter::SetOrientation( MR_Angle pOrientation )
 }
 
 
-// Everything the craft's behaviour depends on, for the state hash (docs/specs/simulation-state.md). Position, room and
-// orientation are hashed by the level; presentation state (renderer, sound queues) is not part of the simulation.
-void MR_MainCharacter::HashLogicState( MR_StateHasher& pHasher ) const
+// A small FIFO as a count and its items; on load the FIFO is rebuilt.
+template <class pFifo> static void VisitFifo( MR_StateVisitor& pVisitor, pFifo& pQueue )
 {
-   pHasher.Int( mRoom );
-   pHasher.Int( mMasterMode );
-   pHasher.Int( mHoverModel );
-   pHasher.Int( mHoverId );
-   pHasher.Int( mControlState );
-   pHasher.Int( mMotorOnState );
-   pHasher.Int( mAllowWeapons );
-   pHasher.Double( mXSpeed );
-   pHasher.Double( mYSpeed );
-   pHasher.Double( mZSpeed );
-   pHasher.Double( mXSpeedBeforeCollision );
-   pHasher.Double( mYSpeedBeforeCollision );
-   pHasher.Int( mBlockedSteps );
-   pHasher.Int( mOnFloor );
-   pHasher.Int( mCabinOrientation );
-   pHasher.Int( mOutOfControlDuration );
-   pHasher.Int( mFireDone );
-   pHasher.Int( mCurrentWeapon );
-   pHasher.Int( mMissileRefillDuration );
-   pHasher.Int( mJumpRefillDuration );
-   pHasher.Int( mMineList.Used() );
-   for( int lIndex = 0; lIndex < mMineList.Used(); ++lIndex ) pHasher.Int( mMineList[ lIndex ] );
-   pHasher.Int( mPowerUpList.Used() );
-   for( int lIndex = 0; lIndex < mPowerUpList.Used(); ++lIndex ) pHasher.Int( mPowerUpList[ lIndex ] );
-   pHasher.Int( mPowerUpLeft );
-   pHasher.Double( mFuelLevel );
-   pHasher.Int( mNbLapForRace );
-   pHasher.Int( mLapCount );
-   pHasher.Int( mLastLapCompletion );
-   pHasher.Int( mLastLapDuration );
-   pHasher.Int( mBestLapDuration );
-   pHasher.Int( mCheckPoint1 );
-   pHasher.Int( mCheckPoint2 );
-   pHasher.Int( mLastHits.Used() );
-   for( int lIndex = 0; lIndex < mLastHits.Used(); ++lIndex ) pHasher.Int( mLastHits[ lIndex ] );
-   pHasher.Int( GetTotalTime() );
+   int lUsed = pQueue.Used();
+   pVisitor.Int( lUsed );
+   if( pVisitor.IsLoading() )
+   {
+      pQueue.Clean();
+      for( int lIndex = 0; lIndex < lUsed && lIndex < pQueue.TotalSize(); ++lIndex )
+      {
+         int lItem = 0;
+         pVisitor.Int( lItem );
+         pQueue.Add( lItem );
+      }
+   }
+   else
+   {
+      for( int lIndex = 0; lIndex < lUsed; ++lIndex )
+      {
+         int lItem = pQueue[ lIndex ];
+         pVisitor.Int( lItem );
+      }
+   }
+}
+
+// Everything the craft's behaviour depends on (docs/specs/simulation-state.md). Position and orientation are handled
+// by the level; presentation state (renderer, sound queues) is not part of the simulation. The same list hashes,
+// saves and restores the craft.
+void MR_MainCharacter::VisitLogicState( MR_StateVisitor& pVisitor )
+{
+   pVisitor.Int( mRoom );
+   pVisitor.Int( mMasterMode );
+   pVisitor.Int( mHoverModel );
+   pVisitor.Int( mHoverId );
+   pVisitor.Int( mControlState );
+   pVisitor.Int( mMotorOnState );
+   pVisitor.Int( mMotorDisplay );
+   pVisitor.Int( mAllowWeapons );
+   pVisitor.Double( mXSpeed );
+   pVisitor.Double( mYSpeed );
+   pVisitor.Double( mZSpeed );
+   pVisitor.Double( mXSpeedBeforeCollision );
+   pVisitor.Double( mYSpeedBeforeCollision );
+   pVisitor.Int( mBlockedSteps );
+   pVisitor.Int( mOnFloor );
+   pVisitor.Int( mCabinOrientation );
+   pVisitor.Int( mOutOfControlDuration );
+   pVisitor.Int( mFireDone );
+   pVisitor.Int( mCurrentWeapon );
+   pVisitor.Int( mMissileRefillDuration );
+   pVisitor.Int( mJumpRefillDuration );
+   VisitFifo( pVisitor, mMineList );
+   VisitFifo( pVisitor, mPowerUpList );
+   pVisitor.Int( mPowerUpLeft );
+   pVisitor.Double( mFuelLevel );
+   pVisitor.Int( mNbLapForRace );
+   pVisitor.Int( mLapCount );
+   pVisitor.Int( mLastLapCompletion );
+   pVisitor.Int( mLastLapDuration );
+   pVisitor.Int( mBestLapDuration );
+   pVisitor.Int( mCheckPoint1 );
+   pVisitor.Int( mCheckPoint2 );
+   VisitFifo( pVisitor, mLastHits );
+   pVisitor.Int( mLastCollisionTime );
+   pVisitor.Int( mNetPriority );
 }
 
 double MR_MainCharacter::GetNormalisedSpeed() const

@@ -41,7 +41,7 @@ protected:
     const MR_ShapeInterface* GetReceivingContactEffectShape() override;
     int Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, int pRoom ) override;
     BOOL AssignPermNumber( int pNumber ) override;
-    void HashLogicState( MR_StateHasher& pHasher ) const override;
+    void VisitLogicState( MR_StateVisitor& pVisitor ) override;
 
 private:
     MR_PowerUpEffect mEffect;
@@ -66,7 +66,7 @@ protected:
     int Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, int pRoom ) override;
     void ApplyEffect( const MR_ContactEffect* pEffect, MR_SimulationTime pTime, MR_SimulationTime pDuration, BOOL pValidDirection,
                       MR_Angle pHorizontalDirection, MR_Int32 pZMin, MR_Int32 pZMax, MR_Level* pLevel ) override;
-    void HashLogicState( MR_StateHasher& pHasher ) const override;
+    void VisitLogicState( MR_StateVisitor& pVisitor ) override;
 
 private:
     MR_SimulationTime mTimeSinceLastCollision;
@@ -97,7 +97,7 @@ protected:
     void ApplyEffect( const MR_ContactEffect* pEffect, MR_SimulationTime pTime, MR_SimulationTime pDuration, BOOL pValidDirection,
                       MR_Angle pHorizontalDirection, MR_Int32 pZMin, MR_Int32 pZMax, MR_Level* pLevel ) override;
     int Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, int pRoom ) override;
-    void HashLogicState( MR_StateHasher& pHasher ) const override;
+    void VisitLogicState( MR_StateVisitor& pVisitor ) override;
 
 private:
     int InternalSimulate( MR_SimulationTime pDuration, MR_Level* pLevel, int pRoom );
@@ -128,7 +128,7 @@ protected:
     const MR_ShapeInterface* GetReceivingContactEffectShape() override;
     BOOL AssignPermNumber( int pNumber ) override;
     int Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, int pRoom ) override;
-    void HashLogicState( MR_StateHasher& pHasher ) const override;
+    void VisitLogicState( MR_StateVisitor& pVisitor ) override;
 
 private:
     BOOL mOnGround;
@@ -165,7 +165,7 @@ protected:
     const MR_ContactEffectList* GetEffectList() override;
     const MR_ShapeInterface* GetReceivingContactEffectShape() override;
     const MR_ShapeInterface* GetGivingContactEffectShape() override;
-    void HashLogicState( MR_StateHasher& pHasher ) const override;
+    void VisitLogicState( MR_StateVisitor& pVisitor ) override;
 
 private:
     int mXSpeed;

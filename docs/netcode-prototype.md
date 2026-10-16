@@ -60,7 +60,7 @@ errors of a few centimetres to half a metre are small; the 400 ms case is where 
 
 - It is a relay model of two peers. The authoritative-server design (the server owns the result and corrects clients)
   is a Stage 2 build; the same rollback machinery runs on the client in that design. Server-side lag compensation for
-  weapons (rewinding other craft to the shooter's view) needs real snapshots and is not exercised.
+  weapons (rewinding other craft to the shooter's view) needs snapshots; those now exist ([simulation-state.md](specs/simulation-state.md)) but the compensation itself is not built or exercised.
 - Eight players: prediction error grows with players and the replay cost with craft count; not measured yet.
 - Loss beyond the 16-tick window is modelled as a reliable resend delivered at the end, not as a stall.
 - Timings are Debug-build, desktop CPU. Phones and WebAssembly are untested (`HoverNetNetcodeProto` is not built for

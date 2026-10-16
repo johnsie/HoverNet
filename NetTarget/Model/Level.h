@@ -320,6 +320,7 @@ class MR_DllDeclare  MR_Level
       static MR_FreeElementHandle   GetNextFreeElement( MR_FreeElementHandle pHandle );
       static MR_FreeElement*        GetFreeElement( MR_FreeElementHandle     pHandle );
       MR_FreeElementHandle          GetPermanentElementHandle( int pElem )const;
+      int                           GetPermanentElementCount()const;
 
       void                          MoveElement(   MR_FreeElementHandle pHandle, int pNewRoom );                          // -1 mean non classified
       MR_FreeElementHandle          InsertElement( MR_FreeElement* pElement, int pNewRoom, BOOL Broadcast = FALSE );      // -1 mean non classified

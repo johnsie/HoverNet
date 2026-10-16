@@ -56,7 +56,7 @@ BOOL MR_Element::InitString( const char* pInitStr )
    return lReturnValue;
 }
 
-void MR_Element::HashLogicState( MR_StateHasher& /*pHasher*/ ) const
+void MR_Element::VisitLogicState( MR_StateVisitor& /*pVisitor*/ )
 {
 }
 

@@ -35,9 +35,9 @@ agree on all 18.
 
 **Rules version 2 (16 October 2026).** The golden hashes were regenerated once, when the missile was restored to the
 original game's speed (46.662, double) instead of the truncated 46 the portable plug-in had been using
-([legacy-element-differences.md](legacy-element-differences.md)). **Rules version 3** replaced the tools' ad hoc hash with the library's `MR_HashLevelState`, which covers the whole simulation
+([legacy-element-differences.md](legacy-element-differences.md)). **Rules version 4** adds the fields the snapshot needed (motor display, last collision time, network priority flag, a missile's pending bounce sound) to the one field list. **Rules version 3** replaced the tools' ad hoc hash with the library's `MR_HashLevelState`, which covers the whole simulation
 state (weapons, stocks, laps, countdowns, and every element's own state); the golden files were regenerated once. Hashes
-quoted in older notes below are from earlier versions; all current tables and files are version 3.
+quoted in older notes below are from earlier versions; all current tables and files are version 4.
 
 ## Results
 

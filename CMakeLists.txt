@@ -145,6 +145,7 @@ add_library(HoverNetModelCore STATIC
     NetTarget/Model/Shapes.cpp
     NetTarget/Model/ShapeCollisions.cpp
     NetTarget/Model/StateHash.cpp
+    NetTarget/Model/StateSnapshot.cpp
 )
 
 target_link_libraries(HoverNetModelCore PUBLIC HoverNetPortableUtil)
@@ -295,6 +296,11 @@ else()
         NetTarget/LinuxClient/NetcodeProto.cpp
     )
     target_link_libraries(HoverNetNetcodeProto PRIVATE HoverNetSim)
+
+    add_executable(HoverNetSnapshotTest
+        NetTarget/LinuxClient/SnapshotTest.cpp
+    )
+    target_link_libraries(HoverNetSnapshotTest PRIVATE HoverNetSim)
 
     add_executable(HoverNetReplay
         NetTarget/LinuxClient/ReplayTool.cpp
@@ -614,6 +620,9 @@ if(BUILD_TESTING AND NOT WIN32)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetSimBoundary
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/check-sim-boundary.sh
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetSnapshot
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-snapshot.sh $<TARGET_FILE:HoverNetSnapshotTest>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
