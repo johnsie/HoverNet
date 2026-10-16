@@ -30,7 +30,6 @@
 #include "../Model/RaceEffects.h"
 #include "../Model/FreeElementMovingHelper.h"
 #include "../Util/FuzzyLogic.h"
-#include "../ObjFacTools/ResActor.h"
 
 #define MR_NB_HOVER_MODEL 8
 
@@ -41,103 +40,6 @@
 #define MR_EON_CRAFT  19
 #define MR_MANTA_CRAFT 24
 #define MR_SELECTABLE_HOVER_MODEL_COUNT 5
-
-// Helper class to access ResActor internals
-class MR_ResActorFriend
-{
-   public:
-      static void Draw( const MR_ResActor* pActor, MR_3DViewPort* pDest, const MR_PositionMatrix& pMatrix, int pSequence, int pFrame );
-};
-
-// Simple concrete implementation of MainCharacterRenderer
-class MR_SimpleMainCharacterRenderer: public MR_MainCharacterRenderer
-{
-   private:
-      int                 mFrame;   // Current animation frame
-
-   public:
-      MR_SimpleMainCharacterRenderer( const MR_ObjectFromFactoryId& pId )
-         :MR_MainCharacterRenderer( pId ), mFrame(0)
-      {
-      }
-      
-      virtual ~MR_SimpleMainCharacterRenderer() {}
-
-      virtual void Render( MR_3DViewPort* pDest,
-                           const MR_3DCoordinate& pPosition,
-                           MR_Angle pOrientation,
-                           BOOL     pMotorOn,
-                           int      pHoverId,
-                           int      pModel )
-      {
-         if( pDest == NULL ) return;
-         
-         // Compute the required rotation matrix
-         MR_PositionMatrix lMatrix;
-         
-         // CRITICAL FIX: For the viewing character (player's own hovercraft), we should NOT cull it
-         // from view even if it appears outside the frustum. Use a very large tolerance.
-         // If ComputePositionMatrix still fails, we render it anyway because it's the player's perspective.
-         BOOL matrix_computed = pDest->ComputePositionMatrix( lMatrix, pPosition, pOrientation, 100000 );
-         
-         // Update animation frame
-         if( pMotorOn )
-         {
-            mFrame = (mFrame + 1) % 2;
-         }
-         else
-         {
-            mFrame = 0;
-         }
-         
-         // IMPORTANT: Even if matrix computation failed, we continue rendering the viewing character
-         // because it should NEVER disappear from the player's view
-         
-         // Delegate to the proper actor rendering
-         // This will be handled by the factory-created renderer
-         // which has access to the 3D models
-      }
-
-      virtual MR_ShortSound*      GetLineCrossingSound() { return NULL; }
-      virtual MR_ShortSound*      GetStartSound()        { return NULL; }
-      virtual MR_ShortSound*      GetFinishSound()       { return NULL; }
-      virtual MR_ShortSound*      GetBumpSound()         { return NULL; }
-      virtual MR_ShortSound*      GetJumpSound()         { return NULL; }
-      virtual MR_ShortSound*      GetFireSound()         { return NULL; }
-      virtual MR_ShortSound*      GetMisJumpSound()      { return NULL; }
-      virtual MR_ShortSound*      GetMisFireSound()      { return NULL; }
-      virtual MR_ShortSound*      GetOutOfCtrlSound()    { return NULL; }
-      virtual MR_ContinuousSound* GetMotorSound()        { return NULL; }
-      virtual MR_ContinuousSound* GetFrictionSound()     { return NULL; }
-};
-
-// Implementation of the Draw function
-void MR_ResActorFriend::Draw( const MR_ResActor* pActor, MR_3DViewPort* pDest, const MR_PositionMatrix& pMatrix, int pSequence, int pFrame )
-{
-   if( pActor == NULL || pDest == NULL ) return;
-   
-   // Access the actor's sequence and frame data
-   if( pSequence >= 0 && pSequence < (int)pActor->mNbSequence )
-   {
-      MR_ResActor::Sequence* lSeq = &(pActor->mSequenceList[ pSequence ]);
-      
-      if( pFrame >= 0 && pFrame < (int)lSeq->mNbFrame )
-      {
-         MR_ResActor::Frame* lFrame = &(lSeq->mFrameList[ pFrame ]);
-         
-         // Render each patch in the frame
-         for( int lCounter = 0; lCounter < (int)lFrame->mNbComponent; lCounter++ )
-         {
-            MR_ResActor::Patch* lPatch = (MR_ResActor::Patch*)lFrame->mComponentList[ lCounter ];
-            
-            if( lPatch != NULL && lPatch->mBitmap != NULL )
-            {
-               pDest->RenderPatch( *lPatch, pMatrix, lPatch->mBitmap );
-            }
-         }
-      }
-   }
-};
 
 // Local types
 class MR_MainCharacterState: private MR_BitPack
@@ -360,91 +262,15 @@ void MR_MainCharacter::SetOrientation( MR_Angle pOrientation )
 }
 
 
+double MR_MainCharacter::GetNormalisedSpeed() const
+{
+   return sqrt( mXSpeed*mXSpeed + mYSpeed*mYSpeed )/(eSteadySpeed[0]);
+}
+
 int MR_MainCharacter::GetHoverId()const
 {
    return mHoverId;
 }
-void MR_MainCharacter::AddRenderer()
-{
-   if( mRenderer == NULL )
-   {
-      // Create a simple renderer from the MainCharacter DLL
-      MR_ObjectFromFactoryId lId = { MR_MAIN_CHARACTER_DLL_ID, 100 };
-      
-#ifdef _WIN32
-      __try
-      {
-         mRenderer = (MR_MainCharacterRenderer*) MR_DllObjectFactory::CreateObject( lId );
-      }
-      __except( EXCEPTION_EXECUTE_HANDLER )
-      {
-         // Renderer creation failed - will use fallback
-         mRenderer = NULL;
-      }
-#else
-      try
-      {
-         mRenderer = (MR_MainCharacterRenderer*) MR_DllObjectFactory::CreateObject( lId );
-      }
-      catch(...)
-      {
-         mRenderer = NULL;
-      }
-#endif
-   }
-}
-
-void MR_MainCharacter::Render( MR_3DViewPort* pDest, MR_SimulationTime /*pTime*/ )
-{
-   if( pDest == NULL ) return;
-   if( mRenderer == NULL ) return;  // No renderer available - can't render
-   
-   // DEFENSIVE: Use mPosition as-is for rendering
-   // Even if corrupted, the 3D view will handle it with frustum culling
-   // We don't try to "fix" the position here - just render it
-   
-   // DEFENSIVE: Validate mHoverModel is in range (0-3)
-   // If corrupted, use default model 0
-   int lSafeModel = mHoverModel;
-   if( lSafeModel < 0 || lSafeModel >= MR_SELECTABLE_HOVER_MODEL_COUNT )
-   {
-      lSafeModel = 0;  // Use default model instead of garbage
-   }
-   
-   // DEFENSIVE: Validate mHoverId is reasonable (0-9 range for multiplayer)
-   // If out of range, use default ID 0
-   int lSafeHoverId = mHoverId;
-   if( lSafeHoverId < 0 || lSafeHoverId > 15 )
-   {
-      lSafeHoverId = 0;  // Use default hover ID instead of garbage
-   }
-   
-   // Map model index (0-3) to actor resource IDs (10, 11, 12, 19)
-   int lActorId;
-   switch( lSafeModel )
-   {
-      case 0: lActorId = MR_ELECTRO_CAR; break;   // Actor 10
-      case 1: lActorId = MR_HITECH_CAR; break;    // Actor 11
-      case 2: lActorId = MR_BITURBO_CAR; break;   // Actor 12
-      case 3: lActorId = MR_EON_CRAFT; break;     // Actor 19
-      case 4: lActorId = MR_MANTA_CRAFT; break;   // Actor 24
-      default: lActorId = MR_ELECTRO_CAR; break;  // Default to Electro Car
-   }
-   
-   // Call the renderer - should be MR_HoverRender from ObjFac1
-   // Use MFC TRY/CATCH to catch BOTH SEH and C++ exceptions
-   TRY
-   {
-      mRenderer->Render( pDest, mPosition, mCabinOrientation, mMotorDisplay > 0, lSafeHoverId, lActorId );
-   }
-   CATCH_ALL(e)
-   {
-      // If renderer crashes (C++ exception), silently clean up
-      e->Delete();
-   }
-   END_CATCH_ALL
-}
-
 
 MR_ObjectFromFactory* MR_MainCharacter::FactoryFunc( MR_UInt16 pClassId )
 {
@@ -691,17 +517,11 @@ void MR_MainCharacter::SetControlState( int pState, MR_SimulationTime pTime )
             mJumpRefillDuration = eMantaJumpRefillTime;
          }
 
-         if( mRenderer != NULL )
-         {
-            mInternalSoundList.Add( mRenderer->GetJumpSound() );
-         }
+         QueueSound( eSoundJump, TRUE, FALSE );
       }
       else
       {
-         if( mRenderer != NULL )
-         {
-            mInternalSoundList.Add( mRenderer->GetMisJumpSound() );
-         }
+         QueueSound( eSoundMisJump, TRUE, FALSE );
       }
    }
 
@@ -768,10 +588,7 @@ int MR_MainCharacter::Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, i
    {
       mZSpeed = 1.1*eMaxZSpeed[mHoverModel];
       mJumpRefillDuration = eMantaJumpRefillTime;
-      if( mRenderer != NULL )
-      {
-         mInternalSoundList.Add( mRenderer->GetJumpSound() );
-      }
+      QueueSound( eSoundJump, TRUE, FALSE );
    }
 
    if( mMotorDisplay < 0 )
@@ -878,11 +695,7 @@ int MR_MainCharacter::Simulate( MR_SimulationTime pDuration, MR_Level* pLevel, i
 
                   pLevel->InsertElement( lMissile, mRoom, TRUE );
 
-                  if( mRenderer != NULL )
-                  {
-                     mInternalSoundList.Add( mRenderer->GetFireSound() );
-                     mExternalSoundList.Add( mRenderer->GetFireSound() );
-                  }
+                  QueueSound( eSoundFire, TRUE, TRUE );
 
                }
             }
@@ -1103,9 +916,9 @@ int MR_MainCharacter::InternalSimulate( MR_SimulationTime pDuration, MR_Level* p
                {
                   if( !lReport.HaveContact() )
                   {
-                     if( (mRenderer != NULL)&&(!mOnFloor) )
+                     if( !mOnFloor )
                      {
-                        mInternalSoundList.Add( mRenderer->GetBumpSound() );
+                        QueueSound( eSoundBump, TRUE, FALSE );
                      }
 
 
@@ -1279,10 +1092,9 @@ void MR_MainCharacter::ApplyEffect( const MR_ContactEffect* pEffect,  MR_Simulat
          mXSpeed = lMoment.mXSpeed/256.0;
          mYSpeed = lMoment.mYSpeed/256.0;
 
-         if( (mRenderer != NULL)&& !((lMoment.mXSpeed==0)&&(lMoment.mYSpeed==0)) )
+         if( !((lMoment.mXSpeed==0)&&(lMoment.mYSpeed==0)) )
          {
-            mInternalSoundList.Add( mRenderer->GetBumpSound() );
-            mExternalSoundList.Add( mRenderer->GetBumpSound() );
+            QueueSound( eSoundBump, TRUE, TRUE );
          }
 
          if( (lPhysCollision->mXSpeed!=0 || lPhysCollision->mYSpeed!=0) )
@@ -1336,19 +1148,7 @@ void MR_MainCharacter::ApplyEffect( const MR_ContactEffect* pEffect,  MR_Simulat
       // missile disappear on impact while the remote hovercraft did nothing.
       TriggerOutOfControl();
 
-      if( mRenderer != NULL )
-      {
-         MR_ShortSound* lOutOfCtrlSound = mRenderer->GetOutOfCtrlSound();
-#ifndef _WIN32
-         if( std::getenv( "HOVERNET_SOUND_TRACE" ) != nullptr )
-         {
-            std::fprintf( stderr, "ApplyEffect(LostOfControl): type=%d master=%d sound=%p\n",
-                          (int)lLostOfControl->mType, (int)mMasterMode, (void*)lOutOfCtrlSound );
-         }
-#endif
-         mInternalSoundList.Add( lOutOfCtrlSound );
-         mExternalSoundList.Add( lOutOfCtrlSound );
-      }
+      QueueSound( eSoundOutOfControl, TRUE, TRUE );
 
       if( lLostOfControl->mType == MR_LostOfControl::eMine && mMasterMode )
       {
@@ -1405,19 +1205,7 @@ void MR_MainCharacter::ApplyEffect( const MR_ContactEffect* pEffect,  MR_Simulat
                  mBestLapDuration = mLastLapDuration;
                }
 
-               if( mRenderer != NULL )
-               {
-                  if( mLapCount == mNbLapForRace )
-                  {
-                     mInternalSoundList.Add( mRenderer->GetFinishSound() );
-                     mExternalSoundList.Add( mRenderer->GetFinishSound() );
-                  }
-                  else
-                  {
-                     mInternalSoundList.Add( mRenderer->GetLineCrossingSound() );
-                     mExternalSoundList.Add( mRenderer->GetLineCrossingSound() );
-                  }
-               }
+               QueueSound( (mLapCount == mNbLapForRace) ? eSoundFinish : eSoundLineCrossing, TRUE, TRUE );
             }
             break;
       }
@@ -1613,62 +1401,4 @@ int MR_MainCharacter::GetHitQueue()
    mLastHits.Remove();
 
    return lReturnValue;
-}
-
-
-void MR_MainCharacter::PlayInternalSounds()
-{
-   if( mRenderer != NULL )
-   {
-      // Sound events
-      while( !mInternalSoundList.IsEmpty() )
-      {
-         MR_SoundServer::Play( mInternalSoundList.GetHead() );
-         mInternalSoundList.Remove();
-      }
-
-      // Continuous sounds
-      MR_ContinuousSound* lWindSound  = mRenderer->GetFrictionSound();
-      MR_ContinuousSound* lMotorSound = mRenderer->GetMotorSound();
-      double lAbsSpeed = sqrt( mXSpeed*mXSpeed + mYSpeed*mYSpeed )/(eSteadySpeed[0]);
-
-      if( lAbsSpeed > 0.02 )
-      {
-         MR_SoundServer::Play( lWindSound, 0, 0, 1.5*lAbsSpeed );
-      }
-
-      if( mControlState&eMotorOn )
-      {
-         MR_SoundServer::Play( lMotorSound, 0, 0 );
-      }
-   }
-}
-
-void MR_MainCharacter::PlayExternalSounds( int pDB, int pPan )
-{
-   if( mRenderer != NULL )
-   {
-      // Sound events
-      while( !mExternalSoundList.IsEmpty() )
-      {
-         MR_SoundServer::Play( mExternalSoundList.GetHead(), pDB, 1.0, pPan );
-         mExternalSoundList.Remove();
-      }
-
-      // Continuous sounds
-      MR_ContinuousSound* lWindSound  = mRenderer->GetFrictionSound();
-      MR_ContinuousSound* lMotorSound = mRenderer->GetMotorSound();
-      double lAbsSpeed = sqrt( mXSpeed*mXSpeed + mYSpeed*mYSpeed )/(eSteadySpeed[0]);
-
-
-      if( lAbsSpeed > 0.02 )
-      {
-         MR_SoundServer::Play( lWindSound, 1, pDB, 1.5*lAbsSpeed, pPan );
-      }
-
-      if( mControlState&eMotorOn )
-      {
-         MR_SoundServer::Play( lMotorSound, 1 , pDB, 1.0, pPan );
-      }
-   }
 }

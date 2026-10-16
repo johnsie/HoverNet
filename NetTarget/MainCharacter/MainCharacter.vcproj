@@ -138,6 +138,9 @@
 				RelativePath=".\MainCharacterRenderer.cpp">
 			</File>
 			<File
+				RelativePath=".\MainCharacterView.cpp">
+			</File>
+			<File
 				RelativePath=".\StdAfx.cpp">
 			</File>
 		</Filter>

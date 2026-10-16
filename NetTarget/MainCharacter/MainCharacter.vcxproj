@@ -75,6 +75,7 @@
   <ItemGroup>
     <ClCompile Include="MainCharacter.cpp" />
     <ClCompile Include="MainCharacterRenderer.cpp" />
+    <ClCompile Include="MainCharacterView.cpp" />
     <ClCompile Include="StdAfx.cpp" />
   </ItemGroup>
   <ItemGroup>

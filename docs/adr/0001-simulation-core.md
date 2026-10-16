@@ -39,7 +39,7 @@ Reasons, in order of weight:
 
 ## What "evolve" means (the work Stage 1 inherits)
 
-1. **Cut the render dependency.** Move `Render(...)`/`RenderWallSurface`/`RenderHorizontalSurface` out of the model
+1. **Cut the render dependency.** *Started (16 October 2026): the hovercraft's rendering and sound moved out of `MainCharacter.cpp` into `MainCharacterView.cpp`; the simulation now only reports sound events (`QueueSound`). The new `HoverNetSim` library (model, collisions, hovercraft physics, and a headless presentation stub) links with no video, audio or resource code, and the determinism, netcode and replay tools link only that. Golden hashes did not change. Remaining: the `Render` virtuals on the level's element classes (`MazeElement.h`), the plug-in free elements in ObjFac1, and header-level includes of video types.*  Move `Render(...)`/`RenderWallSurface`/`RenderHorizontalSurface` out of the model
    classes into a separate view layer keyed by element type; `sim` must not include `3DViewport.h`, audio or UI
    headers. Enforce with a link-time check (the `sim` library links without video or sound).
 2. **Replace the dynamically loaded object factory** (`ObjFac1`, `DllObjectFactory`) inside `sim` with a static

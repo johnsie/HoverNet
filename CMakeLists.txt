@@ -152,9 +152,24 @@ if(WIN32)
 endif()
 set_target_properties(HoverNetModelCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# The simulation for programs with no screen or speakers (server, replay and determinism tools, tests): level
+# model, collisions and the hovercraft's physics, with the hovercraft's presentation seam stubbed out. It links with
+# no video, audio or resource code (docs/adr/0001-simulation-core.md); the headless tools link only this, which
+# enforces it.
+add_library(HoverNetSim STATIC
+    NetTarget/MainCharacter/MainCharacter.cpp
+    NetTarget/MainCharacter/MainCharacterRenderer.cpp
+    NetTarget/MainCharacter/MainCharacterHeadless.cpp
+)
+
+target_link_libraries(HoverNetSim PUBLIC HoverNetModelCore HoverNetPortableUtil)
+set_target_properties(HoverNetSim PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# The same simulation with the real presentation (renderer, sounds, drawing) for the game client.
 add_library(HoverNetMainCharacter STATIC
     NetTarget/MainCharacter/MainCharacter.cpp
     NetTarget/MainCharacter/MainCharacterRenderer.cpp
+    NetTarget/MainCharacter/MainCharacterView.cpp
 )
 
 target_link_libraries(HoverNetMainCharacter PUBLIC HoverNetModelCore HoverNetResourceCore HoverNetVideoCore HoverNetPortableUtil)
@@ -268,20 +283,20 @@ else()
     )
 
     add_dependencies(HoverNetDeterminismRun HoverNetHeadlessObjFac1)
-    target_link_libraries(HoverNetDeterminismRun PRIVATE HoverNetMainCharacter)
+    target_link_libraries(HoverNetDeterminismRun PRIVATE HoverNetSim)
 
     add_executable(HoverNetNetcodeProto
         NetTarget/LinuxClient/NetcodeProto.cpp
     )
     add_dependencies(HoverNetNetcodeProto HoverNetHeadlessObjFac1)
-    target_link_libraries(HoverNetNetcodeProto PRIVATE HoverNetMainCharacter)
+    target_link_libraries(HoverNetNetcodeProto PRIVATE HoverNetSim)
 
     add_executable(HoverNetReplay
         NetTarget/LinuxClient/ReplayTool.cpp
         NetTarget/LinuxClient/Sha256.cpp
     )
     add_dependencies(HoverNetReplay HoverNetHeadlessObjFac1)
-    target_link_libraries(HoverNetReplay PRIVATE HoverNetMainCharacter)
+    target_link_libraries(HoverNetReplay PRIVATE HoverNetSim)
 endif()
 
 add_executable(HoverNetMainCharacterRenderSmoke

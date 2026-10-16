@@ -201,6 +201,14 @@ class MR_MainCharacter:public MR_FreeElement
       MR_DllDeclare MR_ElementNetState GetNetState()const;
       MR_DllDeclare void               SetNetState( int pDataLen, const MR_UInt8* pData );
 
+      // What the simulation reports to the presentation layer (sound is only queued when a renderer exists)
+      enum eSoundEvent
+      {
+         eSoundJump, eSoundMisJump, eSoundFire, eSoundBump, eSoundOutOfControl, eSoundFinish, eSoundLineCrossing
+      };
+      void QueueSound( eSoundEvent pSound, BOOL pInternal, BOOL pExternal );
+      double GetNormalisedSpeed() const;   // horizontal speed as a fraction of the base craft's steady speed
+
       MR_DllDeclare void               SetNbLapForRace( int pNbLap );
       
       // Movement inputs
