@@ -6,10 +6,12 @@ the same state on every platform and build?
 ## The tool
 
 `HoverNetDeterminismRun <track> <frames> [--trace|--state]` loads a bundled track, puts one hovercraft on the grid and
-runs a fixed script of inputs (steer, jump, fire, brake) for N frames of 16 ms. It uses
+puts a second craft on the next grid slot and runs a fixed script of inputs for both (steer, jump, fire, brake,
+change weapon) for N frames of 16 ms, so missiles, pickups and craft-to-craft contact are exercised. It uses
 `MR_GameSession::SimulateStep`, which advances the simulation by an exact duration instead of reading the wall clock
 (the game itself still steps by elapsed real time through `Simulate()`, which now calls the same code). After every
-frame the whole craft state (time, position, room, orientation, speeds, fuel, race time) is hashed; `--trace` prints
+frame the state of both craft (time, position, room, orientation, speeds, fuel, race time) and the position and
+orientation of every free element in the level (missiles, mines, power-ups) is hashed; `--trace` prints
 the per-frame hashes and `--state` the raw values, so the first frame where two runs differ is a plain `diff`.
 `--tables` prints the trigonometry tables.
 
@@ -24,6 +26,7 @@ it on the WebAssembly build under Node.
 | Same binary, run twice | identical on all 7 tracks |
 | Native Release (-O2) vs Debug (-O0) | identical on all 7 tracks |
 | Native x86-64 (64-bit) vs WebAssembly (32-bit, different libm and compiler) | identical on all 7 tracks, **after the fix below** |
+| Linux sanitizer build (ASan + UBSan) | clean on all 7 tracks; one signed overflow in the wall-distance maths (`ShapeCollisions.cpp`) was made explicitly wrapping, results unchanged |
 | Windows x64 and Win32 | not run yet |
 
 ### Divergence found and fixed
@@ -38,7 +41,7 @@ hashes did not change) and makes WebAssembly match. This was very probably behin
 
 ## What this does not prove
 
-- One craft, one input script. Weapons, pickups, several craft and remote players are not covered yet.
+- Two local craft and one input script per craft; remote (replicated) players and network effects are not covered.
 - The clock-driven `Simulate()` path (what the game uses) is not deterministic by nature; this run replaces it with
   fixed steps, which is the Stage 1 direction.
 - The Windows builds have not been compared (needs the Windows runner), and the rasterizer is not part of the hash.

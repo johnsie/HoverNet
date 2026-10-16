@@ -4,6 +4,17 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.0.18 - 2026-10-16
+
+### Changed
+- The determinism run now races two craft with weapons and hashes every free element (missiles, mines,
+  power-ups); native Release, Debug, sanitizer and WebAssembly builds replay all seven bundled tracks
+  identically.
+
+### Fixed
+- A signed-integer overflow in the wall-distance maths (found on Tidal Causeway under UBSan) now wraps
+  explicitly; behaviour is unchanged.
+
 ## 2.0.17 - 2026-10-16
 
 ### Fixed
