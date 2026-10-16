@@ -21,6 +21,9 @@ and how to roll one back.
 - `--fixed-step` runs the game's simulation in whole 16 ms ticks whatever the frame rate (off by default).
 
 ### Fixed
+- The checksum code that verifies a downloaded track read the file through a 64 KB buffer on the stack, which overflows WebAssembly's
+  default 64 KB stack (it crashed the replay and server tools when they were built for WebAssembly). It now uses the heap, which removes a
+  possible failure when the browser game verifies a downloaded community track.
 - Missiles fly at the original game's speed again. The shared client had been rounding the missile speed down from
   46.66 to 46 units per millisecond, so its missiles were about 1.4% slower than the original game's and ended a few
   metres short; they also hit with a slightly different impulse. Missiles now use the original maths exactly, which
