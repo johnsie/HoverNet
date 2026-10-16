@@ -177,13 +177,20 @@ test:web:smoke:
 check:web:deployed:
   stage: deploy
   needs:
+    # Tags deploy in their own job; on the default branch the web build job deploys itself.
     - job: deploy:web
+      optional: true
+    - job: build:game:web
+      optional: true
   tags: ["$SERVER_RUNNER_TAG"]
-  # Post-deploy checks from the runner against the live site: headers, MIME types, WebSocket gateway.
+  # Post-deploy checks against the Apache on the runner host (the runner cannot reach the public name):
+  # headers, MIME types, WebSocket gateway.
   script:
-    - scripts/check-web-deploy.sh https://hovernet.outiva.com
+    - HOVERNET_CHECK_LOCAL=1 scripts/check-web-deploy.sh https://hovernet.outiva.com
   rules:
     - !reference [.no_schedule, rules]
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      changes: *web_inputs
     - if: '$CI_COMMIT_TAG'
 
 package:raceserver:deb:
