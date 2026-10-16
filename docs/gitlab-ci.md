@@ -1,13 +1,22 @@
-# GitLab CI and Race Server Delivery
+# GitLab CI: web client and Linux race server
 
-The pipeline builds and packages the central `RaceServer` and native Linux game client as Ubuntu `amd64` Debian packages. It also builds the Windows client and creates an Inno Setup installer, and builds a Windows `RaceServer.exe` (zipped with a template `config.xml`) for anyone who wants to run the race server on Windows instead of Linux.
+GitLab builds, tests and **deploys** two things, and nothing else:
+
+| What | Jobs | Runs on |
+| --- | --- | --- |
+| Web client (https://hovernet.outiva.com) | `build:game:web` (also replays the determinism golden hashes on the WebAssembly build), `test:web:smoke`, `deploy:web`, `check:web:deployed` | default branch (build, smoke test and deploy on `main`), tags (all of it) |
+| Linux race server | `build:raceserver:linux` (with the server's protocol, lifecycle and fuzz tests), `package:raceserver:deb`, `deploy:raceserver` | every pipeline builds; tags package and deploy |
+
+Everything public lives in GitHub Actions instead: the Windows and Linux clients, the Windows and Linux servers,
+all installers and packages, the sanitizer runs and the GitHub releases (see [github-actions.md](github-actions.md)).
+GitLab no longer builds Windows, no longer builds the Linux client, and no longer publishes releases, so the
+Windows runner is not used any more and can be retired.
 
 ## GitLab runners
 
 Configure protected runners with these tags, or override the CI variables in GitLab:
 
 - `race-server`: C++14 compiler, `dpkg-deb`, Bash, and narrowly scoped deployment privileges. It builds/packages the server and deploys tagged releases.
-- `windows`: PowerShell, Visual Studio MSBuild with the **C++ CMake tools for Windows** component, all client dependencies, and Inno Setup (`iscc` on `PATH`).
 - `race-server` also runs the browser build. If `EMSDK` is unset, the web job installs the pinned SDK under the runner user's cache and reuses it on later builds.
 
 Mark the `race-server` runner and production environments as protected. The RaceServer deploy runs automatically on protected version tags. The web deploy runs automatically from the protected default branch and for tags.
@@ -23,9 +32,10 @@ validates/extracts the artifact and atomically switches the Apache release
 symlink. It does not enable Apache sites or install the WebSocket gateway;
 those server components must be configured before enabling the deploy job.
 
-## Linux quality gates
+## Quality gates
 
-`build:game:linux:sanitizers` configures a RelWithDebInfo build with `-DHOVERNET_WARNINGS=ON` (`-Wall -Wextra`) and `-DHOVERNET_SANITIZE=ON` (AddressSanitizer and UndefinedBehaviorSanitizer), then runs the whole ctest suite with sanitizer errors fatal. The compiler output is kept as the `build/sanitize/build.log` artifact so warning counts can be tracked. Both options are off by default; use them locally with the same CMake flags.
+The full test suite and the nightly ASan/UBSan run are in GitHub Actions. GitLab runs the race server's protocol, lifecycle
+and fuzz tests on every build, and the web build must replay the determinism golden hashes (`scripts/test-determinism.sh`).
 
 The community tracks are deliberately not built by CI: they are about 700 MB of
 third-party files that are not in the repository. Only their small manifest

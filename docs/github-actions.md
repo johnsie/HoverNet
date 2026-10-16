@@ -1,23 +1,29 @@
-# GitHub Actions builds
+# GitHub Actions: clients, servers, packages and releases
 
-The GitHub workflow in `.github/workflows/build.yml` builds and tests HoverNet without replacing the existing GitLab pipeline.
+GitHub Actions (`.github/workflows/build.yml`) builds, tests, packages and **publishes** everything public. GitLab only
+builds and deploys the web client and the Linux race server (see [gitlab-ci.md](gitlab-ci.md)).
 
-## Produced packages
+## What it builds
 
-Every push, pull request, and manual run produces three downloadable workflow artifacts:
+| Job | Runs on | Produces |
+| --- | --- | --- |
+| `linux` | push, pull request, tag | Linux client and race server, the whole ctest suite (physics, determinism, tracks, protocol), `hovernet-game_*.deb`, `hovernet-raceserver_*.deb` |
+| `windows` | push, pull request, tag | shared 64-bit client with installed-package acceptance tests, `HoverNet-*-windows-x64-setup.exe`, the legacy `HoverNet-*-win32-setup.exe`, `hovernet-raceserver_*_win32.zip` and `hovernet-raceserver_*_win64.zip` |
+| `raceserver-sanitizers` | push, pull request, tag | the race server's protocol, lifecycle and fuzz tests under ASan and UBSan |
+| `sanitizers-full` | nightly (03:17 UTC) and manual | the whole test suite under ASan and UBSan |
+| `dependency-review` | pull request | dependency security review |
+| `release` | `v*` tags | `SHA256SUMS` and the public GitHub release |
 
-- `hovernet-linux-packages` contains the Ubuntu/Debian packages for the game client and race server.
-- `hovernet-windows-installer` contains the Windows game setup executable.
-- `hovernet-windows-raceserver` contains a zip with the Windows race server executable (`RaceServer.exe`) and a template `config.xml`.
-
-The Linux game and race server are built through the repository's CMake project and the complete test suite is run before the DEB packages are created. The game DEB includes the tracks. The Windows client and race server are both built as 32-bit Release applications; the client gets SDL2 and the existing runtime assets bundled by the Inno Setup installer, while the race server is just the console executable plus its config template, zipped.
+Workflow artifacts (installers, `.deb` files, server zips) are kept for 30 days on every run.
 
 ## Releases
 
-Pushing a tag whose name starts with `v`, for example `v0.2.0`, runs both platform builds and creates a GitHub Release containing both DEBs, the Windows setup EXE, and the Windows race server zip.
-
-The repository's GitHub Actions setting must allow workflows to create releases. Under **Settings > Actions > General > Workflow permissions**, select **Read and write permissions** if the organisation does not already grant this to the release job.
+Pushing a tag that starts with `v` runs the builds and, only if **every** job passed, creates the public release with
+all packages and `SHA256SUMS`. A hyphenated tag (`v2.1.0-beta.1`) is published as a pre-release with the beta notes;
+a stable tag starts with `docs/release-notes.md`. Push the same tag to GitLab to deploy the web client and the server.
+The repository setting **Settings > Actions > General > Workflow permissions** must allow workflows to create releases.
 
 ## Deployment
 
-Production deployment remains in GitLab. This keeps the existing protected GitLab runner, environment approvals, and `/usr/local/sbin/hovernet-deploy` privilege boundary unchanged. The packages built by GitHub have the same layout and use the same Debian packaging scripts, so a protected GitHub deployment can be added later after a GitHub self-hosted runner has been registered on the race server.
+GitHub does not deploy. Production deployment stays in GitLab so the protected runner, environment approvals and the
+`/usr/local/sbin/hovernet-deploy` and `hovernet-web-deploy` privilege boundaries are unchanged.

@@ -4,20 +4,20 @@ How a release is made, verified, upgraded to, and rolled back.
 
 ## Making a release
 
-1. Make sure `main` is green on GitLab and GitHub Actions (both build and test).
+1. Make sure `main` is green on GitHub Actions (clients, servers, tests) and on GitLab (web client and Linux server).
 2. Update [CHANGELOG.md](../CHANGELOG.md): move *Unreleased* under the new version
    and date.
 3. Tag `vX.Y.Z` (an annotated tag on a commit that is already on `main`) and push
-   it to **both** remotes (`gitlab` and `origin`). A tag push builds and packages:
+   it to **both** remotes (`gitlab` and `origin`). On **GitHub Actions** the tag builds and packages:
    - Linux `hovernet-game` and `hovernet-raceserver` `.deb` packages;
    - the Windows x64 installer (`HoverNet-X.Y.Z-windows-x64-setup.exe`), the legacy
-     Win32 installer, and the Windows RaceServer zip;
+     Win32 installer, and the Windows RaceServer zips (win32 and win64);
    - a `SHA256SUMS` file over all of them.
-4. The `publish:github-release` (GitLab) and `release` (GitHub) jobs create the
-   public GitHub release only after **every** package job succeeds. If a job
-   fails, no release is published; fix it and use a **new** tag (do not move or
-   reuse a tag that has been pushed).
-5. The race server is deployed automatically by the tag pipeline: `deploy:raceserver`
+   On **GitLab** the same tag builds, packages and deploys the web client and the Linux race server.
+4. The `release` job on GitHub creates the public GitHub release only after **every**
+   build job succeeds. GitLab does not publish releases. If a job fails, no release is
+   published; fix it and use a **new** tag (do not move or reuse a tag that has been pushed).
+5. Production is deployed automatically by the GitLab tag pipeline: `deploy:raceserver`
    runs on the protected tag after its package job succeeds, as does `deploy:web`.
 6. Community track downloads are hosted separately (see
    [Community tracks](community-tracks.md)); a release does not change them.
