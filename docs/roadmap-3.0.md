@@ -98,7 +98,7 @@ Run the experiments that decide the architecture before building on it.
   jumps, collisions, weapons, pickups, and full races, as inputs plus expected hashes.
 - **Netcode prototype** under artificial latency, loss, jitter and reordering:
   prediction, reconciliation, interpolation, and lag compensation for weapons.
-- **Architecture decision (an ADR),** based on the data above: evolve the existing C++
+- **Architecture decision (an ADR).** *Status: proposed, see [adr/0001-simulation-core.md](adr/0001-simulation-core.md): evolve the existing simulation behind a clean boundary; confirm at the Stage 0 review.* Based on the data above: evolve the existing C++
   code behind a clean simulation boundary, or build a new simulation core. Decide how the
   renderer is handled separately.
 - **Win32 inventory.** *Status: done, see [win32-client-inventory.md](win32-client-inventory.md); open decisions are split screen, a settings importer and private rooms.* List every feature only the Win32 client has, and assign each to
