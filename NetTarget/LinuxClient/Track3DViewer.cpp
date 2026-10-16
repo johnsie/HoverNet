@@ -294,8 +294,8 @@ int kHeight = 768;
 void ConfigureGameResolution()
 {
     int testW = 0, testH = 0;
-    if (const char* testRes = std::getenv("HOVERNET_TEST_RES");
-        testRes != nullptr && std::sscanf(testRes, "%dx%d", &testW, &testH) == 2 && testW >= 320 && testH >= 240) {
+    const char* testRes = std::getenv("HOVERNET_TEST_RES");
+    if (testRes != nullptr && std::sscanf(testRes, "%dx%d", &testW, &testH) == 2 && testW >= 320 && testH >= 240) {
         kWidth = testW & ~1;
         kHeight = testH & ~1;
         return;
@@ -5593,8 +5593,8 @@ int RunClient(int argc, char** argv)
     // Screenshot tests: HOVERNET_TEST_WINDOW=WIDTHxHEIGHT opens any screen at that size (e.g. a phone).
     {
         int testW = 0, testH = 0;
-        if (const char* testSize = std::getenv("HOVERNET_TEST_WINDOW");
-            testSize != nullptr && std::sscanf(testSize, "%dx%d", &testW, &testH) == 2 && testW > 0 && testH > 0) {
+        const char* testSize = std::getenv("HOVERNET_TEST_WINDOW");
+        if (testSize != nullptr && std::sscanf(testSize, "%dx%d", &testW, &testH) == 2 && testW > 0 && testH > 0) {
             SDL_SetWindowSize(graphics.GetWindow(), testW, testH);
         }
     }
@@ -5879,8 +5879,8 @@ int RunClient(int argc, char** argv)
             // HOVERNET_ONBOARDING_PAGE lets screenshot tests open a later briefing page.
             const char* startPage = std::getenv("HOVERNET_ONBOARDING_PAGE");
             int testW = 0, testH = 0;
-            if (const char* testSize = std::getenv("HOVERNET_TEST_WINDOW");
-                testSize != nullptr && std::sscanf(testSize, "%dx%d", &testW, &testH) == 2) {
+            const char* testSize = std::getenv("HOVERNET_TEST_WINDOW");
+            if (testSize != nullptr && std::sscanf(testSize, "%dx%d", &testW, &testH) == 2) {
                 SDL_SetWindowSize(graphics.GetWindow(), testW, testH);
             }
             RunOnboardingScreen(graphics, frameLimit, startPage != nullptr ? std::atoi(startPage) : 0);
