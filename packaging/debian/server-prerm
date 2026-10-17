@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+  remove|purge)
+    systemctl stop hovernet-server || true
+    systemctl disable hovernet-server || true
+    ;;
+esac
+
+#DEBHELPER#

@@ -365,7 +365,7 @@ action is authenticated and auditable. **6b** has its own review.
 - Preserve 2.x as an installable legacy release; keep its servers visibly separate.
 - Web deployment as a release artifact: versioned, rollback-able, and checked after deploy (extends the existing post-deploy check).
 - Dedicated-server images, configuration schemas, and upgrade guidance, using the packaging
-  and rollback process already proven in 2.0. *Status: a configuration file with every option documented, a hardened systemd unit and operator documentation exist, see [operators.md](operators.md); signed packages and the 2.0 packaging for the new server do not.*
+  and rollback process already proven in 2.0. *Status: a configuration file with every option documented, a hardened systemd unit and operator documentation exist, see [operators.md](operators.md); a Debian package for the new server exists (reproducible, not yet in the release pipelines); signed packages do not.*
 - Public beta cycles for creators, server operators, competitive players, and accessibility,
   run with 2.0's beta plan (entry and exit criteria, severity triage) as the template.
 - Test rollback, regional failover, protocol-version retirement, and account migration.

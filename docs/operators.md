@@ -48,6 +48,11 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 
 ## Running it as a service
 
+- Debian/Ubuntu package: `packaging/debian/build-authserver-deb.sh VERSION BUILD_DIR` builds `hovernet-server` (the server, `HoverNetModTool`,
+  `HoverNetReplay`, the seven official tracks, `/etc/hovernet/server.conf`, the systemd unit, the licence as `copyright`). Installing creates
+  the `hovernet` user and `/var/lib/hovernet`, enables the service and, on an upgrade only, restarts it through a drain; a fresh install is
+  not started until you have reviewed the configuration. The release pipelines do not build it yet.
+
 - systemd: copy the binary to `/usr/bin`, the configuration to `/etc/hovernet/server.conf`, the tracks to `/usr/share/hovernet/NetTarget/Tracks`
   and `packaging/server/hovernet-server.service` to `/etc/systemd/system/`; create a `hovernet` user and `/var/lib/hovernet`.
 - HoverNet does not use Docker or any other container tooling, for building, testing or deployment; run the server as a service

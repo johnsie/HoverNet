@@ -24,6 +24,7 @@ install -Dm644 packaging/debian/conffiles "$package_root/DEBIAN/conffiles"
 
 sed -i "s/^Version: .*/Version: ${version}/" "$package_root/DEBIAN/control"
 # Licence inventory and release history travel with the package.
+install -Dm644 LICENSE "$package_root/usr/share/doc/hovernet-raceserver/copyright"
 install -Dm644 THIRD_PARTY_NOTICES.md "$package_root/usr/share/doc/hovernet-raceserver/THIRD_PARTY_NOTICES.md"
 install -Dm644 CHANGELOG.md "$package_root/usr/share/doc/hovernet-raceserver/CHANGELOG.md"
 # shellcheck source=packaging/debian/reproducible.sh

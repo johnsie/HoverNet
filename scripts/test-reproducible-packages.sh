@@ -26,12 +26,14 @@ for pass in 1 2; do
   ln -s "$source_dir/packaging" "$tree/packaging"
   ln -s "$source_dir/docs" "$tree/docs"
   ln -s "$source_dir/THIRD_PARTY_NOTICES.md" "$tree/THIRD_PARTY_NOTICES.md"
+  ln -s "$source_dir/LICENSE" "$tree/LICENSE"
   ln -s "$source_dir/CHANGELOG.md" "$tree/CHANGELOG.md"
   (
     cd "$tree"
     export CI_PROJECT_DIR="$tree"
     packaging/debian/build-game-deb.sh 9.9.9 "$build_dir/HoverNetGame2Player" "$build_dir/ObjFac1.so" >/dev/null
     packaging/debian/build-raceserver-deb.sh 9.9.9 "$build_dir/RaceServer" >/dev/null
+    packaging/debian/build-authserver-deb.sh 9.9.9 "$build_dir" >/dev/null
     packaging/debian/build-community-tracks-deb.sh 9.9.9 "$work_dir/tracks" "$tree/dist" >/dev/null
   )
   [[ $pass -eq 1 ]] && sleep 3   # a real gap: timestamps must not leak into the package
@@ -47,21 +49,23 @@ for deb in "$work_dir"/pass1/dist/*.deb; do
     status=1
   fi
 done
-[[ $(ls "$work_dir"/pass1/dist/*.deb | wc -l) -eq 3 ]] || { echo "expected three packages" >&2; status=1; }
+[[ $(ls "$work_dir"/pass1/dist/*.deb | wc -l) -eq 4 ]] || { echo "expected four packages" >&2; status=1; }
 # A pre-release tag must map to a Debian version that sorts BEFORE the final
 # release (2.0.0~beta.1 < 2.0.0), or a beta would shadow the release on upgrade.
 tree="$work_dir/prerelease"
 mkdir -p "$tree"
 for link in NetTarget packaging docs; do ln -s "$source_dir/$link" "$tree/$link"; done
 ln -s "$source_dir/THIRD_PARTY_NOTICES.md" "$tree/THIRD_PARTY_NOTICES.md"
+ln -s "$source_dir/LICENSE" "$tree/LICENSE"
 ln -s "$source_dir/CHANGELOG.md" "$tree/CHANGELOG.md"
 (
   cd "$tree"
   export CI_PROJECT_DIR="$tree"
   packaging/debian/build-game-deb.sh v2.0.0-beta.1 "$build_dir/HoverNetGame2Player" "$build_dir/ObjFac1.so" >/dev/null
   packaging/debian/build-raceserver-deb.sh 2.0.0-beta.1 "$build_dir/RaceServer" >/dev/null
+  packaging/debian/build-authserver-deb.sh 2.0.0-beta.1 "$build_dir" >/dev/null
 )
-for deb in "$tree"/dist/hovernet-game_*.deb "$tree"/dist/hovernet-raceserver_*.deb; do
+for deb in "$tree"/dist/hovernet-game_*.deb "$tree"/dist/hovernet-raceserver_*.deb "$tree"/dist/hovernet-server_*.deb; do
   # GitHub rewrites "~" in asset names, which would break SHA256SUMS: no tilde in file names.
   if [[ $(basename "$deb") == *"~"* ]]; then
     echo "package file name contains a tilde: $(basename "$deb")" >&2

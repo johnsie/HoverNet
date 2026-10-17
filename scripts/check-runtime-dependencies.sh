@@ -40,6 +40,7 @@ check() {
 }
 
 check control RaceServer
+check server-control HoverNetAuthServer HoverNetModTool HoverNetReplay
 check game-control HoverNetGame2Player ObjFac1.so
 [[ $status -eq 0 ]] && echo "runtime dependencies documented and declared"
 exit $status

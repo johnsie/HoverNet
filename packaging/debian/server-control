@@ -1,0 +1,12 @@
+Package: hovernet-server
+Version: 0.0.0
+Section: games
+Priority: optional
+Architecture: amd64
+Maintainer: HoverNet Team <devteam@outiva.com>
+Depends: libc6 (>= 2.31), libstdc++6, libgcc-s1, adduser, systemd
+Recommends: curl
+Description: HoverNet 3.0 authoritative race server (preview)
+ Runs races in which the server alone decides every position, lap and result, with a lobby, replays, moderation tools, a status
+ port, optional encryption and browser (WebSocket) access behind a TLS-terminating web server. Listens on the loopback address
+ until configured in /etc/hovernet/server.conf. Stopping it drains: races under way finish first.

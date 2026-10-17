@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+  configure)
+    if ! getent group hovernet >/dev/null; then
+      addgroup --system hovernet
+    fi
+    if ! getent passwd hovernet >/dev/null; then
+      adduser --system --no-create-home --ingroup hovernet --home /nonexistent hovernet
+    fi
+    install -d -o hovernet -g hovernet -m 0750 /var/lib/hovernet /var/lib/hovernet/replays /var/lib/hovernet/crashes /var/lib/hovernet/moderation
+    systemctl daemon-reload
+    systemctl enable hovernet-server
+    # An upgrade restarts a server that is running; stopping it drains (races under way finish, up to the unit's TimeoutStopSec). A
+    # fresh install is not started: the operator reviews /etc/hovernet/server.conf first.
+    systemctl try-restart hovernet-server || true
+    ;;
+esac
+
+#DEBHELPER#
