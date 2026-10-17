@@ -2,6 +2,9 @@
 
 ### What's new in 2.3
 - **The host starts the race.** In the HoverNet lobby the race no longer starts when the last seat fills: the host sees who has joined in the waiting room and presses **Start Race**; the race starts with whoever is there.
+- **Always seats for 8, and you can start alone** (2.3.1). The number-of-players slider is gone from the host dialog, and **Start Race** works even when nobody has joined, to practise. Others can still join until you start.
+- **Smoother online racing** (2.3.2, 2.3.3, 2.3.5). Your craft no longer jumps when the network delivers updates in clumps, no longer gets stuck at the end of a race (you keep driving after the final result), the sound no longer stutters, the picture's pace is steadier while it catches up with the server, and motion is smoother frame to frame (the craft are drawn between simulation ticks). Chat works again after the results screen. Measured on one Linux machine, not yet on a wide range of real connections or devices.
+- **Watch a race before it starts** (2.3.4). Pick a race that is still waiting for players and press **Watch Race**: the lobby waits and lets you in as a spectator the moment the host starts it. Click the button again to stop waiting.
 
 ### Also in 2.2
 - **One way into online play.** **ONLINE MULTIPLAYER** (main menu, pause menu, results screen, and in the browser) connects to the HoverNet server by itself: you type nothing but, once, your name. The lobby has the classic layout (game list, race details with the track map, actions, who is in the lobby, and lobby chat), with private races, one-player time trials and watching. The race list refreshes by itself. If the HoverNet server is not available, the classic lobby opens instead. A friend's or a club's server is chosen in **Settings** (*HoverNet server*). See [Playing on a HoverNet server](playing-on-servers.md).
