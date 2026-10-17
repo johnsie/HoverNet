@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **Builds for ARM (and for newer x86 CPUs) can no longer drift from other platforms.** The compiler may fuse a multiply and an add into one instruction that rounds differently; with that on, the determinism, snapshot and physics tests fail on this machine. Fusing is now switched off for every target (`-ffp-contract=off`, `/fp:precise`). The results on x86-64 are unchanged (same golden files, same rules version).
+
 ### Added
 - **Personal bests.** The game remembers your fastest finish on each track (per number of laps) and your fastest lap, on your own machine only (nothing is sent anywhere). The results screen says "NEW PERSONAL BEST!" with the time you beat, or shows your best for the track. The browser keeps them with your other settings. Delete the `personal_bests` file in the settings folder to forget them.
 

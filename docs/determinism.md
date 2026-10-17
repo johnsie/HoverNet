@@ -93,3 +93,16 @@ The first sweep found two problems that the seven bundled tracks do not reach:
 - The clock-driven `Simulate()` path (what the game uses) is not deterministic by nature; this run replaces it with
   fixed steps, which is the Stage 1 direction.
 - The Windows comparison was run by hand on the runner, not yet in CI, and only for the bundled tracks and the physics suite (not the community sweep or Debug builds); the rasterizer is not part of the hash.
+
+## Floating point: fused multiply-add is off (2026-10-17)
+
+The simulation still uses a few `double` values (the craft's speeds). They are identical on every platform tested (Linux, Windows x64 and
+Win32, WebAssembly) as long as every multiply and add rounds separately. A compiler is allowed to fuse `a * b + c` into one FMA instruction
+that rounds once, and GCC and Clang do so by default on ARM and on x86 built for CPUs that have FMA. The last bit then differs, and a
+race on an ARM server and one on an x86 client would drift apart.
+
+Measured on an x86-64 machine with FMA: `-march=native -ffp-contract=fast` emitted FMA instructions and made `HoverNetDeterminism`,
+`HoverNetSnapshot` and `HoverNetPhysicsGolden` all fail; `-march=native -ffp-contract=off` emitted none and all three pass with the
+committed golden files. The top-level `CMakeLists.txt` therefore sets `-ffp-contract=off` (GCC, Clang, Emscripten) and `/fp:precise` (MSVC)
+for every target, so a build for ARM or for a newer x86 CPU cannot change a result. Not done: a run on a real ARM machine (none was
+available); the flag is the standard remedy and the x86 experiment above shows the hazard and that the flag removes it.

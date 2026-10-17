@@ -22,6 +22,16 @@ option(HOVERNET_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanit
 set(HOVERNET_WEB_SOCKET_URL "wss://hovernet.outiva.com/race/" CACHE STRING
     "WebSocket URL used by the browser client to reach its RaceServer gateway")
 
+# The simulation must give the same bits on every CPU. A compiler may fuse a multiply and an add into one instruction (FMA) that rounds once
+# instead of twice; GCC and Clang do that by default on ARM (Apple Silicon, Raspberry Pi, ARM servers) and on x86 built for newer CPUs, and
+# the result differs in the last bit. Measured on this repository: built with FMA fusing on, the determinism, snapshot and physics-golden
+# tests all fail; with it off they pass, with identical hashes (docs/determinism.md, "Floating point"). So fusing is off everywhere.
+if(MSVC)
+    add_compile_options(/fp:precise)
+else()
+    add_compile_options(-ffp-contract=off)
+endif()
+
 if(NOT MSVC)
     if(HOVERNET_WARNINGS)
         add_compile_options(-Wall -Wextra)
