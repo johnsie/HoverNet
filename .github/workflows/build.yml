@@ -212,7 +212,10 @@ jobs:
           "$bin/HoverNetLobbyTest.exe"
           "$bin/HoverNetModerationTest.exe"
           "$bin/HoverNetCryptoTest.exe"
-          scripts/test-secure-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe"
+          if ! out=$(scripts/test-secure-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 2>&1); then
+            echo "::error title=secure-tcp::$(echo "$out" | head -c 3000 | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1
+          fi
+          echo "$out"
           scripts/test-trackpack.sh "$bin/HoverNetTrackPack.exe"
           scripts/test-moderation-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNetModTool.exe"
           scripts/test-network-conditions.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNetNetProxy.exe" "$bin/HoverNet.exe"
