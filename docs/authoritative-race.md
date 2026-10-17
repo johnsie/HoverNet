@@ -250,10 +250,13 @@ craft's on-screen speed, distance per millisecond, changes from one frame to the
 | The other player's craft, clean link | not measured | 6.5% |
 | The other player's craft, 60 +- 40 ms jitter | not measured | 13.3% |
 
-`scripts/test-smooth-motion.sh` fails above 12% for your own craft. **Not done:** the other player's craft is predicted from their last
-known input, so when their real input arrives it is corrected in one step (up to about 1.6 m on one frame in these runs); blending that
-correction away over a few frames (a decaying visual offset) is the next step and needs eyes on a real game to tune. The numbers are from
-one Linux machine with no display, not from a browser or a real internet connection.
+`scripts/test-smooth-motion.sh` fails above 12% for your own craft. **Tried and not kept:** the other player's craft is predicted from
+their last known input, so a new input corrects it in one step (up to about 1.6 m on one frame in these runs). A filter that spread the
+correction over a few frames (low-passed per-frame movement plus a slow pull to the prediction) was measured three times each way at
+60 +- 40 ms of jitter: the other craft's speed change averaged 11.1% with it and 10.5% without, run-to-run noise being about 2 points, so it
+bought nothing measurable and was removed rather than risk added lag. A better approach (a decaying visual offset from a second
+prediction with the previous state) is untried. The numbers are from one Linux machine with no display, not from a browser or a real
+internet connection; the remote-craft figures in the table vary by a few points between runs.
 
 ## Not built yet
 
