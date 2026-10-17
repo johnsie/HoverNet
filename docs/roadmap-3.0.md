@@ -194,7 +194,7 @@ differences from 2.0 are documented design decisions.
   metrics, tracing, crash reports) and rolling deployment. *Status: health and metrics endpoint, crash reports, a load and soak harness, a graceful drain for rolling restarts (Linux, `HoverNetDrain`) and a JSON event log exist; distributed tracing and regional pools do not.*
 - A network-condition test harness (latency, loss, duplication, reordering, disconnects)
   in CI, plus **automated soak and load tests** replacing 2.0's manual 24-hour run.
-- Protocol compatibility policy and a negotiated fallback path: 3.0 clients can still talk
+- Protocol compatibility policy and a negotiated fallback path (*policy written in [protocol-compatibility.md](specs/protocol-compatibility.md); the client fallback is not built*): 3.0 clients can still talk
   to a 2.0 relay for a defined period, and the reverse is refused with a clear message.
 - **WebSocket transport** is a first-class RaceServer transport. Secure WebSocket frames
   terminate in a thin adapter feeding the same validated protocol/session layer as native
