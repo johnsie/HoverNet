@@ -169,6 +169,7 @@ async function scenario(name, players, withBot, spectate = false, typeChat = fal
   let bot = null;
   if (withBot) {
     await sleep(6000);   // the browser has connected and is hosting a race that waits for a second player
+    await shot(`servers-${name}-waiting-room`);
     bot = spawn(botBin, ['--port', String(gamePort), '--name', 'Botty', '--join-race', 'ClassicH', '--track', 'ClassicH', '--say', 'hello from the bot'], { stdio: 'ignore' });
   }
   let racers = [];
