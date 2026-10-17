@@ -316,6 +316,11 @@ else()
     )
     target_link_libraries(HoverNetFrameRateTest PRIVATE HoverNetSim)
 
+    add_executable(HoverNetDriver
+        NetTarget/LinuxClient/DriverTool.cpp
+    )
+    target_link_libraries(HoverNetDriver PRIVATE HoverNetSim)
+
     add_executable(HoverNetAuthorityTest
         NetTarget/LinuxClient/AuthorityTest.cpp
     )
@@ -766,6 +771,9 @@ if(BUILD_TESTING AND NOT WIN32)
     set_tests_properties(HoverNetNetcodeTarget120 HoverNetNetcodeTarget250 PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetReplayFormat
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-replay.sh $<TARGET_FILE:HoverNetReplay>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetLeaderboard
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-leaderboard.sh $<TARGET_FILE:HoverNetDriver> $<TARGET_FILE:HoverNetReplay>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetSimBoundary
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/check-sim-boundary.sh

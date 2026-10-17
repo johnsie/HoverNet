@@ -29,9 +29,12 @@ track, and says so; it never plays something that would not reproduce.
 - `HoverNetReplay leaderboard a.hnr b.hnr ... [--track=NAME] [--top=N]` re-simulates every replay and ranks the finishers (per track and lap count)
   and the best laps (per track). A replay that is damaged, recorded under other rules or that does not reproduce is reported as skipped
   and never ranked (exit status 1). Entries are named `id#slot`, where the id is what `HoverNetReplay id race.hnr` prints (16 hex digits of the file's SHA-256, the same whatever the file is called); replays carry player slots, not accounts. The scripted bots in the
-  test suite do not finish a race, so the tests check the ranking is repeatable and agrees with the server's table (both empty); the
-  authority test does check a finisher's result and rank (with the checkpoints granted to the craft, which a replay cannot reproduce), but
-  a leaderboard with finishers from a real replay has not been exercised yet.
+  test suite do not finish a race, so `HoverNetDriver` (`NetTarget/LinuxClient/DriverTool.cpp`) finds controls that do: a beam search over
+  state snapshots of the real simulation, ranked by laps and checkpoints, keeping only craft in track cells not seen yet. It writes the
+  replay the server would record. The test `HoverNetLeaderboard` (`scripts/test-leaderboard.sh`, Linux) makes two different finishing
+  drives of ClassicH (one lap, 99.5 s and 260.9 s), checks both verify, that `results` and `events` report the finish, and that the
+  leaderboard ranks them in order and honours `--top`. Checked on Linux only; the search is deterministic for given options, but it is a
+  heuristic and finds no finish on every track or seed (it found none on The River with the default options), so the test names ClassicH and fixed seeds.
 - `HoverNetReplay verify race.hnr` re-simulates it and compares every checkpoint; `info` prints the header.
 - `HoverNetReplay trace race.hnr` prints every tick's state hash and `dump race.hnr <tick>` the whole state at a tick; diffing the
   output from two platforms finds the first tick and the field that differ ([determinism.md](determinism.md)).
