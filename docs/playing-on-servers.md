@@ -24,8 +24,9 @@ small screen these are tabs: GAMES, CHAT, USERS.
 ## Races
 
 - **Join** a race in the list, or **Watch** one that has already started (you see it a few seconds behind, so nobody can cheat by watching).
-- **Host a race:** press **HOST A RACE**, pick a track, the number of players and laps, and whether weapons are on, then **Create Race**. The race starts when the
-  players are in.
+- **Host a race:** press **HOST A RACE**, pick a track, the number of seats and laps, and whether weapons are on, then **Create Race**. You wait in the race's
+  waiting room, where you see who has joined; **the race starts when you press Start Race**, with whoever is there (even if some seats are empty).
+  Players who join wait for you to start it. If you leave before starting, the others are sent back to the lobby.
 - **Time trial:** host a race with **one player**. It starts at once and you race the clock alone; the server saves it as a verifiable replay.
 - **Private race:** type a **code** of 6 to 16 characters when you host. The race is not listed. The screen shows you the race's **number** while
   you wait: tell your friends the number and the code, and they type both under **Join a private race**. A wrong code looks like a race that does

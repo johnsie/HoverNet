@@ -864,6 +864,9 @@ if(BUILD_TESTING AND NOT WIN32)
         add_test(NAME HoverNetLobbyAutoRefresh
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-lobby-autorefresh.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetStartRace
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-start-race.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetLobbyChat
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-lobby-chat.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

@@ -38,6 +38,9 @@ struct Client
     std::uint8_t rejectReason = 0;
     unsigned ticks = 0;
     std::uint32_t ackRaceId = 0;
+    int ackPlayers = 0, acks = 0;
+    Protocol3::Roster roster;
+    bool gotRoster = false;
     Protocol3::LobbyUsers users;
     bool gotUsers = false;
     std::vector<std::string> chats;           // "name: text"
@@ -65,7 +68,8 @@ struct Client
         while (parser.Next(type, payload)) {
             using namespace Protocol3;
             if (type == kRaceList) gotList = Decode(payload, list);
-            else if (type == kHelloAck) { HelloAck a; if (Decode(payload, a)) { player = a.player; token = a.resumeToken; ackRaceId = a.raceId; ackBytes = payload.size(); } }
+            else if (type == kHelloAck) { HelloAck a; if (Decode(payload, a)) { player = a.player; token = a.resumeToken; ackRaceId = a.raceId; ackBytes = payload.size(); ackPlayers = a.players; ++acks; } }
+            else if (type == kRoster) gotRoster = Decode(payload, roster);
             else if (type == kLobbyUsers) gotUsers = Decode(payload, users);
             else if (type == kChatMessage) { ChatMessage m; if (Decode(payload, m)) chats.push_back((m.fromServer ? std::string("(server) ") : std::string()) + m.name + ": " + m.text); }
             else if (type == kStart) started = true;
@@ -396,6 +400,90 @@ int main()
         Protocol3::Chat bad; bad.text = "hi";
         oldie.Send(Protocol3::kChat, Protocol3::Encode(bad), now); oldie.Pump();
         Check(!oldie.rejected, "one stray message does not close a connection (it counts as invalid, and only many do)");
+    }
+
+    // ---- the host starts the race (kCapHostStart) --------------------------------------------------------------------------------
+    {
+        LobbyServer lobby(MakeConfig());
+        std::int64_t now = 1000;
+        const std::uint32_t caps = Protocol3::kCapHostStart;
+        Client host, a, b;
+        host.Open(lobby, now); a.Open(lobby, now); b.Open(lobby, now);
+        host.Hello("host", now, caps); host.Pump();
+        Protocol3::HostRace three = Host("ClassicH", 3);
+        host.Send(Protocol3::kHostRace, Protocol3::Encode(three), now);
+        a.Hello("ann", now, caps); b.Hello("bob", now, caps);
+        a.Pump(); b.Pump();
+        Protocol3::JoinRace join; join.id = 1;
+        a.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now);
+        b.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now);
+        for (int i = 0; i < 5; ++i) { lobby.Advance(now += 20); host.Pump(); a.Pump(); b.Pump(); }
+        Check(!host.started && !a.started && !b.started, "a race whose host starts it does not start by itself when the last seat fills");
+        Check(host.gotRoster && host.roster.seats == 3 && host.roster.members.size() == 3 && host.roster.members[0].second == "host" && host.roster.members[2].second == "bob", "everyone is told who has joined (slot and name), with the number of seats");
+        a.Send(Protocol3::kStartRace, std::vector<std::uint8_t>(), now);
+        for (int i = 0; i < 3; ++i) { lobby.Advance(now += 20); host.Pump(); a.Pump(); b.Pump(); }
+        Check(!host.started && !a.started, "only the host can start the race");
+        host.Send(Protocol3::kStartRace, std::vector<std::uint8_t>(), now);
+        for (int i = 0; i < 3; ++i) { lobby.Advance(now += 20); host.Pump(); a.Pump(); b.Pump(); }
+        Check(host.started && a.started && b.started, "the host's Start Race starts the race for everyone");
+        Check(host.ackPlayers == 3 && host.acks == 1, "a full race starts with its original acknowledgement (no second one)");
+    }
+    {
+        // Fewer players than seats: the host starts anyway, and the race has exactly the players who are here.
+        LobbyServer lobby(MakeConfig());
+        std::int64_t now = 1000;
+        const std::uint32_t caps = Protocol3::kCapHostStart;
+        Client host, a, gone;
+        host.Open(lobby, now); a.Open(lobby, now); gone.Open(lobby, now);
+        host.Hello("host", now, caps); host.Pump();
+        Protocol3::HostRace four = Host("ClassicH", 4);
+        host.Send(Protocol3::kHostRace, Protocol3::Encode(four), now);
+        a.Hello("ann", now, caps); gone.Hello("gone", now, caps);
+        a.Pump(); gone.Pump();
+        Protocol3::JoinRace join; join.id = 1;
+        gone.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now);
+        a.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now);
+        for (int i = 0; i < 4; ++i) { lobby.Advance(now += 20); host.Pump(); a.Pump(); gone.Pump(); }
+        lobby.Disconnect(gone.conn);                   // slot 1 leaves: a gap
+        for (int i = 0; i < 3; ++i) { lobby.Advance(now += 20); host.Pump(); a.Pump(); }
+        host.Send(Protocol3::kStartRace, std::vector<std::uint8_t>(), now);
+        for (int i = 0; i < 4; ++i) { lobby.Advance(now += 20); host.Pump(); a.Pump(); }
+        Check(host.started && a.started, "the host can start with fewer players than seats");
+        Check(host.ackPlayers == 2 && a.ackPlayers == 2 && host.player == 0 && a.player == 1, "the race has exactly the players who are there, slots numbered from 0 with no gap");
+        Check(host.acks == 2 && a.acks == 2, "each player is sent a new acknowledgement before Start when the player count changes");
+    }
+    {
+        // The host leaves before starting: the others cannot wait for ever.
+        LobbyServer lobby(MakeConfig());
+        std::int64_t now = 1000;
+        const std::uint32_t caps = Protocol3::kCapHostStart;
+        Client host, a;
+        host.Open(lobby, now); a.Open(lobby, now);
+        host.Hello("host", now, caps); host.Pump();
+        Protocol3::HostRace two = Host("ClassicH", 3);
+        host.Send(Protocol3::kHostRace, Protocol3::Encode(two), now);
+        a.Hello("ann", now, caps); a.Pump();
+        Protocol3::JoinRace join; join.id = 1;
+        a.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now);
+        for (int i = 0; i < 3; ++i) { lobby.Advance(now += 20); host.Pump(); a.Pump(); }
+        lobby.Disconnect(host.conn);
+        for (int i = 0; i < 3; ++i) { lobby.Advance(now += 20); a.Pump(); }
+        Check(a.rejected && a.rejectReason == Protocol3::kNotInRace, "when the host leaves before the start, the others are told and sent away");
+    }
+    {
+        // A race hosted by a client that did not ask keeps the old behaviour: it starts when the last seat fills.
+        LobbyServer lobby(MakeConfig());
+        std::int64_t now = 1000;
+        Client host, a;
+        host.Open(lobby, now); a.Open(lobby, now);
+        host.Hello("host", now); host.Pump();
+        Protocol3::HostRace two = Host("ClassicH", 2);
+        host.Send(Protocol3::kHostRace, Protocol3::Encode(two), now);
+        a.Hello("ann", now); a.Pump();
+        Protocol3::JoinRace join; join.id = 1;
+        a.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now);
+        for (int i = 0; i < 4; ++i) { lobby.Advance(now += 20); host.Pump(); a.Pump(); }
+        Check(host.started && a.started && !host.gotRoster, "a race hosted without asking still starts when full (and gets no roster)");
     }
 
     // ---- random bytes ----------------------------------------------------------------------------------------------

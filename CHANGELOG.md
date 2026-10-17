@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Changed
+- **The host starts the race.** A race on the HoverNet server no longer starts when the last seat fills: the host sees who has joined in the waiting room (player list, race chat) and presses **Start Race**; the race starts with whoever is there, even with seats empty. If the host leaves first, the others go back to the lobby. A one-player race (time trial) still starts at once. Protocol: capability bit 2, messages `StartRace` and `Roster` (additive; races hosted by older clients and the bots keep starting when full).
+
 ## 2.2.0 - 2026-10-17
 
 ### Changed

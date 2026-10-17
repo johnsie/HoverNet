@@ -120,3 +120,10 @@ frames, and the load, soak and abuse runs through the WebSocket gateway.
 
 
 **Lobby chat (capability bit 1, `kCapLobbyChat`).** A client that sets it in Hello gets `LobbyUsers` (type 34: `u16` total, `u8` count, up to 30 names; sent whenever who is in the lobby changes) and may send Chat / receive ChatMessage while it is still in the lobby (before it hosts, joins or watches a race); the server rate limits lobby chat (a burst, then one a second) and applies mutes. A client that does not set the bit never sees the new message type.
+
+**The host starts the race (capability bit 2, `kCapHostStart`).** A race whose first player set the bit does not start when the last seat fills (a race with
+one seat, a time trial, still starts at once). The server sends that race's clients that set the bit `Roster` (type 35: `u8` seats, `u8` count, then per member
+`u8` slot and the name) whenever who has joined changes. The host (slot 0) sends `StartRace` (type 26, no payload) and the race starts with the players
+who are there; when fewer than the seats, the race is set up again for that number, slots are numbered from 0 with no gap, and every player gets a fresh
+HelloAck (new slot and resume token) before Start. If the host leaves before then, the others are sent away (`kNotInRace`, "the host left the race").
+A race whose first player did not set the bit keeps the old behaviour (it starts when full).

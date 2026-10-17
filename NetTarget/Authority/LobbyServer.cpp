@@ -385,7 +385,14 @@ void LobbyServer::Advance(std::int64_t nowMs)
         bool emptyOfLiveConns = true;
         for (const auto& c : mConns) if (c->raceId == e.id && !c->closed && !e.host->IsClosed(c->hostConn)) emptyOfLiveConns = false;
         if ((e.finishedAt >= 0 && nowMs - e.finishedAt > mConfig.finishedRaceLingerMs) || (empty && emptyOfLiveConns && !e.host->Started() && nowMs > 0 && e.host->GetMetrics().connectionsAccepted > 0)) {
-            for (auto& c : mConns) if (c->raceId == e.id) { c->closed = true; c->raceId = 0; }
+            for (auto& c : mConns) {
+                if (c->raceId != e.id) continue;
+                // What the race still had to say to this connection (a Reject, a last frame) is kept until it is read.
+                const std::vector<std::uint8_t> pending = e.host->TakeOutput(c->hostConn);
+                c->out.insert(c->out.end(), pending.begin(), pending.end());
+                c->closed = true;
+                c->raceId = 0;
+            }
             AddMetrics(mRemoved, e.host->GetMetrics());
             it = mRaces.erase(it);
         }

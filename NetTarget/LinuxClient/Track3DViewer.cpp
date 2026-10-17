@@ -5147,7 +5147,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
     // Test hook (scripts/test-online-screen-clicks.sh): real SDL mouse events are pushed at the on-screen position of the HOST A RACE button and
     // the dialog's create button, so the test proves they answer an actual click (HOVERNET_TEST_AUTH_CLICKS=host:port); never set in normal play.
     int clickStep = 0, clickFrame = 0, clickHold = 0;
-    ImVec2 connectCenter(-1, -1), hostOpenCenter(-1, -1), createCenter(-1, -1);
+    ImVec2 connectCenter(-1, -1), hostOpenCenter(-1, -1), createCenter(-1, -1), startRaceCenter(-1, -1);
     std::vector<TrackPreview> previews(static_cast<std::size_t>(Tracks().Count()));
     bool hostPopupOpen = false, requestHostPopup = false, privatePopupOpen = false, requestPrivatePopup = false;
     int lobbyTab = 0;                   // small screens: 0 games, 1 chat, 2 users
@@ -5224,6 +5224,24 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
         lobby.Pump();
         if (lobby.GetState() == OnlineLobby::State::eReady) { ready = true; break; }
         if (lobby.GetState() == OnlineLobby::State::eBrowsing && !chatFocusedOnce) { chatFocusedOnce = true; focusChat = true; }   // ready to type
+        if (std::getenv("HOVERNET_TEST_AUTH_STARTCLICK") != nullptr && lobby.GetState() == OnlineLobby::State::eWaiting && lobby.IsHost()) {
+            // Test hook (scripts/test-start-race.sh): wait for a second player, show that the race does not start by itself, then press
+            // Start Race with real mouse events.
+            static bool sAnnounced = false;
+            static int sWaitFrames = 0;
+            if (!sAnnounced) { sAnnounced = true; std::printf("STARTTEST waiting for a second player\n"); std::fflush(stdout); }
+            if (lobby.GetRoster().members.size() >= 2) {
+                ++sWaitFrames;
+                if (sWaitFrames == 40) { std::printf("STARTTEST two players are in and the race has not started by itself\n"); std::fflush(stdout); }
+                if (sWaitFrames >= 46 && startRaceCenter.x >= 0) {
+                    const int phase = sWaitFrames - 46;
+                    if (phase == 0) pushClick(startRaceCenter, 0);
+                    else if (phase == 1) pushClick(startRaceCenter, 1);
+                    else if (phase == 2) { pushClick(startRaceCenter, 2); std::printf("STARTTEST Start Race clicked\n"); std::fflush(stdout); }
+                }
+            }
+        }
+        if (std::getenv("HOVERNET_TEST_AUTH_AUTOSTART") != nullptr && lobby.GetState() == OnlineLobby::State::eWaiting && lobby.IsHost() && lobby.GetRoster().members.size() >= 2) lobby.StartRace();   // test hook: the host presses Start Race when someone has joined
         if (std::getenv("HOVERNET_TEST_AUTH_AUTOREFRESH") != nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) {
             // Test hook (scripts/test-lobby-autorefresh.sh): nothing is pressed; a race hosted by someone else must appear in the list by itself.
             static bool sAnnounced = false;
@@ -5484,27 +5502,44 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             HoverNetSectionHeading(waitingRoom ? "Your race" : "Game details");
             if (waitingRoom) {
                 const Protocol3::HelloAck& ack = lobby.Ack();
+                const Protocol3::Roster& roster = lobby.GetRoster();
                 const int trackIndex = FindHostableTrack(ack.track);
                 const TrackBriefing briefing = BriefingFor(trackIndex);
-                const float infoWidth = stacked ? 0.0f : std::max(250.0f, ImGui::GetContentRegionAvail().x * 0.46f);
+                // Race info and the map on the left, the player list on the right at full height, as in the classic waiting room.
+                const float infoWidth = stacked ? 0.0f : std::max(250.0f, ImGui::GetContentRegionAvail().x * 0.50f);
                 ImGui::BeginChild("RaceInfoColumn", stacked ? ImVec2(0.0f, ImGui::GetContentRegionAvail().y * 0.55f) : ImVec2(infoWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
                 infoRow("Track:", ack.track.empty() ? "-" : ack.track);
                 if (!ack.track.empty()) {
                     infoRow("Laps:", briefing.mFreePlay ? "none (free play)" : std::to_string(ack.laps));
                     infoRow("Weapons:", ack.weapons ? "On" : "Off");
-                    infoRow("Players:", ack.players == 1 ? std::string("1 (a time trial: you race the clock)") : std::to_string(ack.players));
+                    infoRow("Seats:", std::to_string(roster.seats != 0 ? roster.seats : ack.players));
                     if (ack.raceId != 0) infoRow("Race:", "number " + std::to_string(ack.raceId));
                 }
-                ImGui::Spacing();
                 if (ack.raceId != 0 && !hostedCode.empty()) {
+                    ImGui::Spacing();
                     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
                     ImGui::TextWrapped("Private race: tell your friends number %u and code %s. They type both under \"Join a private race\".", ack.raceId, hostedCode.c_str());
                     ImGui::PopStyleColor();
                 }
+                ImGui::Spacing();
+                if (trackIndex >= 0) {
+                    ImGui::BeginChild("RaceMapColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
+                    DrawTrackPreview(previewFor(trackIndex), 80.0f, false);
+                    ImGui::EndChild();
+                }
                 ImGui::EndChild();
                 if (!stacked) ImGui::SameLine();
-                ImGui::BeginChild("RaceMapColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
-                if (trackIndex >= 0) DrawTrackPreview(previewFor(trackIndex), 80.0f, false);
+                ImGui::BeginChild("PlayersColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
+                ImGui::Text("Players (%d / %d)", static_cast<int>(roster.members.size()), roster.seats != 0 ? static_cast<int>(roster.seats) : static_cast<int>(ack.players));
+                ImGui::BeginChild("PlayersListBox", ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y), true);
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 2.0f));
+                for (const auto& member : roster.members) {
+                    const bool isYou = member.first == ack.player;
+                    ImGui::BulletText("%s%s%s", member.second.c_str(), isYou ? " (you)" : "", member.first == 0 ? " - host" : "");
+                }
+                if (roster.members.empty()) ImGui::BulletText("%s (you)%s", name.c_str(), lobby.IsHost() ? " - host" : "");
+                ImGui::PopStyleVar();
+                ImGui::EndChild();
                 ImGui::EndChild();
             }
             else if (selectedInfo != nullptr) {
@@ -5543,9 +5578,22 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             if (!stacked) ImGui::SameLine();
             ImGui::BeginChild("ActionsPanel", ImVec2(0, actionsHeight), true);
             if (waitingRoom) {
-                ImGui::PushTextWrapPos(0.0f);
-                ImGui::TextDisabled("%s", lobby.Message().c_str());
-                ImGui::PopTextWrapPos();
+                const bool alone = lobby.GetRoster().members.size() < 2;
+                if (lobby.IsHost()) {
+                    // The one primary action: the only filled red button on the screen. The race starts when the host presses it.
+                    ImGui::BeginDisabled(alone);
+                    if (HoverNetButton("Start Race", ImVec2(-FLT_MIN, 40))) lobby.StartRace();
+                    ImGui::EndDisabled();
+                    startRaceCenter = centreOfLastItem();
+                    ImGui::PushTextWrapPos(0.0f);
+                    ImGui::TextDisabled(alone ? "Waiting for other players to join..." : "Start the race when you are ready.");
+                    ImGui::PopTextWrapPos();
+                }
+                else {
+                    ImGui::PushTextWrapPos(0.0f);
+                    ImGui::TextDisabled("Waiting for the host to start the race...");
+                    ImGui::PopTextWrapPos();
+                }
                 ImGui::Spacing();
                 if (HoverNetQuietButton("Leave Race", ImVec2(-FLT_MIN, 0))) lobby.Cancel();
             }

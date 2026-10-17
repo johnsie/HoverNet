@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Protocol3
@@ -18,6 +19,7 @@ constexpr std::uint16_t kDefaultMaxFrame = 1200;
 // Hello.capabilities bits: what this client understands beyond the first 3.0 messages. A server adds the matching optional fields to its
 // answers only to a client that set the bit, so a client built before the bit existed never sees a message longer than it expects.
 constexpr std::uint32_t kCapRaceId = 1;
+constexpr std::uint32_t kCapHostStart = 4;    // the host of a race starts it (StartRace) instead of it starting when the last seat fills; the server sends Roster while it waits
 constexpr std::uint32_t kCapLobbyChat = 2;   // the lobby carries chat (Chat / ChatMessage before a race is joined) and sends LobbyUsers   // HelloAck carries the number of the race (so a host can tell friends which private race to join)
 constexpr std::uint16_t kMinMaxFrame = 64;
 constexpr int kMaxInputsPerMessage = 32;
@@ -42,10 +44,12 @@ enum Type : std::uint8_t
     kJoinRace = 23,
     kSpectate = 24,        // a Hello that asks to watch the race instead of driving in it
     kSpectateRace = 25,    // lobby: watch a race by id
+    kStartRace = 26,       // client to server (the host, only with kCapHostStart): start the race now with the players who are here; no payload
     kChat = 30,            // client to server: say something to the race
     kChatMessage = 31,     // server to client: someone said something
     kBlock = 32,           // client to server: stop showing me this name
     kReport = 33,          // client to server: report a name to the moderators
+    kRoster = 35,          // server to client, only with kCapHostStart: who has joined the race that has not started (slot and name), and how many seats
     kLobbyUsers = 34,      // server to client, only to a client that set kCapLobbyChat: who is in the lobby (not yet in a race)
 };
 
@@ -103,6 +107,7 @@ struct Pong { std::uint32_t clientTick = 0, token = 0, serverTick = 0; };
 struct PlayerResult { std::uint8_t player = 0, rank = 0; bool finished = false; std::uint8_t laps = 0; std::int32_t finishTimeMs = 0, bestLapMs = 0; };
 struct RaceInfo { std::uint32_t id = 0; std::string track; std::uint8_t players = 0, joined = 0, laps = 0; bool weapons = true, started = false; };
 struct RaceList { std::vector<RaceInfo> races; };
+struct Roster { std::uint8_t seats = 0; std::vector<std::pair<std::uint8_t, std::string>> members; };   // members: (slot, name) of everyone who has joined, slot 0 being the host
 struct LobbyUsers { std::uint16_t total = 0; std::vector<std::string> names; };   // names: the first kMaxLobbyUserNames, in a fixed order; total: how many are in the lobby
 constexpr int kMaxLobbyUserNames = 30;
 // A non-empty code makes a race private: it is not listed and can be joined or watched only by id and code (6 to 16 characters).
@@ -134,6 +139,7 @@ std::vector<std::uint8_t> Encode(const ChatMessage&);
 std::vector<std::uint8_t> Encode(const Chat&);
 std::vector<std::uint8_t> Encode(const RaceList&);
 std::vector<std::uint8_t> Encode(const LobbyUsers&);
+std::vector<std::uint8_t> Encode(const Roster&);
 std::vector<std::uint8_t> Encode(const HostRace&);
 std::vector<std::uint8_t> Encode(const JoinRace&);
 std::vector<std::uint8_t> Encode(const SpectateRace&);
@@ -157,6 +163,7 @@ bool Decode(const std::vector<std::uint8_t>& payload, ChatMessage&);
 bool Decode(const std::vector<std::uint8_t>& payload, Chat&);
 bool Decode(const std::vector<std::uint8_t>& payload, RaceList&);
 bool Decode(const std::vector<std::uint8_t>& payload, LobbyUsers&);
+bool Decode(const std::vector<std::uint8_t>& payload, Roster&);
 bool Decode(const std::vector<std::uint8_t>& payload, HostRace&);
 bool Decode(const std::vector<std::uint8_t>& payload, JoinRace&);
 bool Decode(const std::vector<std::uint8_t>& payload, SpectateRace&);

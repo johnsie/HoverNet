@@ -154,6 +154,7 @@ async function scenario(name, players, withBot, spectate = false, typeChat = fal
   await setenv('HOVERNET_TEST_AUTH_PLAYERS', String(players));
   if (process.env.BROWSE_SHOTS) await setenv('HOVERNET_TEST_AUTH_BROWSE', '1');
   if (spectate) await setenv('HOVERNET_TEST_AUTH_SPECTATE', '1');
+  if (players > 1) await setenv('HOVERNET_TEST_AUTH_AUTOSTART', '1');   // the host presses Start Race once the other player has joined
   await setenv('HOVERNET_TEST_CHATLOG', '1');   // print the chat messages that arrive
   // Driver briefing: Next, then Next x3 (the last is Finish); positions for 837x715 and for a phone in landscape (PHONE=1, 844x390).
   await click(phone ? 95 : 135, phone ? 331 : 636); await sleep(900);

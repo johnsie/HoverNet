@@ -22,6 +22,16 @@ bool AuthoritativeRace::Start( const RaceConfig& config, std::string& error )
     if( config.players < 1 || config.players > ReplayFormat::kMaxPlayers ) { error = "bad player count"; return false; }
     if( config.laps < 1 || config.laps > 255 ) { error = "bad lap count"; return false; }
     mConfig = config;
+    // Starting again (a race that starts with fewer players than it had seats) begins from nothing.
+    mCraft.clear();
+    mPending.clear();
+    mLastInput.clear();
+    mHistory.clear();
+    mCheckpoints.clear();
+    mEvents.clear();
+    mLastLap.clear();
+    mTick = 0;
+    mFinished = false;
 
     MR_RecordFile* lTrack = new MR_RecordFile;
     if( !lTrack->OpenForRead( config.trackPath.c_str() ) )

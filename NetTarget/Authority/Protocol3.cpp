@@ -226,6 +226,28 @@ bool Decode(const std::vector<std::uint8_t>& p, Result& m)
     return in.Done();
 }
 
+std::vector<std::uint8_t> Encode(const Roster& m)
+{
+    Out o;
+    o.U8(m.seats);
+    o.U8(static_cast<std::uint32_t>(m.members.size()));
+    for (const auto& member : m.members) { o.U8(member.first); o.Str(member.second); }
+    return o.b;
+}
+bool Decode(const std::vector<std::uint8_t>& p, Roster& m)
+{
+    In in(p);
+    m.seats = static_cast<std::uint8_t>(in.U8());
+    const std::uint32_t count = in.U8();
+    if (!in.ok || count > 8 || m.seats < 1 || m.seats > 8) return false;
+    m.members.clear();
+    for (std::uint32_t i = 0; i < count && in.ok; ++i) {
+        const std::uint8_t slot = static_cast<std::uint8_t>(in.U8());
+        m.members.push_back(std::make_pair(slot, in.Str(32)));
+    }
+    return in.Done();
+}
+
 std::vector<std::uint8_t> Encode(const LobbyUsers& m)
 {
     Out o;

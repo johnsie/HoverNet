@@ -39,8 +39,8 @@ bool OnlineLobby::Connect(const std::string& host, int port, const std::string& 
     if (!mConn.Connect(host, port, error, serverKey.empty() ? nullptr : serverKey.data())) { Fail(error.empty() ? "Could not connect to the server." : error); return false; }
     Hello hello;
     hello.name = name.substr(0, 32);
-    hello.capabilities = kCapRaceId | kCapLobbyChat;   // this client shows the race number to a host, and the lobby's chat and users
-    mRaces.clear(); mBacklog.clear(); mUsers.clear(); mUsersTotal = 0; mChat.clear();
+    hello.capabilities = kCapRaceId | kCapLobbyChat | kCapHostStart;   // this client shows the race number to a host, and the lobby's chat and users
+    mRaces.clear(); mBacklog.clear(); mUsers.clear(); mUsersTotal = 0; mChat.clear(); mRoster = Roster(); mIsHost = false;
     mGotAck = mGotStart = mSpectating = false;
     mState = State::eIdle;
     mMessage = "Connecting...";
@@ -84,6 +84,10 @@ void OnlineLobby::Pump()
             LobbyUsers u;
             if (Decode(f.payload, u)) { mUsers = u.names; mUsersTotal = u.total; }
         }
+        else if (f.type == kRoster) {
+            Roster r;
+            if (Decode(f.payload, r)) mRoster = r;
+        }
         else if (f.type == kChatMessage && !mGotStart) {
             // Lobby chat, and the chat of a race that has not started yet. Once the race has started, chat belongs to the race and is
             // handed over with the rest of what arrived (the backlog), so a message sent at the start is not lost.
@@ -118,6 +122,8 @@ void OnlineLobby::Host(const std::string& track, int players, int laps, bool wea
     h.code = code;
     mNotice.clear();
     mSpectating = false;
+    mIsHost = true;
+    mRoster = Roster();
     if (Send(kHostRace, Encode(h))) { mState = State::eWaiting; mMessage = players == 1 ? "Starting your time trial..." : "Race created: waiting for players."; }
 }
 
@@ -129,6 +135,8 @@ void OnlineLobby::Join(std::uint32_t id, const std::string& code)
     j.code = code;
     mNotice.clear();
     mSpectating = false;
+    mIsHost = false;
+    mRoster = Roster();
     if (Send(kJoinRace, Encode(j))) { mState = State::eWaiting; mMessage = "Joined: waiting for the race to start."; }
 }
 
@@ -140,6 +148,7 @@ void OnlineLobby::Spectate(std::uint32_t id, const std::string& code)
     s.code = code;
     mNotice.clear();
     mSpectating = true;
+    mIsHost = false;
     if (Send(kSpectateRace, Encode(s))) { mState = State::eWaiting; mMessage = "Joining as a spectator..."; }
 }
 
@@ -159,4 +168,11 @@ void OnlineLobby::SendChat(const std::string& text)
     Chat c;
     c.text = text.substr(0, 120);
     Send(kChat, Encode(c));
+}
+
+void OnlineLobby::StartRace()
+{
+    if (mState != State::eWaiting || !mIsHost) return;
+    Send(kStartRace, std::vector<std::uint8_t>());
+    mMessage = "Starting the race...";
 }

@@ -86,6 +86,9 @@ private:
     void Invalid(Connection& c, std::int64_t nowMs, const char* why);
     void Handle(Connection& c, std::uint8_t type, const std::vector<std::uint8_t>& payload, std::int64_t nowMs);
     void BeginRaceIfFull(std::int64_t nowMs);
+    void StartNow(std::int64_t nowMs);                    // sends Start: the race runs from here
+    void HostStart(Connection& c, std::int64_t nowMs);    // the host presses Start Race: start with the players who are here
+    void SendRosterIfChanged();
     void SendSnapshot(Connection& c, std::uint32_t id);
     void Broadcast(const std::vector<std::uint8_t>& frame);
     void FinishRace();
@@ -95,6 +98,9 @@ private:
 
     HostConfig mConfig;
     AuthoritativeRace mRace;
+    bool mHostStarts = false;      // the first player asked (kCapHostStart) to start the race himself or herself
+    int mHostConn = 0;             // that player's connection
+    std::string mLastRoster;       // the roster as last sent
     std::vector<std::unique_ptr<Connection>> mConnections;
     int mNextId;
     bool mRaceLoaded;

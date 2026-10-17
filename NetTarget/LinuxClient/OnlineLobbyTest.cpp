@@ -54,8 +54,18 @@ int main(int argc, char** argv)
     // The friend has the code.
     Check(friendLobby.Connect("127.0.0.1", port, "Friend", noKey) && WaitFor(friendLobby, OnlineLobby::State::eBrowsing, 3000), "the friend connects");
     friendLobby.Join(1, "kestrel7");
-    Check(WaitFor(friendLobby, OnlineLobby::State::eReady, 8000), "the friend's race starts");
-    Check(WaitFor(host, OnlineLobby::State::eReady, 8000), "the host's race starts");
+    for (int i = 0; i < 300 && host.GetRoster().members.size() < 2; ++i) { host.Pump(); friendLobby.Pump(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+    Check(host.GetRoster().members.size() == 2 && host.GetRoster().members[0].second == "Hosty" && host.GetRoster().members[1].second == "Friend", "the host sees who has joined");
+    Check(friendLobby.GetRoster().members.size() == 2 && !friendLobby.IsHost() && host.IsHost(), "the friend sees the same roster and knows it is not the host");
+    // The race has all its seats taken and still waits: it starts when the host presses Start Race, not when the seats fill.
+    for (int i = 0; i < 40; ++i) { host.Pump(); friendLobby.Pump(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+    Check(host.GetState() == OnlineLobby::State::eWaiting && friendLobby.GetState() == OnlineLobby::State::eWaiting, "a full race waits for the host to start it");
+    friendLobby.StartRace();   // a player who is not the host cannot start it
+    for (int i = 0; i < 20; ++i) { host.Pump(); friendLobby.Pump(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+    Check(host.GetState() == OnlineLobby::State::eWaiting, "only the host's Start Race starts the race");
+    host.StartRace();
+    Check(WaitFor(friendLobby, OnlineLobby::State::eReady, 8000), "the friend's race starts when the host presses Start Race");
+    Check(WaitFor(host, OnlineLobby::State::eReady, 8000), "the host's race starts when the host presses Start Race");
     Check(host.Ack().track == "ClassicH" && host.Ack().players == 2 && host.Ack().laps == 1, "the host is told the race settings");
     Check(host.Ack().player != friendLobby.Ack().player, "each player has their own slot");
 

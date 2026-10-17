@@ -46,6 +46,10 @@ public:
     int UsersTotal() const { return mUsersTotal; }
     const std::deque<std::string>& ChatLines() const { return mChat; }
     void SendChat(const std::string& text);
+    // The host of a race that has not started: who has joined (slot, name; slot 0 is the host) and how many seats, and the button that starts it.
+    bool IsHost() const { return mIsHost; }
+    const Protocol3::Roster& GetRoster() const { return mRoster; }
+    void StartRace();
     const std::string& Notice() const { return mNotice; }                    // why the last host/join/watch was refused (cleared by the next request)
     bool Spectating() const { return mSpectating; }
     const Protocol3::HelloAck& Ack() const { return mAck; }
@@ -70,6 +74,8 @@ private:
     std::vector<std::string> mUsers;
     int mUsersTotal = 0;
     std::deque<std::string> mChat;
+    Protocol3::Roster mRoster;
+    bool mIsHost = false;
     std::string mHost, mName;
     int mPort = 0;
     std::vector<std::uint8_t> mKey;

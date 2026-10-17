@@ -199,11 +199,57 @@ void RaceHost::Receive(int connection, const std::uint8_t* data, std::size_t siz
 void RaceHost::BeginRaceIfFull(std::int64_t nowMs)
 {
     if (mStarted || ConnectedPlayers() < mConfig.race.players) return;
+    // A race whose host wants to start it himself or herself waits for that, however full it is (a one-player race is a time trial: it starts at once).
+    if (mHostStarts && mConfig.race.players > 1) return;
+    StartNow(nowMs);
+}
+
+void RaceHost::StartNow(std::int64_t nowMs)
+{
     mStarted = true;
     mStartMs = nowMs + mConfig.startDelayMs;
     Protocol3::Start s;
     s.countdownMs = static_cast<std::uint32_t>(mConfig.startDelayMs);
     Broadcast(Protocol3::EncodeFrame(Protocol3::kStart, Protocol3::Encode(s)));
+}
+
+// The host pressed Start Race: the race has exactly the players who are here. If fewer than the seats, the race is set up again for that many
+// (slots numbered from 0 in order, fresh reconnect tokens) and each player is sent a new HelloAck before Start.
+void RaceHost::HostStart(Connection& c, std::int64_t nowMs)
+{
+    if (!mHostStarts || mStarted || c.player != 0) return;
+    std::vector<Connection*> here;
+    for (auto& o : mConnections) if (!o->closed && o->player >= 0) here.push_back(o.get());
+    std::sort(here.begin(), here.end(), [](const Connection* a, const Connection* b) { return a->player < b->player; });
+    const int n = static_cast<int>(here.size());
+    if (n < 1) return;
+    if (n != mConfig.race.players) {
+        mConfig.race.players = n;
+        std::string error;
+        if (!mRace.Start(mConfig.race, error)) { for (auto* o : here) Close(*o, Protocol3::kBadSettings, "that race could not be started"); return; }
+        mKeyframes.clear();
+        KeepKeyframe();
+        mTokens.assign(static_cast<std::size_t>(n), 0);
+        for (int i = 0; i < n; ++i) { here[static_cast<std::size_t>(i)]->player = i; mTokens[static_cast<std::size_t>(i)] = NextToken(); }
+        for (int i = 0; i < n; ++i) SendHelloAck(*here[static_cast<std::size_t>(i)]);
+    }
+    StartNow(nowMs);
+}
+
+void RaceHost::SendRosterIfChanged()
+{
+    if (!mHostStarts || mStarted) return;
+    Protocol3::Roster r;
+    r.seats = static_cast<std::uint8_t>(mConfig.race.players);
+    std::vector<const Connection*> here;
+    for (const auto& o : mConnections) if (!o->closed && o->player >= 0) here.push_back(o.get());
+    std::sort(here.begin(), here.end(), [](const Connection* a, const Connection* b) { return a->player < b->player; });
+    std::string signature = std::to_string(r.seats) + "|";
+    for (const Connection* o : here) { r.members.push_back(std::make_pair(static_cast<std::uint8_t>(o->player), o->name)); signature += std::to_string(o->player) + ":" + o->name + "\n"; }
+    if (signature == mLastRoster) return;
+    mLastRoster = signature;
+    const std::vector<std::uint8_t> frame = Protocol3::EncodeFrame(Protocol3::kRoster, Protocol3::Encode(r));
+    for (auto& o : mConnections) if (!o->closed && o->helloDone && o->player >= 0 && (o->caps & Protocol3::kCapHostStart) != 0) Send(*o, frame);
 }
 
 void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::uint8_t>& payload, std::int64_t nowMs)
@@ -218,6 +264,7 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
         c.helloDone = true;
         c.name = h.name;
         c.caps = h.capabilities;
+        if (ConnectedPlayers() == 0 && (h.capabilities & kCapHostStart) != 0) { mHostStarts = true; mHostConn = c.id; }
         std::vector<bool> used(static_cast<std::size_t>(mConfig.race.players), false);
         for (const auto& o : mConnections) if (!o->closed && o->player >= 0) used[static_cast<std::size_t>(o->player)] = true;
         for (int slot = 0; slot < mConfig.race.players; ++slot) if (!used[static_cast<std::size_t>(slot)]) { c.player = slot; break; }
@@ -289,6 +336,11 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
             else if (r == InputResult::Late && i + 1 == in.controls.size()) ++mMetrics.inputsLate;
             else if (r == InputResult::TooFarAhead) ++mMetrics.inputsTooFar;
         }
+        return;
+    }
+    case kStartRace: {
+        if (!payload.empty()) { Invalid(c, nowMs, "start race"); return; }
+        HostStart(c, nowMs);
         return;
     }
     case kChat: {
@@ -466,6 +518,12 @@ void RaceHost::FinishRace()
 void RaceHost::Advance(std::int64_t nowMs)
 {
     mLastNow = nowMs;
+    // The host left a race that had not started: it cannot start, so the others are told and sent away.
+    if (mHostStarts && !mStarted && mHostConn != 0 && IsClosed(mHostConn)) {
+        for (auto& o : mConnections) if (!o->closed && o->player >= 0) Close(*o, Protocol3::kNotInRace, "the host left the race");
+        mHostConn = 0;
+    }
+    SendRosterIfChanged();
     // A moderator's removal order takes effect here.
     if (mConfig.moderation != nullptr)
         for (auto& conn : mConnections)
