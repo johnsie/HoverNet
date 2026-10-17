@@ -123,7 +123,9 @@ async function click(x, y) {
 async function waitFor(fn, ms) { for (let t = 0; t < ms; t += 500) { if (await fn()) return true; await sleep(500); } return false; }
 
 await send('Runtime.enable'); await send('Page.enable');
-await send('Emulation.setDeviceMetricsOverride', { width: 837, height: 715, deviceScaleFactor: 1, mobile: false });
+const phone = process.env.PHONE === '1';
+await send('Emulation.setDeviceMetricsOverride', phone ? { width: 844, height: 390, deviceScaleFactor: 1, mobile: true } : { width: 837, height: 715, deviceScaleFactor: 1, mobile: false });
+if (phone) await send('Emulation.setTouchEmulationEnabled', { enabled: true });
 async function typeKey(ch) {
   const code = ch === ' ' ? 'Space' : `Key${ch.toUpperCase()}`;
   const vk = ch === ' ' ? 32 : ch.toUpperCase().charCodeAt(0);
@@ -145,11 +147,18 @@ async function scenario(name, players, withBot, spectate = false, typeChat = fal
   await setenv('HOVERNET_TEST_AUTH_SERVER', gameUrl);
   await setenv('HOVERNET_TEST_AUTH_VERIFY', '1'); await setenv('HOVERNET_TEST_AUTH_SCRIPT', '1');
   await setenv('HOVERNET_TEST_AUTH_PLAYERS', String(players));
+  if (process.env.BROWSE_SHOTS) await setenv('HOVERNET_TEST_AUTH_BROWSE', '1');
   if (spectate) await setenv('HOVERNET_TEST_AUTH_SPECTATE', '1');
   await setenv('HOVERNET_TEST_CHATLOG', '1');   // print the chat messages that arrive
-  // Driver briefing at 837x715: Next, then Next x3 (the last is Finish).
-  await click(135, 636); await sleep(900);
-  for (let i = 0; i < 3; i++) { await click(277, 636); await sleep(900); }
+  // Driver briefing: Next, then Next x3 (the last is Finish); positions for 837x715 and for a phone in landscape (PHONE=1, 844x390).
+  await click(phone ? 95 : 135, phone ? 331 : 636); await sleep(900);
+  for (let i = 0; i < 3; i++) { await click(phone ? 201 : 277, phone ? 331 : 636); await sleep(900); }
+  if (process.env.BROWSE_SHOTS) {
+    // Look at the screen instead of racing: connect, list, scroll to the host options, and keep the pictures.
+    await sleep(5000); await shot(`servers-${name}-browse-1`);
+    await evalJs("1");
+    return;
+  }
   let bot = null;
   if (withBot) {
     await sleep(6000);   // the browser has connected and is hosting a race that waits for a second player

@@ -5177,33 +5177,32 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
 
         // 1. The server.
         ImGui::TextColored(kHoverNetCoral, "SERVER");
-        ImGui::BeginDisabled(connected);
-        ImGui::PushItemWidth(-1.0f);
-#ifdef HOVERNET_WEB
-        ImGui::TextUnformatted("Address (a wss:// address from the server's owner)");
-        ImGui::InputTextWithHint("##address", "wss://race.example.org/auth/", address, sizeof(address));
-#else
-        ImGui::TextUnformatted("Address");
-        ImGui::InputTextWithHint("##address", "race.example.org:9610", address, sizeof(address));
-        ImGui::TextUnformatted("Server key (only for encrypted servers: the 64 characters its owner gives you)");
-        ImGui::InputTextWithHint("##serverkey", "leave empty for a plain connection", key, sizeof(key));
-#endif
-        ImGui::PopItemWidth();
-        ImGui::EndDisabled();
         if (!connected) {
+            ImGui::PushItemWidth(-1.0f);
+#ifdef HOVERNET_WEB
+            ImGui::TextUnformatted("Address (a wss:// address from the server's owner)");
+            ImGui::InputTextWithHint("##address", "wss://race.example.org/auth/", address, sizeof(address));
+#else
+            ImGui::TextUnformatted("Address");
+            ImGui::InputTextWithHint("##address", "race.example.org:9610", address, sizeof(address));
+            ImGui::TextUnformatted("Server key (only for encrypted servers: the 64 characters its owner gives you)");
+            ImGui::InputTextWithHint("##serverkey", "leave empty for a plain connection", key, sizeof(key));
+#endif
+            ImGui::TextUnformatted("Your name (other players see it)");
+            ImGui::InputTextWithHint("##yourname", "your name", nameBuffer, 33);
+            ImGui::PopItemWidth();
             if (HoverNetButton(state == OnlineLobby::State::eFailed ? "Try again" : "Connect", ImVec2(-FLT_MIN, 40.0f))) connect();
             connectCenter = ImVec2((ImGui::GetItemRectMin().x + ImGui::GetItemRectMax().x) * 0.5f, (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f);
         }
-        else if (HoverNetButton("Disconnect", ImVec2(-FLT_MIN, 36.0f))) { lobby.Close(); selectedRace = -1; }
+        else {
+            // Connected: one line instead of the fields, so a small screen keeps its room for the races.
+            ImGui::TextWrapped("Connected to %s as %s", address, name.c_str());
+            if (HoverNetButton("Disconnect", ImVec2(-FLT_MIN, 36.0f))) { lobby.Close(); selectedRace = -1; }
+        }
         if (!problem.empty()) ImGui::TextColored(kHoverNetCoral, "%s", problem.c_str());
         if (state == OnlineLobby::State::eFailed || (state == OnlineLobby::State::eIdle && !lobby.Message().empty())) {
             ImGui::TextColored(kHoverNetCoral, "%s", lobby.Message().c_str());
         }
-        ImGui::BeginDisabled(connected);
-        ImGui::TextUnformatted("Your name (other players see it)");
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::InputTextWithHint("##yourname", "your name", nameBuffer, 33);
-        ImGui::EndDisabled();
         if (!lobby.Notice().empty()) ImGui::TextColored(kHoverNetCoral, "%s", lobby.Notice().c_str());
 
         if (state == OnlineLobby::State::eWaiting) {
