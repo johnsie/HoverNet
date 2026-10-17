@@ -31,6 +31,7 @@ int main(int argc, char** argv)
 {
     std::string host = "127.0.0.1", name = "bot", track = "ClassicH";
     int port = 9610, lead = 12;
+    std::string say, reportName;         // optional: say something in the race once it has started, report a player
     bool spectate = false;               // watch instead of driving (single-race servers: --spectate; lobby: --spectate-race TRACK)
     std::string hostTrack, joinTrack;   // lobby servers: host a race ('Track:players[:laps]') or join an open race on a track
     for (int i = 1; i < argc; ++i) {
@@ -41,6 +42,8 @@ int main(int argc, char** argv)
         else if (a == "--name") name = value();
         else if (a == "--track") track = value();
         else if (a == "--lead") lead = std::atoi(value());
+        else if (a == "--say") say = value();
+        else if (a == "--report") reportName = value();
         else if (a == "--spectate") spectate = true;
         else if (a == "--spectate-race") { spectate = true; joinTrack = value(); }
         else if (a == "--host-race") hostTrack = value();
@@ -139,7 +142,15 @@ int main(int argc, char** argv)
                     if (!joined) { std::fprintf(stderr, "no open race to join\n"); return 1; }
                 }
             }
-            else if (type == kStart) started = true;
+            else if (type == kStart) {
+                started = true;
+                if (!say.empty()) { Chat c; c.text = say; sendFrame(kChat, Encode(c)); }
+                if (!reportName.empty()) { Report r; r.name = reportName; r.reason = "reported by the test bot"; sendFrame(kReport, Encode(r)); }
+            }
+            else if (type == kChatMessage) {
+                ChatMessage m;
+                if (Decode(payload, m)) std::printf("[chat] %s%s: %s\n", m.fromServer ? "(server) " : "", m.name.c_str(), m.text.c_str());
+            }
             else if (type == kTick && built && (!spectate || restored)) {
                 Tick t;
                 if (!Decode(payload, t) || t.tick != verified || static_cast<int>(t.controls.size()) != players) { diverged = true; continue; }

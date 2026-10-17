@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "AuthoritativeRace.h"
+#include "Moderation.h"
 #include "Protocol3.h"
 
 namespace Authority
@@ -29,6 +30,9 @@ struct HostConfig
     int spectatorDelayMs = 10000;     // spectators see the race this far behind the drivers (protects competitive integrity)
     int maxSpectators = 64;
     int keyframeTicks = 250;          // a state snapshot is kept this often, for spectators joining and for seeking
+    Moderation* moderation = nullptr;   // shared by every race on the server; mutes, reports and the audit log (optional)
+    int chatBurst = 3;                // chat messages allowed in a burst; then one a second
+    int reportsPerMinute = 3;
     std::uint64_t tokenSeed = 1;      // seeds the reconnect tokens; a production server seeds this from the operating system
 };
 

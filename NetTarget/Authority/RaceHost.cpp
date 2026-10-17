@@ -1,6 +1,7 @@
 #include "RaceHost.h"
 
 #include <algorithm>
+#include <set>
 
 #include "ReplayFormat.h"
 #include "../LinuxClient/Sha256.h"
@@ -16,6 +17,11 @@ struct RaceHost::Connection
     bool helloDone = false;
     int player = -1;
     bool spectator = false;
+    std::string name;
+    std::set<std::string> blocked;
+    double chatTokens = 3;
+    std::int64_t lastChatMs = 0;
+    std::vector<std::int64_t> reportTimes;
     std::uint32_t specCursor = 0;       // the next Tick a spectator is owed
     bool specResultSent = false;
     std::int64_t connectedMs = 0;
@@ -206,6 +212,7 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
         if (h.major != kMajor) { Close(c, kUnsupportedVersion, "this server speaks protocol 3"); return; }
         if (mStarted || ConnectedPlayers() >= mConfig.race.players) { Close(c, kServerFull, "the race is full or already running"); return; }
         c.helloDone = true;
+        c.name = h.name;
         std::vector<bool> used(static_cast<std::size_t>(mConfig.race.players), false);
         for (const auto& o : mConnections) if (!o->closed && o->player >= 0) used[static_cast<std::size_t>(o->player)] = true;
         for (int slot = 0; slot < mConfig.race.players; ++slot) if (!used[static_cast<std::size_t>(slot)]) { c.player = slot; break; }
@@ -224,6 +231,7 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
         if (!mStarted) { Close(c, kNotInRace, "the race has not started"); return; }
         if (Spectators() >= mConfig.maxSpectators) { Close(c, kServerFull, "too many spectators"); return; }
         c.helloDone = true;
+        c.name = h.name;
         c.spectator = true;
         c.parser.SetMaxFrame(std::min<std::uint16_t>(h.maxFrame, kDefaultMaxFrame));
         StartSpectator(c, nowMs);
@@ -268,6 +276,57 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
             else if (r == InputResult::Late && i + 1 == in.controls.size()) ++mMetrics.inputsLate;
             else if (r == InputResult::TooFarAhead) ++mMetrics.inputsTooFar;
         }
+        return;
+    }
+    case kChat: {
+        Chat m;
+        if (!Decode(payload, m) || !IsValidText(m.text, 120)) { Invalid(c, nowMs, "chat"); return; }
+        c.chatTokens = std::min<double>(mConfig.chatBurst, c.chatTokens + (nowMs - c.lastChatMs) / 1000.0);
+        c.lastChatMs = nowMs;
+        ChatMessage notice;
+        notice.fromServer = true;
+        notice.name = "server";
+        if (c.chatTokens < 1) { notice.text = "Slow down: too many messages."; Send(c, EncodeFrame(kChatMessage, Encode(notice))); return; }
+        c.chatTokens -= 1;
+        if (mConfig.moderation != nullptr && mConfig.moderation->IsMuted(c.name, nowMs)) {
+            notice.text = "You are muted.";
+            Send(c, EncodeFrame(kChatMessage, Encode(notice)));
+            return;
+        }
+        ChatMessage out;
+        out.name = c.name;
+        out.text = m.text;
+        if (mConfig.moderation != nullptr) mConfig.moderation->RememberChat(nowMs, c.name + ": " + m.text);
+        const std::vector<std::uint8_t> frame = EncodeFrame(kChatMessage, Encode(out));
+        for (auto& o : mConnections) {
+            if (o->closed || !o->helloDone) continue;
+            if (o.get() != &c && o->blocked.count(c.name)) continue;      // they blocked the sender
+            Send(*o, frame);
+        }
+        return;
+    }
+    case kBlock: {
+        Block m;
+        if (!Decode(payload, m) || !IsValidText(m.name, 32)) { Invalid(c, nowMs, "block"); return; }
+        if (c.blocked.size() < 50) c.blocked.insert(m.name);
+        return;
+    }
+    case kReport: {
+        Report m;
+        if (!Decode(payload, m) || !IsValidText(m.name, 32) || !IsValidText(m.reason, 120)) { Invalid(c, nowMs, "report"); return; }
+        ChatMessage notice;
+        notice.fromServer = true;
+        notice.name = "server";
+        c.reportTimes.erase(std::remove_if(c.reportTimes.begin(), c.reportTimes.end(), [&](std::int64_t t) { return nowMs - t > 60000; }), c.reportTimes.end());
+        if (static_cast<int>(c.reportTimes.size()) >= mConfig.reportsPerMinute || m.name == c.name || mConfig.moderation == nullptr) {
+            notice.text = "That report was not accepted.";
+        }
+        else {
+            c.reportTimes.push_back(nowMs);
+            mConfig.moderation->AddReport(nowMs, c.name, m.name, m.reason);
+            notice.text = "Report received. Thank you.";
+        }
+        Send(c, EncodeFrame(kChatMessage, Encode(notice)));
         return;
     }
     case kPing: {
@@ -392,6 +451,11 @@ void RaceHost::FinishRace()
 void RaceHost::Advance(std::int64_t nowMs)
 {
     mLastNow = nowMs;
+    // A moderator's removal order takes effect here.
+    if (mConfig.moderation != nullptr)
+        for (auto& conn : mConnections)
+            if (!conn->closed && !conn->name.empty() && mConfig.moderation->TakeKick(conn->name)) Close(*conn, Protocol3::kBanned, "removed by a moderator");
+
     // A connection that never completes Hello is closed.
     for (auto& c : mConnections)
         if (!c->closed && !c->helloDone && nowMs - c->connectedMs > mConfig.helloTimeoutMs) Close(*c, Protocol3::kBadMessage, "hello timeout");

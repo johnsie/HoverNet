@@ -263,4 +263,20 @@ bool Decode(const std::vector<std::uint8_t>& p, JoinRace& m) { In in(p); m.id = 
 
 std::vector<std::uint8_t> Encode(const SpectateRace& m) { Out o; o.U32(m.id); return o.b; }
 bool Decode(const std::vector<std::uint8_t>& p, SpectateRace& m) { In in(p); m.id = in.U32(); return in.Done(); }
+
+std::vector<std::uint8_t> Encode(const Chat& m) { Out o; o.Str(m.text); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, Chat& m) { In in(p); m.text = in.Str(120); return in.Done() && !m.text.empty(); }
+std::vector<std::uint8_t> Encode(const ChatMessage& m) { Out o; o.Str(m.name); o.Str(m.text); o.U8(m.fromServer ? 1 : 0); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, ChatMessage& m)
+{
+    In in(p);
+    m.name = in.Str(32); m.text = in.Str(120);
+    const std::uint32_t f = in.U8();
+    m.fromServer = f != 0;
+    return in.Done() && f <= 1;
+}
+std::vector<std::uint8_t> Encode(const Block& m) { Out o; o.Str(m.name); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, Block& m) { In in(p); m.name = in.Str(32); return in.Done() && !m.name.empty(); }
+std::vector<std::uint8_t> Encode(const Report& m) { Out o; o.Str(m.name); o.Str(m.reason); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, Report& m) { In in(p); m.name = in.Str(32); m.reason = in.Str(120); return in.Done() && !m.name.empty(); }
 }

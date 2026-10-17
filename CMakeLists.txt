@@ -168,6 +168,8 @@ add_library(HoverNetSim STATIC
     NetTarget/ObjFac1/FinishLine.cpp
     NetTarget/Authority/ReplayFormat.cpp
     NetTarget/Authority/TrackPackage.cpp
+    NetTarget/Authority/Hmac.cpp
+    NetTarget/Authority/Moderation.cpp
     NetTarget/Authority/AuthoritativeRace.cpp
     NetTarget/Authority/Protocol3.cpp
     NetTarget/Authority/RaceWorld.cpp
@@ -326,6 +328,13 @@ else()
         NetTarget/LinuxClient/AuthServer.cpp
     )
     target_link_libraries(HoverNetAuthServer PRIVATE HoverNetSim)
+    add_executable(HoverNetModTool
+        NetTarget/LinuxClient/ModTool.cpp
+    )
+    target_link_libraries(HoverNetModTool PRIVATE HoverNetSim)
+    if(WIN32)
+        target_link_libraries(HoverNetModTool PRIVATE ws2_32)
+    endif()
     add_executable(HoverNetAuthBot
         NetTarget/LinuxClient/AuthBot.cpp
     )
@@ -349,6 +358,11 @@ else()
         NetTarget/LinuxClient/TrackPack.cpp
     )
     target_link_libraries(HoverNetTrackPack PRIVATE HoverNetSim)
+
+    add_executable(HoverNetModerationTest
+        NetTarget/LinuxClient/ModerationTest.cpp
+    )
+    target_link_libraries(HoverNetModerationTest PRIVATE HoverNetSim)
 
     add_executable(HoverNetSnapshotTest
         NetTarget/LinuxClient/SnapshotTest.cpp
@@ -723,6 +737,8 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetAuthority COMMAND HoverNetAuthorityTest ClassicH 8)
     add_test(NAME HoverNetAuthorityRiver COMMAND HoverNetAuthorityTest "The River" 8)
     set_tests_properties(HoverNetAuthority HoverNetAuthorityRiver PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetModeration COMMAND HoverNetModerationTest)
+    set_tests_properties(HoverNetModeration PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetLobby COMMAND HoverNetLobbyTest)
     set_tests_properties(HoverNetLobby PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetProtocol COMMAND HoverNetProtocolTest ClassicH 8)
@@ -756,6 +772,9 @@ if(BUILD_TESTING AND NOT WIN32)
     set_tests_properties(HoverNetAuthClientSpectate PROPERTIES ENVIRONMENT "AUTH_SPECTATE=1")
     add_test(NAME HoverNetTrackPack
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-trackpack.sh $<TARGET_FILE:HoverNetTrackPack>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetModerationTcp
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-moderation-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetModTool>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>

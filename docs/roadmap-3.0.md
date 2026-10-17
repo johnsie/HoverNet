@@ -252,10 +252,10 @@ stored data, on every supported platform.
 operational and legal load. They are split so the launch is not held up by them.
 
 **6a, in 3.0:** safe basics.
-- Display names, optional sign-in, privacy controls, and a guest path.
-- Parties, invitations, private and public lobbies, and region selection.
-- Mute, block, and report with a minimal moderator workflow and an audit log.
-- Retention and deletion policy for personal data, chat, and telemetry.
+- Display names, optional sign-in, privacy controls, and a guest path. *Status: display names and the guest path exist (a session name); sign-in is not built.*
+- Parties, invitations, private and public lobbies, and region selection. *Status: the public lobby (host, join, watch) exists; the rest needs accounts.*
+- Mute, block, and report with a minimal moderator workflow and an audit log. *Status: done on the authoritative server, see [online-services.md](online-services.md): chat, block, report with chat context, an authenticated moderator console (HMAC challenge-response), mutes, kicks, address bans and a tamper-evident audit log.*
+- Retention and deletion policy for personal data, chat, and telemetry. *Status: written and enforced by the server's hourly purge, see [online-services.md](online-services.md).*
 
 **6b, 3.1 unless staffing and a business case justify pulling it in:**
 skill-aware matchmaking, seasonal and permanent ratings with auditable result ingestion,

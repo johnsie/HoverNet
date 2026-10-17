@@ -38,6 +38,10 @@ enum Type : std::uint8_t
     kJoinRace = 23,
     kSpectate = 24,        // a Hello that asks to watch the race instead of driving in it
     kSpectateRace = 25,    // lobby: watch a race by id
+    kChat = 30,            // client to server: say something to the race
+    kChatMessage = 31,     // server to client: someone said something
+    kBlock = 32,           // client to server: stop showing me this name
+    kReport = 33,          // client to server: report a name to the moderators
 };
 
 enum RejectReason : std::uint8_t
@@ -50,6 +54,7 @@ enum RejectReason : std::uint8_t
     kNoSuchRace = 6,
     kBadSettings = 7,
     kTooManyRaces = 8,
+    kBanned = 9,
 };
 
 // ---- framing -----------------------------------------------------------------------------------------------
@@ -94,6 +99,10 @@ struct RaceList { std::vector<RaceInfo> races; };
 struct HostRace { std::string track; std::uint8_t players = 2, laps = 3; bool weapons = true; };
 struct JoinRace { std::uint32_t id = 0; };
 struct SpectateRace { std::uint32_t id = 0; };
+struct Chat { std::string text; };
+struct ChatMessage { std::string name; std::string text; bool fromServer = false; };
+struct Block { std::string name; };
+struct Report { std::string name; std::string reason; };
 struct Result { std::uint32_t ticks = 0; std::uint64_t finalHash = 0; std::vector<PlayerResult> players; };
 
 std::vector<std::uint8_t> Encode(const Hello&);
@@ -108,6 +117,10 @@ std::vector<std::uint8_t> Encode(const SnapshotChunk&);
 std::vector<std::uint8_t> Encode(const Ping&);
 std::vector<std::uint8_t> Encode(const Pong&);
 std::vector<std::uint8_t> Encode(const Result&);
+std::vector<std::uint8_t> Encode(const Report&);
+std::vector<std::uint8_t> Encode(const Block&);
+std::vector<std::uint8_t> Encode(const ChatMessage&);
+std::vector<std::uint8_t> Encode(const Chat&);
 std::vector<std::uint8_t> Encode(const RaceList&);
 std::vector<std::uint8_t> Encode(const HostRace&);
 std::vector<std::uint8_t> Encode(const JoinRace&);
@@ -126,6 +139,10 @@ bool Decode(const std::vector<std::uint8_t>& payload, SnapshotChunk&);
 bool Decode(const std::vector<std::uint8_t>& payload, Ping&);
 bool Decode(const std::vector<std::uint8_t>& payload, Pong&);
 bool Decode(const std::vector<std::uint8_t>& payload, Result&);
+bool Decode(const std::vector<std::uint8_t>& payload, Report&);
+bool Decode(const std::vector<std::uint8_t>& payload, Block&);
+bool Decode(const std::vector<std::uint8_t>& payload, ChatMessage&);
+bool Decode(const std::vector<std::uint8_t>& payload, Chat&);
 bool Decode(const std::vector<std::uint8_t>& payload, RaceList&);
 bool Decode(const std::vector<std::uint8_t>& payload, HostRace&);
 bool Decode(const std::vector<std::uint8_t>& payload, JoinRace&);

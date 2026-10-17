@@ -18,6 +18,13 @@ and how to roll one back.
 - **Playing on the authoritative server (preview).** `HoverNet --auth-connect HOST:PORT` joins a race on `HoverNetAuthServer` with the normal
   renderer and controls: the server decides the race, the game shows an exact copy of it plus a prediction of the next few ticks, and
   reconnects by itself if the connection drops. Command line only for now; see [docs/authoritative-race.md](docs/authoritative-race.md).
+- **Lobby, spectating and moderation on the authoritative server (preview).** `HoverNetAuthServer --lobby` hosts many races: players host and join
+  through the lobby, and anyone can watch a running race a few seconds behind the drivers (`HoverNet --auth-connect HOST:PORT --spectate`). Races support chat,
+  blocking and reports; moderators use a loopback console with challenge-response login, and every moderation action goes into a tamper-evident audit log.
+  See [docs/online-services.md](docs/online-services.md).
+- **Track packages.** `HoverNetTrackPack` wraps a classic track in a versioned, verifiable package with author, licence and hashes without changing the track,
+  and imported all 1,012 community tracks. See [docs/specs/track-package.md](docs/specs/track-package.md).
+- Replays can be rewound and fast-forwarded in the game (Left, Right, Home).
 - `--fixed-step` runs the game's simulation in whole 16 ms ticks whatever the frame rate (off by default).
 
 ### Fixed

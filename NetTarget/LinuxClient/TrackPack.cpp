@@ -10,6 +10,10 @@
 // what it found in the manifest: rooms, starts, element counts and whether it is a race or free play. The original bytes are
 // kept unchanged in the package. A track that cannot be imported is reported with the exact reason.
 #include <algorithm>
+#ifdef _WIN32
+#define popen _popen
+#define pclose _pclose
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -213,12 +217,12 @@ int Fuzz(const std::string& path, int iterations)
     base.payload.resize(64);
     base.manifest["payload-bytes"] = "64";
     base.manifest["payload-sha256"] = Sha256::HashBytes(base.payload.data(), base.payload.size());
-    const std::vector<std::uint8_t> small = TrackPackage::Encode(base);
+    const std::vector<std::uint8_t> tiny = TrackPackage::Encode(base);
     std::uint64_t state = 0x2545F4914F6CDD1DULL;
     auto next = [&state]() { state ^= state >> 12; state ^= state << 25; state ^= state >> 27; return state * 2685821657736338717ULL; };
     int accepted = 0, rejected = 0;
     for (int i = 0; i < iterations; ++i) {
-        std::vector<std::uint8_t> bytes = small;
+        std::vector<std::uint8_t> bytes = tiny;
         const int edits = 1 + static_cast<int>(next() % 4);
         for (int e = 0; e < edits && bytes.size() > 12; ++e) {
             const std::size_t at = static_cast<std::size_t>(next() % (bytes.size() - 4));
@@ -245,7 +249,11 @@ int Corpus(const std::string& dir, const std::string& outDir, const std::string&
 {
     std::vector<std::string> files;
     {
+#ifdef _WIN32
+        std::string command = "dir /b \"" + dir + "\"";
+#else
         std::string command = "ls -1 \"" + dir + "\"";
+#endif
         FILE* pipe = popen(command.c_str(), "r");
         if (pipe == nullptr) { std::fprintf(stderr, "cannot list %s\n", dir.c_str()); return 1; }
         char line[4096];
