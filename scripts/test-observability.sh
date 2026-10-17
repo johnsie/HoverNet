@@ -7,6 +7,7 @@ server="${1:?usage: $0 <server> <bot>}"; bot="${2:?}"
 dir="$(mktemp -d)"; trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$dir"' EXIT
 fail=0
 PY=python3; command -v python3 >/dev/null 2>&1 || PY=python
+if ! command -v "$PY" >/dev/null 2>&1 || ! "$PY" -c "import socket" >/dev/null 2>&1; then echo "observability: skipped the HTTP checks (no Python on this machine)"; PY=""; fi
 get() { "$PY" - "$1" "$2" <<'P'
 import socket, sys
 s = socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=5)
@@ -24,19 +25,19 @@ for _ in $(seq 1 100); do grep -q "status on" "$dir/server.txt" 2>/dev/null && g
 port=$(sed -n 's/.*listening on [0-9.]*:\([0-9]*\),.*/\1/p' "$dir/server.txt" | head -1)
 status=$(sed -n 's/.*status on 127.0.0.1:\([0-9]*\) .*/\1/p' "$dir/server.txt" | head -1)
 [ -n "$port" ] && [ -n "$status" ] || { echo "FAIL: the server did not start"; cat "$dir/server.txt"; exit 1; }
-get "$status" /health | grep -q "200 OK" || { echo "FAIL: /health"; fail=1; }
-get "$status" /nothing | grep -q "404" || { echo "FAIL: unknown path should be 404"; fail=1; }
+[ -z "$PY" ] || get "$status" /health | grep -q "200 OK" || { echo "FAIL: /health"; fail=1; }
+[ -z "$PY" ] || get "$status" /nothing | grep -q "404" || { echo "FAIL: unknown path should be 404"; fail=1; }
 "$bot" --port "$port" --name o1 --host-race ClassicH:2 > "$dir/o1.txt" 2>&1 &
 sleep 0.4
 "$bot" --port "$port" --name o2 --join-race ClassicH --track ClassicH > "$dir/o2.txt" 2>&1 &
 wait %2 %3 2>/dev/null
 sleep 1
-m=$(get "$status" /metrics)
-echo "$m" | grep -q "^hovernet_races_hosted_total 1$" || { echo "FAIL: races hosted"; echo "$m" | grep hosted; fail=1; }
+m=""; [ -z "$PY" ] || m=$(get "$status" /metrics)
+[ -z "$PY" ] || echo "$m" | grep -q "^hovernet_races_hosted_total 1$" || { echo "FAIL: races hosted"; echo "$m" | grep hosted; fail=1; }
 ticks=$(echo "$m" | sed -n 's/^hovernet_ticks_simulated_total \([0-9]*\)$/\1/p')
-[ "${ticks:-0}" -ge 290 ] || { echo "FAIL: ticks simulated is ${ticks:-none}"; fail=1; }
-echo "$m" | grep -q "^hovernet_invalid_messages_total 0$" || { echo "FAIL: invalid messages"; fail=1; }
-echo "$m" | grep -q "^# TYPE hovernet_bytes_sent_total counter$" || { echo "FAIL: metrics format"; fail=1; }
+[ -z "$PY" ] || [ "${ticks:-0}" -ge 290 ] || { echo "FAIL: ticks simulated is ${ticks:-none}"; fail=1; }
+[ -z "$PY" ] || echo "$m" | grep -q "^hovernet_invalid_messages_total 0$" || { echo "FAIL: invalid messages"; fail=1; }
+[ -z "$PY" ] || echo "$m" | grep -q "^# TYPE hovernet_bytes_sent_total counter$" || { echo "FAIL: metrics format"; fail=1; }
 kill %1 2>/dev/null; wait %1 2>/dev/null
 # A crash leaves a report.
 mkdir -p "$dir/crash"
