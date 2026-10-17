@@ -96,7 +96,13 @@ async function waitFor(fn, ms) { for (let t = 0; t < ms; t += 500) { if (await f
 
 await send('Runtime.enable'); await send('Page.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: 837, height: 715, deviceScaleFactor: 1, mobile: false });
-async function scenario(name, players, withBot, spectate = false) {
+async function typeKey(ch) {
+  const code = ch === ' ' ? 'Space' : `Key${ch.toUpperCase()}`;
+  const vk = ch === ' ' ? 32 : ch.toUpperCase().charCodeAt(0);
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: ch, code, text: ch, unmodifiedText: ch, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk }); await sleep(60);
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: ch, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk }); await sleep(60);
+}
+async function scenario(name, players, withBot, spectate = false, typeChat = false) {
   console.log(`-- ${name}`);
   consoleLines.length = 0;
   if (name !== 'first') {
@@ -133,6 +139,13 @@ async function scenario(name, players, withBot, spectate = false) {
   check(await waitFor(async () => { const v = await inRace(); seen.push(v); return v === 1; }, 60000), `${name}: the browser connected over WebSocket and ${spectate ? 'is watching' : 'a race started'}`);
   if (process.env.DEBUG_SEEN) console.log('inRace samples:', seen.join(','));
   await sleep(1500); await shot(`servers-${name}-race`);
+  if (typeChat) {
+    await sleep(300);
+    for (const ch of 'hi there') await typeKey(ch);
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }); await sleep(80);
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+    check(await waitFor(async () => consoleLines.some((l) => /CHATTEST received: Player: hi there/.test(l)), 15000), `${name}: a message typed with the keyboard reached the server and came back`);
+  }
   check(await waitFor(async () => consoleLines.some((l) => /auth client: [1-9][0-9]* ticks verified, 0 tick failures, [0-9]+ restore checks, 0 restore failures/.test(l)), 120000),
         `${name}: the browser followed the whole race exactly (every tick verified)`);
   for (const r of racers) { try { r.kill(); } catch (e) {} }
@@ -145,6 +158,7 @@ const botBin = path.join(path.dirname(path.resolve(serverBin)), 'HoverNetAuthBot
 const only = process.env.ONLY;
 if (!only || only === 'first') await scenario('first', 1, false);
 if (!only || only === 'two') await scenario('two-players-and-chat', 2, true);
+if (!only || only === 'typing') await scenario('typing-chat', 1, false, false, true);
 if (!only || only === 'spectate') {
   // Races that already ended can still be listed for a moment: wait until the server has none, so the spectator watches the new one.
   if (statusPort) for (let i = 0; i < 120; i++) {
