@@ -6396,6 +6396,16 @@ struct AuthOnline
     std::unique_ptr<RenderedWorld> world;
     std::uint32_t lead = 12;     // ticks ahead of the confirmed tick that the client aims its inputs at
     Uint32 lastSend = 0, lastPing = 0, lastSnapshotRequest = 0, lastReconnect = 0;
+    // The picture's own clock: it runs smoothly with real time and is only eased toward the server's (confirmed tick + lead), so a burst of Ticks
+    // that arrives late does not make the craft lurch. After the final Result the client drives on by itself (free driving).
+    double displayTick = 0;
+    Uint32 displayMs = 0;
+    bool displayInit = false;
+    bool freeDriving = false;
+    Uint32 freeMs = 0;
+    double freeAcc = 0;
+    std::uint32_t freeTicks = 0;
+    std::uint32_t shownTick = 0;     // the tick the picture is at (for the test instrumentation)
     int reconnectAttempts = 0;
     std::vector<Protocol3::SnapshotChunk> chunks;
     std::vector<AuthFrame> backlog;
@@ -6944,6 +6954,8 @@ int RunClient(int argc, char** argv)
         auth.world.reset(new RenderedWorld(session, auth.craft));
         auth.active = true;
         auth.lost = auth.resultReceived = false;
+        auth.displayInit = false;
+        auth.freeDriving = false;
         auth.reconnectAttempts = 0;
         auth.chunks.clear();
         auth.needSnapshot = auth.spectator;   // the server sends the keyframe first; nothing is drawn or applied before it
@@ -7411,7 +7423,91 @@ int RunClient(int argc, char** argv)
                     ++auth.restoreFailures;
                 }
             }
-            auth.predictor.PredictOn(*auth.world, auth.predictor.ConfirmedTick() + (auth.scripted || auth.verify || auth.spectator ? 0u : auth.lead), error);
+            const std::uint32_t confirmed = auth.predictor.ConfirmedTick();
+            if (auth.resultReceived && !auth.spectator && !auth.verify) {
+                // The race is over (everyone has finished, or time ran out) and the server has stopped. The craft is not left where the server's last
+                // state put it: it is restored to that state once, and then driven on from the player's own keys, as in single player.
+                if (!auth.freeDriving) {
+                    auth.predictor.PredictOn(*auth.world, confirmed, error);
+                    auth.freeDriving = true;
+                    auth.freeMs = now;
+                    auth.freeAcc = 0;
+                    auth.freeTicks = 0;
+                    session.AddMessage("The race is over. Keep driving as long as you like");
+                    if (std::getenv("HOVERNET_TEST_FREEDRIVE") != nullptr) { const MR_MainCharacter* me = auth.craft[static_cast<std::size_t>(auth.ack.player)]; std::printf("FREEDRIVETEST position at the result (%d,%d)\n", me->mPosition.mX, me->mPosition.mY); std::fflush(stdout); }
+                }
+                else {
+                    auth.freeAcc += std::min<double>(5.0, (now - auth.freeMs) / 16.0);
+                    auth.freeMs = now;
+                    std::vector<std::uint16_t> controls(static_cast<std::size_t>(auth.ack.players), 0);
+                    while (auth.freeAcc >= 1.0) {
+                        controls[static_cast<std::size_t>(auth.ack.player)] = auth.scripted ? SimHarnessScripted(auth.ack.player, auth.freeTicks)
+                                                                                           : static_cast<std::uint16_t>(controlState & 0xFFFF);
+                        auth.world->StepTick(controls.data());
+                        auth.freeAcc -= 1.0;
+                        ++auth.freeTicks;
+                    }
+                    if (std::getenv("HOVERNET_TEST_FREEDRIVE") != nullptr && auth.freeTicks >= 200) {
+                        // Test hook (scripts/test-free-drive.sh): after the race the craft must still be driven by its player.
+                        const MR_MainCharacter* me = auth.craft[static_cast<std::size_t>(auth.ack.player)];
+                        std::printf("FREEDRIVETEST position after the result (%d,%d); free-driven ticks %u\n", me->mPosition.mX, me->mPosition.mY, auth.freeTicks);
+                        std::fflush(stdout);
+                        return 1;
+                    }
+                }
+            }
+            else if (auth.verify) {
+                // Test mode: the picture is exactly the confirmed state.
+                auth.predictor.PredictOn(*auth.world, confirmed, error);
+                auth.shownTick = confirmed;
+            }
+            else {
+                // The picture's tick follows the clock; it is eased toward confirmed + lead (a spectator: toward the confirmed tick) instead of
+                // being tied to it, so Ticks that arrive in a burst after a stall move the craft smoothly, not in a jump.
+                const double ahead = auth.spectator ? 0.0 : static_cast<double>(auth.lead);
+                const double ideal = confirmed + ahead;
+                if (!auth.displayInit || auth.needSnapshot) { auth.displayTick = ideal; auth.displayInit = true; auth.displayMs = now; }
+                const double elapsed = std::min<double>(8.0, (now - auth.displayMs) / 16.0);
+                auth.displayMs = now;
+                if (confirmed == 0) auth.displayTick = ideal;   // the race has not produced its first tick: nothing to run ahead of
+                auth.displayTick += confirmed == 0 ? 0.0 : elapsed;
+                const double error2 = ideal - auth.displayTick;
+                if (std::fabs(error2) > 40.0) auth.displayTick = ideal;                       // lost sync (a long stall): jump
+                else auth.displayTick += error2 * std::min(1.0, 0.06 * elapsed);              // otherwise ease: about 6% of the gap per tick
+                if (auth.spectator && auth.displayTick > confirmed) auth.displayTick = confirmed;   // a spectator never runs past what is known
+                if (auth.displayTick < confirmed) auth.displayTick = confirmed;
+                auth.shownTick = static_cast<std::uint32_t>(auth.displayTick);
+                auth.predictor.PredictOn(*auth.world, auth.shownTick, error);
+            }
+        }
+        // Test instrumentation (HOVERNET_TEST_JITTER): how smoothly does the craft move on screen? Per frame: how many ticks the picture advanced
+        // against how many the clock says it should have (1.0 = exactly in step), and how far the craft jumped.
+        static std::vector<double> sRatios, sJumps;
+        static Uint32 sLastFrame = 0;
+        static std::uint32_t sLastDisplay = 0;
+        static double sLastX = 0, sLastY = 0;
+        static bool sHave = false;
+        if (std::getenv("HOVERNET_TEST_JITTER") != nullptr && !auth.needSnapshot && !auth.resultReceived && !auth.spectator && auth.shownTick != 0) {
+            const std::uint32_t displayTick = auth.shownTick;
+            const MR_MainCharacter* me = auth.craft[static_cast<std::size_t>(auth.ack.player)];
+            const double x = me->mPosition.mX, y = me->mPosition.mY;
+            static int sWarmup = 0;
+            if (sHave && now > sLastFrame && ++sWarmup > 30) {
+                const double expected = (now - sLastFrame) / 16.0;
+                sRatios.push_back((static_cast<double>(displayTick) - sLastDisplay) / expected);
+                sJumps.push_back(std::sqrt((x - sLastX) * (x - sLastX) + (y - sLastY) * (y - sLastY)));
+            }
+            sHave = true; sLastFrame = now; sLastDisplay = displayTick; sLastX = x; sLastY = y;
+        }
+        if (auth.resultReceived && std::getenv("HOVERNET_TEST_JITTER") != nullptr && !sRatios.empty()) {
+            std::vector<double> r = sRatios, j = sJumps;
+            std::sort(r.begin(), r.end()); std::sort(j.begin(), j.end());
+            auto pct = [](const std::vector<double>& v, double q) { return v[static_cast<std::size_t>(q * (v.size() - 1))]; };
+            std::printf("JITTERTEST frames=%zu pace(ticks shown per tick elapsed) p5=%.2f p50=%.2f p95=%.2f max=%.2f   craft jump per frame (mm) p50=%.0f p95=%.0f max=%.0f\n",
+                        r.size(), pct(r, 0.05), pct(r, 0.5), pct(r, 0.95), r.back(), pct(j, 0.5), pct(j, 0.95), j.back());
+            std::fflush(stdout);
+            sRatios.clear(); sJumps.clear();
+            return 1;   // the measurement is done: leave (exit status 0)
         }
         if (auth.resultReceived && auth.verify) {
             std::printf("auth client: %u ticks verified, %u tick failures, %u restore checks, %u restore failures%s\n", auth.verified, auth.tickFailures,

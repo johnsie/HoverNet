@@ -6,6 +6,12 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.2 - 2026-10-17
+
+### Fixed
+- **Online: the craft no longer jumps around.** The picture of your craft was tied to the moment the server's ticks arrived, so any clumping of ticks on the network (common over the internet and through web proxies) made it stall and then lurch (measured: 0.44x to 1.88x of real time, up to 3.4x, with 60 +- 40 ms of jitter). The picture now runs on its own smooth clock and is only eased toward the server's (0.89x to 1.41x, the same as a perfect connection). A spectator's view is smoothed the same way.
+- **Online: the craft no longer gets stuck at the end of the race.** When everyone has finished the server stops simulating, and the client kept putting the craft back where the server's last state had it. After the final result the client now drives the craft on from your own keys, as in single player (the other craft stay where they finished).
+
 ## 2.3.1 - 2026-10-17
 
 ### Changed
