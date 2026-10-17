@@ -61,7 +61,7 @@ acc="$(ask "Accounts: 'none' (guest names only), 'optional' or 'required' (Enter
 if [ -n "$acc" ]; then
   how=""; data=""
   if [ "$acc" != none ]; then
-    how="$(ask "Sign-in method (email-link, oauth, password):")"
+    how="$(ask "Sign-in method (device-key, email-link, oauth, password):")"
     data="$(ask "Personal data you accept to store (e.g. email address only):")"
   fi
   note "Accounts and sign-in" "Accounts: **$acc**. Method: ${how:-n/a}. Data stored: ${data:-n/a}. A privacy and deletion policy for accounts still has to be written and reviewed."

@@ -1,6 +1,6 @@
 # ADR 0002: Licence and authorship policy for track content
 
-- Status: **Proposed** (17 October 2026), for confirmation by the project owner. Not legal advice; have a lawyer review it before the
+- Status: **Accepted** (2026-10-17) by the project owner. Not legal advice; legal review is still to do before outside submissions.
   catalogue is opened to outside submissions.
 - Deciders: project owner
 - Roadmap: [roadmap-3.0.md](../roadmap-3.0.md), "Decisions to make before kickoff" and the risk "Unknown licensing of community content"
