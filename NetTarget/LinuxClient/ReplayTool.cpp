@@ -4,6 +4,7 @@
 //   HoverNetReplay verify <file.hnr>                                  re-simulate and check every checkpoint
 //   HoverNetReplay info   <file.hnr>                                  print the header
 //   HoverNetReplay results <file.hnr>                                 replay it and print each player's laps, finish and best lap
+//   HoverNetReplay events <file.hnr>                                  every lap crossing and finish: tick, player, lap time and race time
 //   HoverNetReplay id <file.hnr>                                      print the replay's shareable identifier (16 hex digits of its SHA-256)
 //   HoverNetReplay leaderboard <file.hnr>... [--track=NAME] [--top=N] rank the verified results of many replays
 //
@@ -179,7 +180,7 @@ int Replay_(const std::string& path, long dumpTick, bool trace)
 
 // Replays the inputs through the authoritative race and returns the result table: what a leaderboard or a time trial needs
 // from a replay. The same inputs always give the same table on every platform.
-bool ComputeResults(const std::string& path, Replay& r, std::vector<Authority::PlayerResult>& results, std::uint32_t& ticks)
+bool ComputeResults(const std::string& path, Replay& r, std::vector<Authority::PlayerResult>& results, std::uint32_t& ticks, std::vector<Authority::RaceEvent>* events = nullptr)
 {
     std::vector<std::uint8_t> file;
     std::string error;
@@ -202,7 +203,22 @@ bool ComputeResults(const std::string& path, Replay& r, std::vector<Authority::P
     if (race.StateHash() != r.finalHash && race.CurrentTick() == r.ticks) { std::fprintf(stderr, "%s: DIVERGED at the end\n", path.c_str()); return false; }
     results = race.Results();
     ticks = race.CurrentTick();
+    if (events != nullptr) *events = race.Events();
     return true;
+}
+
+// The timeline of a replay: every lap crossing and finish with its tick and race time (markers for a viewer, and a lap-time table).
+int Events(const std::string& path)
+{
+    Replay r;
+    std::vector<Authority::PlayerResult> results;
+    std::vector<Authority::RaceEvent> events;
+    std::uint32_t ticks = 0;
+    if (!ComputeResults(path, r, results, ticks, &events)) return 1;
+    std::printf("events for %s after %u ticks: %zu\n", r.track.c_str(), ticks, events.size());
+    for (const Authority::RaceEvent& e : events)
+        std::printf("tick %u player %d %s %d lap_ms %lld race_ms %lld\n", e.tick, e.player, e.finished ? "finish" : "lap", e.lap, static_cast<long long>(e.lapMs), static_cast<long long>(e.raceMs));
+    return 0;
 }
 
 int Results(const std::string& path)
@@ -326,6 +342,7 @@ int main(int argc, char** argv)
     if (cmd == "info") return Info(argv[2]);
     if (cmd == "results") return Results(argv[2]);
     if (cmd == "id") return Id(argv[2]);
+    if (cmd == "events") return Events(argv[2]);
     if (cmd == "leaderboard") {
         std::vector<std::string> files;
         std::string track;

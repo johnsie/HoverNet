@@ -41,6 +41,9 @@ i1=$("${tool[@]}" id "$dir/ClassicH.hnr" | tr -d '\r'); i2=$("${tool[@]}" id "$d
 # The leaderboard skips (and reports) a damaged replay and still ranks the others.
 "${tool[@]}" leaderboard "$dir/ClassicH.hnr" "$dir/flipped.hnr" >/dev/null 2>&1 && { echo "FAIL: leaderboard accepted a damaged replay"; fail=1; }
 "${tool[@]}" leaderboard "$dir/ClassicH.hnr" "$dir/The River.hnr" >/dev/null 2>&1 || { echo "FAIL: leaderboard over two good replays failed"; fail=1; }
+# The event timeline is produced and repeatable (the scripted race completes no lap, so it is empty; the authority test checks a real finish).
+e1=$("${tool[@]}" events "$dir/ClassicH.hnr" 2>&1 | tr -d '\r' | grep -v 'Net priority'); e2=$("${tool[@]}" events "$dir/ClassicH.hnr" 2>&1 | tr -d '\r' | grep -v 'Net priority')
+echo "$e1" | grep -q '^events for ClassicH after 1500 ticks: 0$' && [ "$e1" = "$e2" ] || { echo "FAIL: the replay event timeline is wrong: $e1"; fail=1; }
 # Mutation fuzzing of the decoder with the CRC repaired (run under the sanitizer build in CI).
 expect_ok "${tool[@]}" fuzz "$dir/ClassicH.hnr" 5000
 [ $fail -eq 0 ] && echo "replay: record/verify round trip and corruption checks passed"

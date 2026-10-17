@@ -269,6 +269,9 @@ int main(int argc, char** argv)
             Check(results[0].rank == 1 && results[0].laps == 1, "the finisher is ranked first with one lap");
             Check(results[0].finishTimeMs > 0 && results[0].bestLapMs == results[0].finishTimeMs, "a one-lap finish time is also the best lap");
             Check(results[1].rank == 2 && results[1].laps == 0, "a craft that did not finish ranks behind the finisher");
+            const auto& events = race.Events();
+            Check(events.size() == 1 && events[0].player == 0 && events[0].lap == 1 && events[0].finished && events[0].raceMs == results[0].finishTimeMs && events[0].lapMs == results[0].bestLapMs,
+                  "the finish is recorded as one event with the lap and race time");
             std::printf("  finish: player 0 in %lld ms\n", static_cast<long long>(results[0].finishTimeMs));
         }
         else {

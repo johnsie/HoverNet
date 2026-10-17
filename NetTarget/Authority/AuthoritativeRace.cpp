@@ -69,6 +69,8 @@ bool AuthoritativeRace::Start( const RaceConfig& config, std::string& error )
     mLastInput.assign( config.players, 0 );
     mPending.assign( config.players, std::vector<std::int32_t>() );
     mTick = 0;
+    mEvents.clear();
+    mLastLap.clear();
     mFinished = false;
     return true;
 }
@@ -129,6 +131,24 @@ bool AuthoritativeRace::AdvanceTick()
     mSession->SimulateStep( ReplayFormat::kFrameMs );
     ++mTick;
     if( mTick % ReplayFormat::kCheckpointTicks == 0 ) mCheckpoints.push_back( StateHash() );
+
+    if( mLastLap.size() != mCraft.size() ) mLastLap.assign( mCraft.size(), 0 );
+    for( std::size_t lPlayer = 0; lPlayer < mCraft.size(); ++lPlayer )
+    {
+        const int lLap = mCraft[ lPlayer ]->GetLap();
+        if( lLap > mLastLap[ lPlayer ] )
+        {
+            mLastLap[ lPlayer ] = lLap;
+            RaceEvent lEvent;
+            lEvent.tick = mTick;
+            lEvent.player = static_cast<int>( lPlayer );
+            lEvent.lap = lLap;
+            lEvent.finished = mCraft[ lPlayer ]->HasFinish() != FALSE;
+            lEvent.lapMs = mCraft[ lPlayer ]->GetLastLapDuration();
+            lEvent.raceMs = mCraft[ lPlayer ]->GetTotalTime();
+            mEvents.push_back( lEvent );
+        }
+    }
 
     bool lAllDone = true;
     for( std::size_t lPlayer = 0; lPlayer < mCraft.size(); ++lPlayer ) lAllDone = lAllDone && mCraft[ lPlayer ]->HasFinish();

@@ -25,6 +25,7 @@ track, and says so; it never plays something that would not reproduce.
 - `HoverNetReplay results race.hnr` replays the inputs through the authoritative race and prints one row per player (rank, laps, finish
   time, best lap), the same on every platform: the input a leaderboard or a time trial needs. The server writes the same table beside each official replay as `<name>.results.tsv`
   (tab-separated: rank, player, laps, finished, finish_ms, best_lap_ms), and its test checks the two agree.
+- `HoverNetReplay events race.hnr` prints the timeline: every lap crossing and finish with its tick, lap time and race time. The server records the same events as the race runs (`AuthoritativeRace::Events`) and writes them in its event log; they are derived, not stored in the file, so the replay format did not change.
 - `HoverNetReplay leaderboard a.hnr b.hnr ... [--track=NAME] [--top=N]` re-simulates every replay and ranks the finishers (per track and lap count)
   and the best laps (per track). A replay that is damaged, recorded under other rules or that does not reproduce is reported as skipped
   and never ranked (exit status 1). Entries are named `id#slot`, where the id is what `HoverNetReplay id race.hnr` prints (16 hex digits of the file's SHA-256, the same whatever the file is called); replays carry player slots, not accounts. The scripted bots in the

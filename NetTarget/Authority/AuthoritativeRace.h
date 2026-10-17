@@ -49,6 +49,18 @@ struct PlayerResult
     int rank = 0;                     // 1 = winner; unfinished players rank by laps then are ordered after finishers
 };
 
+// A lap completed (the last one also finishes the race for that player). Recorded as the race runs; not part of the hashed state, so a
+// race restored from a snapshot has only the events after it. A replay re-simulated from tick 0 yields the same events.
+struct RaceEvent
+{
+    std::uint32_t tick = 0;           // the tick after which the lap count changed
+    int player = 0;
+    int lap = 0;                      // laps completed so far
+    bool finished = false;
+    std::int64_t lapMs = 0;           // duration of this lap
+    std::int64_t raceMs = 0;          // race time at the crossing
+};
+
 class AuthoritativeRace
 {
 public:
@@ -70,6 +82,7 @@ public:
     bool FreePlay() const { return mFreePlay; }                   // the track has no finish line: the race runs to a time limit
     std::uint64_t StateHash() const;                              // MR_HashLevelState of the whole race
     std::vector<PlayerResult> Results() const;
+    const std::vector<RaceEvent>& Events() const { return mEvents; }
 
     // The control words every player's craft used at a tick that has been simulated (empty if not yet).
     std::vector<std::uint16_t> InputsAt(std::uint32_t tick) const;
@@ -95,6 +108,8 @@ private:
     std::vector<std::uint16_t> mHistory;                             // [tick * players + player], what was actually simulated
     std::vector<std::uint64_t> mCheckpoints;
     std::string mTrackSha256;
+    std::vector<RaceEvent> mEvents;
+    std::vector<int> mLastLap;                                        // per player, for detecting lap crossings
 };
 }
 

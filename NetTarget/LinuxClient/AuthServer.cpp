@@ -269,7 +269,7 @@ void LogEvent(const char* event, const std::string& fields = std::string())
     std::fflush(g_eventLog);
 }
 
-std::string ResultFields(const std::string& track, std::uint32_t ticks, std::uint64_t hash, const std::vector<Authority::PlayerResult>& results)
+std::string ResultFields(const std::string& track, std::uint32_t ticks, std::uint64_t hash, const std::vector<Authority::PlayerResult>& results, const std::vector<Authority::RaceEvent>& events)
 {
     char head[256];
     std::snprintf(head, sizeof(head), "\"track\":\"%s\",\"ticks\":%u,\"final_hash\":\"%016llx\",\"results\":[", track.c_str(), ticks, static_cast<unsigned long long>(hash));
@@ -279,6 +279,14 @@ std::string ResultFields(const std::string& track, std::uint32_t ticks, std::uin
         char row[160];
         std::snprintf(row, sizeof(row), "%s{\"player\":%d,\"rank\":%d,\"laps\":%d,\"finished\":%s,\"finish_ms\":%lld,\"best_lap_ms\":%lld}", i ? "," : "", r.player, r.rank, r.laps,
                       r.finished ? "true" : "false", static_cast<long long>(r.finishTimeMs), static_cast<long long>(r.bestLapMs));
+        out += row;
+    }
+    out += "],\"laps\":[";
+    for (std::size_t i = 0; i < events.size(); ++i) {
+        const auto& e = events[i];
+        char row[160];
+        std::snprintf(row, sizeof(row), "%s{\"tick\":%u,\"player\":%d,\"lap\":%d,\"finished\":%s,\"lap_ms\":%lld,\"race_ms\":%lld}", i ? "," : "", e.tick, e.player, e.lap,
+                      e.finished ? "true" : "false", static_cast<long long>(e.lapMs), static_cast<long long>(e.raceMs));
         out += row;
     }
     return out + "]";
@@ -515,7 +523,7 @@ int main(int argc, char** argv)
         lobby.SetRaceFinishedCallback([&](std::uint32_t id, const RaceHost& finished) {
             std::printf("race %u over after %u ticks, final hash %016llx\n", id, finished.Race().CurrentTick(), static_cast<unsigned long long>(finished.Race().StateHash()));
             for (const auto& r : finished.Race().Results()) std::printf("  player %d: rank %d, laps %d%s\n", r.player, r.rank, r.laps, r.finished ? ", finished" : "");
-            LogEvent("race_finished", ResultFields(finished.Config().race.trackName, finished.Race().CurrentTick(), finished.Race().StateHash(), finished.Race().Results()));
+            LogEvent("race_finished", ResultFields(finished.Config().race.trackName, finished.Race().CurrentTick(), finished.Race().StateHash(), finished.Race().Results(), finished.Race().Events()));
             if (!replayDir.empty()) {
                 char name[160];
                 std::snprintf(name, sizeof(name), "/%s-%u-%lld.hnr", finished.Config().race.trackName.c_str(), id, static_cast<long long>(std::time(nullptr)));
@@ -590,7 +598,7 @@ int main(int argc, char** argv)
                 const std::vector<Authority::PlayerResult> results = host->Race().Results();
                 std::printf("race over after %u ticks, final hash %016llx\n", host->Race().CurrentTick(), static_cast<unsigned long long>(host->Race().StateHash()));
                 for (const auto& r : results) std::printf("  player %d: rank %d, laps %d%s\n", r.player, r.rank, r.laps, r.finished ? ", finished" : "");
-                LogEvent("race_finished", ResultFields(cfg.race.trackName, host->Race().CurrentTick(), host->Race().StateHash(), results));
+                LogEvent("race_finished", ResultFields(cfg.race.trackName, host->Race().CurrentTick(), host->Race().StateHash(), results, host->Race().Events()));
                 std::fflush(stdout);
                 const RaceHost::Metrics& m = host->GetMetrics();
                 std::printf("metrics: connections %llu accepted / %llu closed, %llu frames in (%llu bytes), %llu frames out (%llu bytes), %llu invalid, %llu ticks, inputs %llu accepted / %llu late / %llu too far, %llu snapshots\n",
