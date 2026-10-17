@@ -1,3 +1,23 @@
+## HoverNet 2.1
+
+### What's new in 2.1
+- **HoverNet servers.** A new main-menu screen (**HOVERNET SERVERS**, also on the pause and results screens, and in the browser) connects to the
+  new HoverNet servers, where the server runs the race: host a race, join one, watch one, race **privately** with a code, or start a
+  **one-player time trial**. See [Playing on a HoverNet server](playing-on-servers.md). There is no public server built in; the server's
+  owner gives you its address.
+- **Finishing no longer takes the race away.** You are told to press **Enter** for your results; keep driving and chatting as long as you like.
+- **Chat** in races on the new servers, during and after the race.
+- **Spectator camera:** **[** and **]** (and Left/Right when watching a live race) switch between the craft.
+- **For server owners:** the `hovernet-server` package, graceful restarts that let races finish, the browser path over WebSocket, replay
+  verification and leaderboards (`HoverNetReplay`), an Ed25519 signing tool, and an operator guide. The old `hovernet-raceserver` is unchanged.
+- The Linux packages now carry the licence text, as the HoverRace licence requires.
+
+### Known limits of this release
+- No one has clicked through the new screen on a real phone, and the Windows installer's licence-file change was not built or run by the author
+  before release (the CI build is the check).
+- The browser reaches the new servers through a TLS proxy in front of them; the proxy was tried with a test proxy, not the production web server.
+- Nothing is signed yet: there is no project signing key.
+
 ## HoverNet 2.0
 
 HoverNet 2.0 is out of beta and is now the current release. Thank you to everyone
