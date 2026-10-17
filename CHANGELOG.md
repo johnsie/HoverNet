@@ -6,6 +6,15 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.1.1 - 2026-10-17
+
+### Fixed
+- **Web client: opening HOVERNET SERVERS froze the game.** The screen asked the browser for its own address with `emscripten_run_script_string`, which uses `eval()`; the site's Content-Security-Policy forbids `eval()`, so the page threw an error and stopped drawing. It now uses a function compiled into the page. The address field's default was also wrong (`ws://ws:///auth/`, from one shared buffer being read twice) and is now `wss://<this site>/auth/`.
+- The browser tests now run under the production Content-Security-Policy (read from the repository's copy of the web server configuration) and include a real click on the main menu's HOVERNET SERVERS button; the 2.1.0 tests entered the screen through a test switch and so could not see this.
+
+### Added
+- A manual-free deploy of the 3.0 server from a tag's GitLab pipeline (`deploy:server`, through a root-owned wrapper), `scripts/release.sh` (a guarded release from your own machine) and `scripts/setup-server-host.sh` (install and configure the 3.0 server on the host). The first tag after the host helper is installed will install the `hovernet-server` package there (enabled, not started).
+
 ## 2.1.0 - 2026-10-17
 
 This release adds the HoverNet 3.0 server-side groundwork (authoritative server, lobby, private races, time trials, WebSocket transport, replay tools, signing tool). The desktop game and the browser game both have a HoverNet Servers screen for it; the deployed 2.0 race server is unchanged.

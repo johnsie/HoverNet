@@ -18,6 +18,11 @@ const chromeBin = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromiu
 if (!chromeBin) { console.log('SKIP: no Chrome/Chromium installed'); process.exit(77); }
 fs.mkdirSync(outDir, { recursive: true });
 
+// The production web server's security headers, read from the repository's own copy of its configuration, so the tests run under the same
+// Content-Security-Policy as the real site (a page that needs eval(), for example, works without one and fails with it).
+const vhost = fs.readFileSync(new URL('../../packaging/web/hovernet.outiva.com.conf', import.meta.url), 'utf8');
+const csp = (/Header always set Content-Security-Policy "([^"]+)"/.exec(vhost) || [])[1];
+if (!csp) { console.error('cannot find the Content-Security-Policy in packaging/web/hovernet.outiva.com.conf'); process.exit(2); }
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.data': 'application/octet-stream' };
 const server = http.createServer((req, res) => {
   const name = req.url.split('?')[0] === '/' ? '/index.html' : req.url.split('?')[0];
@@ -25,7 +30,7 @@ const server = http.createServer((req, res) => {
   if (!file.startsWith(path.resolve(webDir)) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
   res.writeHead(200, {
     'Content-Type': types[path.extname(file)] || 'application/octet-stream',
-    'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp',
+    'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp', 'Content-Security-Policy': csp,
   });
   fs.createReadStream(file).pipe(res);
 });

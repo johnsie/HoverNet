@@ -88,6 +88,13 @@ EM_JS(void, hovernet_js_set_game_size, (int w, int h), {
 EM_JS(int, hovernet_js_window_size, (), {
     return (window.innerWidth << 16) | window.innerHeight;
 });
+// This page's address for a HoverNet server, e.g. wss://hovernet.outiva.com/auth/, written into `out` (at most cap bytes). Compiled into the
+// page's script: the production page's Content-Security-Policy forbids eval(), which emscripten_run_script_string() uses (that froze the game
+// when the HoverNet Servers screen opened in 2.1.0).
+EM_JS(int, hovernet_js_default_server_url, (char* out, int cap), {
+    var url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/auth/';
+    return stringToUTF8(url, out, cap);
+});
 EM_JS(int, hovernet_js_is_touch, (), {
     return (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 1 : 0;
 });
@@ -5014,9 +5021,10 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
 #ifdef HOVERNET_WEB
     // The browser connects by WebSocket to a wss:// address; a remembered TCP-style address from elsewhere is not one.
     if (settings.address.compare(0, 3, "ws:") != 0 && settings.address.compare(0, 4, "wss:") != 0) {
-        const char* pageHost = emscripten_run_script_string("location.host");
-        const char* scheme = emscripten_run_script_string("location.protocol === 'https:' ? 'wss://' : 'ws://'");
-        settings.address = std::string(scheme) + (pageHost != nullptr ? pageHost : "localhost") + "/auth/";
+        char url[256];
+        url[0] = '\0';
+        hovernet_js_default_server_url(url, sizeof(url));
+        settings.address = url[0] != '\0' ? std::string(url) : std::string("wss://localhost/auth/");
     }
     settings.key.clear();
 #endif

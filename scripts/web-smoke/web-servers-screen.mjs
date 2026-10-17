@@ -27,6 +27,11 @@ const chromeBin = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromiu
 if (!chromeBin) { console.log('SKIP: no Chrome/Chromium installed'); process.exit(77); }
 fs.mkdirSync(outDir, { recursive: true });
 
+// The production web server's security headers, read from the repository's own copy of its configuration, so the tests run under the same
+// Content-Security-Policy as the real site (a page that needs eval(), for example, works without one and fails with it).
+const vhost = fs.readFileSync(new URL('../../packaging/web/hovernet.outiva.com.conf', import.meta.url), 'utf8');
+const csp = (/Header always set Content-Security-Policy "([^"]+)"/.exec(vhost) || [])[1];
+if (!csp) { console.error('cannot find the Content-Security-Policy in packaging/web/hovernet.outiva.com.conf'); process.exit(2); }
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.data': 'application/octet-stream' };
 const server = http.createServer((req, res) => {
   const name = req.url.split('?')[0] === '/' ? '/index.html' : req.url.split('?')[0];
@@ -34,7 +39,7 @@ const server = http.createServer((req, res) => {
   if (!file.startsWith(path.resolve(webDir)) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
   res.writeHead(200, {
     'Content-Type': types[path.extname(file)] || 'application/octet-stream',
-    'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp',
+    'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp', 'Content-Security-Policy': csp,
   });
   fs.createReadStream(file).pipe(res);
 });
@@ -192,8 +197,32 @@ async function scenario(name, players, withBot, spectate = false, typeChat = fal
   }
 }
 const botBin = path.join(path.dirname(path.resolve(serverBin)), 'HoverNetAuthBot');
+async function menuClick() {
+  console.log('-- menu-click');
+  consoleLines.length = 0;
+  await send('Storage.clearDataForOrigin', { origin: new URL(url).origin, storageTypes: 'all' });
+  await send('Page.navigate', { url });
+  check(await waitFor(async () => (await frames()) >= 5, 120000), 'the game draws its first frames');
+  await sleep(1500);
+  await click(phone ? 95 : 135, phone ? 331 : 636); await sleep(900);
+  for (let i = 0; i < 3; i++) { await click(phone ? 201 : 277, phone ? 331 : 636); await sleep(900); }
+  await sleep(1500); await shot('menuclick-1-main-menu');
+  // A real click on the HOVERNET SERVERS button (no test switches are set): the screen must open and the game must keep running.
+  const x = +(process.env.CLICK_X || (phone ? 641 : 618)), y = +(process.env.CLICK_Y || (phone ? 203 : 331));
+  const before = await frames();
+  await click(x, y);
+  await sleep(2500); await shot('menuclick-2-after-click');
+  const after = await frames();
+  await sleep(1500);
+  const later = await frames();
+  check(after > before + 3 && later > after + 3, `menu-click: the game keeps drawing frames after the click (frames ${before} -> ${after} -> ${later})`);
+  check(exceptions.length === 0, `menu-click: no uncaught page exceptions${exceptions.length ? ': ' + exceptions[0] : ''}`);
+  if (failures) console.log('console:\n' + consoleLines.slice(-15).join('\n'));
+}
 const only = process.env.ONLY;
+if (only === 'menuclick') { await menuClick(); await finish(); }
 if (!only || only === 'first') await scenario('first', 1, false);
+if (!only) await menuClick();
 if (!only || only === 'two') await scenario('two-players-and-chat', 2, true);
 if (!only || only === 'typing') await scenario('typing-chat', 1, false, false, true);
 if (!only || only === 'spectate') {
