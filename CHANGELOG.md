@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.6 - 2026-10-18
+
 ### Fixed
 - **Builds for ARM (and for newer x86 CPUs) can no longer drift from other platforms.** The compiler may fuse a multiply and an add into one instruction that rounds differently; with that on, the determinism, snapshot and physics tests fail on this machine. Fusing is now switched off for every target (`-ffp-contract=off`, `/fp:precise`). The results on x86-64 are unchanged (same golden files, same rules version).
 
