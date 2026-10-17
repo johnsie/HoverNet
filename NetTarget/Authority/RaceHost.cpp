@@ -28,6 +28,7 @@ struct RaceHost::Connection
     std::vector<std::int64_t> invalidTimes;
     // token bucket for Input frames: refills continuously
     double inputTokens = 0;
+    int inputOver = 0;          // consecutive Input frames dropped for being over the rate limit
     std::int64_t lastRefillMs = 0;
     std::vector<std::int64_t> snapshotTimes;
 };
@@ -72,7 +73,7 @@ int RaceHost::Connect(std::int64_t nowMs)
     c->id = mNextId++;
     c->connectedMs = nowMs;
     c->lastRefillMs = nowMs;
-    c->inputTokens = 8;
+    c->inputTokens = 16;
     ++mMetrics.connectionsAccepted;
     const int id = c->id;
     mConnections.push_back(std::move(c));
@@ -262,11 +263,18 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
     case kInput: {
         Input in;
         if (!Decode(payload, in)) { Invalid(c, nowMs, "input"); return; }
-        // Token bucket: refill at maxInputFramesPerSecond, burst of 16.
-        c.inputTokens = std::min(16.0, c.inputTokens + (nowMs - c.lastRefillMs) * mConfig.maxInputFramesPerSecond / 1000.0);
+        // Token bucket: refill at maxInputFramesPerSecond with room for a second's worth, so a network freeze that delivers a burst
+        // of queued inputs is not a flood. Over the limit, frames are dropped (inputs repeat each other, so nothing is lost); only a
+        // sustained flood, far over, counts as invalid and ends the connection.
+        c.inputTokens = std::min(64.0, c.inputTokens + (nowMs - c.lastRefillMs) * mConfig.maxInputFramesPerSecond / 1000.0);
         c.lastRefillMs = nowMs;
-        if (c.inputTokens < 1) { Invalid(c, nowMs, "rate"); return; }
+        if (c.inputTokens < 1) {
+            // Over the limit: drop the frame. Only a long unbroken run of them, a flood, counts as invalid.
+            if (++c.inputOver > 64) Invalid(c, nowMs, "rate");
+            return;
+        }
         c.inputTokens -= 1;
+        c.inputOver = 0;
         if (!mStarted) return;   // inputs before the start are ignored, not errors
         for (std::size_t i = 0; i < in.controls.size(); ++i) {
             const InputResult r = mRace.SubmitInput(c.player, in.firstTick + static_cast<std::uint32_t>(i), in.controls[i]);

@@ -330,6 +330,12 @@ else()
     )
     target_compile_definitions(HoverNetAuthServer PRIVATE HOVERNET_SERVER_VERSION="${HOVERNET_VERSION}")
     target_link_libraries(HoverNetAuthServer PRIVATE HoverNetSim)
+    add_executable(HoverNetNetProxy
+        NetTarget/LinuxClient/NetProxy.cpp
+    )
+    if(WIN32)
+        target_link_libraries(HoverNetNetProxy PRIVATE ws2_32)
+    endif()
     add_executable(HoverNetModTool
         NetTarget/LinuxClient/ModTool.cpp
     )
@@ -789,6 +795,9 @@ if(BUILD_TESTING AND NOT WIN32)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetObservability
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-observability.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetNetworkConditions
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-network-conditions.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetNetProxy> $<TARGET_FILE:HoverNetGame2Player>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>

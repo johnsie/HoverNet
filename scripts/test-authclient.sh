@@ -21,7 +21,14 @@ for i in $(seq "$first" "$players"); do
   pids+=($!)
 done
 [ -n "${AUTH_SPECTATE:-}" ] && sleep 4
-"$client" --auth-connect "127.0.0.1:$port" --auth-verify --auth-script ${AUTH_SPECTATE:+--spectate} ${AUTH_DROP:+--auth-drop "$AUTH_DROP"} --frames 100000 > "$dir/client.txt" 2>&1
+# AUTH_PROXY (the proxy program) with AUTH_PROXY_ARGS puts a bad network between the game client and the server.
+clientport="$port"
+if [ -n "${AUTH_PROXY:-}" ]; then
+  "$AUTH_PROXY" --listen-port 0 --target-port "$port" ${AUTH_PROXY_ARGS:-} > "$dir/proxy.txt" 2>&1 &
+  for _ in $(seq 1 100); do grep -q "listening on" "$dir/proxy.txt" 2>/dev/null && break; sleep 0.1; done
+  clientport=$(sed -n 's/.*listening on 127.0.0.1:\([0-9]*\),.*/\1/p' "$dir/proxy.txt" | head -1)
+fi
+"$client" --auth-connect "127.0.0.1:$clientport" --auth-verify --auth-script ${AUTH_SPECTATE:+--spectate} ${AUTH_DROP:+--auth-drop "$AUTH_DROP"} --frames 100000 > "$dir/client.txt" 2>&1
 cstatus=$?
 fail=0
 [ $cstatus -eq 0 ] || { echo "FAIL: the game client exited with status $cstatus"; tail -5 "$dir/client.txt"; fail=1; }

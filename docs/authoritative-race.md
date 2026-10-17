@@ -159,6 +159,21 @@ Drivers are unaffected.
   directly and through the lobby) and the game client itself (`HoverNet --auth-connect HOST:PORT --spectate [--spectate-player N]`,
   ctest `HoverNetAuthClientSpectate`): the client draws the confirmed state with the normal renderer from the chosen craft's view.
 
+## Bad networks
+
+`HoverNetNetProxy` sits between players and the server and adds delay, jitter, a bandwidth limit, periodic freezes (a loss burst:
+nothing moves, then everything arrives at once) and disconnects. Because the paths are TCP, a bad network shows up as lateness, bursts
+and stalls, which is what loss and reordering look like to the game. `scripts/test-network-conditions.sh` (ctest
+`HoverNetNetworkConditions`) races scripted players through 60 ms each way with jitter (eight players), 150 ms each way with 40 ms of
+jitter, a 500 ms freeze every three seconds, and a 48 kbit/s pipe, and requires every player to follow every tick exactly. Then it puts
+the real game client behind a proxy that hangs up on it every 14 KB (about every six seconds): the client reconnects with its token,
+resynchronises from a snapshot and still verifies every tick. (The UDP-style conditions, true loss and reordering of datagrams, are
+exercised by the in-memory prediction model in [netcode-prototype.md](netcode-prototype.md).)
+
+This harness found a real defect: a freeze followed by the burst of queued inputs looked like a flood and got players disconnected. The
+input limit now allows a second's burst, drops excess frames (inputs repeat each other, so nothing is lost) and only ends a connection
+after a long unbroken run of them.
+
 ## Running it: observability, load and soak
 
 - **Status port.** `--status-port P` opens a loopback-only HTTP port: `GET /health` answers `ok`, `GET /metrics` answers Prometheus text

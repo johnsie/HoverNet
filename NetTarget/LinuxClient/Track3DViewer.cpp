@@ -6393,7 +6393,7 @@ int RunClient(int argc, char** argv)
         }
         if (auth.resultReceived && auth.verify) {
             std::printf("auth client: %u ticks verified, %u tick failures, %u restore checks, %u restore failures%s\n", auth.verified, auth.tickFailures,
-                        auth.restoreChecks, auth.restoreFailures, auth.dropAfter != 0 ? (auth.reconnected ? ", reconnected" : ", DID NOT RECONNECT") : "");
+                        auth.restoreChecks, auth.restoreFailures, auth.reconnected ? ", reconnected" : (auth.dropAfter != 0 ? ", DID NOT RECONNECT" : ""));
             std::fflush(stdout);
             const bool reconnectOk = auth.dropAfter == 0 || auth.reconnected;
             return (auth.tickFailures == 0 && auth.restoreFailures == 0 && auth.verified > 0 && reconnectOk) ? 1 : 2;
