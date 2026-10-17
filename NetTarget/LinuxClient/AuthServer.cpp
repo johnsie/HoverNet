@@ -134,6 +134,7 @@ int main(int argc, char** argv)
         else if (a == "--max-connections") maxConnections = std::atoi(value());
         else if (a == "--replay-dir") replayDir = value();
         else if (a == "--lobby") lobbyMode = true;
+        else if (a == "--spectator-delay-ms") cfg.spectatorDelayMs = std::atoi(value());
         else if (a == "--tracks") trackList = value();
         else if (a == "--no-weapons") cfg.race.weapons = false;
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
@@ -200,7 +201,9 @@ int main(int argc, char** argv)
             if (raceEndedAt < 0) raceEndedAt = NowMs();
             bool flushed = true;
             for (const auto& p : peers) flushed = flushed && p->pending.empty();
-            if (flushed && NowMs() - raceEndedAt > 300) {
+            // Spectators are a delay behind: they get the last Ticks and the Result that long after the drivers do.
+            const std::int64_t grace = 300 + (host->Spectators() > 0 ? cfg.spectatorDelayMs + 500 : 0);
+            if (flushed && NowMs() - raceEndedAt > grace) {
                 const std::vector<Authority::PlayerResult> results = host->Race().Results();
                 std::printf("race over after %u ticks, final hash %016llx\n", host->Race().CurrentTick(), static_cast<unsigned long long>(host->Race().StateHash()));
                 for (const auto& r : results) std::printf("  player %d: rank %d, laps %d%s\n", r.player, r.rank, r.laps, r.finished ? ", finished" : "");

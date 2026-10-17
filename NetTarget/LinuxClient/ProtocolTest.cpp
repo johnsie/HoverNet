@@ -16,6 +16,7 @@
 #include "SimHarness.h"
 #include "../Authority/Protocol3.h"
 #include "../Authority/RaceHost.h"
+#include "../Authority/RaceWorld.h"
 #include "../Authority/ReplayFormat.h"
 #include "../Model/StateSnapshot.h"
 #include "../ObjFac1/SimElements.h"
@@ -414,6 +415,93 @@ void TestReconnect(const std::string& track)
     Check(host.IsClosed(b2) && !host.IsClosed(b3), "a second reconnection replaces the first");
 }
 
+// Spectators see the race a fixed delay behind the drivers, starting from a keyframe snapshot, and can only watch.
+void TestSpectator(const std::string& track)
+{
+    HostConfig cfg = MakeConfig(track, 4);
+    cfg.startDelayMs = 0;
+    cfg.spectatorDelayMs = 2560;      // 160 ticks
+    cfg.race.maxTicks = 900;
+    RaceHost host(cfg);
+    std::string error;
+    host.Init(error);
+    int conns[4];
+    for (int i = 0; i < 4; ++i) { conns[i] = host.Connect(0); Send(host, conns[i], HelloFrame(("p" + std::to_string(i)).c_str()), 0); }
+
+    // A spectator before the start would be refused; here the race is already on, so join after 700 ticks.
+    int spec = -1;
+    Inbox seen;
+    auto spectatorFrame = [&](std::uint8_t type, const std::vector<std::uint8_t>& payload, std::int64_t now) { Send(host, spec, Protocol3::EncodeFrame(type, payload), now); };
+    for (std::uint32_t t = 0; t < 900; ++t) {
+        const std::int64_t now = static_cast<std::int64_t>(t) * 16;
+        for (int i = 0; i < 4; ++i) {
+            Protocol3::Input in; in.firstTick = t; in.controls = {SimHarness::ScriptedInput(i, t)};
+            Send(host, conns[i], Protocol3::EncodeFrame(Protocol3::kInput, Protocol3::Encode(in)), now);
+        }
+        host.Advance(now);
+        if (t == 700) {
+            spec = host.Connect(now);
+            Protocol3::Hello h; h.name = "watcher";
+            spectatorFrame(Protocol3::kSpectate, Protocol3::Encode(h), now);
+            Check(!host.IsClosed(spec), "a spectator is accepted once the race is running");
+            Protocol3::Input rogue; rogue.firstTick = t; rogue.controls = {0xFF};
+            spectatorFrame(Protocol3::kInput, Protocol3::Encode(rogue), now);   // a spectator cannot drive
+        }
+        if (spec >= 0) seen.Take(host, spec);
+        for (int i = 0; i < 4; ++i) host.TakeOutput(conns[i]);
+    }
+    for (std::int64_t now = 900 * 16; now < 900 * 16 + 4000; now += 16) { host.Advance(now); seen.Take(host, spec); }
+
+    // Rebuild the race from what the spectator was sent.
+    RaceWorld world;
+    Check(world.Build(cfg.race.trackPath, track, 4, cfg.race.laps, cfg.race.weapons, error), "the spectator builds its copy of the race");
+    std::vector<Protocol3::SnapshotChunk> chunks;
+    std::uint32_t keyTick = 0, nextTick = 0, applied = 0, lastTick = 0;
+    bool restored = false, ok = true, gotAck = false, gotResult = false;
+    for (const Inbox::Frame& f : seen.frames) {
+        using namespace Protocol3;
+        if (f.type == kHelloAck) gotAck = true;
+        else if (f.type == kSnapshotChunk) { SnapshotChunk c; if (Decode(f.payload, c)) chunks.push_back(c); }
+        else if (f.type == kTick) {
+            if (!restored) {
+                std::vector<std::uint8_t> bytes;
+                for (const SnapshotChunk& c : chunks) bytes.insert(bytes.end(), c.data.begin(), c.data.end());
+                keyTick = chunks.empty() ? 0 : chunks[0].tick;
+                restored = !chunks.empty() && world.Restore(bytes, error);
+                nextTick = keyTick;
+                if (!restored) { ok = false; break; }
+            }
+            Tick t;
+            if (!Decode(f.payload, t) || t.tick != nextTick) { ok = false; break; }
+            world.Step(t.controls.data());
+            if (world.Hash() != t.hash) { ok = false; break; }
+            lastTick = t.tick;
+            ++nextTick;
+            ++applied;
+        }
+        else if (f.type == kResult) gotResult = true;
+    }
+    Check(gotAck, "the spectator gets the race details");
+    Check(ok && restored, "the spectator restores the keyframe and follows the Tick stream with every hash matching");
+    Check(keyTick == 500, "it starts from the newest keyframe not newer than 'now minus the delay' (tick 500 for 700 - 160 = 540)");
+    Check(applied > 700 - 160 - 500, "it received the ticks from the keyframe on");
+    std::fprintf(stderr, "  spectator joined at tick 700, started from keyframe %u, followed %u ticks to tick %u\n", keyTick, applied, lastTick);
+    Check(gotResult, "the result reaches the spectator after the delay");
+    Check(host.InvalidTotal() >= 1, "a spectator trying to send inputs is counted as invalid");
+
+    // A spectator may not join before the race starts.
+    {
+        RaceHost waiting(cfg);
+        std::string e2;
+        waiting.Init(e2);
+        const int sp = waiting.Connect(0);
+        Protocol3::Hello h;
+        h.name = "early";
+        Send(waiting, sp, Protocol3::EncodeFrame(Protocol3::kSpectate, Protocol3::Encode(h)), 0);
+        Check(waiting.IsClosed(sp), "a spectator is refused before the race starts");
+    }
+}
+
 // A race with a time limit ends, broadcasts its result, and the late inputs after the end are refused.
 void TestResult(const std::string& track)
 {
@@ -631,6 +719,7 @@ int main(int argc, char** argv)
     TestFraming();
     TestRace(track, players);
     TestReconnect(track);
+    TestSpectator(track);
     TestResult(track);
     TestAbuse(track);
     TestTampering(track);

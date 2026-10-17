@@ -36,6 +36,8 @@ enum Type : std::uint8_t
     kRaceList = 21,
     kHostRace = 22,
     kJoinRace = 23,
+    kSpectate = 24,        // a Hello that asks to watch the race instead of driving in it
+    kSpectateRace = 25,    // lobby: watch a race by id
 };
 
 enum RejectReason : std::uint8_t
@@ -91,6 +93,7 @@ struct RaceInfo { std::uint32_t id = 0; std::string track; std::uint8_t players 
 struct RaceList { std::vector<RaceInfo> races; };
 struct HostRace { std::string track; std::uint8_t players = 2, laps = 3; bool weapons = true; };
 struct JoinRace { std::uint32_t id = 0; };
+struct SpectateRace { std::uint32_t id = 0; };
 struct Result { std::uint32_t ticks = 0; std::uint64_t finalHash = 0; std::vector<PlayerResult> players; };
 
 std::vector<std::uint8_t> Encode(const Hello&);
@@ -108,6 +111,7 @@ std::vector<std::uint8_t> Encode(const Result&);
 std::vector<std::uint8_t> Encode(const RaceList&);
 std::vector<std::uint8_t> Encode(const HostRace&);
 std::vector<std::uint8_t> Encode(const JoinRace&);
+std::vector<std::uint8_t> Encode(const SpectateRace&);
 
 // Each returns false for anything malformed (wrong size, bad count, bad text) and leaves the output unspecified.
 bool Decode(const std::vector<std::uint8_t>& payload, Hello&);
@@ -125,6 +129,7 @@ bool Decode(const std::vector<std::uint8_t>& payload, Result&);
 bool Decode(const std::vector<std::uint8_t>& payload, RaceList&);
 bool Decode(const std::vector<std::uint8_t>& payload, HostRace&);
 bool Decode(const std::vector<std::uint8_t>& payload, JoinRace&);
+bool Decode(const std::vector<std::uint8_t>& payload, SpectateRace&);
 
 // Text fields (names, track names, messages): UTF-8, one line, no control bytes, at most `maxBytes`. Rejects overlong
 // forms, surrogates, code points above U+10FFFF and truncated sequences.

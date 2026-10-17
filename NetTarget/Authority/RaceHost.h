@@ -26,6 +26,9 @@ struct HostConfig
     int invalidWindowMs = 10000;
     int helloTimeoutMs = 5000;        // a connection that has not completed Hello by then is closed
     int snapshotsPerMinute = 6;       // per connection
+    int spectatorDelayMs = 10000;     // spectators see the race this far behind the drivers (protects competitive integrity)
+    int maxSpectators = 64;
+    int keyframeTicks = 250;          // a state snapshot is kept this often, for spectators joining and for seeking
     std::uint64_t tokenSeed = 1;      // seeds the reconnect tokens; a production server seeds this from the operating system
 };
 
@@ -59,6 +62,7 @@ public:
     const Metrics& GetMetrics() const { return mMetrics; }
 
     bool Started() const { return mStarted; }
+    int Spectators() const;
     int PlayerSlots() const { return mConfig.race.players; }
     const HostConfig& Config() const { return mConfig; }
     bool OwnsResumeToken(std::uint64_t token) const;
@@ -80,6 +84,9 @@ private:
     void SendSnapshot(Connection& c, std::uint32_t id);
     void Broadcast(const std::vector<std::uint8_t>& frame);
     void FinishRace();
+    void SendSpectatorFrames(Connection& c);
+    void StartSpectator(Connection& c, std::int64_t nowMs);
+    void KeepKeyframe();
 
     HostConfig mConfig;
     AuthoritativeRace mRace;
@@ -88,11 +95,15 @@ private:
     bool mRaceLoaded;
     bool mStarted;
     bool mResultSent;
+    std::int64_t mLastNow = 0;
     std::int64_t mStartMs;       // server time of tick 0
     std::uint32_t mSimulated;
     int mInvalidTotal;
     Metrics mMetrics;
     std::string mTrackSha256;
+    std::vector<std::uint8_t> mResultFrame;
+    std::vector<std::vector<std::uint8_t>> mTickFrames;                 // every Tick frame sent, by tick (for spectators)
+    std::vector<std::pair<std::uint32_t, std::vector<std::uint8_t>>> mKeyframes;   // (tick, snapshot) every keyframeTicks
     std::vector<std::uint64_t> mTokens;   // reconnect token per player slot (0 = none yet)
     std::uint64_t mTokenState;
     std::uint64_t NextToken();

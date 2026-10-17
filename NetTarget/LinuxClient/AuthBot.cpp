@@ -14,6 +14,8 @@
 #include "AuthSocket.h"
 #include "SimHarness.h"
 #include "../Authority/Protocol3.h"
+#include "../Authority/ReplayFormat.h"
+#include "../Model/StateSnapshot.h"
 #include "../ObjFac1/SimElements.h"
 
 namespace
@@ -29,6 +31,7 @@ int main(int argc, char** argv)
 {
     std::string host = "127.0.0.1", name = "bot", track = "ClassicH";
     int port = 9610, lead = 12;
+    bool spectate = false;               // watch instead of driving (single-race servers: --spectate; lobby: --spectate-race TRACK)
     std::string hostTrack, joinTrack;   // lobby servers: host a race ('Track:players[:laps]') or join an open race on a track
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -38,6 +41,8 @@ int main(int argc, char** argv)
         else if (a == "--name") name = value();
         else if (a == "--track") track = value();
         else if (a == "--lead") lead = std::atoi(value());
+        else if (a == "--spectate") spectate = true;
+        else if (a == "--spectate-race") { spectate = true; joinTrack = value(); }
         else if (a == "--host-race") hostTrack = value();
         else if (a == "--join-race") joinTrack = value();
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
@@ -65,11 +70,15 @@ int main(int argc, char** argv)
     };
     Protocol3::Hello hello;
     hello.name = name;
-    if (!sendFrame(Protocol3::kHello, Protocol3::Encode(hello))) return 1;
+    // A spectator on a single-race server says Spectate instead of Hello; on a lobby server it says Hello and then picks a race.
+    const bool lobbySpectator = spectate && !joinTrack.empty();
+    if (!sendFrame(spectate && !lobbySpectator ? Protocol3::kSpectate : Protocol3::kHello, Protocol3::Encode(hello))) return 1;
 
     SimHarness::World world;
     int player = -1, players = 0;
-    bool started = false, gotResult = false, diverged = false, built = false, lobbyDone = false;
+    bool started = false, gotResult = false, diverged = false, built = false, lobbyDone = false, restored = false;
+    std::vector<Protocol3::SnapshotChunk> chunks;
+    std::uint32_t firstTick = 0;
     std::uint32_t verified = 0;
     std::int64_t lastSend = -1000, deadline = NowMs() + 120000;
     std::uint8_t buffer[4096];
@@ -104,6 +113,19 @@ int main(int argc, char** argv)
                     track = h.track;
                     if (!sendFrame(kHostRace, Encode(h))) return 1;
                 }
+                else if (lobbySpectator) {
+                    bool joined = false;
+                    for (const RaceInfo& r : list.races) {
+                        if (!r.started || r.track != joinTrack) continue;
+                        SpectateRace j;
+                        j.id = r.id;
+                        if (!sendFrame(kSpectateRace, Encode(j))) return 1;
+                        track = r.track;
+                        joined = true;
+                        break;
+                    }
+                    if (!joined) { std::fprintf(stderr, "no running race to watch\n"); return 1; }
+                }
                 else {
                     bool joined = false;
                     for (const RaceInfo& r : list.races) {
@@ -118,17 +140,37 @@ int main(int argc, char** argv)
                 }
             }
             else if (type == kStart) started = true;
-            else if (type == kTick && built) {
+            else if (type == kTick && built && (!spectate || restored)) {
                 Tick t;
                 if (!Decode(payload, t) || t.tick != verified || static_cast<int>(t.controls.size()) != players) { diverged = true; continue; }
                 world.Step(t.controls.data());
                 if (world.Hash() != t.hash) diverged = true;
                 ++verified;
             }
+            else if (type == kSnapshotChunk && built && spectate) {
+                SnapshotChunk c;
+                if (!Decode(payload, c)) { diverged = true; continue; }
+                if (c.index == 0) chunks.clear();
+                chunks.push_back(c);
+                if (c.index + 1 == c.count && chunks.size() == c.count) {
+                    std::vector<std::uint8_t> bytes;
+                    for (const SnapshotChunk& part : chunks) bytes.insert(bytes.end(), part.data.begin(), part.data.end());
+                    std::vector<MR_FreeElement*> external(world.craft.begin(), world.craft.end());
+                    std::int64_t time = 0;
+                    std::string error;
+                    if (MR_RestoreLevelState(world.session->GetCurrentLevel(), bytes.data(), bytes.size(), external, ReplayFormat::kSimulationRules, time, error)) {
+                        world.session->SetSimulationTime(static_cast<MR_SimulationTime>(time));
+                        verified = c.tick;
+                        restored = true;
+                    }
+                    else { std::fprintf(stderr, "cannot restore the snapshot: %s\n", error.c_str()); diverged = true; }
+                    chunks.clear();
+                }
+            }
             else if (type == kResult) gotResult = true;
             else if (type == kReject) { Reject r; Decode(payload, r); std::fprintf(stderr, "rejected: %s\n", r.message.c_str()); return 1; }
         }
-        if (started && player >= 0 && NowMs() - lastSend >= 16) {
+        if (!spectate && started && player >= 0 && NowMs() - lastSend >= 16) {
             lastSend = NowMs();
             Protocol3::Input in;
             const std::uint32_t target = verified + static_cast<std::uint32_t>(lead);
@@ -140,5 +182,5 @@ int main(int argc, char** argv)
     }
     AuthNet::CloseSocket(s);
     std::printf("%s (player %d): %u ticks verified, result %s, %s\n", name.c_str(), player, verified, gotResult ? "received" : "MISSING", diverged ? "DIVERGED" : "no divergence");
-    return (!diverged && gotResult && verified > 0) ? 0 : 1;
+    return (!diverged && gotResult && verified > 0 && (!spectate || restored)) ? 0 : 1;
 }

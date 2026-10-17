@@ -254,6 +254,15 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         Attach(c, *it->second, EncodeFrame(kHello, Encode(hello)), nowMs);
         return;
     }
+    if (type == kSpectateRace) {
+        SpectateRace m;
+        if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
+        auto it = mRaces.find(m.id);
+        if (it == mRaces.end()) { Close(c, kNoSuchRace, "no such race"); return; }
+        Hello hello; hello.name = c.name;
+        Attach(c, *it->second, EncodeFrame(kSpectate, Encode(hello)), nowMs);
+        return;
+    }
     Invalid(c, nowMs);   // anything else is not valid in the lobby
 }
 

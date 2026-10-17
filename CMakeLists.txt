@@ -741,6 +741,13 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetLobbyTcp
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-lobby-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> 400
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetSpectatorTcp
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-spectator-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetAuthClientSpectate
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-authclient.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetGame2Player> 3 700
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    set_tests_properties(HoverNetAuthClientSpectate PROPERTIES ENVIRONMENT "AUTH_SPECTATE=1")
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

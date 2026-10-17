@@ -5482,6 +5482,8 @@ struct AuthOnline
     bool active = false;
     bool verify = false;         // test mode: check that restoring into the rendered session reproduces the confirmed state
     bool scripted = false;       // test mode: the scripted input of the other tools instead of the keyboard
+    bool spectator = false;      // watch a running race (delayed, from a keyframe) instead of driving in it
+    int watch = 0;               // which craft the camera follows when spectating
     bool lost = false;
     bool resultReceived = false;
     bool needSnapshot = false;
@@ -5591,6 +5593,8 @@ int RunClient(int argc, char** argv)
     AuthOnline auth;
     auth.verify = HasArgument(argc, argv, "--auth-verify");
     auth.scripted = HasArgument(argc, argv, "--auth-script");
+    auth.spectator = HasArgument(argc, argv, "--spectate");
+    auth.watch = std::atoi(ParseStringArg(argc, argv, "--spectate-player").c_str());
     auth.dropAfter = static_cast<unsigned>(std::atoi(ParseStringArg(argc, argv, "--auth-drop").c_str()));
 #endif
 #endif
@@ -6032,10 +6036,10 @@ int RunClient(int argc, char** argv)
             if (!auth.conn.Connect(auth.host, auth.port, error)) return FatalClientError(error);
             Protocol3::Hello hello;
             hello.name = auth.name.substr(0, 32);
-            auth.conn.Send(Protocol3::kHello, Protocol3::Encode(hello));
+            auth.conn.Send(auth.spectator ? Protocol3::kSpectate : Protocol3::kHello, Protocol3::Encode(hello));
             bool gotAck = false, gotStart = false;
             const Uint32 waitStart = SDL_GetTicks();
-            while (!(gotAck && gotStart)) {
+            while (!(gotAck && (gotStart || auth.spectator))) {
                 SDL_PumpEvents();
                 std::vector<AuthFrame> frames;
                 const bool open = auth.conn.Pump(frames);
@@ -6049,7 +6053,7 @@ int RunClient(int argc, char** argv)
                     }
                     else if (gotAck) auth.backlog.push_back(f);   // ticks that arrive while the race is being set up
                 }
-                if (!open && !(gotAck && gotStart)) return FatalClientError("The connection to the server was lost before the race started.");
+                if (!open && !(gotAck && (gotStart || auth.spectator))) return FatalClientError("The connection to the server was lost before the race started.");
                 if (SDL_GetTicks() - waitStart > 120000) return FatalClientError("Timed out waiting for the race to fill and start.");
                 SDL_Delay(5);
             }
@@ -6061,12 +6065,14 @@ int RunClient(int argc, char** argv)
                 return FatalClientError("The server runs different game rules than this version of the game.");
             }
             if (!loadLocalRace(auth.ack.track, auth.ack.laps, auth.ack.weapons)) return FatalClientError("Could not load the server's track.");
-            const std::string placeError = placeRaceCraft(auth.ack.players, auth.ack.laps, auth.ack.weapons, auth.ack.player, auth.craft);
+            if (auth.spectator && (auth.watch < 0 || auth.watch >= auth.ack.players)) auth.watch = 0;
+            const std::string placeError = placeRaceCraft(auth.ack.players, auth.ack.laps, auth.ack.weapons, auth.spectator ? auth.watch : auth.ack.player, auth.craft);
             if (!placeError.empty()) return FatalClientError(placeError);
             session.SetSimulationTime(0);
             if (!auth.predictor.Init(authTrackPath, auth.ack, error)) return FatalClientError(error);
             auth.world.reset(new RenderedWorld(session, auth.craft));
             auth.active = true;
+            auth.needSnapshot = auth.spectator;   // the server sends the keyframe first; nothing is drawn or applied before it
             auth.lastSend = auth.lastPing = SDL_GetTicks();
             session.AddMessage(("Connected: you are player " + std::to_string(auth.ack.player + 1) + " of " + std::to_string(auth.ack.players)).c_str());
 #else
@@ -6326,7 +6332,7 @@ int RunClient(int argc, char** argv)
         if (!auth.conn.IsOpen() && !auth.resultReceived) {
             // Lost the connection: try to take the slot back with the resume token, once a second, for 15 seconds.
             if (!auth.lost) { auth.lost = true; session.AddMessage("Connection lost - reconnecting..."); auth.lastReconnect = 0; }
-            if (auth.reconnectAttempts < 15 && now - auth.lastReconnect >= 1000) {
+            if (!auth.spectator && auth.reconnectAttempts < 15 && now - auth.lastReconnect >= 1000) {
                 auth.lastReconnect = now;
                 ++auth.reconnectAttempts;
                 std::string error;
@@ -6357,7 +6363,7 @@ int RunClient(int argc, char** argv)
                 ping.token = now;
                 auth.conn.Send(Protocol3::kPing, Protocol3::Encode(ping));
             }
-            if (now - auth.lastSend >= 16) {
+            if (!auth.spectator && now - auth.lastSend >= 16) {
                 auth.lastSend = now;
                 const std::uint32_t target = auth.predictor.ConfirmedTick() + auth.lead;
                 const std::uint16_t input = auth.scripted ? SimHarnessScripted(auth.ack.player, target)
@@ -6383,7 +6389,7 @@ int RunClient(int argc, char** argv)
                     ++auth.restoreFailures;
                 }
             }
-            auth.predictor.PredictOn(*auth.world, auth.predictor.ConfirmedTick() + (auth.scripted || auth.verify ? 0u : auth.lead), error);
+            auth.predictor.PredictOn(*auth.world, auth.predictor.ConfirmedTick() + (auth.scripted || auth.verify || auth.spectator ? 0u : auth.lead), error);
         }
         if (auth.resultReceived && auth.verify) {
             std::printf("auth client: %u ticks verified, %u tick failures, %u restore checks, %u restore failures%s\n", auth.verified, auth.tickFailures,

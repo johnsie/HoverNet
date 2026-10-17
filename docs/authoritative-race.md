@@ -144,6 +144,21 @@ Tests: `HoverNetLobbyTest` (in memory, ctest `HoverNetLobby`, also as WebAssembl
 `HoverNetLobbyTcp`): nine scripted players host and join three races on three tracks over real TCP; every player verifies every tick
 and the server saves three replays. Linux and Windows x64.
 
+## Spectating
+
+A spectator watches a running race **a fixed delay behind the drivers** (10 s by default, `--spectator-delay-ms`), which protects
+competitive integrity. It sends `Spectate` (a Hello that asks to watch; through the lobby, `SpectateRace` with the race id) and gets
+the race details, then the newest **keyframe snapshot** not newer than "now minus the delay" (the server keeps one every 250 ticks and
+every Tick it has sent), then the Tick stream from the keyframe on; a spectator holds nothing newer than the delay allows, and the
+delay keeps running after the race ends so the last Ticks and the Result still arrive. Spectators cannot drive (their inputs count as
+invalid), cannot join before the race has started, are capped (64), and can ask for a fresh keyframe if they fall out of step.
+Drivers are unaffected.
+
+- Tests: `TestSpectator` in `HoverNetProtocolTest` (joins at tick 700 with a 160-tick delay, starts from keyframe 500, follows to the
+  end with every hash matching, receives the Result), `scripts/test-spectator-tcp.sh` (a spectator bot joins a running race over TCP,
+  directly and through the lobby) and the game client itself (`HoverNet --auth-connect HOST:PORT --spectate [--spectate-player N]`,
+  ctest `HoverNetAuthClientSpectate`): the client draws the confirmed state with the normal renderer from the chosen craft's view.
+
 ## Reconnect, tampering, bandwidth and metrics
 
 - **Reconnect.** The HelloAck carries a random resume token for the player's slot. A player who drops keeps the slot (the craft

@@ -15,6 +15,9 @@ struct RaceHost::Connection
     bool closed = false;
     bool helloDone = false;
     int player = -1;
+    bool spectator = false;
+    std::uint32_t specCursor = 0;       // the next Tick a spectator is owed
+    bool specResultSent = false;
     std::int64_t connectedMs = 0;
     std::vector<std::int64_t> invalidTimes;
     // token bucket for Input frames: refills continuously
@@ -42,6 +45,7 @@ bool RaceHost::Init(std::string& error)
     // Loading the race here makes configuration errors visible at start-up rather than when the last player arrives.
     if (!mRace.Start(mConfig.race, error)) return false;
     mRaceLoaded = true;
+    KeepKeyframe();   // tick 0
     return true;
 }
 
@@ -94,6 +98,19 @@ bool RaceHost::OwnsResumeToken(std::uint64_t token) const
     if (token == 0) return false;
     for (std::uint64_t t : mTokens) if (t == token) return true;
     return false;
+}
+
+void RaceHost::KeepKeyframe()
+{
+    if (!mKeyframes.empty() && mKeyframes.back().first == mRace.CurrentTick()) return;
+    mKeyframes.push_back(std::make_pair(mRace.CurrentTick(), mRace.Snapshot()));
+}
+
+int RaceHost::Spectators() const
+{
+    int n = 0;
+    for (const auto& c : mConnections) if (!c->closed && c->spectator) ++n;
+    return n;
 }
 
 int RaceHost::ConnectedPlayers() const
@@ -199,6 +216,20 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
         return;
     }
 
+    if (type == kSpectate) {
+        Hello h;
+        if (c.helloDone) { Invalid(c, nowMs, "second hello"); return; }
+        if (!Decode(payload, h)) { Close(c, kBadMessage, "malformed spectate request"); return; }
+        if (h.major != kMajor) { Close(c, kUnsupportedVersion, "this server speaks protocol 3"); return; }
+        if (!mStarted) { Close(c, kNotInRace, "the race has not started"); return; }
+        if (Spectators() >= mConfig.maxSpectators) { Close(c, kServerFull, "too many spectators"); return; }
+        c.helloDone = true;
+        c.spectator = true;
+        c.parser.SetMaxFrame(std::min<std::uint16_t>(h.maxFrame, kDefaultMaxFrame));
+        StartSpectator(c, nowMs);
+        return;
+    }
+
     if (type == kResume) {
         Resume m;
         if (c.helloDone) { Invalid(c, nowMs, "resume after hello"); return; }
@@ -216,6 +247,8 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
     }
 
     if (!c.helloDone) { Close(c, kBadMessage, "hello first"); return; }
+
+    if (c.spectator && type != kPing && type != kSnapshotRequest) { Invalid(c, nowMs, "spectators only watch"); return; }
 
     switch (type) {
     case kInput: {
@@ -253,6 +286,7 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
         if (!mStarted) { Invalid(c, nowMs, "snapshot before start"); return; }
         c.snapshotTimes.push_back(nowMs);
         ++mMetrics.snapshotsServed;
+        if (c.spectator) { StartSpectator(c, nowMs); return; }
         SendSnapshot(c, r.id);
         return;
     }
@@ -280,6 +314,60 @@ void RaceHost::SendSnapshot(Connection& c, std::uint32_t id)
     }
 }
 
+// Gives a spectator the newest keyframe that is not newer than what it may see, then (from Advance) the Ticks after it.
+void RaceHost::StartSpectator(Connection& c, std::int64_t)
+{
+    using namespace Protocol3;
+    const std::int64_t delayTicks = mConfig.spectatorDelayMs / ReplayFormat::kFrameMs;
+    const std::int64_t target = static_cast<std::int64_t>(mRace.CurrentTick()) - delayTicks;
+    const std::pair<std::uint32_t, std::vector<std::uint8_t>>* key = &mKeyframes.front();
+    for (const auto& k : mKeyframes) if (static_cast<std::int64_t>(k.first) <= target || &k == &mKeyframes.front()) key = &k;
+    HelloAck a;
+    a.maxFrame = static_cast<std::uint16_t>(c.parser.MaxFrame());
+    a.player = 0;
+    a.players = static_cast<std::uint8_t>(mConfig.race.players);
+    a.tickMs = ReplayFormat::kFrameMs;
+    a.rules = ReplayFormat::kSimulationRules;
+    a.track = mConfig.race.trackName;
+    a.trackSha256 = mTrackSha256;
+    a.laps = static_cast<std::uint8_t>(mConfig.race.laps);
+    a.weapons = mConfig.race.weapons;
+    a.resumeToken = 0;
+    if (c.specCursor == 0 && !c.specResultSent) Send(c, EncodeFrame(kHelloAck, Encode(a)));
+    const std::size_t per = 900;
+    const std::size_t count = (key->second.size() + per - 1) / per;
+    for (std::size_t i = 0; i < count; ++i) {
+        SnapshotChunk chunk;
+        chunk.id = 0;
+        chunk.index = static_cast<std::uint16_t>(i);
+        chunk.count = static_cast<std::uint16_t>(count);
+        chunk.tick = key->first;
+        chunk.data.assign(key->second.begin() + static_cast<std::ptrdiff_t>(i * per), key->second.begin() + static_cast<std::ptrdiff_t>(std::min(key->second.size(), (i + 1) * per)));
+        Send(c, EncodeFrame(kSnapshotChunk, Encode(chunk)));
+    }
+    c.specCursor = key->first;
+    c.specResultSent = false;
+}
+
+void RaceHost::SendSpectatorFrames(Connection& c)
+{
+    const std::uint32_t delayTicks = static_cast<std::uint32_t>(mConfig.spectatorDelayMs / ReplayFormat::kFrameMs);
+    const std::uint32_t simulated = static_cast<std::uint32_t>(mTickFrames.size());
+    // A spectator is owed every Tick up to `simulated - delayTicks` (or all of them once the race is over and the delay has elapsed).
+    // Time-based, so the delay keeps running after the race ends and the last Ticks and the Result still reach the spectator.
+    const std::int64_t dueTicks = mStarted ? (mLastNow - mStartMs) / ReplayFormat::kFrameMs + 1 : 0;
+    const std::int64_t releasable = dueTicks - static_cast<std::int64_t>(delayTicks);
+    const std::uint32_t allowed = releasable <= 0 ? 0 : static_cast<std::uint32_t>(std::min<std::int64_t>(releasable, simulated));
+    while (c.specCursor < allowed && c.specCursor < simulated) {
+        Send(c, mTickFrames[c.specCursor]);
+        ++c.specCursor;
+    }
+    if (mRace.Finished() && c.specCursor >= simulated && !c.specResultSent && mResultSent) {
+        c.specResultSent = true;
+        Send(c, mResultFrame);
+    }
+}
+
 void RaceHost::FinishRace()
 {
     if (mResultSent) return;
@@ -297,16 +385,24 @@ void RaceHost::FinishRace()
         q.bestLapMs = static_cast<std::int32_t>(p.bestLapMs);
         r.players.push_back(q);
     }
-    Broadcast(Protocol3::EncodeFrame(Protocol3::kResult, Protocol3::Encode(r)));
+    mResultFrame = Protocol3::EncodeFrame(Protocol3::kResult, Protocol3::Encode(r));
+    Broadcast(mResultFrame);
 }
 
 void RaceHost::Advance(std::int64_t nowMs)
 {
+    mLastNow = nowMs;
     // A connection that never completes Hello is closed.
     for (auto& c : mConnections)
         if (!c->closed && !c->helloDone && nowMs - c->connectedMs > mConfig.helloTimeoutMs) Close(*c, Protocol3::kBadMessage, "hello timeout");
 
-    if (!mStarted || mRace.Finished()) { if (mStarted && mRace.Finished()) FinishRace(); return; }
+    if (!mStarted || mRace.Finished()) {
+        if (mStarted && mRace.Finished()) {
+            FinishRace();
+            for (auto& conn : mConnections) if (!conn->closed && conn->spectator) SendSpectatorFrames(*conn);
+        }
+        return;
+    }
     // Tick n is due at mStartMs + n * tick; run every tick that is due (a very late call catches up, bounded by the race).
     while (!mRace.Finished() && nowMs >= mStartMs + static_cast<std::int64_t>(mSimulated) * ReplayFormat::kFrameMs) {
         const std::uint32_t tick = mRace.CurrentTick();
@@ -318,8 +414,12 @@ void RaceHost::Advance(std::int64_t nowMs)
         t.hash = mRace.StateHash();
         // The inputs actually used at this tick, for every player (prediction and spectators reconstruct the race from them).
         t.controls = mRace.InputsAt(tick);
-        Broadcast(Protocol3::EncodeFrame(Protocol3::kTick, Protocol3::Encode(t)));
+        const std::vector<std::uint8_t> tickFrame = Protocol3::EncodeFrame(Protocol3::kTick, Protocol3::Encode(t));
+        mTickFrames.push_back(tickFrame);
+        Broadcast(tickFrame);
+        if (mConfig.keyframeTicks > 0 && mRace.CurrentTick() % static_cast<std::uint32_t>(mConfig.keyframeTicks) == 0) KeepKeyframe();
     }
+    for (auto& conn : mConnections) if (!conn->closed && conn->spectator) SendSpectatorFrames(*conn);
     if (mRace.Finished()) FinishRace();
 }
 }

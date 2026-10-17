@@ -260,4 +260,7 @@ bool Decode(const std::vector<std::uint8_t>& p, HostRace& m)
 
 std::vector<std::uint8_t> Encode(const JoinRace& m) { Out o; o.U32(m.id); return o.b; }
 bool Decode(const std::vector<std::uint8_t>& p, JoinRace& m) { In in(p); m.id = in.U32(); return in.Done(); }
+
+std::vector<std::uint8_t> Encode(const SpectateRace& m) { Out o; o.U32(m.id); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, SpectateRace& m) { In in(p); m.id = in.U32(); return in.Done(); }
 }

@@ -211,6 +211,8 @@ jobs:
           "$bin/HoverNetProtocolTest.exe" ClassicH 8
           "$bin/HoverNetLobbyTest.exe"
           scripts/test-lobby-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 400
+          scripts/test-spectator-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe"
+          AUTH_SPECTATE=1 scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 3 700
           HOVERNET_REPLAY_TOOL="$bin/HoverNetReplay.exe" scripts/test-authserver.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 8 500
           scripts/test-replay-viewer.sh "$bin/HoverNetReplay.exe" "$bin/HoverNet.exe"
           scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 8 400
