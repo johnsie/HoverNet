@@ -5082,6 +5082,8 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
     chatInput[0] = '\0';
     std::size_t lastChatCount = 0;
     bool focusChat = false, chatFocusedOnce = false;
+    std::uint32_t selectedRaceId = 0;   // the selected race, by number: the list refreshes by itself and its rows move
+    Uint32 lastListRefresh = 0;
     auto pushClick = [](const ImVec2& at, int step) {
         SDL_Event e;
         SDL_memset(&e, 0, sizeof(e));
@@ -5150,6 +5152,14 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
         if (lobby.GetState() == OnlineLobby::State::eReady) { ready = true; break; }
         if (std::getenv("HOVERNET_TEST_AUTH_ADVANCED") != nullptr && nameKnown && framesShown == 1) { showCard = true; autoPending = false; }   // test hook for screenshots
         if (lobby.GetState() == OnlineLobby::State::eBrowsing && !chatFocusedOnce) { chatFocusedOnce = true; focusChat = true; }   // ready to type
+        if (std::getenv("HOVERNET_TEST_AUTH_AUTOREFRESH") != nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) {
+            // Test hook (scripts/test-lobby-autorefresh.sh): nothing is pressed; a race hosted by someone else must appear in the list by itself.
+            static bool sAnnounced = false;
+            if (!sAnnounced) { sAnnounced = true; std::printf("AUTOREFRESHTEST waiting for a race to appear\n"); std::fflush(stdout); }
+            if (!lobby.Races().empty()) { std::printf("AUTOREFRESHTEST ok: a race hosted by someone else appeared on its own\n"); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
+        }
+        // The race list keeps itself current: ask again every two seconds while browsing (the server limits how often, and this stays well under).
+        if (lobby.GetState() == OnlineLobby::State::eBrowsing && SDL_GetTicks() - lastListRefresh > 2000) { lastListRefresh = SDL_GetTicks(); lobby.Refresh(); }
         if (std::getenv("HOVERNET_TEST_AUTH_LOBBYCHAT") != nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) {
             // Test hook (scripts/test-lobby-chat.sh): type a message with real key events and press Enter; it must come back from the server.
             static int sFrames = 0;
@@ -5378,8 +5388,9 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             const float listWidth = availWidth * 0.28f;
             const float detailsWidth = waitingRoom ? availWidth - actionsWidth - spacing : availWidth - listWidth - actionsWidth - 2.0f * spacing;
             const auto& races = lobby.Races();
-            if (selectedRace < 0 && !races.empty() && std::getenv("HOVERNET_TEST_AUTH_SELECT") != nullptr) selectedRace = 0;   // test hook for screenshots
-            if (selectedRace >= static_cast<int>(races.size())) selectedRace = -1;
+            selectedRace = -1;
+            for (int i = 0; i < static_cast<int>(races.size()); ++i) if (races[static_cast<std::size_t>(i)].id == selectedRaceId) selectedRace = i;
+            if (selectedRace < 0 && !races.empty() && std::getenv("HOVERNET_TEST_AUTH_SELECT") != nullptr) { selectedRace = 0; selectedRaceId = races[0].id; }   // test hook for screenshots
             const Protocol3::RaceInfo* selectedInfo = (!waitingRoom && selectedRace >= 0) ? &races[static_cast<std::size_t>(selectedRace)] : nullptr;
             const bool canJoin = selectedInfo != nullptr && !selectedInfo->started && selectedInfo->joined < selectedInfo->players;
 
@@ -5399,6 +5410,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                         std::snprintf(label, sizeof(label), "%s  (%d/%d)%s", r.track.c_str(), r.joined, r.players, r.started ? "  (racing)" : "");
                         if (ImGui::Selectable(label, i == selectedRace, ImGuiSelectableFlags_AllowDoubleClick)) {
                             selectedRace = i;
+                            selectedRaceId = r.id;
                             const Protocol3::RaceInfo& chosen = races[static_cast<std::size_t>(i)];
                             if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !chosen.started && chosen.joined < chosen.players) lobby.Join(chosen.id, "");
                         }
@@ -5486,7 +5498,6 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 ImGui::BeginDisabled(selectedInfo == nullptr || !selectedInfo->started);
                 if (HoverNetQuietButton("Watch Race", ImVec2(-FLT_MIN, 0))) lobby.Spectate(selectedInfo->id, "");
                 ImGui::EndDisabled();
-                if (HoverNetQuietButton("Refresh", ImVec2(-FLT_MIN, 0))) lobby.Refresh();
                 ImGui::Spacing();
                 if (HoverNetButton("HOST A RACE", ImVec2(-FLT_MIN, 44.0f))) requestHostPopup = true;
                 hostOpenCenter = centreOfLastItem();
@@ -5504,7 +5515,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             // Leaving sits apart at the bottom so it is not hit by mistake.
             ImGui::SetCursorPosY(std::max(ImGui::GetCursorPosY(), actionsHeight - 2.0f * ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().WindowPadding.y));
             if (!waitingRoom) {
-                if (HoverNetQuietButton("Use another server...", ImVec2(-FLT_MIN, 0))) { lobby.Close(); selectedRace = -1; showCard = true; autoPending = false; autoAttempt = false; }
+                if (HoverNetQuietButton("Use another server...", ImVec2(-FLT_MIN, 0))) { lobby.Close(); selectedRace = -1; selectedRaceId = 0; showCard = true; autoPending = false; autoAttempt = false; }
             }
             if (HoverNetQuietButton("Back to Menu", ImVec2(-FLT_MIN, 0))) { lobby.Close(); running = false; }
             ImGui::EndChild();

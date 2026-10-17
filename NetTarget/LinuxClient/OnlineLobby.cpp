@@ -102,7 +102,6 @@ void OnlineLobby::Pump()
 void OnlineLobby::Refresh()
 {
     if (mState != State::eBrowsing) return;
-    mNotice.clear();
     Send(kListRaces, std::vector<std::uint8_t>());
 }
 
