@@ -3819,6 +3819,8 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     (void)font;
 
     HostPrefs prefs = LoadLocalRacePrefs();
+    PersonalBests personalBests;   // the player's own records, shown under the laps while choosing a track
+    personalBests.Load(ConfigDirPath() + "/personal_bests");
 
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -3951,6 +3953,21 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::SliderInt("##Laps", &prefs.mLaps, 1, 20);
         ImGui::PopItemWidth();
         ImGui::EndDisabled();
+        if (!tightHeight && !guide.mFreePlay) {
+            const std::string trackName = TrackNameAt(prefs.mTrackIndex);
+            const long long raceBest = personalBests.RaceBest(trackName, prefs.mLaps), lapBest = personalBests.LapBest(trackName);
+            char best[32], text[96];
+            if (raceBest > 0) {
+                FormatRaceTime(static_cast<MR_SimulationTime>(raceBest), best, sizeof(best));
+                std::snprintf(text, sizeof(text), "Your best over %d lap%s: %s", prefs.mLaps, prefs.mLaps == 1 ? "" : "s", best);
+                ImGui::TextDisabled("%s", text);
+            }
+            if (lapBest > 0) {
+                FormatRaceTime(static_cast<MR_SimulationTime>(lapBest), best, sizeof(best));
+                std::snprintf(text, sizeof(text), "Your best lap on this track: %s", best);
+                ImGui::TextDisabled("%s", text);
+            }
+        }
         ImGui::Spacing();
         ImGui::Checkbox("Weapons enabled", &prefs.mWeapons);
         ImGui::Spacing();
