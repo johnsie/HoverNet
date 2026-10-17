@@ -19,8 +19,9 @@ fail=0
 pids=()
 "$bot" --port "$port" --name b1 > "$dir/b1.txt" 2>&1 & pids+=($!)
 "$bot" --port "$port" --name b2 --say "you are all terrible drivers" > "$dir/b2.txt" 2>&1 & pids+=($!)
-"$bot" --port "$port" --name b3 --report b2 > "$dir/b3.txt" 2>&1 & pids+=($!)
-sleep 3
+"$bot" --port "$port" --name b3 --report b2 --report-delay-ms 800 > "$dir/b3.txt" 2>&1 & pids+=($!)
+# Wait until the bots have connected and the report exists (a fixed sleep failed when the machine was busy with other tests).
+for _ in $(seq 1 150); do "$mod" --port "$admin" --name ada --secret-file "$dir/ada.secret" "REPORTS" 2>&1 | grep -q "b3 reports b2" && break; sleep 0.2; done
 out=$("$mod" --port "$admin" --name ada --secret-file "$dir/ada.secret" "REPORTS" "REPORT 1" "MUTE b2 5" "MUTES" "BAN 203.0.113.9" "AUDIT-CHECK" 2>&1)
 echo "$out" | grep -q "b3 reports b2" || { echo "FAIL: the report is not listed"; echo "$out"; fail=1; }
 echo "$out" | grep -q "chat: b2: you are all terrible drivers" || { echo "FAIL: the report lacks its chat context"; echo "$out"; fail=1; }

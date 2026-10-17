@@ -839,6 +839,15 @@ if(BUILD_TESTING AND NOT WIN32)
         add_test(NAME HoverNetOnlineLobby
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-online-lobby.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetOnlineLobbyTest>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetOnlineScreenClicks
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-online-screen-clicks.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetFinishFlow
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-finish-flow.sh $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetChatAfterFinish
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-chat-after-finish.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetOnlineMenu
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-online-menu.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

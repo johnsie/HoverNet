@@ -46,3 +46,4 @@ dist/
 # ImGui-based binary (Track3DViewer, Game2Player, the new
 # ImGuiLogicalMouseSmoke test) run from the repo root
 /imgui.ini
+__pycache__/

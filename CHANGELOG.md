@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Changed
+- Crossing the finish line no longer opens the results screen over the race. The player is told, in the race, that they can press Enter (the controller's Back button, or MENU on a touch screen) for their results and race options, and may keep driving as long as they like; the finish time is kept from the moment of the finish. Chat keeps working after the finish, and now also in races on HoverNet 3.0 servers (type, Enter to send; messages from the others appear on screen). The HoverNet Servers button is also on the results screen.
+
 ## 2.1.0 - 2026-10-17
 
 This release adds the HoverNet 3.0 server-side groundwork (authoritative server, lobby, private races, time trials, WebSocket transport, replay tools, signing tool). The desktop game has a HoverNet Servers screen for it; there is no browser client for protocol 3.0 yet, so the web build has no such screen; the deployed 2.0 race server is unchanged.

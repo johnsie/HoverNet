@@ -3513,6 +3513,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                                  MR_SimulationTime pFinishTime, MR_SimulationTime pBestLap,
                                  int pRank, int pPlayerCount, int pFrameLimit)
 {
+    if (std::getenv("HOVERNET_TEST_FINISH") != nullptr) { std::printf("FINISHTEST results screen opened\n"); std::fflush(stdout); }
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
     if (ownsImGuiContext) {
         ImGui::CreateContext();
@@ -5004,6 +5005,26 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
     int testStep = testServer != nullptr ? 1 : 0;
     if (testServer != nullptr) std::snprintf(address, sizeof(address), "%s", testServer);
 
+    // Test hook (scripts/test-online-screen-clicks.sh): real SDL mouse events are pushed at the on-screen position of the Connect and the
+    // Host buttons, so the test proves the buttons answer an actual click (HOVERNET_TEST_AUTH_CLICKS=host:port); never set in normal play.
+    const char* clickTest = std::getenv("HOVERNET_TEST_AUTH_CLICKS");
+    int clickStep = 0, clickFrame = 0, clickHold = 0;
+    ImVec2 connectCenter(-1, -1), hostCenter(-1, -1);
+    if (clickTest != nullptr) std::snprintf(address, sizeof(address), "%s", clickTest);
+    auto pushClick = [](const ImVec2& at, int step) {
+        SDL_Event e;
+        SDL_memset(&e, 0, sizeof(e));
+        if (step == 0) {
+            e.type = SDL_MOUSEMOTION; e.motion.x = static_cast<Sint32>(at.x); e.motion.y = static_cast<Sint32>(at.y);
+        }
+        else {
+            e.type = step == 1 ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+            e.button.button = SDL_BUTTON_LEFT; e.button.state = step == 1 ? SDL_PRESSED : SDL_RELEASED; e.button.clicks = 1;
+            e.button.x = static_cast<Sint32>(at.x); e.button.y = static_cast<Sint32>(at.y);
+        }
+        SDL_PushEvent(&e);
+    };
+
     auto connect = [&]() {
         std::string host;
         int port = 0;
@@ -5034,6 +5055,23 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
         }
         lobby.Pump();
         if (lobby.GetState() == OnlineLobby::State::eReady) { ready = true; break; }
+        if (clickTest != nullptr) {
+            ++clickFrame;
+            const OnlineLobby::State st = lobby.GetState();
+            // click sequence: move, press, release on consecutive frames, aimed at the button's centre as drawn last frame
+            auto click = [&](const ImVec2& at, int nextStep) {
+                if (at.x < 0) return;
+                if (clickHold == 0) pushClick(at, 0);
+                else if (clickHold == 1) pushClick(at, 1);
+                else if (clickHold == 2) { pushClick(at, 2); clickStep = nextStep; clickHold = -1; }
+                ++clickHold;
+            };
+            if (clickStep == 0 && clickFrame > 5) click(connectCenter, 1);
+            else if (clickStep == 1 && st == OnlineLobby::State::eBrowsing) { clickStep = 2; clickHold = 0; clickFrame = 0; std::printf("CLICKTEST connect clicked: the lobby answered\n"); }
+            else if (clickStep == 2 && clickFrame > 5) click(hostCenter, 3);
+            else if (clickStep == 3 && st == OnlineLobby::State::eWaiting) { std::printf("CLICKTEST ok: Host clicked, the race is being set up\n"); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
+            if (clickFrame > 600) { std::printf("CLICKTEST FAIL at step %d (state %d)\n", clickStep, static_cast<int>(st)); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
+        }
         if (testStep == 1) { connect(); testStep = 2; }
         else if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_BROWSE") == nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) { lobby.Host(Tracks().Get(0) != nullptr ? Tracks().Get(0)->mName : "ClassicH", 1, 1, false, ""); testStep = 3; }
 
@@ -5084,6 +5122,7 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
         ImGui::EndDisabled();
         if (!connected) {
             if (HoverNetButton(state == OnlineLobby::State::eFailed ? "Try again" : "Connect", ImVec2(-FLT_MIN, 40.0f))) connect();
+            connectCenter = ImVec2((ImGui::GetItemRectMin().x + ImGui::GetItemRectMax().x) * 0.5f, (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f);
         }
         else if (HoverNetButton("Disconnect", ImVec2(-FLT_MIN, 36.0f))) { lobby.Close(); selectedRace = -1; }
         if (!problem.empty()) ImGui::TextColored(kHoverNetCoral, "%s", problem.c_str());
@@ -5178,6 +5217,8 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
                 }
                 else problem = "Servers host the official tracks unless their owner added others: pick one of the first seven.";
             }
+            hostCenter = ImVec2((ImGui::GetItemRectMin().x + ImGui::GetItemRectMax().x) * 0.5f, (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f);
+            if (clickTest != nullptr && clickStep >= 2) ImGui::SetScrollHereY(0.7f);   // the test scrolls the Host button into view (a player uses the wheel)
             ImGui::EndDisabled();
         }
         ImGui::Spacing();
@@ -6656,6 +6697,12 @@ int RunClient(int argc, char** argv)
     bool cockpitView = false;
     bool missileSeen = false;
     bool finishAnnounced = false;
+    // Finishing does not take the race away: the player is told they can press Enter for the results and race options, and may drive
+    // on as long as they like (some like to stay on the track). The times are kept from the moment of the finish.
+    bool resultsPending = false;
+    Uint32 lastResultsHint = 0;
+    bool resultsSeen = false;     // the results screen has been opened once: no more reminders
+    MR_SimulationTime finishTotalTime = 0, finishBestLap = 0;
 #ifdef HOVERNET_GAME2_PLAYER
     // A mid-race RaceServer drop (crash, network outage) currently just makes
     // every onlineClient.IsConnected() check below quietly stop sending/polling --
@@ -6668,6 +6715,17 @@ int RunClient(int argc, char** argv)
     // eRSMsgChatMessage handling below) -- text input only actually does
     // anything once online, but it's harmless to leave enabled for local play.
     std::string chatBuffer;
+#ifdef HOVERNET_GAME2_PLAYER
+    // Chat works in a race on the old lobby server and in one on a HoverNet 3.0 server, during the race and after the player has finished.
+    auto canChat = [&]() -> bool {
+        if (onlineClient.IsConnected()) return true;
+#if !defined(HOVERNET_WEB)
+        return auth.active && auth.conn.IsOpen();
+#else
+        return false;
+#endif
+    };
+#endif
     bool pauseHintShown = false;
     MR_SimulationTime lastRaceClock = -100000;
     std::vector<uint8_t> vrEyes; // VR: left+right eye RGBA, reused between frames
@@ -6715,6 +6773,14 @@ int RunClient(int argc, char** argv)
             else if (f.type == kResult && !auth.resultReceived) {
                 auth.resultReceived = true;
                 session.AddMessage("The race is over. The server has the final result.");
+            }
+            else if (f.type == kChatMessage) {
+                ChatMessage m;
+                if (Decode(f.payload, m)) {
+                    const std::string line = (m.fromServer ? std::string("Server: ") : m.name + ": ") + m.text;
+                    session.AddMessage(line.c_str());
+                    if (std::getenv("HOVERNET_TEST_CHAT") != nullptr) { std::printf("CHATTEST received: %s\n", line.c_str()); std::fflush(stdout); }
+                }
             }
             else if (f.type == kReject) {
                 Reject r;
@@ -6814,6 +6880,7 @@ int RunClient(int argc, char** argv)
         const MR_3DCoordinate previousCamera = camera;
         bool leaveForLobby = false;
         bool startNewLocalRace = false;
+        bool openResults = false;   // Enter (or the controller's Back button) after a finish: show the results and race options
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
@@ -6830,23 +6897,39 @@ int RunClient(int argc, char** argv)
                 }
             }
 #ifdef HOVERNET_GAME2_PLAYER
-            else if (event.type == SDL_TEXTINPUT && onlineClient.IsConnected()) {
+            else if (event.type == SDL_TEXTINPUT && canChat()) {
                 if (chatBuffer.size() < 60) {
                     chatBuffer += event.text.text;
                 }
             }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_BACKSPACE &&
-                     onlineClient.IsConnected() && !chatBuffer.empty()) {
+                     canChat() && !chatBuffer.empty()) {
                 chatBuffer.pop_back();
             }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN &&
-                     onlineClient.IsConnected() && !chatBuffer.empty()) {
-                const std::string wireChat = RaceServerClient::EncodeInRaceChat(chatBuffer);
-                onlineClient.SendMessage(eRSMsgChatMessage, wireChat.data(), wireChat.size());
-                session.AddMessage(("You: " + chatBuffer).c_str());
-                chatBuffer.clear();
+                     canChat() && !chatBuffer.empty()) {
+#if !defined(HOVERNET_WEB)
+                if (!onlineClient.IsConnected()) {
+                    // A 3.0 server sends every message back to everyone in the race, the sender included: it is shown when it returns.
+                    Protocol3::Chat chat;
+                    chat.text = chatBuffer;
+                    auth.conn.Send(Protocol3::kChat, Protocol3::Encode(chat));
+                    chatBuffer.clear();
+                }
+                else
+#endif
+                {
+                    const std::string wireChat = RaceServerClient::EncodeInRaceChat(chatBuffer);
+                    onlineClient.SendMessage(eRSMsgChatMessage, wireChat.data(), wireChat.size());
+                    session.AddMessage(("You: " + chatBuffer).c_str());
+                    chatBuffer.clear();
+                }
             }
 #endif
+            else if (resultsPending && ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN && event.key.repeat == 0) ||
+                                        (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK))) {
+                openResults = true;
+            }
             else if ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) ||
                      (event.type == SDL_CONTROLLERBUTTONDOWN &&
                       event.cbutton.button == SDL_CONTROLLER_BUTTON_START)) {
@@ -6926,7 +7009,7 @@ int RunClient(int argc, char** argv)
 #ifdef HOVERNET_GAME2_PLAYER
         if (leaveForLobby) {
             missileSeen = false;
-            finishAnnounced = false;
+            finishAnnounced = false; resultsPending = false;
             if (!resetRaceSession() || !joinOnlineRace()) {
                 running = false;
                 break;
@@ -6939,7 +7022,7 @@ int RunClient(int argc, char** argv)
                                                             *menuFontHandle->GetSprite(), frameLimit);
             if (setup.confirmed) {
                 missileSeen = false;
-                finishAnnounced = false;
+                finishAnnounced = false; resultsPending = false;
                 if (!loadLocalRace(setup.trackName, setup.laps, setup.weapons)) {
                     running = false;
                     break;
@@ -7188,14 +7271,63 @@ int RunClient(int argc, char** argv)
 #else
             const bool testResults = false;
 #endif
-            if (!finishAnnounced && (mainCharacter->HasFinish() || testResults)) {
+            // Test hook (scripts/test-finish-flow.sh): act as if the player crossed the line on frame 30, then press Enter on frame 80.
+            bool testFinish = false;
+            static int sTestFrames = 0;
+            if (std::getenv("HOVERNET_TEST_CHAT") != nullptr) {
+                // Test hook (scripts/test-chat-after-finish.sh): type a message on frame 120 and send it on frame 125.
+                if (sTestFrames == 120) {
+                    SDL_Event text;
+                    SDL_memset(&text, 0, sizeof(text));
+                    text.type = SDL_TEXTINPUT;
+                    SDL_strlcpy(text.text.text, "hello from the finish line", sizeof(text.text.text));
+                    SDL_PushEvent(&text);
+                }
+                if (sTestFrames == 125) {
+                    SDL_Event key;
+                    SDL_memset(&key, 0, sizeof(key));
+                    key.type = SDL_KEYDOWN; key.key.state = SDL_PRESSED; key.key.keysym.sym = SDLK_RETURN; key.key.keysym.scancode = SDL_SCANCODE_RETURN;
+                    SDL_PushEvent(&key);
+                }
+            }
+            if (std::getenv("HOVERNET_TEST_FINISH") != nullptr || std::getenv("HOVERNET_TEST_CHAT") != nullptr) {
+                ++sTestFrames;
+                testFinish = sTestFrames == 30;
+                if (sTestFrames == 70 && !resultsSeen) std::printf("FINISHTEST still driving, results screen not open\n");
+                if (sTestFrames == 80) {
+                    SDL_Event key;
+                    SDL_memset(&key, 0, sizeof(key));
+                    key.type = SDL_KEYDOWN; key.key.state = SDL_PRESSED; key.key.keysym.sym = SDLK_RETURN; key.key.keysym.scancode = SDL_SCANCODE_RETURN;
+                    SDL_PushEvent(&key);
+                }
+            }
+            if (!finishAnnounced && (mainCharacter->HasFinish() || testResults || testFinish)) {
                 finishAnnounced = true;
+                resultsPending = true;
+                resultsSeen = false;
+                finishTotalTime = mainCharacter->GetTotalTime();
+                finishBestLap = mainCharacter->GetBestLapDuration();
+                lastResultsHint = SDL_GetTicks();
+                if (testResults) {
+                    openResults = true;   // the browser smoke test opens the screen directly
+                }
+                else {
+                    session.AddMessage(HoverNetIsTouchDevice() ? "Finished! Keep driving, or press MENU for race options"
+                                                               : "Finished! Keep driving, or press Enter for your results");
+                    if (testFinish) { std::printf("FINISHTEST finished, race still running\n"); std::fflush(stdout); }
+                }
+            }
+            else if (resultsPending && !resultsSeen && !openResults && SDL_GetTicks() - lastResultsHint > 12000) {
+                lastResultsHint = SDL_GetTicks();
+                session.AddMessage(HoverNetIsTouchDevice() ? "Press MENU for race options" : "Press Enter for your results and race options");
+            }
+            if (openResults && resultsPending) {
 #ifdef HOVERNET_WEB
                 gHoverNetInRace = 0;
 #endif
                 const PostRaceChoice resultChoice = RunPostRaceScreen(
                     graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                    mainCharacter->GetTotalTime(), mainCharacter->GetBestLapDuration(),
+                    finishTotalTime, finishBestLap,
                     session.GetRank(mainCharacter), session.GetNbPlayers(),
                     frameLimit < 0 ? -1 : 2);
                 if (resultChoice == PostRaceChoice::eQuit) {
@@ -7204,7 +7336,7 @@ int RunClient(int argc, char** argv)
                 }
                 if (resultChoice == PostRaceChoice::eOnlineLobby) {
                     missileSeen = false;
-                    finishAnnounced = false;
+                    finishAnnounced = false; resultsPending = false;
                     if (!resetRaceSession() || !joinOnlineRace()) {
                         running = false;
                     }
@@ -7215,7 +7347,7 @@ int RunClient(int argc, char** argv)
                 if (resultChoice == PostRaceChoice::eAuthServer) {
                     if (playOnAuthServer()) {
                         missileSeen = false;
-                        finishAnnounced = false;
+                        finishAnnounced = false; resultsPending = false;
                         wasOnlineConnected = onlineClient.IsConnected();
                     }
                     else if (g_QuitConfirmed) {
@@ -7229,7 +7361,7 @@ int RunClient(int argc, char** argv)
                         graphics, buffer, viewport, *menuFontHandle->GetSprite(), frameLimit);
                     if (setup.confirmed) {
                         missileSeen = false;
-                        finishAnnounced = false;
+                        finishAnnounced = false; resultsPending = false;
                         if (!loadLocalRace(setup.trackName, setup.laps, setup.weapons)) {
                             running = false;
                         }
@@ -7237,7 +7369,8 @@ int RunClient(int argc, char** argv)
                     }
                     continue;
                 }
-                session.AddMessage("Race complete -- press ESC for race options");
+                session.AddMessage("Press Enter for your results again, or ESC for race options");
+                resultsSeen = true;
             }
             if (onlineClient.IsConnected() && localClientId >= 0) {
                 while (mainCharacter->HitQueueCount() > 0) {

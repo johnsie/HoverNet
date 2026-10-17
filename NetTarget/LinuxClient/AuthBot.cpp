@@ -35,6 +35,8 @@ int main(int argc, char** argv)
     int port = 9610, lead = 12;
     std::string serverKeyHex;            // pin the server's key and talk over the secure session
     std::string say, reportName;         // optional: say something in the race once it has started, report a player
+    int reportDelayMs = 0;               // wait this long after the start before reporting (so a message sent at the start is in the context)
+    std::int64_t reportDueMs = -1;
     bool spectate = false;               // watch instead of driving (single-race servers: --spectate; lobby: --spectate-race TRACK)
     std::string code;                    // lobby: the code of a private race, to host one or to join or watch one by id
     int raceId = 0;                      // lobby: join (or, with --spectate, watch) this race id directly; needed for private races
@@ -50,6 +52,7 @@ int main(int argc, char** argv)
         else if (a == "--server-key") serverKeyHex = value();
         else if (a == "--say") say = value();
         else if (a == "--report") reportName = value();
+        else if (a == "--report-delay-ms") reportDelayMs = std::atoi(value());
         else if (a == "--spectate") spectate = true;
         else if (a == "--spectate-race") { spectate = true; joinTrack = value(); }
         else if (a == "--code") code = value();
@@ -86,6 +89,7 @@ int main(int argc, char** argv)
     std::uint32_t verified = 0;
     std::int64_t lastSend = -1000, deadline = NowMs() + 120000;
     while (NowMs() < deadline && !gotResult) {
+        if (reportDueMs >= 0 && NowMs() >= reportDueMs) { Protocol3::Report r; r.name = reportName; r.reason = "reported by the test bot"; sendFrame(Protocol3::kReport, Protocol3::Encode(r)); reportDueMs = -1; }
         std::vector<AuthFrame> received;
         const bool open = conn.Pump(received);
         if (!open && received.empty()) break;
@@ -149,7 +153,7 @@ int main(int argc, char** argv)
             else if (type == kStart) {
                 started = true;
                 if (!say.empty()) { Chat c; c.text = say; sendFrame(kChat, Encode(c)); }
-                if (!reportName.empty()) { Report r; r.name = reportName; r.reason = "reported by the test bot"; sendFrame(kReport, Encode(r)); }
+                if (!reportName.empty()) reportDueMs = NowMs() + reportDelayMs;
             }
             else if (type == kChatMessage) {
                 ChatMessage m;
