@@ -73,6 +73,24 @@ build:raceserver:linux:
     paths:
       - build/raceserver/RaceServer
 
+build:authserver:linux:
+  stage: build
+  rules:
+    - !reference [.no_schedule, rules]
+    - when: on_success
+  needs: []
+  tags: ["$LINUX_RUNNER_TAG"]
+  script:
+    - cmake -S . -B build/authserver -DCMAKE_BUILD_TYPE=Release
+    - cmake --build build/authserver --target HoverNetAuthServer HoverNetModTool HoverNetReplay HoverNetLobbyTest HoverNetProtocolTest --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+    - ctest --test-dir build/authserver --output-on-failure -R 'HoverNet(Lobby|Protocol)$'
+  artifacts:
+    expire_in: 7 days
+    paths:
+      - build/authserver/HoverNetAuthServer
+      - build/authserver/HoverNetModTool
+      - build/authserver/HoverNetReplay
+
 build:game:web:
   stage: web
   needs: []
@@ -222,6 +240,25 @@ package:raceserver:deb:
     - export PACKAGE_VERSION="${CI_COMMIT_TAG#v}"; packaging/debian/build-raceserver-deb.sh "${PACKAGE_VERSION:-0.0.0+${CI_COMMIT_SHORT_SHA}}" build/raceserver/RaceServer
   artifacts:
     name: "hovernet-raceserver-${CI_COMMIT_REF_SLUG}"
+    expire_in: 30 days
+    paths:
+      - dist/*.deb
+
+package:server:deb:
+  stage: package
+  rules:
+    - !reference [.no_schedule, rules]
+    - when: on_success
+  tags: ["$LINUX_RUNNER_TAG"]
+  needs:
+    - job: build:authserver:linux
+      artifacts: true
+  # Packaged only. Nothing deploys the 3.0 server automatically: installing it on a host is the operator's decision (docs/operators.md).
+  script:
+    - chmod +x packaging/debian/build-authserver-deb.sh
+    - export PACKAGE_VERSION="${CI_COMMIT_TAG#v}"; packaging/debian/build-authserver-deb.sh "${PACKAGE_VERSION:-0.0.0+${CI_COMMIT_SHORT_SHA}}" build/authserver
+  artifacts:
+    name: "hovernet-server-${CI_COMMIT_REF_SLUG}"
     expire_in: 30 days
     paths:
       - dist/*.deb
