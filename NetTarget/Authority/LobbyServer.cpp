@@ -40,6 +40,13 @@ const LobbyServer::Conn* LobbyServer::Find(int id) const
     return nullptr;
 }
 
+int LobbyServer::RunningRaces() const
+{
+    int n = 0;
+    for (const auto& r : mRaces) if (r.second->host->Started() && !r.second->host->RaceFinished()) ++n;
+    return n;
+}
+
 const RaceHost* LobbyServer::Race(std::uint32_t id) const
 {
     auto it = mRaces.find(id);
@@ -237,6 +244,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
     if (type == kHostRace) {
         HostRace m;
         if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
+        if (mDraining) { Close(c, kServerDraining, "the server is restarting; try again in a minute"); return; }
         const bool allowed = std::find(mConfig.tracks.begin(), mConfig.tracks.end(), m.track) != mConfig.tracks.end();
         if (!allowed || m.players < 2 || m.players > 8 || m.laps < 1 || m.laps > 10) { Close(c, kBadSettings, "that race cannot be hosted here"); return; }
         if (static_cast<int>(mRaces.size()) >= mConfig.maxRaces) { Close(c, kTooManyRaces, "the server is hosting as many races as it can"); return; }
@@ -262,6 +270,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
     if (type == kJoinRace) {
         JoinRace m;
         if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
+        if (mDraining) { Close(c, kServerDraining, "the server is restarting; try again in a minute"); return; }
         auto it = mRaces.find(m.id);
         if (it == mRaces.end()) { Close(c, kNoSuchRace, "no such race"); return; }
         RaceHost& h = *it->second->host;

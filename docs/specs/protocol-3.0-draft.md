@@ -35,7 +35,7 @@ and on what the [netcode prototype](../netcode-prototype.md) showed the simulati
    so a client can fall back or tell the player to update.
 2. **HelloAck** (server): accepted major.minor, negotiated capabilities and `max_frame`, a 16-byte server nonce, and the
    server's tick length (`16 ms`) and rules version (`replay-format.md: rules`). Or **Reject** with a machine-readable
-   reason (`unsupported_version`, `server_full`, `banned`, `rate_limited`) and a short UTF-8 message.
+   reason (`unsupported_version`, `server_full`, `banned`, `rate_limited`, `server_draining`) and a short UTF-8 message.
 3. **Secure session** (native without TLS termination): ephemeral X25519 key exchange, server identity signed with a long-term
    Ed25519 key pinned in the client (and checked against the downloaded manifest), then AEAD (ChaCha20-Poly1305) with a
    per-direction 64-bit message counter as nonce. Counters never repeat, so replayed frames are rejected. Browser sessions

@@ -54,6 +54,11 @@ public:
     const RaceHost* Race(std::uint32_t id) const;
     std::vector<std::uint32_t> RaceIds() const;
     int OpenConnections() const;
+    // Draining (a rolling restart): races under way run to their end, but nobody can host or join a race any more. The process
+    // exits when RunningRaces() reaches 0.
+    void SetDraining(bool draining) { mDraining = draining; }
+    bool Draining() const { return mDraining; }
+    int RunningRaces() const;
     // Counters of every race the server has hosted (running races plus those already removed).
     RaceHost::Metrics TotalMetrics() const;
 
@@ -76,6 +81,7 @@ private:
     std::uint64_t mSeed;
     RaceHost::Metrics mRemoved;      // counters of races already removed
     std::uint64_t mRacesHosted = 0;
+    bool mDraining = false;
     std::function<void(std::uint32_t, const RaceHost&)> mOnFinished;
 };
 }

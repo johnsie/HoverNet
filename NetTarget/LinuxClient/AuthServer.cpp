@@ -11,6 +11,7 @@
 #include <chrono>
 #include <functional>
 #include <cstdio>
+#include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -240,6 +241,10 @@ void WriteResults(const std::string& replayPath, const std::vector<Authority::Pl
     std::fclose(f);
 }
 
+// SIGTERM and SIGINT start a drain instead of killing races under way (a rolling restart): see docs/operators.md.
+volatile std::sig_atomic_t g_drainRequested = 0;
+void OnDrainSignal(int) { g_drainRequested = g_drainRequested == 0 ? 1 : 3; }   // 1 drain, 3 a second signal: leave now
+
 template <class MetricsFn>
 void PumpStatus(AuthSocket listener, std::vector<std::unique_ptr<StatusPeer>>& peers, MetricsFn metrics)
 {
@@ -259,7 +264,10 @@ void PumpStatus(AuthSocket listener, std::vector<std::unique_ptr<StatusPeer>>& p
         else if (n == 0 || !AuthNet::WouldBlock()) { AuthNet::CloseSocket(p->socket); p->socket = kInvalidSocket; continue; }
         if (p->request.find("\r\n\r\n") == std::string::npos && p->request.find("\n\n") == std::string::npos && p->request.size() < 4096) continue;
         std::string body, status = "200 OK";
-        if (p->request.compare(0, 12, "GET /health ") == 0) body = "ok\n";
+        if (p->request.compare(0, 12, "GET /health ") == 0) {
+            if (g_drainRequested != 0) { status = "503 Service Unavailable"; body = "draining\n"; }   // load balancers stop sending players
+            else body = "ok\n";
+        }
         else if (p->request.compare(0, 13, "GET /metrics ") == 0) body = metrics();
         else { status = "404 Not Found"; body = "not found\n"; }
         const std::string response = "HTTP/1.1 " + status + "\r\nContent-Type: text/plain; version=0.0.4\r\nContent-Length: " + std::to_string(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
@@ -333,6 +341,7 @@ int main(int argc, char** argv)
     std::string moderationDir;
     int adminPort = -1;
     int statusPort = -1;
+    int drainTimeoutSeconds = 600;
     std::string crashDir;
     bool crashTest = false;
     std::string identityFile;
@@ -355,6 +364,7 @@ int main(int argc, char** argv)
         else if (a == "--moderation-dir") moderationDir = value();
         else if (a == "--admin-port") adminPort = std::atoi(value());
         else if (a == "--status-port") statusPort = std::atoi(value());
+        else if (a == "--drain-timeout") drainTimeoutSeconds = std::atoi(value());
         else if (a == "--crash-dir") crashDir = value();
         else if (a == "--crash-test") crashTest = true;
         else if (a == "--identity-file") identityFile = value();
@@ -384,6 +394,8 @@ int main(int argc, char** argv)
     }
     security.require = requireEncryption;
     if (requireEncryption && !security.enabled) { std::fprintf(stderr, "--require-encryption needs --identity-file\n"); return 2; }
+    std::signal(SIGTERM, OnDrainSignal);
+    std::signal(SIGINT, OnDrainSignal);
     int boundPort = 0;
     AuthSocket listener = AuthNet::Listen(bind, port, boundPort);
     if (listener == kInvalidSocket) { std::fprintf(stderr, "cannot listen on %s:%d\n", bind.c_str(), port); return 1; }
@@ -469,11 +481,30 @@ int main(int argc, char** argv)
         std::fflush(stdout);
         metricsText = [&]() { return RenderMetrics(lobby.TotalMetrics(), static_cast<unsigned long long>(lobby.RaceCount()), lobby.RacesHosted(), static_cast<unsigned long long>(lobby.OpenConnections()), NowMs() - serverStart); };
         std::vector<std::unique_ptr<Peer>> lobbyPeers;
+        std::int64_t drainStarted = -1, drainedAt = -1;
         for (;;) {
             PumpSockets(lobby, listener, lobbyPeers, maxConnections, moderation.get(), security);
             housekeeping();
+            if (g_drainRequested != 0) {
+                // Rolling restart: races under way finish (and their replays are saved), no race can be hosted or joined, and the
+                // process leaves once none is running, or when the timeout ends. A second signal leaves at once.
+                if (drainStarted < 0) {
+                    drainStarted = NowMs();
+                    lobby.SetDraining(true);
+                    std::printf("draining: %d races running, leaving when they end (at most %d s)\n", lobby.RunningRaces(), drainTimeoutSeconds);
+                    std::fflush(stdout);
+                    g_drainRequested = 2;
+                }
+                if (lobby.RunningRaces() == 0 && drainedAt < 0) drainedAt = NowMs();
+                if (g_drainRequested == 3 || (drainedAt >= 0 && NowMs() - drainedAt > 2500) || NowMs() - drainStarted > drainTimeoutSeconds * 1000LL) break;   // the pause lets the last results reach the players
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
+        std::printf("drained after %lld ms, %d races were still running\n", static_cast<long long>(NowMs() - drainStarted), lobby.RunningRaces());
+        std::fflush(stdout);
+        for (auto& p : lobbyPeers) AuthNet::CloseSocket(p->socket);
+        AuthNet::CloseSocket(listener);
+        return 0;
     }
 
     std::unique_ptr<RaceHost> host(new RaceHost(cfg));
@@ -484,10 +515,14 @@ int main(int argc, char** argv)
 
     std::vector<std::unique_ptr<Peer>> peers;
     metricsText = [&]() { return RenderMetrics(host->GetMetrics(), 1, 1, static_cast<unsigned long long>(peers.size()), NowMs() - serverStart); };
-    std::int64_t raceEndedAt = -1;
+    std::int64_t raceEndedAt = -1, drainStartedFixed = -1;
     for (;;) {
         PumpSockets(*host, listener, peers, maxConnections, moderation.get(), security);
         housekeeping();
+        if (g_drainRequested != 0) {   // a race not yet started is simply abandoned; one under way finishes and is saved first
+            if (drainStartedFixed < 0) { drainStartedFixed = NowMs(); std::printf("draining\n"); std::fflush(stdout); }
+            if (g_drainRequested == 3 || !host->Started() || NowMs() - drainStartedFixed > drainTimeoutSeconds * 1000LL) break;
+        }
 
         if (host->RaceFinished()) {
             if (raceEndedAt < 0) raceEndedAt = NowMs();
@@ -519,7 +554,7 @@ int main(int argc, char** argv)
                     WriteResults(path, results);
                     std::fflush(stdout);
                 }
-                if (once) break;
+                if (once || g_drainRequested != 0) break;
                 for (auto& p : peers) { host->Disconnect(p->connection); AuthNet::CloseSocket(p->socket); }
                 peers.clear();
                 host.reset(new RaceHost(cfg));

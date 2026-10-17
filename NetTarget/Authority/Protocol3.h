@@ -55,6 +55,7 @@ enum RejectReason : std::uint8_t
     kBadSettings = 7,
     kTooManyRaces = 8,
     kBanned = 9,
+    kServerDraining = 10,   // the server is shutting down for a restart: races under way finish, no new race starts
 };
 
 // ---- framing -----------------------------------------------------------------------------------------------

@@ -40,6 +40,7 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 | `--replay-dir DIR` | save a replay of every race |
 | `--moderation-dir DIR`, `--admin-port P` | audit log, moderators and the console ([online-services.md](online-services.md)) |
 | `--status-port P`, `--crash-dir DIR` | `/health`, `/metrics`; crash reports |
+| `--drain-timeout S` | longest a drain waits for races under way (default 600 seconds) |
 | `--once` | serve one race and exit (tests) |
 | `--config FILE` | read options from a file |
 
@@ -50,6 +51,15 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 - HoverNet does not use Docker or any other container tooling, for building, testing or deployment; run the server as a service
   as above or from a terminal.
 
+
+## Restarting without ending anyone's race (rolling deployment)
+
+Send the server `SIGTERM` (`systemctl stop` or `reload`-style restarts do this). It **drains**: races under way run to their end and their
+replays are saved, hosting or joining a race is refused with "the server is restarting" (reject reason 10), `/health` answers `503 draining`
+so a load balancer or DNS health check stops sending players, and the process exits 0 when no race is running (after a short pause so the
+last results reach the players) or after `--drain-timeout`. A second signal exits at once. Races that have not started are dropped.
+Set `TimeoutStopSec` in the systemd unit above the drain timeout. To roll a pool: start the new build on a spare port, point the balancer
+at it, `SIGTERM` the old one, and remove it from the pool when it exits. Tested on Linux (`HoverNetDrain`); not yet on Windows.
 
 ## Watching a server
 

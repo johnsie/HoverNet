@@ -795,6 +795,11 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetLobbyTcp
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-lobby-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> 400
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    if(UNIX)   # needs POSIX signals and curl; the Windows service is stopped differently (docs/operators.md)
+        add_test(NAME HoverNetDrain
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-drain.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    endif()
     add_test(NAME HoverNetSpectatorTcp
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-spectator-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

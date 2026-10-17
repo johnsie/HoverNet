@@ -9,6 +9,8 @@ WorkingDirectory=/usr/share/hovernet
 ExecStart=/usr/bin/HoverNetAuthServer --config /etc/hovernet/server.conf
 Restart=on-failure
 RestartSec=3
+# SIGTERM starts a drain: races under way finish first (drain-timeout in the configuration, 600 s by default).
+TimeoutStopSec=660
 # The server needs no privileges.
 NoNewPrivileges=true
 PrivateTmp=true
