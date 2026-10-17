@@ -816,6 +816,9 @@ if(BUILD_TESTING AND NOT WIN32)
         add_test(NAME HoverNetSigning
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-signing.sh $<TARGET_FILE:HoverNetSign>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetAbuse
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-abuse.sh $<TARGET_FILE:HoverNetAuthServer>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetWebSocketTcp
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-websocket.sh $<TARGET_FILE:HoverNetAuthServer>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

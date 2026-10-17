@@ -64,7 +64,9 @@ terminates TLS and proxies `wss://your.site/auth/` to the loopback port (Apache 
 address, the per-address connection cap is not applied to loopback in this mode and address bans do not reach individual browsers
 (mutes and kicks by name still do); `--max-connections` still bounds the total. Tested with a scripted client over a real socket
 (`HoverNetWebSocketTcp`) and a unit test with the RFC 6455 vectors and random bytes (`HoverNetWebSocket`); there is no browser client
-for protocol 3.0 yet, so no real browser has been tried.
+for protocol 3.0 yet, so no real browser has been tried. `HoverNetAbuse` throws 120 hostile connections at a live server (garbage, oversized and
+truncated frames, half-open and giant upgrade requests, bad WebSocket frames) and checks it stays up, healthy and serving, including under
+ASan/UBSan.
 
 ## Restarting without ending anyone's race (rolling deployment)
 
