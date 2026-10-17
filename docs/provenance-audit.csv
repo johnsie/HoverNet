@@ -1,0 +1,874 @@
+path,class,reason
+.claude/settings.json,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+.github/workflows/build.yml,added-reference,text that refers to HoverRace internals
+.gitignore,baseline,present in the first (imported) commit
+.gitlab-ci.yml,added-reference,text that refers to HoverRace internals
+.vs/NetTarget/FileContentIndex/1c6cc459-311a-45eb-b888-8408a34411e7.vsidx,added-asset,"binary added later, origin not recorded"
+.vs/NetTarget/FileContentIndex/8af2eea7-a3b9-4a0c-a0ec-ff8c89322d0b.vsidx,added-asset,"binary added later, origin not recorded"
+.vs/NetTarget/v17/.suo,baseline-asset,binary present in the first (imported) commit
+.vs/NetTarget/v17/Browse.VC.db,added-asset,"binary added later, origin not recorded"
+.vs/NetTarget/v17/DocumentLayout.json,baseline,present in the first (imported) commit
+.vs/NetTarget/v17/Solution.VC.db,added-asset,"binary added later, origin not recorded"
+.vs/NetTarget/v17/fileList.bin,added-asset,"binary added later, origin not recorded"
+.vscode/tasks.json,added-reference,text that refers to HoverRace internals
+CHANGELOG.md,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+CMakeLists.txt,added-reference,text that refers to HoverRace internals
+HoverCad/ChildFrm.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/ChildFrm.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/GDIResources.cpp,baseline,present in the first (imported) commit
+HoverCad/GDIResources.h,baseline,present in the first (imported) commit
+HoverCad/HCad1.TR,baseline-asset,binary present in the first (imported) commit
+HoverCad/HoverCad.aps,baseline-asset,binary present in the first (imported) commit
+HoverCad/HoverCad.clw,baseline,present in the first (imported) commit
+HoverCad/HoverCad.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/HoverCad.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/HoverCad.mak,baseline,present in the first (imported) commit
+HoverCad/HoverCad.mdp,baseline-asset,binary present in the first (imported) commit
+HoverCad/HoverCad.rc,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/HoverCad.reg,baseline,present in the first (imported) commit
+HoverCad/HoverCad.vcxproj,added-reference,text that refers to HoverRace internals
+HoverCad/HoverCad.vcxproj.filters,added-reference,text that refers to HoverRace internals
+HoverCad/HoverCad.vcxproj.user,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+HoverCad/HoverCadDoc.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/HoverCadDoc.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/HoverCadView.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/HoverCadView.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/HoverTypes.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/HoverTypes.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/MainFrm.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/MainFrm.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/ReadMe.txt,baseline,present in the first (imported) commit
+HoverCad/ScaleSelect.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/ScaleSelect.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/SelectAttrib.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/SelectAttrib.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/StdAfx.cpp,baseline,present in the first (imported) commit
+HoverCad/StdAfx.h,baseline,present in the first (imported) commit
+HoverCad/ZoomBar.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/ZoomBar.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+HoverCad/arrow.cur,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/HoverCad.ico,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/HoverCad.rc2,baseline,present in the first (imported) commit
+HoverCad/res/HoverCadDoc.ico,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/Toolbar.bmp,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/cur00001.cur,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/cur00002.cur,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/cur00003.cur,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/cur00004.cur,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/cur00005.cur,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/cursor1.cur,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/pointer_.cur,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/select.bmp,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/selectit.bmp,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/status_i.bmp,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/tools_ba.bmp,baseline-asset,binary present in the first (imported) commit
+HoverCad/res/zoom.bmp,baseline-asset,binary present in the first (imported) commit
+HoverCad/resource.h,baseline,present in the first (imported) commit
+HoverCad/resource.hm,baseline,present in the first (imported) commit
+HoverCad/test.TR,baseline-asset,binary present in the first (imported) commit
+InternetRoom/BannerServer.c,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/ClickServer.c,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/IRoom.c,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/InternetRoom.c,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/InternetRoom.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/InternetRoom.mak,baseline,present in the first (imported) commit
+InternetRoom/InternetRoom.mdp,baseline-asset,binary present in the first (imported) commit
+InternetRoom/InternetRoom2.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/InternetRoom3.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/InternetRoom3.vcxproj,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+InternetRoom/InternetRoom3.vcxproj.filters,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+InternetRoom/InternetRoom_file.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/KeyServer.c,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/KeyServer.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/MVC.TMP,baseline,present in the first (imported) commit
+InternetRoom/ServerScore.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/ServerScore2.c,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/cgiref.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/getmail.c,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/logfile,baseline,present in the first (imported) commit
+InternetRoom/orderno.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+InternetRoom/roomlist.txt,baseline,present in the first (imported) commit
+InternetRoom/scores.txt,baseline,present in the first (imported) commit
+InternetRoom/startnewbies.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget.sln,baseline,present in the first (imported) commit
+NetTarget/ColorTools/ColorTools.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ColorTools/ColorTools.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ColorTools/ColorTools.vcproj,baseline,present in the first (imported) commit
+NetTarget/ColorTools/ColorTools.vcxproj,baseline,present in the first (imported) commit
+NetTarget/ColorTools/ColorTools.vcxproj.user,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/ColorTools/StdAfx.cpp,baseline,present in the first (imported) commit
+NetTarget/ColorTools/StdAfx.h,baseline,present in the first (imported) commit
+NetTarget/CommunityTracks.tsv,added-reference,text that refers to HoverRace internals
+NetTarget/Game2/About.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/About.dib,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/AboutBeta.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/Banner.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/Banner.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/ClientSession.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/ClientSession.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/CommonDialog.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/CommonDialog.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/Game2.aps,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/Game2.rc,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/Game2.vcproj,baseline,present in the first (imported) commit
+NetTarget/Game2/Game2.vcxproj,baseline,present in the first (imported) commit
+NetTarget/Game2/Game2.vcxproj.new,added-reference,text that refers to HoverRace internals
+NetTarget/Game2/GameApp.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/GameApp.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/InternetRoom.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/InternetRoom.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/License.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/License.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/MatchReport.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/MatchReport.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/MeetingRoomDialog.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/MeetingRoomDialog.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/NetInterface.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/NetInterface.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/NetworkSession.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/NetworkSession.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/Observer.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/Observer.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/RoomListDialog.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/RoomListDialog.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/Security.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/Sponsor.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/Sponsor.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/StdAfx.cpp,baseline,present in the first (imported) commit
+NetTarget/Game2/StdAfx.h,baseline,present in the first (imported) commit
+NetTarget/Game2/TrackSelect.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/TrackSelect.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/abouteon.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/abouteon.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/betanotice.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/bitmap1.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/demolicence2.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/fireball.ico,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/icon1.ico,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/icon2.ico,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/icon3.ico,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/intro1.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/introeon.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/legal_no.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/Game2/main.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Game2/resource.h,baseline,present in the first (imported) commit
+NetTarget/Game2/test_https_fetch.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/Game2/warning.ico,baseline-asset,binary present in the first (imported) commit
+NetTarget/GameServer/GameServer.vcproj,baseline,present in the first (imported) commit
+NetTarget/GraphicsSDL2/SDL2Graphics.cpp,added-reference,text that refers to HoverRace internals
+NetTarget/GraphicsSDL2/SDL2Graphics.h,added-reference,text that refers to HoverRace internals
+NetTarget/GraphicsSDL2/SDL2Test.cpp,added-reference,text that refers to HoverRace internals
+NetTarget/GraphicsSDL2/SDL2Test.vcxproj,added-reference,text that refers to HoverRace internals
+NetTarget/GraphicsSDL2/VideoBufferSDL2Adapter.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/GraphicsSDL2/VideoBufferSDL2Adapter.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/GrokkSoft.url,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Help/Font2.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/FuelZone.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/FuelZone.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/Help.doc,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/display.jpg,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/display.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/greenwall.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/greenwall.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/greywall.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/greywall.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/index.html,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Help/kaltent.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kcaps.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kcaps.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kctrl.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kctrl.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kd.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kd.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kdel.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kdel.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kdown.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kdown.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/ke.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/ke.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kend.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kf.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kf.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kf1.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kf1.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kf10.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kf10.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kf2.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/khome.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/khome.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kinsert.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kinsert.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kleft.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kleft.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kminus.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kminus.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kpgdn.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kpgdn.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kpgup.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kpgup.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kplus.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kplus.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kright.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kright.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/ks.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/ks.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kshift.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kshift.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/ktab.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/ktab.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kup.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/kup.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/logo.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/redwall.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/redwall.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/small.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/speedzone.jpg,baseline-asset,binary present in the first (imported) commit
+NetTarget/Help/speedzone.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/Intro.avi,baseline-asset,binary present in the first (imported) commit
+NetTarget/LinuxClient/ActorRenderSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/ClientSessionSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/DynamicFactorySmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/FactorySmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/GameSessionSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/Gunzip.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/Gunzip.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/HeadlessSoundServer.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/HeadlessSprite.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/HeadlessVideoBuffer.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/ImGuiLogicalCoords.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/ImGuiLogicalMouseSmoke.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/InRaceChatSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/LevelSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/LobbyCli.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/MainCharacterRenderSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/MainCharacterSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/MantaResourceBuilder.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/ModelCoreSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/ObserverChatRenderSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/ObserverSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/RaceServerClient.cpp,added-reference,text that refers to HoverRace internals
+NetTarget/LinuxClient/RaceServerClient.h,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/RaceServerClientSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/RaceServerLifecycleSmoke.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/RecordFileSmoke.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/LinuxClient/ResourceSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/ServerConfigSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/Sha256.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/Sha256.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/Track3DViewer.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/TrackCatalog.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/TrackCatalog.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/TrackCatalogSmoke.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/TrackDownloadSmoke.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/TrackDownloader.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/TrackDownloader.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/LinuxClient/TrackLoadSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/TrackViewer.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/ViewportSmoke.cpp,added-engine,written against the HoverRace engine API
+NetTarget/LinuxClient/assets/menu-hovercraft-source.png,added-asset,"binary added later, origin not recorded"
+NetTarget/LinuxClient/assets/menu-hovercraft.bmp,added-asset,"binary added later, origin not recorded"
+NetTarget/LinuxClient/main.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/MainCharacter/MainCharacter.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MainCharacter/MainCharacter.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MainCharacter/MainCharacter.vcproj,baseline,present in the first (imported) commit
+NetTarget/MainCharacter/MainCharacter.vcxproj,baseline,present in the first (imported) commit
+NetTarget/MainCharacter/MainCharacter.vcxproj.user,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/MainCharacter/MainCharacterRenderer.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MainCharacter/MainCharacterRenderer.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MainCharacter/StdAfx.cpp,baseline,present in the first (imported) commit
+NetTarget/MainCharacter/StdAfx.h,baseline,present in the first (imported) commit
+NetTarget/MazeCompiler/LevelBuilder.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MazeCompiler/LevelBuilder.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MazeCompiler/LevelBuilderVisiblesZones.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MazeCompiler/MaxeCompiler.aps,baseline-asset,binary present in the first (imported) commit
+NetTarget/MazeCompiler/MazeCompiler.aps,baseline-asset,binary present in the first (imported) commit
+NetTarget/MazeCompiler/MazeCompiler.rc,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MazeCompiler/MazeCompiler.vcproj,baseline,present in the first (imported) commit
+NetTarget/MazeCompiler/MazeCompiler.vcxproj,added-reference,text that refers to HoverRace internals
+NetTarget/MazeCompiler/MazeCompiler.vcxproj.filters,added-reference,text that refers to HoverRace internals
+NetTarget/MazeCompiler/Parser.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MazeCompiler/Parser.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MazeCompiler/StdAfx.cpp,baseline,present in the first (imported) commit
+NetTarget/MazeCompiler/StdAfx.h,baseline,present in the first (imported) commit
+NetTarget/MazeCompiler/TrackCommonStuff.cpp,baseline,present in the first (imported) commit
+NetTarget/MazeCompiler/TrackCommonStuff.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MazeCompiler/TrackMap.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MazeCompiler/TrackMap.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MazeCompiler/main.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/MazeCompiler/resource.h,baseline,present in the first (imported) commit
+NetTarget/Model/ActorPool.h,baseline,present in the first (imported) commit
+NetTarget/Model/ConcreteShape.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/ConcreteShape.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/ContactEffect.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/ContactEffect.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/FreeElementMovingHelper.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/FreeElementMovingHelper.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/GameSession.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/GameSession.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/Level.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/Level.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/MazeElement.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/MazeElement.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/Model.vcproj,baseline,present in the first (imported) commit
+NetTarget/Model/Model.vcxproj,baseline,present in the first (imported) commit
+NetTarget/Model/Model.vcxproj.user,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/Model/ModelClass.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/PhysicalCollision.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/PhysicalCollision.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/RaceEffects.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/ShapeCollisions.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/ShapeCollisions.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/Shapes.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/Shapes.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Model/StdAfx.cpp,baseline,present in the first (imported) commit
+NetTarget/Model/StdAfx.h,baseline,present in the first (imported) commit
+NetTarget/Model/dump,baseline,present in the first (imported) commit
+NetTarget/NetTarget.mak,baseline,present in the first (imported) commit
+NetTarget/NetTarget.mdp,baseline-asset,binary present in the first (imported) commit
+NetTarget/NetTarget.vcproj,baseline,present in the first (imported) commit
+NetTarget/NetTarget.vcxproj,baseline,present in the first (imported) commit
+NetTarget/ObjFac1.dat,baseline-asset,binary present in the first (imported) commit
+NetTarget/ObjFac1/Ball.msh,baseline-asset,binary present in the first (imported) commit
+NetTarget/ObjFac1/BallElement.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/BallElement.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/BumperGate.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/BumperGate.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/DefaultSurface.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/DefaultSurface.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/DoubleSpeedSource.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/DoubleSpeedSource.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/FinishLine.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/FinishLine.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/FuelSource.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/FuelSource.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/GenericRenderer.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/GenericRenderer.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/HoverRender.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/HoverRender.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/LinuxPlugin.cpp,added-engine,written against the HoverRace engine API
+NetTarget/ObjFac1/Manta.msh,added-asset,"binary added later, origin not recorded"
+NetTarget/ObjFac1/Mine.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/Mine.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/Missile.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/Missile.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/ObjFac1.aps,baseline-asset,binary present in the first (imported) commit
+NetTarget/ObjFac1/ObjFac1.dat,baseline-asset,binary present in the first (imported) commit
+NetTarget/ObjFac1/ObjFac1.fbres,baseline-asset,binary present in the first (imported) commit
+NetTarget/ObjFac1/ObjFac1.vcproj,baseline,present in the first (imported) commit
+NetTarget/ObjFac1/ObjFac1.vcxproj,added-reference,text that refers to HoverRace internals
+NetTarget/ObjFac1/ObjFac1Res.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/PowerUp.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/PowerUp.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/StdAfx.cpp,baseline,present in the first (imported) commit
+NetTarget/ObjFac1/StdAfx.h,baseline,present in the first (imported) commit
+NetTarget/ObjFac1/TestElement.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/TestElement.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/WoodSurface.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/WoodSurface.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFac1/babe.msh,baseline-asset,binary present in the first (imported) commit
+NetTarget/ObjFac1/boxer.msh,baseline-asset,binary present in the first (imported) commit
+NetTarget/ObjFac1/gate.h,baseline,present in the first (imported) commit
+NetTarget/ObjFac1/generate_manta_mesh.py,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/ObjFac1/main.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/BitmapSurface.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/BitmapSurface.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/FreeElementBase.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/FreeElementBase.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/FreeElementBaseRenderer.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/FreeElementBaseRenderer.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/MovementSpec.h,baseline,present in the first (imported) commit
+NetTarget/ObjFacTools/ObjFacTools.vcproj,baseline,present in the first (imported) commit
+NetTarget/ObjFacTools/ObjFacTools.vcxproj,baseline,present in the first (imported) commit
+NetTarget/ObjFacTools/ObjFacTools.vcxproj.user,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/ObjFacTools/ObjectFactoryData.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/ObjectFactoryData.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/ResActor.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/ResActor.h,baseline,present in the first (imported) commit
+NetTarget/ObjFacTools/ResBitmap.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/ResBitmap.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/ResSound.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/ResSound.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/ResSprite.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/ResSprite.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/ResourceLib.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/ResourceLib.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/SpriteHandle.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/SpriteHandle.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ObjFacTools/StdAfx.cpp,baseline,present in the first (imported) commit
+NetTarget/ObjFacTools/StdAfx.h,baseline,present in the first (imported) commit
+NetTarget/PaletteCreator/PaletteCreator.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/PaletteCreator/PaletteCreator.vcproj,baseline,present in the first (imported) commit
+NetTarget/Platform/MfcCompat.h,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/CMakeLists.txt,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/RaceServer/Config/ServerConfig.cpp,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/Config/ServerConfig.h,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/GameSimulation/GameSimulation.cpp,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/GameSimulation/GameSimulation.h,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/GameSimulation/GameState.h,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/Logging/ServerLogger.cpp,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/Logging/ServerLogger.h,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/NetworkInterface/ClientConnection.cpp,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/NetworkInterface/ClientConnection.h,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/NetworkInterface/MessageDispatcher.cpp,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/NetworkInterface/MessageDispatcher.h,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/NetworkInterface/Protocol.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/RaceServer/NetworkInterface/ServerSocket.cpp,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/NetworkInterface/ServerSocket.h,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/README.md,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/RaceServer/RaceManager/RaceManager.cpp,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/RaceManager/RaceManager.h,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/RaceManager/RaceSession.cpp,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/RaceManager/RaceSession.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/RaceServer/RaceServer.cpp,added-engine,written against the HoverRace engine API
+NetTarget/RaceServer/RaceServer.vcxproj,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/RaceServer/config.xml,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/RaceServer/stdafx.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/RaceServer/stdafx.h,added-engine,written against the HoverRace engine API
+NetTarget/Registration.url,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/BitmapHelper.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/BitmapHelper.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/ResActorBuilder.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/ResActorBuilder.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/ResBitmapBuilder.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/ResBitmapBuilder.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/ResSoundBuilder.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/ResSoundBuilder.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/ResSpriteBuilder.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/ResSpriteBuilder.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/ResourceCompiler.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/ResourceCompiler.vcproj,baseline,present in the first (imported) commit
+NetTarget/ResourceCompiler/ResourceLibBuilder.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/ResourceLibBuilder.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/StdAfx.cpp,baseline,present in the first (imported) commit
+NetTarget/ResourceCompiler/StdAfx.h,baseline,present in the first (imported) commit
+NetTarget/ResourceCompiler/TextParsing.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceCompiler/TextParsing.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceDecompiler/CArchiveParser.cpp,added-reference,text that refers to HoverRace internals
+NetTarget/ResourceDecompiler/CArchiveParser.h,added-reference,text that refers to HoverRace internals
+NetTarget/ResourceDecompiler/README.md,added-reference,text that refers to HoverRace internals
+NetTarget/ResourceDecompiler/ResourceDecompiler.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/ResourceDecompiler/ResourceDecompiler.h,added-engine,written against the HoverRace engine API
+NetTarget/ResourceDecompiler/ResourceDecompiler.vcxproj,added-reference,text that refers to HoverRace internals
+NetTarget/ResourceDecompiler/main.cpp,added-engine,written against the HoverRace engine API
+NetTarget/Sounds/Bump1.wav,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/CrossLine.WAV,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/Finish.WAV,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/FinishLine.wav,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/MissileBounce.wav,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/MissileMotor.WAV,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/OutOfCtrl.WAV,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/Start.WAV,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/bounce.wav,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/fire.wav,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/jump.wav,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/misfire.wav,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/misjump.wav,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/motor.WAV,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/wind.WAV,baseline-asset,binary present in the first (imported) commit
+NetTarget/Sounds/wind2.wav,baseline-asset,binary present in the first (imported) commit
+NetTarget/Stat.out,baseline,present in the first (imported) commit
+NetTarget/ThirdParty/imgui/LICENSE.txt,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/backends/imgui_impl_sdl2.cpp,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/backends/imgui_impl_sdl2.h,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/backends/imgui_impl_sdlrenderer2.cpp,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/backends/imgui_impl_sdlrenderer2.h,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/imconfig.h,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/imgui.cpp,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/imgui.h,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/imgui_draw.cpp,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/imgui_internal.h,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/imgui_tables.cpp,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/imgui_widgets.cpp,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/imstb_rectpack.h,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/imstb_textedit.h,third-party,bundled third-party code
+NetTarget/ThirdParty/imgui/imstb_truetype.h,third-party,bundled third-party code
+NetTarget/TrackSources/Metro Spiral.track.txt,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/TrackSources/Switchback.track.txt,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/TrackSources/Tidal Causeway.track.txt,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/Tracks/ClassicH.trk,baseline-asset,binary present in the first (imported) commit
+NetTarget/Tracks/Metro Spiral.trk,added-asset,"binary added later, origin not recorded"
+NetTarget/Tracks/Steeplechase.trk,baseline-asset,binary present in the first (imported) commit
+NetTarget/Tracks/Switchback.trk,added-asset,"binary added later, origin not recorded"
+NetTarget/Tracks/The Alley2.trk,baseline-asset,binary present in the first (imported) commit
+NetTarget/Tracks/The River.trk,baseline-asset,binary present in the first (imported) commit
+NetTarget/Tracks/Tidal Causeway.trk,added-asset,"binary added later, origin not recorded"
+NetTarget/Util/BitPacking.h,baseline,present in the first (imported) commit
+NetTarget/Util/Cursor.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/DllObjectFactory.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/DllObjectFactory.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/FastArray.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/FastFifo.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/FastMemManip.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/FuzzyLogic.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/FuzzyLogic.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/KeyHandling.h,baseline,present in the first (imported) commit
+NetTarget/Util/MR_Types.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/NET.APS,baseline-asset,binary present in the first (imported) commit
+NetTarget/Util/NET.rc,baseline,present in the first (imported) commit
+NetTarget/Util/Profiler.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/Profiler.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/RecordFile.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/RecordFile.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/StdAfx.cpp,baseline,present in the first (imported) commit
+NetTarget/Util/StdAfx.h,baseline,present in the first (imported) commit
+NetTarget/Util/StrRes.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/StrRes.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/Util.vcproj,baseline,present in the first (imported) commit
+NetTarget/Util/Util.vcxproj,baseline,present in the first (imported) commit
+NetTarget/Util/Util.vcxproj.user,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/Util/WireFormat.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/Util/WorldCoordinates.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/WorldCoordinates.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/Util/resource.h,baseline,present in the first (imported) commit
+NetTarget/VideoServices/2DViewPort.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/2DViewport.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/3DViewport.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/3DViewport.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/3DViewportRendering.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/Bitmap.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/Bitmap.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/ColorPalette.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/ColorPalette.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/ColorTab.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/GraphicsTest.cpp,added-engine,written against the HoverRace engine API
+NetTarget/VideoServices/GraphicsUtilities.cpp,added-engine,written against the HoverRace engine API
+NetTarget/VideoServices/GraphicsUtilities.h,added-engine,written against the HoverRace engine API
+NetTarget/VideoServices/ModernActorRenderer.cpp,added-engine,written against the HoverRace engine API
+NetTarget/VideoServices/ModernActorRenderer.h,added-engine,written against the HoverRace engine API
+NetTarget/VideoServices/ModernRenderer.cpp,added-engine,written against the HoverRace engine API
+NetTarget/VideoServices/ModernRenderer.h,added-engine,written against the HoverRace engine API
+NetTarget/VideoServices/ModernVideoBuffer.cpp,added-engine,written against the HoverRace engine API
+NetTarget/VideoServices/ModernVideoBuffer.h,added-engine,written against the HoverRace engine API
+NetTarget/VideoServices/Patch.cpp,baseline,present in the first (imported) commit
+NetTarget/VideoServices/Patch.h,baseline,present in the first (imported) commit
+NetTarget/VideoServices/RenderingEngine.cpp,added-engine,written against the HoverRace engine API
+NetTarget/VideoServices/RenderingEngine.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/SoundServer.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/SoundServer.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/SoundServer_OpenAL.cpp.disabled,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/Sprite.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/Sprite.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/StdAfx.cpp,baseline,present in the first (imported) commit
+NetTarget/VideoServices/StdAfx.h,baseline,present in the first (imported) commit
+NetTarget/VideoServices/VideoBuffer.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/VideoBuffer.h,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/VideoBuffer2DDraw.cpp,licensed-header,carries a GrokkSoft/HoverRace licence header
+NetTarget/VideoServices/VideoBufferSDL2Integration.cpp,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/VideoServices/VideoBufferSDL2Integration.h,added-engine,written against the HoverRace engine API
+NetTarget/VideoServices/VideoServices.vcproj,baseline,present in the first (imported) commit
+NetTarget/VideoServices/VideoServices.vcxproj,baseline,present in the first (imported) commit
+NetTarget/VideoServices/VideoServices.vcxproj.user,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+NetTarget/bitmaps/About.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/About.dib,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/About.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/AboutBeat.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/AboutBeta.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Back1.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Back4.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Ball.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/BlueBulb.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CAPTURE2.RAS,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarBumper.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarBumper.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit1.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit2.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit20.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit21.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit22.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit23.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit24.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit25.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit26.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit27.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit28.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit29.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit2X.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit3.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit4.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit5.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit6.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit7.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit8.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpit9.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarCockpitX.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarDriverHead.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarDriverNeck.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarIcons.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarMotor.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarMotor.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarMotor2.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarMotor3.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarMotorArm.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarMotorArm.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/CarMotorFire.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Checker.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Clouds.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/ColorTab.pal,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/ETALON.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/ETALON.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/FinishWord.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/FirePat.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Font.pal,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Font1.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/FontTable.doc,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Fonta1.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Fontb1.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Fontc1.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Fontd1.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/FuelZone.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Hyper/StdFloor.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Hyper/StepYellow.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Hyper/WallStep.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Hyper/Walll.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Hyper/Wallr.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Hyper/WallrGreen.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Hyper/WallrGreenOff.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Hyper/WallrRed.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Hyper/WallrRedOff.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Hyper/YellowNeon.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Hyper/YellowNeonFlash.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Image21.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/LastFrame.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Manta/MantaConceptTop.png,added-asset,"binary added later, origin not recorded"
+NetTarget/bitmaps/Manta/MantaIcon.pcx,added-asset,"binary added later, origin not recorded"
+NetTarget/bitmaps/MineStat.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/MissileBody.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/MissileStat.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/MissileWing.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Old Font1.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/OldWallL.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/OldWallLGreen.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/OldWallLRed.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/PALETTE.PCX,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/PitWord.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/PitWork.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/Profile2.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/SpeedZone.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/StdFloor.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/StepYellow.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallBase.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallDoNotEnter.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallGGreen.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallL.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallLGreen.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallLGreenOff.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallLRed.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallLRedOff.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallN.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallPassLeft.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallPassRight.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallR.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallRGreen.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallRGreenOff.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallRRed.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallRRedOff.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallStep.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/WallTop.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/YellowNeon.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/YellowNeonFlash.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/betanotice.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/betanotice.gif,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/betanotice.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/big_brick.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/bluesky.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/bumpergate.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/aqua.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/black.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/blue.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/gray.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/green.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/orange.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/pink.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/red.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/rust.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/skin.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/white.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/color/yellow.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/demolicence.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/demolicence2.bmp,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/demolicence2.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/etalon.fbb,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/gatel.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/gater.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/intro.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/intro1.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/legal .doc,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/mine1.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/mine2.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/powerup.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/powerupstat.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/profile1.tga,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/smokmask.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/bitmaps/test.pal,baseline-asset,binary present in the first (imported) commit
+NetTarget/mazes/BG-CITY.pcx,baseline-asset,binary present in the first (imported) commit
+NetTarget/mazes/ClassicH.TR,baseline-asset,binary present in the first (imported) commit
+NetTarget/mazes/ClassicH[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/Steeplechase.TR,baseline-asset,binary present in the first (imported) commit
+NetTarget/mazes/Steeplechase[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/The Alley2.TR,baseline-asset,binary present in the first (imported) commit
+NetTarget/mazes/bClassicH[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/fuckClassicH[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/gggSteeplechase[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/jClassicH[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/jSteeplechase[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/jejejeSteeplechase[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/morningSteeplechase[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/myClassicH[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/testSteeplechase[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/tttSteeplechase[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/mazes/vSteeplechase[-1--1].trk,added-asset,"binary added later, origin not recorded"
+NetTarget/project.props,baseline,present in the first (imported) commit
+NetTarget/projects_info.json,baseline,present in the first (imported) commit
+NetTarget/source.dat,baseline-asset,binary present in the first (imported) commit
+NetTarget/sponsor.dat,baseline-asset,binary present in the first (imported) commit
+NetTarget/~VCA170.TMP,baseline,present in the first (imported) commit
+OpenAL/AL/al.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+OpenAL/AL/alc.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+OpenAL/al.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+OpenAL/alc.h,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+OpenAL/alsdl2wrapper.cpp,added-reference,text that refers to HoverRace internals
+OpenAL/alstub.cpp,added-reference,text that refers to HoverRace internals
+OpenAL/alstub_waveout.cpp,added-reference,text that refers to HoverRace internals
+README.md,licensed-header,carries a GrokkSoft/HoverRace licence header
+THIRD_PARTY_NOTICES.md,licensed-header,carries a GrokkSoft/HoverRace licence header
+compile_tracks.ps1,added-reference,text that refers to HoverRace internals
+docs/2.0-network-protocol.md,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+docs/2.0-platform-inventory.md,added-reference,text that refers to HoverRace internals
+docs/2.0-product-contract.md,added-reference,text that refers to HoverRace internals
+docs/beta-release-notes.md,added-reference,text that refers to HoverRace internals
+docs/beta-test-plan.md,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+docs/community-tracks-pack-readme.txt,added-reference,text that refers to HoverRace internals
+docs/community-tracks.md,added-reference,text that refers to HoverRace internals
+docs/github-actions.md,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+docs/gitlab-ci.md,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+docs/images/hovercraft.png,added-asset,"binary added later, origin not recorded"
+docs/linux-client.md,added-reference,text that refers to HoverRace internals
+docs/phase2-verification.md,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+docs/release-notes.md,added-reference,text that refers to HoverRace internals
+docs/releasing.md,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+docs/roadmap-2.0.md,added-reference,text that refers to HoverRace internals
+docs/roadmap-3.0.md,added-reference,text that refers to HoverRace internals
+docs/technical.md,added-reference,text that refers to HoverRace internals
+docs/track-authoring.md,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+docs/track-format.md,added-reference,text that refers to HoverRace internals
+docs/x64-audit.md,added-reference,text that refers to HoverRace internals
+packaging/debian/build-community-tracks-deb.sh,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/debian/build-game-deb.sh,added-reference,text that refers to HoverRace internals
+packaging/debian/build-raceserver-deb.sh,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/debian/community-tracks-control,added-reference,text that refers to HoverRace internals
+packaging/debian/conffiles,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/debian/control,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/debian/game-control,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/debian/hovernet-deploy,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/debian/hovernet-game,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/debian/hovernet-game.desktop,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/debian/hovernet-raceserver.service,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/debian/postinst,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/debian/reproducible.sh,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/debian/runtime-dependencies.tsv,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+packaging/windows/HoverNet-x64.iss,added-reference,text that refers to HoverRace internals
+packaging/windows/HoverNet.iss,added-reference,text that refers to HoverRace internals
+recompile_tracks.ps1,added-reference,text that refers to HoverRace internals
+roomlist2.txt,added-reference,text that refers to HoverRace internals
+scripts/check-runtime-dependencies.sh,added-reference,text that refers to HoverRace internals
+scripts/generate-community-manifest.sh,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+scripts/install-community-tracks.ps1,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+scripts/install-community-tracks.sh,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+scripts/make-release-checksums.sh,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+scripts/package-community-tracks.sh,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+scripts/raceserver_protocol_fuzz.py,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+scripts/run-raceserver-soak.sh,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+scripts/test-all-tracks-multiplayer.sh,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+scripts/test-community-tracks.sh,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+scripts/test-cross-platform-race.sh,candidate,"added later; no header, no engine dependence, no HoverRace internals"
+scripts/test-reproducible-packages.sh,added-reference,text that refers to HoverRace internals
+scripts/test-track-toolchain.sh,added-reference,text that refers to HoverRace internals
+scripts/test-windows-client.ps1,added-reference,text that refers to HoverRace internals
+scripts/validate-windows-x64-package.ps1,added-reference,text that refers to HoverRace internals
+test_output/actor_actor_19_19.msh,generated,"kept output, not source"
+test_output/actor_actor_20_20.msh,generated,"kept output, not source"
+test_output/actor_actor_21_21.msh,generated,"kept output, not source"
+test_output/actor_actor_22_22.msh,generated,"kept output, not source"
+test_output/actor_actor_23_23.msh,generated,"kept output, not source"
+test_output/actor_babe_11.msh,generated,"kept output, not source"
+test_output/actor_ball_12.msh,generated,"kept output, not source"
+test_output/actor_demo_fighter_10.msh,generated,"kept output, not source"
+test_output/bitmap_1.tga,generated,"kept output, not source"
+test_output/bitmap_1051.tga,generated,"kept output, not source"
+test_output/bitmap_1052.tga,generated,"kept output, not source"
+test_output/bitmap_1053.tga,generated,"kept output, not source"
+test_output/bitmap_1054.tga,generated,"kept output, not source"
+test_output/bitmap_1055.tga,generated,"kept output, not source"
+test_output/bitmap_1056.tga,generated,"kept output, not source"
+test_output/bitmap_1057.tga,generated,"kept output, not source"
+test_output/bitmap_1058.tga,generated,"kept output, not source"
+test_output/bitmap_1059.tga,generated,"kept output, not source"
+test_output/bitmap_1060.tga,generated,"kept output, not source"
+test_output/bitmap_1061.tga,generated,"kept output, not source"
+test_output/bitmap_1062.tga,generated,"kept output, not source"
+test_output/bitmap_1063.tga,generated,"kept output, not source"
+test_output/bitmap_1064.tga,generated,"kept output, not source"
+test_output/bitmap_1065.tga,generated,"kept output, not source"
+test_output/bitmap_1066.tga,generated,"kept output, not source"
+test_output/bitmap_1067.tga,generated,"kept output, not source"
+test_output/bitmap_1068.tga,generated,"kept output, not source"
+test_output/bitmap_1069.tga,generated,"kept output, not source"
+test_output/bitmap_1070.tga,generated,"kept output, not source"
+test_output/bitmap_1071.tga,generated,"kept output, not source"
+test_output/bitmap_1072.tga,generated,"kept output, not source"
+test_output/bitmap_1073.tga,generated,"kept output, not source"
+test_output/bitmap_1074.tga,generated,"kept output, not source"
+test_output/bitmap_1075.tga,generated,"kept output, not source"
+test_output/bitmap_1076.tga,generated,"kept output, not source"
+test_output/bitmap_1077.tga,generated,"kept output, not source"
+test_output/bitmap_20.tga,generated,"kept output, not source"
+test_output/bitmap_21.tga,generated,"kept output, not source"
+test_output/bitmap_22.tga,generated,"kept output, not source"
+test_output/bitmap_23.tga,generated,"kept output, not source"
+test_output/bitmap_24.tga,generated,"kept output, not source"
+test_output/bitmap_25.tga,generated,"kept output, not source"
+test_output/bitmap_26.tga,generated,"kept output, not source"
+test_output/bitmap_27.tga,generated,"kept output, not source"
+test_output/bitmap_28.tga,generated,"kept output, not source"
+test_output/bitmap_29.tga,generated,"kept output, not source"
+test_output/bitmap_30.tga,generated,"kept output, not source"
+test_output/bitmap_31.tga,generated,"kept output, not source"
+test_output/bitmap_40.tga,generated,"kept output, not source"
+test_output/bitmap_41.tga,generated,"kept output, not source"
+test_output/bitmap_42.tga,generated,"kept output, not source"
+test_output/bitmap_43.tga,generated,"kept output, not source"
+test_output/bitmap_44.tga,generated,"kept output, not source"
+test_output/bitmap_45.tga,generated,"kept output, not source"
+test_output/bitmap_46.tga,generated,"kept output, not source"
+test_output/bitmap_47.tga,generated,"kept output, not source"
+test_output/bitmap_48.tga,generated,"kept output, not source"
+test_output/bitmap_49.tga,generated,"kept output, not source"
+test_output/bitmap_50.tga,generated,"kept output, not source"
+test_output/bitmap_51.tga,generated,"kept output, not source"
+test_output/bitmap_52.tga,generated,"kept output, not source"
+test_output/bitmap_53.tga,generated,"kept output, not source"
+test_output/bitmap_54.tga,generated,"kept output, not source"
+test_output/bitmap_55.tga,generated,"kept output, not source"
+test_output/bitmap_56.tga,generated,"kept output, not source"
+test_output/bitmap_57.tga,generated,"kept output, not source"
+test_output/bitmap_58.tga,generated,"kept output, not source"
+test_output/bitmap_59.tga,generated,"kept output, not source"
+test_output/bitmap_70.tga,generated,"kept output, not source"
+test_output/bitmap_71.tga,generated,"kept output, not source"
+test_output/bitmap_72.tga,generated,"kept output, not source"
+test_output/bitmap_73.tga,generated,"kept output, not source"
+test_output/bitmap_74.tga,generated,"kept output, not source"
+test_output/bitmap_75.tga,generated,"kept output, not source"
+test_output/bitmap_76.tga,generated,"kept output, not source"
+test_output/bitmap_77.tga,generated,"kept output, not source"
+test_output/bitmap_78.tga,generated,"kept output, not source"
+test_output/bitmap_79.tga,generated,"kept output, not source"
+test_output/bitmap_80.tga,generated,"kept output, not source"
+test_output/bitmap_81.tga,generated,"kept output, not source"
+test_output/bitmap_85.tga,generated,"kept output, not source"
+test_output/bitmap_86.tga,generated,"kept output, not source"
+test_output/bitmap_87.tga,generated,"kept output, not source"
+test_output/bitmap_88.tga,generated,"kept output, not source"
+tools/generate_switchback_track.py,candidate,"added later; no header, no engine dependence, no HoverRace internals"
