@@ -4,6 +4,7 @@
 # Every file it edits is copied to a .bak-<time> file first; a failed Apache configtest puts the old file back.
 #
 #   setup-server.sh /path/to/hovernet-server_X.Y.Z_amd64.deb [--no-apache]
+#   setup-server.sh --configure-only [--no-apache]        (the package is already installed)
 #
 # For tests, these can be overridden: HN_CONF, HN_APACHE_SITE, HN_ORIGIN, HN_STATUS_PORT, HN_SKIP_SERVICES=1 (edit files only).
 set -euo pipefail
@@ -11,6 +12,8 @@ set -euo pipefail
 deb="${1:-}"; shift || true
 apache=yes
 for a in "$@"; do [ "$a" = "--no-apache" ] && apache=no; done
+install_package=yes
+if [ "$deb" = "--configure-only" ]; then install_package=no; deb=""; fi     # the package is already installed (for example by the GitLab deploy)
 conf="${HN_CONF:-/etc/hovernet/server.conf}"
 site="${HN_APACHE_SITE:-/etc/apache2/sites-available/hovernet.outiva.com.conf}"
 origin="${HN_ORIGIN:-https://hovernet.outiva.com}"
@@ -33,11 +36,16 @@ set_option() {
 
 if [ -z "$skip_services" ]; then
     [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
-    [ -f "$deb" ] || { echo "usage: $0 /path/to/hovernet-server_X.Y.Z_amd64.deb [--no-apache]" >&2; exit 64; }
-    dpkg-deb --field "$deb" Package | grep -Fxq hovernet-server || { echo "$deb is not a hovernet-server package" >&2; exit 65; }
-    say "Installing $(basename "$deb")"
     was_active=no; systemctl is-active --quiet hovernet-server && was_active=yes || true
-    apt-get install -y "$deb"
+    if [ "$install_package" = yes ]; then
+        [ -f "$deb" ] || { echo "usage: $0 /path/to/hovernet-server_X.Y.Z_amd64.deb | --configure-only [--no-apache]" >&2; exit 64; }
+        dpkg-deb --field "$deb" Package | grep -Fxq hovernet-server || { echo "$deb is not a hovernet-server package" >&2; exit 65; }
+        say "Installing $(basename "$deb")"
+        apt-get install -y "$deb"
+    else
+        dpkg-query -W hovernet-server >/dev/null 2>&1 || { echo "hovernet-server is not installed: give a package instead of --configure-only" >&2; exit 1; }
+        say "Using the installed $(dpkg-query -W hovernet-server)"
+    fi
 fi
 
 say "Configuring $conf"

@@ -5,19 +5,21 @@
 #
 #   scripts/setup-server-host.sh --version 2.1.0            # downloads the release's package and checks it against SHA256SUMS
 #   scripts/setup-server-host.sh --deb ~/Downloads/hovernet-server_2.1.0_amd64.deb      # a package you already have
+#   scripts/setup-server-host.sh --configure-only           # the package is already installed (the GitLab deploy does that): configure, start, check
 #
 # Options: --host USER@HOST (default john@192.168.10.181)   --no-apache (leave the web server alone)   --dry-run (print, do nothing)
 #
 # Use a package built by CI (the GitHub release, or the GitLab job's artifact), not one built on this machine: the host's libraries are older.
 set -euo pipefail
 
-host="john@192.168.10.181"; version=""; deb=""; apache_flag=""; dry=no
+host="john@192.168.10.181"; version=""; deb=""; apache_flag=""; dry=no; configure_only=no
 while [ $# -gt 0 ]; do
   case "$1" in
     --host) host="${2:?}"; shift 2 ;;
     --version) version="${2:?}"; shift 2 ;;
     --deb) deb="${2:?}"; shift 2 ;;
     --no-apache) apache_flag="--no-apache"; shift ;;
+    --configure-only) configure_only=yes; shift ;;
     --dry-run) dry=yes; shift ;;
     -h|--help) sed -n 2,12p "$0"; exit 0 ;;
     *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
@@ -26,11 +28,12 @@ done
 here="$(cd "$(dirname "$0")" && pwd)"
 remote_script="$here/../packaging/server/setup-server.sh"
 [ -f "$remote_script" ] || { echo "cannot find $remote_script" >&2; exit 1; }
-[ -n "$version" ] || [ -n "$deb" ] || { echo "give --version X.Y.Z or --deb FILE (see --help)" >&2; exit 2; }
+[ -n "$version" ] || [ -n "$deb" ] || [ "$configure_only" = yes ] || { echo "give --version X.Y.Z, --deb FILE or --configure-only (see --help)" >&2; exit 2; }
 run() { echo "+ $*"; [ "$dry" = yes ] || "$@"; }
 
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
-if [ -n "$version" ]; then
+if [ "$configure_only" = yes ]; then :
+elif [ -n "$version" ]; then
   [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version must look like 2.1.0" >&2; exit 2; }
   base="https://github.com/johnsie/HoverNet/releases/download/v${version}"
   name="hovernet-server_${version}_amd64.deb"
@@ -43,14 +46,19 @@ if [ -n "$version" ]; then
     deb="$work/$name"
   fi
 fi
-[ "$dry" = yes ] || [ -f "$deb" ] || { echo "no such file: $deb" >&2; exit 1; }
-[ "$dry" = yes ] || dpkg-deb --field "$deb" Package | grep -Fxq hovernet-server || { echo "$deb is not a hovernet-server package" >&2; exit 1; }
+[ "$configure_only" = yes ] || [ "$dry" = yes ] || [ -f "$deb" ] || { echo "no such file: $deb" >&2; exit 1; }
+[ "$configure_only" = yes ] || [ "$dry" = yes ] || dpkg-deb --field "$deb" Package | grep -Fxq hovernet-server || { echo "$deb is not a hovernet-server package" >&2; exit 1; }
 
 stamp="$(date +%Y%m%d-%H%M%S)"; remote_dir="hn-setup-$stamp"
-echo "Host: $host   package: $deb"
+echo "Host: $host   package: ${deb:-(already installed)}"
 run ssh "$host" "mkdir -p ~/$remote_dir"
-run scp "$remote_script" "$deb" "$host:~/$remote_dir/"
-run ssh -t "$host" "sudo bash ~/$remote_dir/setup-server.sh ~/$remote_dir/$(basename "$deb") $apache_flag"
+if [ "$configure_only" = yes ]; then
+  run scp "$remote_script" "$host:~/$remote_dir/"
+  run ssh -t "$host" "sudo bash ~/$remote_dir/setup-server.sh --configure-only $apache_flag"
+else
+  run scp "$remote_script" "$deb" "$host:~/$remote_dir/"
+  run ssh -t "$host" "sudo bash ~/$remote_dir/setup-server.sh ~/$remote_dir/$(basename "$deb") $apache_flag"
+fi
 run ssh "$host" "rm -rf ~/$remote_dir"
 echo
 echo "Finished. Open the web client, choose HOVERNET SERVERS and Connect (the default address is wss://hovernet.outiva.com/auth/)."
