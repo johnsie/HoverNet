@@ -453,7 +453,7 @@ foundations.
 
 - Confirm the latency and loss targets and the eight-player limit.
 - Decide who owns operations (on-call, moderation) before Stage 6a starts.
-- Choose the licence and authorship policy for community content.
+- Choose the licence and authorship policy for community content. *Proposed in [ADR 0002](adr/0002-content-licence-policy.md); the catalogue check is enforced by `HoverNetTrackPack verify --catalogue`; confirm it and get legal review.*
 - Agree the Win32 deprecation timeline once the Stage 0 inventory exists.
 - Confirm SDL2 as the canonical UI/UX reference for browser parity and define screenshot
   tolerances/viewports for the visual regression suite.
