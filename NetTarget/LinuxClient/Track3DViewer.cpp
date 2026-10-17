@@ -7572,7 +7572,8 @@ int RunClient(int argc, char** argv)
         }
         // Test instrumentation (HOVERNET_TEST_JITTER): how smoothly does the craft move on screen? Per frame: how many ticks the picture advanced
         // against how many the clock says it should have (1.0 = exactly in step), and how far the craft jumped.
-        static std::vector<double> sRatios, sJumps, sDts, sSteps, sVel;
+        static std::vector<double> sRatios, sJumps, sDts, sSteps, sVel, sOtherVel, sOtherJump;
+        static double sOtherX = 0, sOtherY = 0;
         static Uint32 sLastFrame = 0;
         static std::uint32_t sLastDisplay = 0;
         static double sLastX = 0, sLastY = 0;
@@ -7588,8 +7589,15 @@ int RunClient(int argc, char** argv)
                 sJumps.push_back(std::sqrt((x - sLastX) * (x - sLastX) + (y - sLastY) * (y - sLastY)));
                 sDts.push_back(static_cast<double>(now - sLastFrame));
                 sVel.push_back(sJumps.back() / static_cast<double>(now - sLastFrame));
+                if (auth.ack.players > 1) {
+                    const MR_MainCharacter* other = auth.craft[static_cast<std::size_t>((auth.ack.player + 1) % auth.ack.players)];
+                    const double jx = other->mPosition.mX - sOtherX, jy = other->mPosition.mY - sOtherY;
+                    sOtherJump.push_back(std::sqrt(jx * jx + jy * jy));
+                    sOtherVel.push_back(sOtherJump.back() / static_cast<double>(now - sLastFrame));
+                }
                 sSteps.push_back(static_cast<double>(displayTick) - sLastDisplay);
             }
+            if (auth.ack.players > 1) { const MR_MainCharacter* other = auth.craft[static_cast<std::size_t>((auth.ack.player + 1) % auth.ack.players)]; sOtherX = other->mPosition.mX; sOtherY = other->mPosition.mY; }
             sHave = true; sLastFrame = now; sLastDisplay = displayTick; sLastX = x; sLastY = y;
         }
         if (auth.resultReceived && std::getenv("HOVERNET_TEST_JITTER") != nullptr && !sRatios.empty()) {
@@ -7613,7 +7621,15 @@ int RunClient(int argc, char** argv)
                 mean /= static_cast<double>(sVel.size());
                 std::printf("JITTERTEST on-screen speed changes by %.1f%% of its average from frame to frame\n", 100.0 * change / static_cast<double>(sVel.size() - 1) / mean);
             }
-            sRatios.clear(); sJumps.clear(); sDts.clear(); sSteps.clear(); sVel.clear();
+            if (!sOtherVel.empty()) {
+                double change = 0, mean = 0;
+                for (std::size_t i = 0; i < sOtherVel.size(); ++i) { mean += sOtherVel[i]; if (i > 0) change += std::fabs(sOtherVel[i] - sOtherVel[i - 1]); }
+                mean /= static_cast<double>(sOtherVel.size());
+                std::sort(sOtherJump.begin(), sOtherJump.end());
+                std::printf("JITTERTEST another player's craft: on-screen speed changes by %.1f%% of its average from frame to frame; jump per frame (mm) p50=%.0f p95=%.0f max=%.0f\n",
+                            100.0 * change / static_cast<double>(sOtherVel.size() - 1) / mean, pct(sOtherJump, 0.5), pct(sOtherJump, 0.95), sOtherJump.back());
+            }
+            sRatios.clear(); sJumps.clear(); sDts.clear(); sSteps.clear(); sVel.clear(); sOtherVel.clear(); sOtherJump.clear();
             return 1;   // the measurement is done: leave (exit status 0)
         }
         if (auth.resultReceived && auth.verify) {

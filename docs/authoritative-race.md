@@ -233,6 +233,28 @@ a new one when the race ends (`--once` for tests). Options: `--track`, `--player
   and must receive the Result. It passes on Linux (also under ASan/UBSan) and on Windows x64 over Winsock. Running it with a
   large tick count (for example `... 8 200000`, about an hour) is the soak test of the Stage 2 exit gate; it is not in CI.
 
+## How smooth the picture is (measured 2026-10-17)
+
+The simulation runs in whole 16 ms ticks and frames do not fall on tick boundaries, so a client that shows whole ticks makes the craft's
+on-screen speed change from frame to frame. The client draws the craft between the current tick and the next (it replays the prediction to
+both and blends by how far the clock is into the tick), which single player, with its continuous clock, never needed. Measured with
+`HOVERNET_TEST_JITTER=1` (the real client, a scripted race, a headless window at about 30 frames a second; the number is how much the
+craft's on-screen speed, distance per millisecond, changes from one frame to the next, as a percentage of its average):
+
+| Case | Whole ticks | Between ticks |
+| --- | --- | --- |
+| Your craft alone on a clean link | 14.3% | 4.0% |
+| Your craft alone, 60 +- 40 ms jitter | 15.7-18.6% | 7.3-7.9% |
+| Your craft with a second player, clean link | not measured | 7.2% |
+| Your craft with a second player, 60 +- 40 ms jitter | not measured | 9.4% |
+| The other player's craft, clean link | not measured | 6.5% |
+| The other player's craft, 60 +- 40 ms jitter | not measured | 13.3% |
+
+`scripts/test-smooth-motion.sh` fails above 12% for your own craft. **Not done:** the other player's craft is predicted from their last
+known input, so when their real input arrives it is corrected in one step (up to about 1.6 m on one frame in these runs); blending that
+correction away over a few frames (a decaying visual offset) is the next step and needs eyes on a real game to tune. The numbers are from
+one Linux machine with no display, not from a browser or a real internet connection.
+
 ## Not built yet
 
 - Browser checks still open: Apache or nginx in front (a local test proxy over wss:// with several players, spectating and typed chat is checked in headless Chrome) and phones. (The browser client itself exists: it speaks protocol 3.0 over a WebSocket and has the servers screen.)
