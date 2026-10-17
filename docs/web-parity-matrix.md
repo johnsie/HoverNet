@@ -5,7 +5,7 @@ matrix tracks the player experience in [2.0-product-contract.md](2.0-product-con
 says how; anything without evidence is listed as **not verified** rather than assumed. Browser-only additions
 (touch controls, phone layouts, Game Size, VR) are additive and listed at the end.
 
-Last updated 2026-10-16 (v2.0.18). Evidence comes from `scripts/test-web-client.sh` (headless Chrome, phone-size
+Last updated 2026-10-17 (rows 11 and 12 for HoverNet 3.0 servers, from the tests described below, run against v2.3.5 plus later local changes). Evidence comes from `scripts/test-web-client.sh` (headless Chrome, phone-size
 touch viewport, run against a local build and the live site), headless screenshots at phone, iPad and desktop
 sizes, and `scripts/test-determinism.sh` (native vs WebAssembly).
 
@@ -21,8 +21,8 @@ sizes, and `scripts/test-determinism.sh` (native vs WebAssembly).
 | 8 | Race physics, collisions, weapons, pickups | Verified | Scripted two-craft races with missiles replay with identical hashes on native (Release, Debug, sanitizer) and WebAssembly for all seven bundled tracks ([determinism.md](determinism.md)); a native-vs-browser difference in wall bounces was found and fixed |
 | 9 | Pause menu: resume, new local race, online, settings, controls, quit | Verified | Smoke test: Escape pauses, Resume returns, New Local Race opens the setup screen |
 | 10 | Results screen after finishing | Partly | The smoke test opens the results screen with a test hook and clicks KEEP DRIVING (phone size, headless Chrome); a real finish in a browser has not been run. The personal-best lines ("new personal best", "your best finish here") are shared code; checked on Linux in a headless screenshot, not yet in a browser |
-| 11 | Online lobby: browse, host, join, chat | Not verified | Gateway upgrade and foreign-origin refusal are checked after deploy (`check-web-deploy.sh`); an actual lobby session is **not verified** |
-| 12 | Online race, including mixed browser and native players | Not verified | Same protocol and relay; no mixed race has been run |
+| 11 | Online lobby: browse, host, join, chat | Verified on HoverNet 3.0 servers | `scripts/web-smoke/web-servers-screen.mjs` (headless Chrome, real `HoverNetAuthServer`, through a TLS proxy): connect, host, join, lobby and race chat (typed with real key presses), watch, and watch-before-start (the browser asks to watch a race that has not started, stays out, and is let in when it starts). Not verified: the old 2.x lobby, the production web server |
+| 12 | Online race, including mixed browser and native players | Verified on HoverNet 3.0 servers | The same test runs a two-player race between the browser and a native scripted player, and the browser follows every tick's state hash exactly. Not verified: a real internet connection, a native desktop client (not a scripted bot) against a browser |
 | 13 | Errors recover to a menu with a message | Not verified | Server-down and lost-connection paths not exercised in a browser |
 | 14 | Track and asset loading, caching | Partly | First-load download and IndexedDB cache work in headless runs; slow-network and storage-full cases not tested |
 | 15 | Supported browsers | Not verified | Only Chrome (headless) has been run; Firefox, Edge and Safari/iOS not tested |

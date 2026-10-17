@@ -137,7 +137,7 @@ async function typeKey(ch) {
   await send('Input.dispatchKeyEvent', { type: 'keyDown', key: ch, code, text: ch, unmodifiedText: ch, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk }); await sleep(60);
   await send('Input.dispatchKeyEvent', { type: 'keyUp', key: ch, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk }); await sleep(60);
 }
-async function scenario(name, players, withBot, spectate = false, typeChat = false) {
+async function scenario(name, players, withBot, spectate = false, typeChat = false, queueWatch = false) {
   console.log(`-- ${name}`);
   consoleLines.length = 0;
   if (name !== 'first') {
@@ -154,6 +154,7 @@ async function scenario(name, players, withBot, spectate = false, typeChat = fal
   await setenv('HOVERNET_TEST_AUTH_PLAYERS', String(players));
   if (process.env.BROWSE_SHOTS) await setenv('HOVERNET_TEST_AUTH_BROWSE', '1');
   if (spectate) await setenv('HOVERNET_TEST_AUTH_SPECTATE', '1');
+  if (queueWatch) await setenv('HOVERNET_TEST_AUTH_WATCHQUEUE', '1');
   if (players > 1) await setenv('HOVERNET_TEST_AUTH_AUTOSTART', '1');   // the host presses Start Race once the other player has joined
   await setenv('HOVERNET_TEST_CHATLOG', '1');   // print the chat messages that arrive
   // Driver briefing: Next, then Next x3 (the last is Finish); positions for 837x715 and for a phone in landscape (PHONE=1, 844x390).
@@ -176,6 +177,12 @@ async function scenario(name, players, withBot, spectate = false, typeChat = fal
     check(await waitFor(async () => consoleLines.some((l) => /SERVERSTEST waiting for a race to watch/.test(l)), 60000), `${name}: the browser connected and is waiting for a race to watch`);
     racers.push(spawn(botBin, ['--port', String(gamePort), '--name', 'RacerA', '--host-race', 'ClassicH:2:1'], { stdio: 'ignore' }));
     await sleep(1500);
+    if (queueWatch) {
+      // The race is listed but waits for its second player: the browser asks to watch it now, and must NOT be let in yet.
+      check(await waitFor(async () => consoleLines.some((l) => /SERVERSTEST queued a watch on a race that has not started/.test(l)), 30000), `${name}: the browser chose to watch a race that has not started`);
+      await sleep(4000);
+      check((await inRace()) !== 1, `${name}: the browser is still waiting while the race has not started`);
+    }
     racers.push(spawn(botBin, ['--port', String(gamePort), '--name', 'RacerB', '--join-race', 'ClassicH', '--track', 'ClassicH'], { stdio: 'ignore' }));
   }
   const seen = [];
@@ -236,6 +243,15 @@ if (!only || only === 'spectate') {
     await sleep(500);
   }
   await scenario('spectate', 1, false, true);
+}
+if (!only || only === 'watchqueue') {
+  if (statusPort) for (let i = 0; i < 120; i++) {
+    const text = await (await fetch(`http://127.0.0.1:${statusPort}/metrics`)).text();
+    const m = /^hovernet_races_running (\d+)/m.exec(text);
+    if (m && +m[1] === 0) break;
+    await sleep(500);
+  }
+  await scenario('watch-before-start', 1, false, true, false, true);
 }
 check(exceptions.length === 0, `no uncaught page exceptions${exceptions.length ? ': ' + exceptions[0] : ''}`);
 if (failures) { await shot('servers-2-end'); console.log(consoleLines.slice(-12).join('\n')); console.log('server output:\n' + gameOut.split('\n').slice(-12).join('\n')); }

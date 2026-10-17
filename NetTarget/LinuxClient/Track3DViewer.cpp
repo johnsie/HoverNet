@@ -5350,7 +5350,15 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             if (SDL_GetTicks() - sLastRefresh > 400) {
                 sLastRefresh = SDL_GetTicks();
                 lobby.Refresh();
-                for (const auto& r : lobby.Races()) if (r.started) { lobby.Spectate(r.id, ""); testStep = 3; break; }
+                if (std::getenv("HOVERNET_TEST_AUTH_WATCHQUEUE") != nullptr) {
+                    // Watch Race on a race that has not started: the lobby waits and lets the browser in when the host starts it.
+                    for (const auto& r : lobby.Races()) if (!r.started) {
+                        lobby.WatchWhenStarted(r.id, ""); testStep = 3;
+                        std::printf("SERVERSTEST queued a watch on a race that has not started\n"); std::fflush(stdout);
+                        break;
+                    }
+                }
+                else for (const auto& r : lobby.Races()) if (r.started) { lobby.Spectate(r.id, ""); testStep = 3; break; }
             }
         }
         if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_POPUP") != nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) {
