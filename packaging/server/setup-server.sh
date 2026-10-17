@@ -82,8 +82,19 @@ if [ "$apache" = yes ]; then
             if apachectl configtest; then systemctl reload apache2; echo "Apache reloaded"
             else echo "configtest failed: restoring the old site file" >&2; cp -a "$site.bak-$stamp" "$site"; exit 1; fi
         fi
+    elif grep -Eq '^[[:space:]]*ProxyPassReverse /race/' "$site"; then
+        # The live site file is older than the repository's copy and has no /auth/ lines at all: add them after the /race/ ones.
+        backup "$site"
+        sed -i -E '/^[[:space:]]*ProxyPassReverse \/race\//a\    ProxyPass /auth/ ws://127.0.0.1:9610/auth/ retry=0 timeout=300\n    ProxyPassReverse /auth/ ws://127.0.0.1:9610/auth/' "$site"
+        echo "added the /auth/ proxy lines after the /race/ ones"
+        if [ -z "$skip_services" ]; then
+            if apachectl configtest; then systemctl reload apache2; echo "Apache reloaded"
+            else echo "configtest failed: restoring the old site file" >&2; cp -a "$site.bak-$stamp" "$site"; exit 1; fi
+        fi
     else
-        echo "NOTE: the site file has no /auth/ proxy lines (it is older than this repository's copy); copy them from packaging/web/hovernet.outiva.com.conf." >&2
+        echo "NOTE: the site file has no ProxyPass /race/ lines to add the /auth/ ones after; add these two inside the VirtualHost *:443 yourself:" >&2
+        echo "    ProxyPass /auth/ ws://127.0.0.1:9610/auth/ retry=0 timeout=300" >&2
+        echo "    ProxyPassReverse /auth/ ws://127.0.0.1:9610/auth/" >&2
     fi
 fi
 
