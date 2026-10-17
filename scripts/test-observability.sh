@@ -10,14 +10,17 @@ PY=python3; command -v python3 >/dev/null 2>&1 || PY=python
 if ! command -v "$PY" >/dev/null 2>&1 || ! "$PY" -c "import socket" >/dev/null 2>&1; then echo "observability: skipped the HTTP checks (no Python on this machine)"; PY=""; fi
 get() { "$PY" - "$1" "$2" <<'P'
 import socket, sys
-s = socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=5)
-s.sendall(("GET %s HTTP/1.1\r\nHost: x\r\n\r\n" % sys.argv[2]).encode())
 data = b""
-while True:
-    chunk = s.recv(4096)
-    if not chunk: break
-    data += chunk
-sys.stdout.write(data.decode())
+try:
+    s = socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=5)
+    s.sendall(("GET %s HTTP/1.1\r\nHost: x\r\n\r\n" % sys.argv[2]).encode())
+    while True:
+        chunk = s.recv(4096)
+        if not chunk: break
+        data += chunk
+except Exception as e:
+    sys.stderr.write("get %s failed: %r after %d bytes\n" % (sys.argv[2], e, len(data)))
+sys.stdout.write(data.decode(errors="replace"))
 P
 }
 "$server" --lobby --port 0 --status-port 0 --limit-ticks 300 --start-delay-ms 300 > "$dir/server.txt" 2>&1 &
@@ -25,7 +28,7 @@ for _ in $(seq 1 100); do grep -q "status on" "$dir/server.txt" 2>/dev/null && g
 port=$(sed -n 's/.*listening on [0-9.]*:\([0-9]*\),.*/\1/p' "$dir/server.txt" | head -1)
 status=$(sed -n 's/.*status on 127.0.0.1:\([0-9]*\) .*/\1/p' "$dir/server.txt" | head -1)
 [ -n "$port" ] && [ -n "$status" ] || { echo "FAIL: the server did not start"; cat "$dir/server.txt"; exit 1; }
-[ -z "$PY" ] || get "$status" /health | grep -q "200 OK" || { echo "FAIL: /health"; fail=1; }
+[ -z "$PY" ] || get "$status" /health | grep -q "200 OK" || { echo "FAIL: /health ($PY: $(get "$status" /health 2>&1 | head -c 300))"; fail=1; }
 [ -z "$PY" ] || get "$status" /nothing | grep -q "404" || { echo "FAIL: unknown path should be 404"; fail=1; }
 "$bot" --port "$port" --name o1 --host-race ClassicH:2 > "$dir/o1.txt" 2>&1 &
 sleep 0.4
