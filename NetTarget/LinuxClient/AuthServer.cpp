@@ -9,6 +9,7 @@
 // termination or on a trusted network. One thread, non-blocking sockets, no allocation per tick beyond the host's own.
 #include <algorithm>
 #include <chrono>
+#include <functional>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -25,6 +26,7 @@
 
 #include "AuthSocket.h"
 #include "SimHarness.h"
+#include "CrashReporter.h"
 #include "../Authority/LobbyServer.h"
 #include "../Authority/Moderation.h"
 #include "../Authority/RaceHost.h"
@@ -164,6 +166,69 @@ void PumpAdmin(AdminConsole& console, AuthSocket listener, std::vector<std::uniq
     peers.erase(std::remove_if(peers.begin(), peers.end(), [](const std::unique_ptr<AdminPeer>& p) { return p->socket == kInvalidSocket; }), peers.end());
 }
 
+// A tiny HTTP responder on a loopback port for monitoring: GET /health and GET /metrics (Prometheus text format).
+struct StatusPeer
+{
+    AuthSocket socket = kInvalidSocket;
+    std::string request;
+};
+
+std::string Metric(const char* name, const char* help, const char* type, unsigned long long value)
+{
+    char line[256];
+    std::snprintf(line, sizeof(line), "# HELP %s %s\n# TYPE %s %s\n%s %llu\n", name, help, name, type, name, value);
+    return line;
+}
+
+template <class MetricsFn>
+void PumpStatus(AuthSocket listener, std::vector<std::unique_ptr<StatusPeer>>& peers, MetricsFn metrics)
+{
+    for (;;) {
+        AuthSocket s = accept(listener, nullptr, nullptr);
+        if (s == kInvalidSocket) break;
+        if (peers.size() >= 16) { AuthNet::CloseSocket(s); continue; }
+        AuthNet::SetNonBlocking(s);
+        std::unique_ptr<StatusPeer> p(new StatusPeer);
+        p->socket = s;
+        peers.push_back(std::move(p));
+    }
+    for (auto& p : peers) {
+        char buffer[1024];
+        const int n = static_cast<int>(recv(p->socket, buffer, sizeof(buffer), 0));
+        if (n > 0) p->request.append(buffer, static_cast<std::size_t>(n));
+        else if (n == 0 || !AuthNet::WouldBlock()) { AuthNet::CloseSocket(p->socket); p->socket = kInvalidSocket; continue; }
+        if (p->request.find("\r\n\r\n") == std::string::npos && p->request.find("\n\n") == std::string::npos && p->request.size() < 4096) continue;
+        std::string body, status = "200 OK";
+        if (p->request.compare(0, 12, "GET /health ") == 0) body = "ok\n";
+        else if (p->request.compare(0, 13, "GET /metrics ") == 0) body = metrics();
+        else { status = "404 Not Found"; body = "not found\n"; }
+        const std::string response = "HTTP/1.1 " + status + "\r\nContent-Type: text/plain; version=0.0.4\r\nContent-Length: " + std::to_string(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
+        send(p->socket, response.data(), static_cast<int>(response.size()), 0);
+        AuthNet::CloseSocket(p->socket);
+        p->socket = kInvalidSocket;
+    }
+    peers.erase(std::remove_if(peers.begin(), peers.end(), [](const std::unique_ptr<StatusPeer>& p) { return p->socket == kInvalidSocket; }), peers.end());
+}
+
+std::string RenderMetrics(const RaceHost::Metrics& m, unsigned long long races, unsigned long long racesHosted, unsigned long long connections, std::int64_t uptimeMs)
+{
+    std::string out;
+    out += Metric("hovernet_uptime_seconds", "Seconds since the server started.", "counter", static_cast<unsigned long long>(uptimeMs / 1000));
+    out += Metric("hovernet_races_running", "Races on the server now.", "gauge", races);
+    out += Metric("hovernet_races_hosted_total", "Races hosted since start.", "counter", racesHosted);
+    out += Metric("hovernet_connections_open", "Open connections now.", "gauge", connections);
+    out += Metric("hovernet_connections_accepted_total", "Connections accepted.", "counter", m.connectionsAccepted);
+    out += Metric("hovernet_connections_rejected_total", "Connections refused with a message.", "counter", m.rejectedConnections);
+    out += Metric("hovernet_bytes_received_total", "Bytes received.", "counter", m.bytesIn);
+    out += Metric("hovernet_bytes_sent_total", "Bytes sent.", "counter", m.bytesOut);
+    out += Metric("hovernet_ticks_simulated_total", "Race ticks simulated.", "counter", m.ticksSimulated);
+    out += Metric("hovernet_inputs_accepted_total", "Player inputs accepted.", "counter", m.inputsAccepted);
+    out += Metric("hovernet_inputs_late_total", "Player inputs that arrived after their tick.", "counter", m.inputsLate);
+    out += Metric("hovernet_invalid_messages_total", "Invalid messages received.", "counter", m.invalidMessages);
+    out += Metric("hovernet_snapshots_served_total", "Snapshots served to spectators and returning players.", "counter", m.snapshotsServed);
+    return out;
+}
+
 int main(int argc, char** argv)
 {
     HostConfig cfg;
@@ -178,6 +243,9 @@ int main(int argc, char** argv)
     bool lobbyMode = false;
     std::string moderationDir;
     int adminPort = -1;
+    int statusPort = -1;
+    std::string crashDir;
+    bool crashTest = false;
     std::string trackList;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -195,6 +263,9 @@ int main(int argc, char** argv)
         else if (a == "--lobby") lobbyMode = true;
         else if (a == "--moderation-dir") moderationDir = value();
         else if (a == "--admin-port") adminPort = std::atoi(value());
+        else if (a == "--status-port") statusPort = std::atoi(value());
+        else if (a == "--crash-dir") crashDir = value();
+        else if (a == "--crash-test") crashTest = true;
         else if (a == "--spectator-delay-ms") cfg.spectatorDelayMs = std::atoi(value());
         else if (a == "--tracks") trackList = value();
         else if (a == "--no-weapons") cfg.race.weapons = false;
@@ -239,8 +310,22 @@ int main(int argc, char** argv)
             std::fflush(stdout);
         }
     }
+    AuthSocket statusListener = kInvalidSocket;
+    std::vector<std::unique_ptr<StatusPeer>> statusPeers;
+    if (statusPort >= 0) {
+        int chosen = 0;
+        statusListener = AuthNet::Listen("127.0.0.1", statusPort, chosen);
+        if (statusListener == kInvalidSocket) { std::fprintf(stderr, "cannot open the status port %d\n", statusPort); return 1; }
+        std::printf("status on 127.0.0.1:%d (/health, /metrics)\n", chosen);
+        std::fflush(stdout);
+    }
+    if (!crashDir.empty()) CrashReporter::Install(crashDir, HOVERNET_SERVER_VERSION);
+    const std::int64_t serverStart = NowMs();
     std::int64_t lastPurge = 0;
+    std::function<std::string()> metricsText = [&]() { return std::string(""); };
     auto housekeeping = [&]() {
+        if (statusListener != kInvalidSocket) PumpStatus(statusListener, statusPeers, [&]() { return metricsText(); });
+        if (crashTest && NowMs() - serverStart > 1500) { volatile int* bad = nullptr; *bad = 1; }
         if (adminListener != kInvalidSocket) PumpAdmin(*console, adminListener, adminPeers);
         if (moderation && NowMs() - lastPurge > 3600 * 1000) {   // hourly: chat context 24 hours, resolved reports 30 days, audit lines 180 days
             lastPurge = NowMs();
@@ -276,6 +361,7 @@ int main(int argc, char** argv)
         });
         std::printf("listening on %s:%d, lobby with %zu tracks\n", bind.c_str(), boundPort, lobbyConfig.tracks.size());
         std::fflush(stdout);
+        metricsText = [&]() { return RenderMetrics(lobby.TotalMetrics(), static_cast<unsigned long long>(lobby.RaceCount()), lobby.RacesHosted(), static_cast<unsigned long long>(lobby.OpenConnections()), NowMs() - serverStart); };
         std::vector<std::unique_ptr<Peer>> lobbyPeers;
         for (;;) {
             PumpSockets(lobby, listener, lobbyPeers, maxConnections, moderation.get());
@@ -291,6 +377,7 @@ int main(int argc, char** argv)
     std::fflush(stdout);
 
     std::vector<std::unique_ptr<Peer>> peers;
+    metricsText = [&]() { return RenderMetrics(host->GetMetrics(), 1, 1, static_cast<unsigned long long>(peers.size()), NowMs() - serverStart); };
     std::int64_t raceEndedAt = -1;
     for (;;) {
         PumpSockets(*host, listener, peers, maxConnections, moderation.get());

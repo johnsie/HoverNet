@@ -326,7 +326,9 @@ else()
     # A dedicated server for authoritative races over TCP and a scripted player that checks every tick it is sent.
     add_executable(HoverNetAuthServer
         NetTarget/LinuxClient/AuthServer.cpp
+        NetTarget/LinuxClient/CrashReporter.cpp
     )
+    target_compile_definitions(HoverNetAuthServer PRIVATE HOVERNET_SERVER_VERSION="${HOVERNET_VERSION}")
     target_link_libraries(HoverNetAuthServer PRIVATE HoverNetSim)
     add_executable(HoverNetModTool
         NetTarget/LinuxClient/ModTool.cpp
@@ -784,6 +786,9 @@ if(BUILD_TESTING AND NOT WIN32)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetModerationTcp
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-moderation-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetModTool>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetObservability
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-observability.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>

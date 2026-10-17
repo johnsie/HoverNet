@@ -53,6 +53,21 @@ std::vector<std::uint32_t> LobbyServer::RaceIds() const
     return ids;
 }
 
+static void AddMetrics(RaceHost::Metrics& a, const RaceHost::Metrics& b)
+{
+    a.connectionsAccepted += b.connectionsAccepted; a.connectionsClosed += b.connectionsClosed; a.bytesIn += b.bytesIn; a.bytesOut += b.bytesOut;
+    a.framesIn += b.framesIn; a.framesOut += b.framesOut; a.invalidMessages += b.invalidMessages; a.rejectedConnections += b.rejectedConnections;
+    a.ticksSimulated += b.ticksSimulated; a.inputsAccepted += b.inputsAccepted; a.inputsLate += b.inputsLate; a.inputsTooFar += b.inputsTooFar;
+    a.snapshotsServed += b.snapshotsServed; a.tickBytesOut += b.tickBytesOut;
+}
+
+RaceHost::Metrics LobbyServer::TotalMetrics() const
+{
+    RaceHost::Metrics total = mRemoved;
+    for (const auto& r : mRaces) AddMetrics(total, r.second->host->GetMetrics());
+    return total;
+}
+
 int LobbyServer::OpenConnections() const
 {
     int n = 0;
@@ -240,6 +255,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         Hello hello; hello.name = c.name;
         Entry& ref = *e;
         mRaces[ref.id] = std::move(e);
+        ++mRacesHosted;
         Attach(c, ref, EncodeFrame(kHello, Encode(hello)), nowMs);
         return;
     }
@@ -284,6 +300,7 @@ void LobbyServer::Advance(std::int64_t nowMs)
         for (const auto& c : mConns) if (c->raceId == e.id && !c->closed && !e.host->IsClosed(c->hostConn)) emptyOfLiveConns = false;
         if ((e.finishedAt >= 0 && nowMs - e.finishedAt > mConfig.finishedRaceLingerMs) || (empty && emptyOfLiveConns && !e.host->Started() && nowMs > 0 && e.host->GetMetrics().connectionsAccepted > 0)) {
             for (auto& c : mConns) if (c->raceId == e.id) { c->closed = true; c->raceId = 0; }
+            AddMetrics(mRemoved, e.host->GetMetrics());
             it = mRaces.erase(it);
         }
         else {

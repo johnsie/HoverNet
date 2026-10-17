@@ -49,10 +49,13 @@ public:
     // Called once when a race ends (to save its replay, log it, ...).
     void SetRaceFinishedCallback(std::function<void(std::uint32_t, const RaceHost&)> callback) { mOnFinished = callback; }
 
+    std::uint64_t RacesHosted() const { return mRacesHosted; }
     int RaceCount() const { return static_cast<int>(mRaces.size()); }
     const RaceHost* Race(std::uint32_t id) const;
     std::vector<std::uint32_t> RaceIds() const;
     int OpenConnections() const;
+    // Counters of every race the server has hosted (running races plus those already removed).
+    RaceHost::Metrics TotalMetrics() const;
 
 private:
     struct Conn;
@@ -71,6 +74,8 @@ private:
     int mNextConn;
     std::uint32_t mNextRace;
     std::uint64_t mSeed;
+    RaceHost::Metrics mRemoved;      // counters of races already removed
+    std::uint64_t mRacesHosted = 0;
     std::function<void(std::uint32_t, const RaceHost&)> mOnFinished;
 };
 }

@@ -159,6 +159,21 @@ Drivers are unaffected.
   directly and through the lobby) and the game client itself (`HoverNet --auth-connect HOST:PORT --spectate [--spectate-player N]`,
   ctest `HoverNetAuthClientSpectate`): the client draws the confirmed state with the normal renderer from the chosen craft's view.
 
+## Running it: observability, load and soak
+
+- **Status port.** `--status-port P` opens a loopback-only HTTP port: `GET /health` answers `ok`, `GET /metrics` answers Prometheus text
+  (uptime, races running and hosted, connections, bytes, ticks simulated, inputs accepted and late, invalid messages, snapshots served).
+  Scrape it from a monitoring agent on the same machine or through a tunnel.
+- **Crash reports.** `--crash-dir DIR` installs a handler that writes `crash-<time>.txt` (version, uptime, signal or exception code and,
+  on Linux, a stack trace) when the server dies. Nothing is sent anywhere. `--crash-test` crashes on purpose for the test.
+- **Load and soak** (`HoverNetLoadTest races players race-minutes rounds`, ctest `HoverNetLoad`): races of scripted players hosted through
+  the lobby on a virtual clock, faster than real time, round after round. It checks nobody is refused or sent invalid messages, finished
+  races are removed, sampled replays re-simulate to their recorded final hash, and memory does not grow. Measured on the development
+  machine in a debug build: 0.2 to 0.4 s of CPU per race-minute for 8 players, i.e. one core could host 150 to 280 eight-player races in
+  real time; 9 rounds of 8 races x 8 players left memory flat at 13.8 MB after the first round; 16 races x 8 players x 3 rounds ran
+  clean. Passes on Linux and Windows x64. This does not replace the multi-day real-time soak of the Stage 2 exit gate (run
+  `scripts/test-authserver.sh ... 8 <large tick count>` or the load test with many rounds for that).
+
 ## Reconnect, tampering, bandwidth and metrics
 
 - **Reconnect.** The HelloAck carries a random resume token for the player's slot. A player who drops keeps the slot (the craft
@@ -199,6 +214,6 @@ a new one when the race ends (`--once` for tests). Options: `--track`, `--player
 
 Screens in the game for browsing and choosing races and servers (the lobby protocol exists, the game's command line option still takes one race); screens in the game for choosing a server (today it is a command line option); the
 WebSocket gateway and a browser path for protocol 3.0; authenticated encryption and server identity; account or guest identity;
-a monitoring endpoint, tracing and crash reports (the counters exist); delta coding and compression of the Tick stream; the
+tracing (counters, a status port and crash reports exist); delta coding and compression of the Tick stream; the
 multi-day soak and load runs of the Stage 2 exit gate (the TCP test with a large tick count is the soak); regional pools and rolling
 deployment; and the 2.0 fallback path.
