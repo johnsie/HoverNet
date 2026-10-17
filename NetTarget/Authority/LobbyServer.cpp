@@ -262,7 +262,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
         if (mDraining) { Close(c, kServerDraining, "the server is restarting; try again in a minute"); return; }
         const bool allowed = std::find(mConfig.tracks.begin(), mConfig.tracks.end(), m.track) != mConfig.tracks.end();
-        if (!allowed || m.players < 2 || m.players > 8 || m.laps < 1 || m.laps > 10) { Close(c, kBadSettings, "that race cannot be hosted here"); return; }
+        if (!allowed || m.players < 1 || m.players > 8 || m.laps < 1 || m.laps > 10) { Close(c, kBadSettings, "that race cannot be hosted here"); return; }
         if (static_cast<int>(mRaces.size()) >= mConfig.maxRaces) { Close(c, kTooManyRaces, "the server is hosting as many races as it can"); return; }
         std::unique_ptr<Entry> e(new Entry);
         e->id = mNextRace++;

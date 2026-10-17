@@ -228,7 +228,7 @@ int main()
         const Case cases[] = {
             {"a track the operator does not allow", Host("Tidal Causeway", 2)},
             {"a track name that climbs out of the directory", Host("../../etc/passwd", 2)},
-            {"one player", Host("ClassicH", 1)},
+            {"no players", Host("ClassicH", 0)},
             {"nine players", Host("ClassicH", 9)},
             {"zero laps", Host("ClassicH", 2, 0)},
             {"eleven laps", Host("ClassicH", 2, 11)},

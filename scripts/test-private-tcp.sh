@@ -20,5 +20,8 @@ grep -q "rejected" "$dir/wrong.txt" || { echo "FAIL: the wrong code was not reje
 "$bot" --port "$port" --name friend --race-id 1 --code kestrel7 --track ClassicH > "$dir/friend.txt" 2>&1 & p2=$!
 wait "$p1" || fail=1; wait "$p2" || fail=1
 for n in host friend; do grep -q "no divergence" "$dir/$n.txt" || { echo "FAIL: $n did not see the race through"; cat "$dir/$n.txt"; fail=1; }; done
+# A time trial: a one-player race starts at once, runs alone, and is saved like any other.
+"$bot" --port "$port" --name solo --host-race ClassicH:1:2 > "$dir/solo.txt" 2>&1 || { echo "FAIL: the solo race failed"; cat "$dir/solo.txt"; fail=1; }
+grep -q "no divergence" "$dir/solo.txt" || { echo "FAIL: the solo race did not see itself through"; fail=1; }
 [ $fail -eq 0 ] && echo "private-tcp: unlisted, refused without the code, run to the end for the friend with it"
 exit $fail
