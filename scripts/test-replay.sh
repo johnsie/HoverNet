@@ -32,6 +32,9 @@ if [ "$a" = "$b" ]; then echo "FAIL: different races hashed the same"; fail=1; f
 # A long race (a 25-minute race is 94,000 ticks): the replay still verifies and stays small.
 expect_ok "${tool[@]}" record "The Alley2" 100000 "$dir/long.hnr" --players=2
 expect_ok "${tool[@]}" verify "$dir/long.hnr"
+# The result table: one row per player, ranked, and the same on every run (leaderboards and time trials read it).
+r1=$("${tool[@]}" results "$dir/ClassicH.hnr" 2>&1 | tr -d '\r' | grep '^rank'); r2=$("${tool[@]}" results "$dir/ClassicH.hnr" 2>&1 | tr -d '\r' | grep '^rank')
+[ -n "$r1" ] && [ "$r1" = "$r2" ] && [ "$(echo "$r1" | wc -l)" -ge 2 ] || { echo "FAIL: replay results are missing or differ between runs"; fail=1; }
 # Mutation fuzzing of the decoder with the CRC repaired (run under the sanitizer build in CI).
 expect_ok "${tool[@]}" fuzz "$dir/ClassicH.hnr" 5000
 [ $fail -eq 0 ] && echo "replay: record/verify round trip and corruption checks passed"

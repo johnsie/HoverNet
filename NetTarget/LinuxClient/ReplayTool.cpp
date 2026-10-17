@@ -3,6 +3,7 @@
 //   HoverNetReplay record <track> <ticks> <out.hnr> [--players=1|2]   write a scripted race
 //   HoverNetReplay verify <file.hnr>                                  re-simulate and check every checkpoint
 //   HoverNetReplay info   <file.hnr>                                  print the header
+//   HoverNetReplay results <file.hnr>                                 replay it and print each player's laps, finish and best lap
 //
 // A replay is the track identity, the rules version and each player's input for every tick, plus a state hash
 // every kCheckpointTicks ticks. Because the simulation is deterministic, that is enough to reproduce the race on any
@@ -31,6 +32,7 @@
 #include "../Util/WorldCoordinates.h"
 #include "Sha256.h"
 #include "../Authority/ReplayFormat.h"
+#include "../Authority/AuthoritativeRace.h"
 #include "SimHarness.h"
 
 
@@ -171,6 +173,37 @@ int Replay_(const std::string& path, long dumpTick, bool trace)
     return 0;
 }
 
+// Replays the inputs through the authoritative race and prints the result table: what a leaderboard or a time trial needs
+// from a replay. The same inputs always give the same table on every platform.
+int Results(const std::string& path)
+{
+    std::vector<std::uint8_t> file;
+    Replay r;
+    std::string error;
+    if (!ReadFile(path, file) || !Decode(file, r, error)) { std::fprintf(stderr, "%s: %s\n", path.c_str(), error.empty() ? "unreadable" : error.c_str()); return 1; }
+    if (r.rules != kSimulationRules) { std::fprintf(stderr, "%s: recorded under simulation rules %u, this build is %u\n", path.c_str(), r.rules, kSimulationRules); return 1; }
+    if (Sha256::HashFile(TrackPath(r.track)) != r.trackSha256) { std::fprintf(stderr, "%s: the track file differs from the one recorded\n", path.c_str()); return 1; }
+    Authority::RaceConfig config;
+    config.trackName = r.track;
+    config.trackPath = TrackPath(r.track);
+    config.players = r.players;
+    config.laps = r.laps;
+    config.weapons = r.weapons;
+    config.maxTicks = r.ticks;
+    Authority::AuthoritativeRace race;
+    if (!race.Start(config, error)) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }
+    for (std::uint32_t t = 0; t < r.ticks; ++t) {
+        for (int p = 0; p < r.players; ++p) race.SubmitInput(p, t, r.inputs[static_cast<std::size_t>(t) * r.players + p]);
+        if (!race.AdvanceTick()) break;
+    }
+    if (race.StateHash() != r.finalHash && race.CurrentTick() == r.ticks) { std::printf("DIVERGED at the end\n"); return 1; }
+    std::printf("results for %s after %u ticks\n", r.track.c_str(), race.CurrentTick());
+    for (const Authority::PlayerResult& pr : race.Results())
+        std::printf("rank %d player %d laps %d %s finish_ms %lld best_lap_ms %lld\n", pr.rank, pr.player, pr.laps, pr.finished ? "finished" : "unfinished",
+                    static_cast<long long>(pr.finishTimeMs), static_cast<long long>(pr.bestLapMs));
+    return 0;
+}
+
 int Info(const std::string& path)
 {
     std::vector<std::uint8_t> file;
@@ -203,6 +236,7 @@ int main(int argc, char** argv)
     }
     if (cmd == "verify") return Verify(argv[2]);
     if (cmd == "info") return Info(argv[2]);
+    if (cmd == "results") return Results(argv[2]);
     if (cmd == "trace") return Replay_(argv[2], -1, true);
     if (cmd == "dump" && argc >= 4) return Replay_(argv[2], std::atol(argv[3]), false);
     if (cmd == "fuzz" && argc >= 4) return Fuzz(argv[2], std::atoi(argv[3]));

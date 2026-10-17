@@ -22,6 +22,8 @@ track, and says so; it never plays something that would not reproduce.
 
 ## Checking and debugging
 
+- `HoverNetReplay results race.hnr` replays the inputs through the authoritative race and prints one row per player (rank, laps, finish
+  time, best lap), the same on every platform: the input a leaderboard or a time trial needs.
 - `HoverNetReplay verify race.hnr` re-simulates it and compares every checkpoint; `info` prints the header.
 - `HoverNetReplay trace race.hnr` prints every tick's state hash and `dump race.hnr <tick>` the whole state at a tick; diffing the
   output from two platforms finds the first tick and the field that differ ([determinism.md](determinism.md)).
