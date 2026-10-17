@@ -33,8 +33,8 @@ The browser build has the same HoverNet Servers screen (main menu, results and p
 WebSocket. **Verified** (headless Chrome, a real `HoverNetAuthServer` on the loopback interface with the page's origin allowed, a plain
 `ws://` connection; `scripts/web-smoke/web-servers-screen.mjs`): connect through the screen, host a one-player time trial and follow the
 whole race exactly (every tick's state hash and every snapshot restore); host a two-player race that a native bot joins, follow it exactly,
-and receive the bot's chat message. **Not verified:** `wss://` through the production web server, spectating in a browser, typing chat in
-a browser, phones and tablets, Firefox/Safari. The browser takes a `wss://` address (its
+receive the bot's chat message, and watch a race two bots are running as a spectator (also followed exactly). **Not verified:** `wss://`
+through the production web server, typing chat in a browser, phones and tablets, Firefox/Safari. The browser takes a `wss://` address (its
 default is `wss://<this site>/auth/`, the server's default path) and has no server-key field: encryption is TLS at the web server.
 
 ## Browser-only additions (not in the desktop client)

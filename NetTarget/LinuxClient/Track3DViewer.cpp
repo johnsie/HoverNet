@@ -5126,8 +5126,19 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
             else if (clickStep == 3 && st == OnlineLobby::State::eWaiting) { std::printf("CLICKTEST ok: Host clicked, the race is being set up\n"); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
             if (clickFrame > 600) { std::printf("CLICKTEST FAIL at step %d (state %d)\n", clickStep, static_cast<int>(st)); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
         }
+        if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_SPECTATE") != nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) {
+            // Test hook: wait for a running race and watch it.
+            static Uint32 sLastRefresh = 0;
+            static bool sAnnounced = false;
+            if (!sAnnounced) { sAnnounced = true; std::printf("SERVERSTEST waiting for a race to watch\n"); std::fflush(stdout); }
+            if (SDL_GetTicks() - sLastRefresh > 400) {
+                sLastRefresh = SDL_GetTicks();
+                lobby.Refresh();
+                for (const auto& r : lobby.Races()) if (r.started) { lobby.Spectate(r.id, ""); testStep = 3; break; }
+            }
+        }
         if (testStep == 1) { connect(); testStep = 2; }
-        else if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_BROWSE") == nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) { lobby.Host(Tracks().Get(0) != nullptr ? Tracks().Get(0)->mName : "ClassicH", std::getenv("HOVERNET_TEST_AUTH_PLAYERS") != nullptr ? std::max(1, std::min(8, std::atoi(std::getenv("HOVERNET_TEST_AUTH_PLAYERS")))) : 1, 1, false, ""); testStep = 3; }
+        else if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_BROWSE") == nullptr && std::getenv("HOVERNET_TEST_AUTH_SPECTATE") == nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) { lobby.Host(Tracks().Get(0) != nullptr ? Tracks().Get(0)->mName : "ClassicH", std::getenv("HOVERNET_TEST_AUTH_PLAYERS") != nullptr ? std::max(1, std::min(8, std::atoi(std::getenv("HOVERNET_TEST_AUTH_PLAYERS")))) : 1, 1, false, ""); testStep = 3; }
 
         SDL_Renderer* renderer = graphics.GetRenderer();
         SDL_RenderSetLogicalSize(renderer, 0, 0);

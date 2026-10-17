@@ -40,12 +40,13 @@ const webPort = server.address().port;
 const url = `http://127.0.0.1:${webPort}/`;
 
 // The game server: a lobby that lets this page's origin in over WebSocket.
-const game = spawn(serverBin, ['--lobby', '--port', '0', '--ws-origin', `http://127.0.0.1:${webPort}`, '--limit-ticks', '500', '--start-delay-ms', '500'], { stdio: ['ignore', 'pipe', 'pipe'] });
+const game = spawn(serverBin, ['--lobby', '--port', '0', '--ws-origin', `http://127.0.0.1:${webPort}`, '--status-port', '0', '--limit-ticks', '700', '--start-delay-ms', '500', '--spectator-delay-ms', '300'], { stdio: ['ignore', 'pipe', 'pipe'] });
 let gameOut = '';
 game.stdout.on('data', (d) => (gameOut += d)); game.stderr.on('data', (d) => (gameOut += d));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-let gamePort = 0;
+let gamePort = 0, statusPort = 0;
 for (let i = 0; i < 100 && !gamePort; i++) { const m = /listening on [0-9.]*:(\d+),/.exec(gameOut); if (m) gamePort = +m[1]; else await sleep(100); }
+for (let i = 0; i < 50 && !statusPort; i++) { const m = /status[^\n]*?127\.0\.0\.1:(\d+)/i.exec(gameOut); if (m) statusPort = +m[1]; else await sleep(100); }
 if (!gamePort) { console.log('FAIL: the game server did not start'); console.log(gameOut); process.exit(1); }
 
 const port = 9400 + Math.floor(Math.random() * 500);
@@ -95,7 +96,7 @@ async function waitFor(fn, ms) { for (let t = 0; t < ms; t += 500) { if (await f
 
 await send('Runtime.enable'); await send('Page.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: 837, height: 715, deviceScaleFactor: 1, mobile: false });
-async function scenario(name, players, withBot) {
+async function scenario(name, players, withBot, spectate = false) {
   console.log(`-- ${name}`);
   consoleLines.length = 0;
   if (name !== 'first') {
@@ -110,6 +111,7 @@ async function scenario(name, players, withBot) {
   await setenv('HOVERNET_TEST_AUTH_SERVER', `ws://127.0.0.1:${gamePort}/auth/`);
   await setenv('HOVERNET_TEST_AUTH_VERIFY', '1'); await setenv('HOVERNET_TEST_AUTH_SCRIPT', '1');
   await setenv('HOVERNET_TEST_AUTH_PLAYERS', String(players));
+  if (spectate) await setenv('HOVERNET_TEST_AUTH_SPECTATE', '1');
   await setenv('HOVERNET_TEST_CHATLOG', '1');   // print the chat messages that arrive
   // Driver briefing at 837x715: Next, then Next x3 (the last is Finish).
   await click(135, 636); await sleep(900);
@@ -119,18 +121,40 @@ async function scenario(name, players, withBot) {
     await sleep(6000);   // the browser has connected and is hosting a race that waits for a second player
     bot = spawn(botBin, ['--port', String(gamePort), '--name', 'Botty', '--join-race', 'ClassicH', '--track', 'ClassicH', '--say', 'hello from the bot'], { stdio: 'ignore' });
   }
-  check(await waitFor(async () => (await inRace()) === 1, 60000), `${name}: the browser connected over WebSocket and a race started`);
+  let racers = [];
+  if (spectate) {
+    // The browser is on the screen, waiting for a running race; two bots now start one.
+    check(await waitFor(async () => consoleLines.some((l) => /SERVERSTEST waiting for a race to watch/.test(l)), 60000), `${name}: the browser connected and is waiting for a race to watch`);
+    racers.push(spawn(botBin, ['--port', String(gamePort), '--name', 'RacerA', '--host-race', 'ClassicH:2:1'], { stdio: 'ignore' }));
+    await sleep(1500);
+    racers.push(spawn(botBin, ['--port', String(gamePort), '--name', 'RacerB', '--join-race', 'ClassicH', '--track', 'ClassicH'], { stdio: 'ignore' }));
+  }
+  const seen = [];
+  check(await waitFor(async () => { const v = await inRace(); seen.push(v); return v === 1; }, 60000), `${name}: the browser connected over WebSocket and ${spectate ? 'is watching' : 'a race started'}`);
+  if (process.env.DEBUG_SEEN) console.log('inRace samples:', seen.join(','));
   await sleep(1500); await shot(`servers-${name}-race`);
   check(await waitFor(async () => consoleLines.some((l) => /auth client: [1-9][0-9]* ticks verified, 0 tick failures, [0-9]+ restore checks, 0 restore failures/.test(l)), 120000),
         `${name}: the browser followed the whole race exactly (every tick verified)`);
+  for (const r of racers) { try { r.kill(); } catch (e) {} }
   if (withBot) {
     check(consoleLines.some((l) => /CHATTEST received: Botty: hello from the bot/.test(l)), `${name}: a chat message from another player arrived in the browser`);
     try { bot.kill(); } catch (e) {}
   }
 }
 const botBin = path.join(path.dirname(path.resolve(serverBin)), 'HoverNetAuthBot');
-await scenario('first', 1, false);
-await scenario('two-players-and-chat', 2, true);
+const only = process.env.ONLY;
+if (!only || only === 'first') await scenario('first', 1, false);
+if (!only || only === 'two') await scenario('two-players-and-chat', 2, true);
+if (!only || only === 'spectate') {
+  // Races that already ended can still be listed for a moment: wait until the server has none, so the spectator watches the new one.
+  if (statusPort) for (let i = 0; i < 120; i++) {
+    const text = await (await fetch(`http://127.0.0.1:${statusPort}/metrics`)).text();
+    const m = /^hovernet_races_running (\d+)/m.exec(text);
+    if (m && +m[1] === 0) break;
+    await sleep(500);
+  }
+  await scenario('spectate', 1, false, true);
+}
 check(exceptions.length === 0, `no uncaught page exceptions${exceptions.length ? ': ' + exceptions[0] : ''}`);
 if (failures) { await shot('servers-2-end'); console.log(consoleLines.slice(-12).join('\n')); console.log('server output:\n' + gameOut.split('\n').slice(-12).join('\n')); }
 await finish();
