@@ -36,6 +36,8 @@ int main(int argc, char** argv)
     std::string serverKeyHex;            // pin the server's key and talk over the secure session
     std::string say, reportName;         // optional: say something in the race once it has started, report a player
     bool spectate = false;               // watch instead of driving (single-race servers: --spectate; lobby: --spectate-race TRACK)
+    std::string code;                    // lobby: the code of a private race, to host one or to join or watch one by id
+    int raceId = 0;                      // lobby: join (or, with --spectate, watch) this race id directly; needed for private races
     std::string hostTrack, joinTrack;   // lobby servers: host a race ('Track:players[:laps]') or join an open race on a track
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -50,6 +52,8 @@ int main(int argc, char** argv)
         else if (a == "--report") reportName = value();
         else if (a == "--spectate") spectate = true;
         else if (a == "--spectate-race") { spectate = true; joinTrack = value(); }
+        else if (a == "--code") code = value();
+        else if (a == "--race-id") raceId = std::atoi(value());
         else if (a == "--host-race") hostTrack = value();
         else if (a == "--join-race") joinTrack = value();
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
@@ -71,7 +75,7 @@ int main(int argc, char** argv)
     Protocol3::Hello hello;
     hello.name = name;
     // A spectator on a single-race server says Spectate instead of Hello; on a lobby server it says Hello and then picks a race.
-    const bool lobbySpectator = spectate && !joinTrack.empty();
+    const bool lobbySpectator = spectate && (!joinTrack.empty() || raceId > 0);
     if (!sendFrame(spectate && !lobbySpectator ? Protocol3::kSpectate : Protocol3::kHello, Protocol3::Encode(hello))) return 1;
 
     SimHarness::World world;
@@ -109,7 +113,12 @@ int main(int argc, char** argv)
                     h.players = static_cast<std::uint8_t>(parts.size() > 1 && !parts[1].empty() ? std::atoi(parts[1].c_str()) : 2);
                     h.laps = static_cast<std::uint8_t>(parts.size() > 2 && !parts[2].empty() ? std::atoi(parts[2].c_str()) : 3);
                     track = h.track;
+                    h.code = code;
                     if (!sendFrame(kHostRace, Encode(h))) return 1;
+                }
+                else if (raceId > 0) {   // a race named by id, public or private
+                    if (lobbySpectator) { SpectateRace j; j.id = static_cast<std::uint32_t>(raceId); j.code = code; if (!sendFrame(kSpectateRace, Encode(j))) return 1; }
+                    else { JoinRace j; j.id = static_cast<std::uint32_t>(raceId); j.code = code; if (!sendFrame(kJoinRace, Encode(j))) return 1; }
                 }
                 else if (lobbySpectator) {
                     bool joined = false;

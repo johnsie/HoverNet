@@ -71,7 +71,7 @@ No lobby, race or gameplay frame is processed before step 2 succeeds.
 | 12, 13 | SnapshotRequest, SnapshotChunk | client to server, server to client | request id; chunks of up to 900 bytes with index, count and the tick |
 | 14, 15 | Ping, Pong | both | client tick and a token; the server adds its tick (drives the adaptive input delay) |
 | 24 | Spectate | client to server | the same as Hello; asks to watch the race instead of driving (answered with a HelloAck, a keyframe snapshot and the delayed Tick stream) |
-| 20 to 23, 25 | ListRaces, RaceList, HostRace, JoinRace, SpectateRace | lobby | list open races; host a race (track, players, laps, weapons); join or watch one by id |
+| 20 to 23, 25 | ListRaces, RaceList, HostRace, JoinRace, SpectateRace | lobby | list open races; host a race (track, players, laps, weapons); join or watch one by id. HostRace, JoinRace and SpectateRace may end with a code (6 to 16 characters): a race hosted with one is private, unlisted, and joined or watched only with it (a wrong code is answered as "no such race"; 30 wrong guesses lock the race) |
 | 16 | Result | server to client | ticks, final hash, per player: rank, finished, laps, finish and best lap times |
 
 The encrypted session is implemented, with a simpler key scheme than this draft's first sketch (a pinned server key and X25519, no signatures): see [secure-session.md](secure-session.md). Not in the code yet: the lobby and race

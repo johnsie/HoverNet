@@ -71,6 +71,7 @@ private:
     void Invalid(Conn& c, std::int64_t nowMs);
     void Handle(Conn& c, std::uint8_t type, const std::vector<std::uint8_t>& payload, std::int64_t nowMs);
     void SendList(Conn& c);
+    bool CodeAccepted(Conn& c, Entry& e, const std::string& code);
     void Attach(Conn& c, Entry& e, const std::vector<std::uint8_t>& firstFrame, std::int64_t nowMs);
 
     LobbyConfig mConfig;

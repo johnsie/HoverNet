@@ -35,6 +35,7 @@ struct In
         return s;
     }
     bool Done() const { return ok && pos == b.size(); }
+    bool AtEnd() const { return pos == b.size(); }
 };
 }
 
@@ -248,21 +249,33 @@ bool Decode(const std::vector<std::uint8_t>& p, RaceList& m)
     return in.Done();
 }
 
-std::vector<std::uint8_t> Encode(const HostRace& m) { Out o; o.Str(m.track); o.U8(m.players); o.U8(m.laps); o.U8(m.weapons ? 1 : 0); return o.b; }
+std::vector<std::uint8_t> Encode(const HostRace& m) { Out o; o.Str(m.track); o.U8(m.players); o.U8(m.laps); o.U8(m.weapons ? 1 : 0); if (!m.code.empty()) o.Str(m.code); return o.b; }
 bool Decode(const std::vector<std::uint8_t>& p, HostRace& m)
 {
     In in(p);
     m.track = in.Str(64); m.players = static_cast<std::uint8_t>(in.U8()); m.laps = static_cast<std::uint8_t>(in.U8());
     const std::uint32_t w = in.U8();
     m.weapons = w != 0;
+    m.code.clear();
+    if (in.ok && !in.AtEnd()) { m.code = in.Str(16); if (m.code.size() < 6) return false; }   // present means 6 to 16 characters
     return in.Done() && w <= 1 && !m.track.empty();
 }
 
-std::vector<std::uint8_t> Encode(const JoinRace& m) { Out o; o.U32(m.id); return o.b; }
-bool Decode(const std::vector<std::uint8_t>& p, JoinRace& m) { In in(p); m.id = in.U32(); return in.Done(); }
+std::vector<std::uint8_t> Encode(const JoinRace& m) { Out o; o.U32(m.id); if (!m.code.empty()) o.Str(m.code); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, JoinRace& m)
+{
+    In in(p); m.id = in.U32(); m.code.clear();
+    if (in.ok && !in.AtEnd()) { m.code = in.Str(16); if (m.code.size() < 6) return false; }
+    return in.Done();
+}
 
-std::vector<std::uint8_t> Encode(const SpectateRace& m) { Out o; o.U32(m.id); return o.b; }
-bool Decode(const std::vector<std::uint8_t>& p, SpectateRace& m) { In in(p); m.id = in.U32(); return in.Done(); }
+std::vector<std::uint8_t> Encode(const SpectateRace& m) { Out o; o.U32(m.id); if (!m.code.empty()) o.Str(m.code); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, SpectateRace& m)
+{
+    In in(p); m.id = in.U32(); m.code.clear();
+    if (in.ok && !in.AtEnd()) { m.code = in.Str(16); if (m.code.size() < 6) return false; }
+    return in.Done();
+}
 
 std::vector<std::uint8_t> Encode(const Chat& m) { Out o; o.Str(m.text); return o.b; }
 bool Decode(const std::vector<std::uint8_t>& p, Chat& m) { In in(p); m.text = in.Str(120); return in.Done() && !m.text.empty(); }

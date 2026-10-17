@@ -282,6 +282,59 @@ int main()
         Check(wrong.rejected && wrong.rejectReason == Protocol3::kUnsupportedVersion, "a protocol 2 client is told to update");
     }
 
+    // ---- private races: unlisted, joined only with the code -------------------------------------------------------
+    {
+        LobbyServer lobby(MakeConfig());
+        std::int64_t now = 1000;
+        Client host, friendly, stranger, wrong, watcher, observer;
+        host.Open(lobby, now); friendly.Open(lobby, now); stranger.Open(lobby, now); wrong.Open(lobby, now); watcher.Open(lobby, now); observer.Open(lobby, now);
+        host.Hello("hostess", now); host.Pump();
+        Protocol3::HostRace priv = Host("ClassicH", 2);
+        priv.code = "kestrel7";
+        host.Send(Protocol3::kHostRace, Protocol3::Encode(priv), now);
+        host.Pump();
+        Check(host.player == 0 && !host.rejected, "a private race can be hosted");
+        stranger.Hello("stranger", now); stranger.Pump();
+        Check(stranger.gotList && stranger.list.races.empty(), "a private race is not in the race list");
+        Protocol3::JoinRace join; join.id = 1;
+        stranger.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now); stranger.Pump();
+        Check(stranger.rejected && stranger.rejectReason == Protocol3::kNoSuchRace, "joining a private race without a code looks like a race that does not exist");
+        wrong.Hello("wrong", now); wrong.Pump();
+        join.code = "kestrel8";
+        wrong.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now); wrong.Pump();
+        Check(wrong.rejected && wrong.rejectReason == Protocol3::kNoSuchRace, "a wrong code is refused the same way");
+        friendly.Hello("friend", now); friendly.Pump();
+        join.code = "kestrel7";
+        friendly.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now); friendly.Pump();
+        Check(friendly.player == 1 && !friendly.rejected, "the right code joins the private race");
+        watcher.Hello("watcher", now); watcher.Pump();
+        Protocol3::SpectateRace watch; watch.id = 1;
+        watcher.Send(Protocol3::kSpectateRace, Protocol3::Encode(watch), now); watcher.Pump();
+        Check(watcher.rejected, "watching a private race needs the code too");
+        observer.Hello("observer", now); observer.Pump();
+        watch.code = "kestrel7";
+        observer.Send(Protocol3::kSpectateRace, Protocol3::Encode(watch), now); observer.Pump();
+        Check(!observer.rejected, "watching with the code is allowed");
+        // Codes are 6 to 16 characters when present; shorter ones are an invalid message.
+        Protocol3::HostRace shortCode = Host("ClassicH", 2);
+        shortCode.code = "abc";
+        const std::vector<std::uint8_t> enc = Protocol3::Encode(shortCode);
+        Protocol3::HostRace back;
+        Check(!Protocol3::Decode(enc, back), "a code shorter than 6 characters does not decode");
+        Check(Protocol3::Decode(Protocol3::Encode(Host("ClassicH", 2)), back) && back.code.empty(), "a host request without a code is an ordinary public one");
+        // Guessing: after 30 wrong guesses the race refuses even the right code.
+        for (int i = 0; i < 30; ++i) {
+            Client g; g.Open(lobby, now); g.Hello("g", now); g.Pump();
+            Protocol3::JoinRace j; j.id = 1; j.code = "guess" + std::to_string(100 + i);
+            g.Send(Protocol3::kJoinRace, Protocol3::Encode(j), now);
+            now += 300;   // stay under the per-connection limits; each guess is its own connection
+        }
+        Client late; late.Open(lobby, now); late.Hello("late", now); late.Pump();
+        join.code = "kestrel7";
+        late.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now); late.Pump();
+        Check(late.rejected, "a race that has been guessed at 30 times refuses everyone");
+    }
+
     // ---- random bytes ----------------------------------------------------------------------------------------------
     {
         LobbyServer lobby(MakeConfig());

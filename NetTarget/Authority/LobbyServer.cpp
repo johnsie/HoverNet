@@ -10,6 +10,8 @@ struct LobbyServer::Entry
     std::unique_ptr<RaceHost> host;
     HostConfig cfg;
     std::int64_t finishedAt = -1;
+    int badAttempts = 0;            // wrong codes tried on this race; after 30 it refuses everyone
+    std::string code;               // non-empty: a private race, unlisted, joined or watched only with this code
 };
 
 struct LobbyServer::Conn
@@ -153,11 +155,25 @@ void LobbyServer::Invalid(Conn& c, std::int64_t nowMs)
     if (static_cast<int>(c.invalidTimes.size()) > mConfig.maxInvalidPerWindow) Close(c, Protocol3::kBadMessage, "too many invalid messages");
 }
 
+// A public race accepts anyone. A private one needs its code; a wrong code is answered exactly like a race that does not exist, and a
+// wrong guess closes the connection, and after 30 wrong guesses the race refuses everyone, so codes cannot be guessed.
+bool LobbyServer::CodeAccepted(Conn&, Entry& e, const std::string& code)
+{
+    if (e.code.empty()) return true;
+    if (e.badAttempts >= 30) return false;
+    unsigned diff = static_cast<unsigned>(e.code.size() ^ code.size());
+    for (std::size_t i = 0; i < e.code.size() && i < code.size(); ++i) diff |= static_cast<unsigned>(e.code[i] ^ code[i]);
+    if (diff == 0) return true;
+    ++e.badAttempts;
+    return false;
+}
+
 void LobbyServer::SendList(Conn& c)
 {
     Protocol3::RaceList list;
     for (const auto& r : mRaces) {
         if (list.races.size() >= 32) break;
+        if (!r.second->code.empty()) continue;   // private races are not listed
         const RaceHost& h = *r.second->host;
         Protocol3::RaceInfo info;
         info.id = r.first;
@@ -256,6 +272,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         e->cfg.race.players = m.players;
         e->cfg.race.laps = m.laps;
         e->cfg.race.weapons = m.weapons;
+        e->code = m.code;
         e->cfg.tokenSeed = mSeed + e->id * 7919;
         e->host.reset(new RaceHost(e->cfg));
         std::string error;
@@ -272,7 +289,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
         if (mDraining) { Close(c, kServerDraining, "the server is restarting; try again in a minute"); return; }
         auto it = mRaces.find(m.id);
-        if (it == mRaces.end()) { Close(c, kNoSuchRace, "no such race"); return; }
+        if (it == mRaces.end() || !CodeAccepted(c, *it->second, m.code)) { Close(c, kNoSuchRace, "no such race"); return; }
         RaceHost& h = *it->second->host;
         if (h.Started() || h.Full()) { Close(c, kServerFull, "that race is full or already running"); return; }
         Hello hello; hello.name = c.name;
@@ -283,7 +300,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         SpectateRace m;
         if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
         auto it = mRaces.find(m.id);
-        if (it == mRaces.end()) { Close(c, kNoSuchRace, "no such race"); return; }
+        if (it == mRaces.end() || !CodeAccepted(c, *it->second, m.code)) { Close(c, kNoSuchRace, "no such race"); return; }
         Hello hello; hello.name = c.name;
         Attach(c, *it->second, EncodeFrame(kSpectate, Encode(hello)), nowMs);
         return;

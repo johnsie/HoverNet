@@ -97,9 +97,11 @@ struct Pong { std::uint32_t clientTick = 0, token = 0, serverTick = 0; };
 struct PlayerResult { std::uint8_t player = 0, rank = 0; bool finished = false; std::uint8_t laps = 0; std::int32_t finishTimeMs = 0, bestLapMs = 0; };
 struct RaceInfo { std::uint32_t id = 0; std::string track; std::uint8_t players = 0, joined = 0, laps = 0; bool weapons = true, started = false; };
 struct RaceList { std::vector<RaceInfo> races; };
-struct HostRace { std::string track; std::uint8_t players = 2, laps = 3; bool weapons = true; };
-struct JoinRace { std::uint32_t id = 0; };
-struct SpectateRace { std::uint32_t id = 0; };
+// A non-empty code makes a race private: it is not listed and can be joined or watched only by id and code (6 to 16 characters).
+// The code is an optional trailing field, so a message without it is an ordinary public one.
+struct HostRace { std::string track; std::uint8_t players = 2, laps = 3; bool weapons = true; std::string code; };
+struct JoinRace { std::uint32_t id = 0; std::string code; };
+struct SpectateRace { std::uint32_t id = 0; std::string code; };
 struct Chat { std::string text; };
 struct ChatMessage { std::string name; std::string text; bool fromServer = false; };
 struct Block { std::string name; };

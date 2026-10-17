@@ -800,6 +800,9 @@ if(BUILD_TESTING AND NOT WIN32)
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-drain.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     endif()
+    add_test(NAME HoverNetPrivateTcp
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-private-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetSpectatorTcp
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-spectator-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
