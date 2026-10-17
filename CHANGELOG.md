@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **Personal bests.** The game remembers your fastest finish on each track (per number of laps) and your fastest lap, on your own machine only (nothing is sent anywhere). The results screen says "NEW PERSONAL BEST!" with the time you beat, or shows your best for the track. The browser keeps them with your other settings. Delete the `personal_bests` file in the settings folder to forget them.
+
 ## 2.3.5 - 2026-10-17
 
 ### Fixed

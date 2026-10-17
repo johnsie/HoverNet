@@ -120,6 +120,7 @@ class MR_ClientSession
 
       void              SetMap( MR_Sprite* pMap, int pX0, int pY0, int pX1, int pY1 );
       const MR_Sprite*  GetMap()const;
+      int               GetNbLap()const { return mNbLap; }   // the laps of the race that is loaded
       void              ConvertMapCoordinate( int& pX, int& pY, int pRatio )const;
 
       virtual int   ResultAvaillable()const; // Return the number of players desc avail

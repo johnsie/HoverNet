@@ -331,7 +331,7 @@ Depends on Stage 1's determinism.
 - Seeking, camera controls, timeline markers, and export-friendly playback. *Status: seeking (Left/Right/Home, from snapshots) and switching the camera between craft (`[` and `]`; Left/Right for a spectator) are done in the game; a free camera, markers on the timeline and export are not (`HoverNetReplay events` lists the laps and finishes for tools).*
 - Delayed live spectating (protects competitive integrity) using the server's spectator
   snapshots. *Status: done in the server, the protocol, the bot and the game client (`--spectate`), see [authoritative-race.md](authoritative-race.md); the HoverNet Servers screen lists running races to watch (desktop and browser).*
-- Ghosts, time trials, personal bests, track leaderboards, and shareable replay identifiers.
+- Ghosts, time trials, personal bests, track leaderboards, and shareable replay identifiers. *Status: personal bests are done on the player's own machine (best finish per track and lap count, best lap per track; the results screen says "new personal best"; desktop and browser share the code, the browser keeps the file in IndexedDB with the other settings), see `PersonalBests.h`; nothing is sent to a server. Server-side time-trial leaderboards from verified replays exist as a tool; ghosts and shareable replay identifiers are not built.*
 
 **Exit gate:** a race can be saved, shared, replayed, and independently verified from the
 stored data, on every supported platform.

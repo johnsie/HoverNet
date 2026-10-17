@@ -91,7 +91,7 @@ int main(int argc, char** argv)
         OnlineLobby host2, queued;
         Check(host2.Connect("127.0.0.1", port, "Host2", noKey) && WaitFor(host2, OnlineLobby::State::eBrowsing, 3000), "a second host connects");
         Check(queued.Connect("127.0.0.1", port, "Queued", noKey) && WaitFor(queued, OnlineLobby::State::eBrowsing, 3000), "the queued watcher connects");
-        host2.Host("ClassicH", 2, 1, false, "");
+        host2.Host("ClassicH", 8, 1, false, "");
         std::uint32_t waitingId = 0;
         for (int i = 0; i < 100 && waitingId == 0; ++i) {
             queued.Refresh();
@@ -112,6 +112,7 @@ int main(int argc, char** argv)
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
             Check(in && queued.QueuedWatchId() == 0, "the waiting watcher is let in when the race starts");
+            Check(WaitFor(host2, OnlineLobby::State::eReady, 8000) && !host2.Spectating(), "the host of that race is in it too");
         }
     }
 

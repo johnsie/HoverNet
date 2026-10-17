@@ -6,6 +6,7 @@
 #include "TrackCatalog.h"
 #include "TrackDownloader.h"
 #include "Sha256.h"
+#include "PersonalBests.h"
 #include "../Authority/ReplayFormat.h"
 #include "../Model/StateHash.h"
 #include "../Model/StateSnapshot.h"
@@ -2074,7 +2075,8 @@ enum class PostRaceChoice
 PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                                  MR_3DViewPort& viewport, const MR_Sprite& font,
                                  MR_SimulationTime pFinishTime, MR_SimulationTime pBestLap,
-                                 int pRank, int pPlayerCount, int pFrameLimit = -1);
+                                 int pRank, int pPlayerCount, int pFrameLimit = -1,
+                                 const PersonalBests::Outcome* pBests = nullptr);
 
 #if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
 // The official HoverNet server players are sent to without typing anything. The key is the server's identity for an encrypted connection (64 hex
@@ -3591,7 +3593,8 @@ void FormatRaceTime(MR_SimulationTime pTime, char* pBuffer, std::size_t pBufferS
 PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                                  MR_3DViewPort& viewport, const MR_Sprite& font,
                                  MR_SimulationTime pFinishTime, MR_SimulationTime pBestLap,
-                                 int pRank, int pPlayerCount, int pFrameLimit)
+                                 int pRank, int pPlayerCount, int pFrameLimit,
+                                 const PersonalBests::Outcome* pBests)
 {
     if (std::getenv("HOVERNET_TEST_FINISH") != nullptr) { std::printf("FINISHTEST results screen opened\n"); std::fflush(stdout); }
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
@@ -3665,7 +3668,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
 
         const float cardWidth = std::min(680.0f, workSize.x - 48.0f);
-        const float cardHeight = std::min(620.0f, workSize.y - 48.0f);
+        const float cardHeight = std::min((pBests != nullptr && pBests->Any() ? 690.0f : 620.0f), workSize.y - 48.0f);
         ImGui::SetCursorPos(ImVec2((workSize.x - cardWidth) * 0.5f,
                                    (workSize.y - cardHeight) * 0.5f));
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.065f, 0.065f, 0.085f, 0.97f));
@@ -3711,6 +3714,37 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             ImGui::EndTable();
         }
 
+        if (pBests != nullptr && pBests->Any()) {
+            // The player's own records on this track (kept on this machine only).
+            char text[160], previous[32];
+            auto centred = [&](const char* line, bool highlight) {
+                const float width = ImGui::CalcTextSize(line).x;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (ImGui::GetContentRegionAvail().x - width) * 0.5f));
+                if (highlight) ImGui::TextColored(kHoverNetCoral, "%s", line); else ImGui::TextDisabled("%s", line);
+            };
+            ImGui::Spacing();
+            if (pBests->newRaceBest) {
+                if (pBests->hadRaceBest) { FormatRaceTime(static_cast<MR_SimulationTime>(pBests->previousRace), previous, sizeof(previous)); std::snprintf(text, sizeof(text), "NEW PERSONAL BEST!  (was %s)", previous); }
+                else std::snprintf(text, sizeof(text), "NEW PERSONAL BEST!  (your first finish on this track)");
+                centred(text, true);
+            }
+            else if (pBests->raceBest > 0) {
+                FormatRaceTime(static_cast<MR_SimulationTime>(pBests->raceBest), previous, sizeof(previous));
+                std::snprintf(text, sizeof(text), "Your best finish here: %s", previous);
+                centred(text, false);
+            }
+            if (pBests->newLapBest) {
+                if (pBests->hadLapBest) { FormatRaceTime(static_cast<MR_SimulationTime>(pBests->previousLap), previous, sizeof(previous)); std::snprintf(text, sizeof(text), "New best lap!  (was %s)", previous); }
+                else std::snprintf(text, sizeof(text), "New best lap!");
+                centred(text, true);
+            }
+            else if (pBests->lapBest > 0) {
+                FormatRaceTime(static_cast<MR_SimulationTime>(pBests->lapBest), previous, sizeof(previous));
+                std::snprintf(text, sizeof(text), "Your best lap here: %s", previous);
+                centred(text, false);
+            }
+        }
+
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
@@ -3742,6 +3776,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        CaptureFrameIfRequested(renderer, framesShown, pFrameLimit);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         HoverNetFrameDelay();
@@ -7136,8 +7171,15 @@ int RunClient(int argc, char** argv)
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--results-screen")) {
+            PersonalBests::Outcome sample;   // HOVERNET_TEST_RESULTS_BESTS=new|old shows the personal-best lines (screenshot test)
+            const char* bestsMode = std::getenv("HOVERNET_TEST_RESULTS_BESTS");
+            if (bestsMode != nullptr) {
+                const bool fresh = std::strcmp(bestsMode, "new") == 0;
+                sample.newRaceBest = fresh; sample.hadRaceBest = true; sample.previousRace = 88123; sample.raceBest = fresh ? 83456 : 80100;
+                sample.newLapBest = fresh; sample.hadLapBest = true; sample.previousLap = 29870; sample.lapBest = fresh ? 27341 : 26500;
+            }
             RunPostRaceScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                              83456, 27341, 1, 4, frameLimit);
+                              83456, 27341, 1, 4, frameLimit, bestsMode != nullptr ? &sample : nullptr);
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--onboarding")) {
@@ -7274,6 +7316,7 @@ int RunClient(int argc, char** argv)
     Uint32 lastResultsHint = 0;
     bool resultsSeen = false;     // the results screen has been opened once: no more reminders
     MR_SimulationTime finishTotalTime = 0, finishBestLap = 0;
+    PersonalBests::Outcome finishBests;
 #ifdef HOVERNET_GAME2_PLAYER
     // A mid-race RaceServer drop (crash, network outage) currently just makes
     // every onlineClient.IsConnected() check below quietly stop sending/polling --
@@ -8099,6 +8142,18 @@ int RunClient(int argc, char** argv)
                 resultsSeen = false;
                 finishTotalTime = mainCharacter->GetTotalTime();
                 finishBestLap = mainCharacter->GetBestLapDuration();
+                if (testFinish && std::getenv("HOVERNET_TEST_FINISH_TIME") != nullptr) {   // test hook (scripts/test-personal-bests.sh): a chosen time
+                    finishTotalTime = std::atoi(std::getenv("HOVERNET_TEST_FINISH_TIME"));
+                    finishBestLap = finishTotalTime / 3;
+                }
+                {
+                    // Once per finish: offer the times to the player's records (a time of zero means nothing was timed).
+                    const std::string bestsPath = ConfigDirPath() + "/personal_bests";
+                    PersonalBests bests;
+                    bests.Load(bestsPath);
+                    finishBests = bests.Record(currentTrackName.empty() ? initialTrackName : currentTrackName, session.GetNbLap(), finishTotalTime, finishBestLap);
+                    if (finishBests.newRaceBest || finishBests.newLapBest) bests.Save(bestsPath);
+                }
                 lastResultsHint = SDL_GetTicks();
                 if (testResults) {
                     openResults = true;   // the browser smoke test opens the screen directly
@@ -8121,7 +8176,7 @@ int RunClient(int argc, char** argv)
                     graphics, buffer, viewport, *menuFontHandle->GetSprite(),
                     finishTotalTime, finishBestLap,
                     session.GetRank(mainCharacter), session.GetNbPlayers(),
-                    frameLimit < 0 ? -1 : 2);
+                    frameLimit < 0 ? -1 : 2, &finishBests);
                 if (resultChoice == PostRaceChoice::eQuit) {
                     running = false;
                     continue;
