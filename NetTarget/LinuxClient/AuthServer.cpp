@@ -259,6 +259,31 @@ void WriteResults(const std::string& replayPath, const std::vector<Authority::Pl
     std::fclose(f);
 }
 
+// One JSON object per line for operators' tooling (--event-log FILE): server start, races hosted and finished with their results,
+// drain. No player names or addresses are written, so the file needs no special retention.
+FILE* g_eventLog = nullptr;
+void LogEvent(const char* event, const std::string& fields = std::string())
+{
+    if (g_eventLog == nullptr) return;
+    std::fprintf(g_eventLog, "{\"time_ms\":%lld,\"event\":\"%s\"%s%s}\n", static_cast<long long>(NowMs()), event, fields.empty() ? "" : ",", fields.c_str());
+    std::fflush(g_eventLog);
+}
+
+std::string ResultFields(const std::string& track, std::uint32_t ticks, std::uint64_t hash, const std::vector<Authority::PlayerResult>& results)
+{
+    char head[256];
+    std::snprintf(head, sizeof(head), "\"track\":\"%s\",\"ticks\":%u,\"final_hash\":\"%016llx\",\"results\":[", track.c_str(), ticks, static_cast<unsigned long long>(hash));
+    std::string out = head;
+    for (std::size_t i = 0; i < results.size(); ++i) {
+        const auto& r = results[i];
+        char row[160];
+        std::snprintf(row, sizeof(row), "%s{\"player\":%d,\"rank\":%d,\"laps\":%d,\"finished\":%s,\"finish_ms\":%lld,\"best_lap_ms\":%lld}", i ? "," : "", r.player, r.rank, r.laps,
+                      r.finished ? "true" : "false", static_cast<long long>(r.finishTimeMs), static_cast<long long>(r.bestLapMs));
+        out += row;
+    }
+    return out + "]";
+}
+
 // SIGTERM and SIGINT start a drain instead of killing races under way (a rolling restart): see docs/operators.md.
 volatile std::sig_atomic_t g_drainRequested = 0;
 void OnDrainSignal(int) { g_drainRequested = g_drainRequested == 0 ? 1 : 3; }   // 1 drain, 3 a second signal: leave now
@@ -360,6 +385,7 @@ int main(int argc, char** argv)
     int adminPort = -1;
     int statusPort = -1;
     int drainTimeoutSeconds = 600;
+    std::string eventLogPath;
     Security security;
     std::string crashDir;
     bool crashTest = false;
@@ -385,6 +411,7 @@ int main(int argc, char** argv)
         else if (a == "--status-port") statusPort = std::atoi(value());
         else if (a == "--ws-origin") { std::stringstream list(value()); for (std::string origin; std::getline(list, origin, ',');) if (!origin.empty()) security.ws.origins.push_back(origin); security.wsEnabled = !security.ws.origins.empty(); }
         else if (a == "--ws-path") security.ws.path = value();
+        else if (a == "--event-log") eventLogPath = value();
         else if (a == "--drain-timeout") drainTimeoutSeconds = std::atoi(value());
         else if (a == "--crash-dir") crashDir = value();
         else if (a == "--crash-test") crashTest = true;
@@ -414,6 +441,10 @@ int main(int argc, char** argv)
     }
     security.require = requireEncryption;
     if (requireEncryption && !security.enabled) { std::fprintf(stderr, "--require-encryption needs --identity-file\n"); return 2; }
+    if (!eventLogPath.empty()) {
+        g_eventLog = std::fopen(eventLogPath.c_str(), "ab");
+        if (g_eventLog == nullptr) { std::fprintf(stderr, "cannot open the event log %s\n", eventLogPath.c_str()); return 1; }
+    }
     std::signal(SIGTERM, OnDrainSignal);
     std::signal(SIGINT, OnDrainSignal);
     int boundPort = 0;
@@ -484,6 +515,7 @@ int main(int argc, char** argv)
         lobby.SetRaceFinishedCallback([&](std::uint32_t id, const RaceHost& finished) {
             std::printf("race %u over after %u ticks, final hash %016llx\n", id, finished.Race().CurrentTick(), static_cast<unsigned long long>(finished.Race().StateHash()));
             for (const auto& r : finished.Race().Results()) std::printf("  player %d: rank %d, laps %d%s\n", r.player, r.rank, r.laps, r.finished ? ", finished" : "");
+            LogEvent("race_finished", ResultFields(finished.Config().race.trackName, finished.Race().CurrentTick(), finished.Race().StateHash(), finished.Race().Results()));
             if (!replayDir.empty()) {
                 char name[160];
                 std::snprintf(name, sizeof(name), "/%s-%u-%lld.hnr", finished.Config().race.trackName.c_str(), id, static_cast<long long>(std::time(nullptr)));
@@ -498,6 +530,7 @@ int main(int argc, char** argv)
             std::fflush(stdout);
         });
         std::printf("listening on %s:%d, lobby with %zu tracks\n", bind.c_str(), boundPort, lobbyConfig.tracks.size());
+        LogEvent("server_start", std::string("\"version\":\"") + HOVERNET_SERVER_VERSION + "\",\"mode\":\"lobby\"");
         std::fflush(stdout);
         metricsText = [&]() { return RenderMetrics(lobby.TotalMetrics(), static_cast<unsigned long long>(lobby.RaceCount()), lobby.RacesHosted(), static_cast<unsigned long long>(lobby.OpenConnections()), NowMs() - serverStart); };
         std::vector<std::unique_ptr<Peer>> lobbyPeers;
@@ -511,6 +544,7 @@ int main(int argc, char** argv)
                 if (drainStarted < 0) {
                     drainStarted = NowMs();
                     lobby.SetDraining(true);
+                    LogEvent("drain_start", "\"races_running\":" + std::to_string(lobby.RunningRaces()));
                     std::printf("draining: %d races running, leaving when they end (at most %d s)\n", lobby.RunningRaces(), drainTimeoutSeconds);
                     std::fflush(stdout);
                     g_drainRequested = 2;
@@ -520,6 +554,7 @@ int main(int argc, char** argv)
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
+        LogEvent("drained", "\"races_still_running\":" + std::to_string(lobby.RunningRaces()));
         std::printf("drained after %lld ms, %d races were still running\n", static_cast<long long>(NowMs() - drainStarted), lobby.RunningRaces());
         std::fflush(stdout);
         for (auto& p : lobbyPeers) AuthNet::CloseSocket(p->socket);
@@ -531,6 +566,7 @@ int main(int argc, char** argv)
     std::string error;
     if (!host->Init(error)) { std::fprintf(stderr, "cannot host the race: %s\n", error.c_str()); return 1; }
     std::printf("listening on %s:%d, %s, %d players, %d laps\n", bind.c_str(), boundPort, cfg.race.trackName.c_str(), cfg.race.players, cfg.race.laps);
+    LogEvent("server_start", std::string("\"version\":\"") + HOVERNET_SERVER_VERSION + "\",\"mode\":\"single\"");
     std::fflush(stdout);
 
     std::vector<std::unique_ptr<Peer>> peers;
@@ -554,6 +590,7 @@ int main(int argc, char** argv)
                 const std::vector<Authority::PlayerResult> results = host->Race().Results();
                 std::printf("race over after %u ticks, final hash %016llx\n", host->Race().CurrentTick(), static_cast<unsigned long long>(host->Race().StateHash()));
                 for (const auto& r : results) std::printf("  player %d: rank %d, laps %d%s\n", r.player, r.rank, r.laps, r.finished ? ", finished" : "");
+                LogEvent("race_finished", ResultFields(cfg.race.trackName, host->Race().CurrentTick(), host->Race().StateHash(), results));
                 std::fflush(stdout);
                 const RaceHost::Metrics& m = host->GetMetrics();
                 std::printf("metrics: connections %llu accepted / %llu closed, %llu frames in (%llu bytes), %llu frames out (%llu bytes), %llu invalid, %llu ticks, inputs %llu accepted / %llu late / %llu too far, %llu snapshots\n",

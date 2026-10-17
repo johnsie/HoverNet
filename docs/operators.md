@@ -41,6 +41,7 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 | `--moderation-dir DIR`, `--admin-port P` | audit log, moderators and the console ([online-services.md](online-services.md)) |
 | `--status-port P`, `--crash-dir DIR` | `/health`, `/metrics`; crash reports |
 | `--ws-origin ORIGINS`, `--ws-path P` | accept browsers over WebSocket from these comma-separated origins, at this path (default `/auth/`) |
+| `--event-log FILE` | append one JSON object per line: `server_start`, `race_finished` (track, ticks, final hash, each player's rank, laps and times), `drain_start`, `drained`; no names or addresses |
 | `--drain-timeout S` | longest a drain waits for races under way (default 600 seconds) |
 | `--once` | serve one race and exit (tests) |
 | `--config FILE` | read options from a file |

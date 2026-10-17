@@ -191,7 +191,7 @@ differences from 2.0 are documented design decisions.
 - Bandwidth budgets, packet prioritisation, compression, rate limiting, and abuse
   protection (extending 2.0's limits and fuzzing).
 - Regional server pools and private dedicated servers; **server observability** (health,
-  metrics, tracing, crash reports) and rolling deployment. *Status: health and metrics endpoint, crash reports, a load and soak harness and a graceful drain for rolling restarts (Linux, `HoverNetDrain`) exist; tracing and regional pools do not.*
+  metrics, tracing, crash reports) and rolling deployment. *Status: health and metrics endpoint, crash reports, a load and soak harness, a graceful drain for rolling restarts (Linux, `HoverNetDrain`) and a JSON event log exist; distributed tracing and regional pools do not.*
 - A network-condition test harness (latency, loss, duplication, reordering, disconnects)
   in CI, plus **automated soak and load tests** replacing 2.0's manual 24-hour run.
 - Protocol compatibility policy and a negotiated fallback path: 3.0 clients can still talk
