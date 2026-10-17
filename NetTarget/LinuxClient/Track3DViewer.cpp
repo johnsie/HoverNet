@@ -13,6 +13,7 @@
 #include "AuthConnection.h"
 #include "../Authority/PredictingClient.h"
 #include "../Authority/Protocol3.h"
+#include "../Authority/Crypto.h"
 #endif
 #include "../GraphicsSDL2/SDL2Graphics.h"
 #include "../Game2/ClientSession.h"
@@ -5493,6 +5494,7 @@ struct AuthOnline
     std::string host;
     int port = 9610;
     std::string name;
+    Crypto::Bytes serverKey;      // the pinned key of the server (32 bytes) for a secure session; empty = plain connection
     Authority::PredictingClient predictor;
     Protocol3::HelloAck ack;
     std::vector<MR_MainCharacter*> craft;
@@ -5594,6 +5596,13 @@ int RunClient(int argc, char** argv)
     auth.verify = HasArgument(argc, argv, "--auth-verify");
     auth.scripted = HasArgument(argc, argv, "--auth-script");
     auth.spectator = HasArgument(argc, argv, "--spectate");
+    {
+        const std::string keyText = ParseStringArg(argc, argv, "--server-key");
+        if (!keyText.empty() && (!Crypto::FromHex(keyText, auth.serverKey) || auth.serverKey.size() != 32)) {
+            std::fprintf(stderr, "--server-key must be 64 hex characters\n");
+            return 2;
+        }
+    }
     auth.watch = std::atoi(ParseStringArg(argc, argv, "--spectate-player").c_str());
     auth.dropAfter = static_cast<unsigned>(std::atoi(ParseStringArg(argc, argv, "--auth-drop").c_str()));
 #endif
@@ -6033,7 +6042,7 @@ int RunClient(int argc, char** argv)
             auth.name = LoadUsername();
             if (auth.name.empty()) auth.name = "Player";
             std::string error;
-            if (!auth.conn.Connect(auth.host, auth.port, error)) return FatalClientError(error);
+            if (!auth.conn.Connect(auth.host, auth.port, error, auth.serverKey.empty() ? nullptr : auth.serverKey.data())) return FatalClientError(error);
             Protocol3::Hello hello;
             hello.name = auth.name.substr(0, 32);
             auth.conn.Send(auth.spectator ? Protocol3::kSpectate : Protocol3::kHello, Protocol3::Encode(hello));
@@ -6336,7 +6345,7 @@ int RunClient(int argc, char** argv)
                 auth.lastReconnect = now;
                 ++auth.reconnectAttempts;
                 std::string error;
-                if (auth.conn.Connect(auth.host, auth.port, error)) {
+                if (auth.conn.Connect(auth.host, auth.port, error, auth.serverKey.empty() ? nullptr : auth.serverKey.data())) {
                     Protocol3::Resume resume;
                     resume.token = auth.ack.resumeToken;
                     auth.conn.Send(Protocol3::kResume, Protocol3::Encode(resume));

@@ -23,7 +23,8 @@ public:
     AuthConnection();
     ~AuthConnection();
 
-    bool Connect(const std::string& host, int port, std::string& error);
+    // serverKey, if given (32 bytes), makes the connection a secure session pinned to that server key (docs/specs/secure-session.md).
+    bool Connect(const std::string& host, int port, std::string& error, const std::uint8_t* serverKey = nullptr);
     void Close();
     bool IsOpen() const;
     // Queues a frame (type + payload) and writes as much as the socket takes. False once the connection is lost.
@@ -32,6 +33,7 @@ public:
     bool Pump(std::vector<AuthFrame>& out);
 
 private:
+    bool Flush();            // writes what the socket will take of the queued bytes
     struct Impl;
     std::unique_ptr<Impl> mImpl;
 };

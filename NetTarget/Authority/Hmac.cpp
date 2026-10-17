@@ -38,6 +38,12 @@ std::string Sha256Hex(const std::string& key, const std::string& message)
     return Sha256::HashBytes(outer.data(), outer.size());
 }
 
+std::vector<std::uint8_t> Sha256Raw(const std::string& key, const std::string& message)
+{
+    const std::vector<unsigned char> raw = FromHex(Sha256Hex(key, message));
+    return std::vector<std::uint8_t>(raw.begin(), raw.end());
+}
+
 bool ConstantTimeEquals(const std::string& a, const std::string& b)
 {
     if (a.size() != b.size()) return false;

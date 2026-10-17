@@ -13,9 +13,11 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 
 ## Security notes (read before exposing it)
 
-- It **listens on 127.0.0.1** unless you pass `--bind`. Until the encrypted session exists (see
-  [specs/protocol-3.0-draft.md](specs/protocol-3.0-draft.md)), do not put it on the open internet without TLS termination in front of it
-  or a VPN; anyone who can read the traffic can read chat and resume tokens.
+- It **listens on 127.0.0.1** unless you pass `--bind`. To serve players over the internet, give it an identity (`--identity-file`) and
+  `--require-encryption`: players then connect over the encrypted, authenticated session of [specs/secure-session.md](specs/secure-session.md),
+  pinning the key the server prints at start-up (`server key ...`; give it to your players, who pass `--server-key`). Without encryption,
+  anyone who can read the traffic can read chat and resume tokens, so keep a plain server on a trusted network. The session code has been
+  tested against the RFC vectors but not independently audited.
 - The moderators' console (`--admin-port`), the monitoring port (`--status-port`) and the crash reports never leave the machine. Reach them
   with an SSH tunnel. `moderators.txt` holds secrets: keep it readable only by the server's user.
 - The server runs no player code, only reads the track files it is told about, and writes only to the replay, moderation and crash
@@ -31,6 +33,7 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 | `--tracks "A,B"` | tracks players may host (default: the seven official ones) |
 | `--track`, `--players`, `--laps`, `--no-weapons` | the fixed race when not in lobby mode |
 | `--port`, `--bind`, `--max-connections` | network (port 0 picks a free port) |
+| `--identity-file FILE`, `--require-encryption` | the server's secret key (created if missing) and refusing plain connections |
 | `--limit-ticks N` | end each race after N ticks (16 ms each); free-play tracks default to 10 minutes |
 | `--start-delay-ms` | countdown before tick 0 |
 | `--spectator-delay-ms` | how far behind the drivers spectators see the race |
@@ -69,4 +72,4 @@ in a debug build ([authoritative-race.md](authoritative-race.md)); size for tens
 
 ## Not provided yet
 
-Encrypted connections, accounts, a server list for players to browse, regional pools, an updater, signed packages.
+Accounts, a server list for players to browse, regional pools, an updater, signed packages.

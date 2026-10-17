@@ -11,7 +11,9 @@
 #include <thread>
 #include <vector>
 
+#include "AuthConnection.h"
 #include "AuthSocket.h"
+#include "../Authority/Crypto.h"
 #include "SimHarness.h"
 #include "../Authority/Protocol3.h"
 #include "../Authority/ReplayFormat.h"
@@ -31,6 +33,7 @@ int main(int argc, char** argv)
 {
     std::string host = "127.0.0.1", name = "bot", track = "ClassicH";
     int port = 9610, lead = 12;
+    std::string serverKeyHex;            // pin the server's key and talk over the secure session
     std::string say, reportName;         // optional: say something in the race once it has started, report a player
     bool spectate = false;               // watch instead of driving (single-race servers: --spectate; lobby: --spectate-race TRACK)
     std::string hostTrack, joinTrack;   // lobby servers: host a race ('Track:players[:laps]') or join an open race on a track
@@ -42,6 +45,7 @@ int main(int argc, char** argv)
         else if (a == "--name") name = value();
         else if (a == "--track") track = value();
         else if (a == "--lead") lead = std::atoi(value());
+        else if (a == "--server-key") serverKeyHex = value();
         else if (a == "--say") say = value();
         else if (a == "--report") reportName = value();
         else if (a == "--spectate") spectate = true;
@@ -56,21 +60,14 @@ int main(int argc, char** argv)
     MR_DllObjectFactory::MR_DllObjectFactoryCleanup factoryCleanup;
     if (!AuthNet::Startup()) return 1;
 
-    AuthSocket s = AuthNet::Connect(host, port);
-    if (s == kInvalidSocket) { std::fprintf(stderr, "cannot connect to %s:%d\n", host.c_str(), port); return 1; }
-
-    Protocol3::FrameParser parser;
-    auto sendFrame = [&](std::uint8_t type, const std::vector<std::uint8_t>& payload) {
-        const std::vector<std::uint8_t> f = Protocol3::EncodeFrame(type, payload);
-        std::size_t off = 0;
-        while (off < f.size()) {
-            const int n = static_cast<int>(send(s, reinterpret_cast<const char*>(f.data()) + off, static_cast<int>(f.size() - off), 0));
-            if (n > 0) off += static_cast<std::size_t>(n);
-            else if (n < 0 && AuthNet::WouldBlock()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            else return false;
-        }
-        return true;
-    };
+    AuthConnection conn;
+    {
+        std::string error;
+        Crypto::Bytes key;
+        if (!serverKeyHex.empty() && (!Crypto::FromHex(serverKeyHex, key) || key.size() != 32)) { std::fprintf(stderr, "--server-key must be 64 hex characters\n"); return 2; }
+        if (!conn.Connect(host, port, error, key.empty() ? nullptr : key.data())) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }
+    }
+    auto sendFrame = [&](std::uint8_t type, const std::vector<std::uint8_t>& payload) { return conn.Send(type, payload); };
     Protocol3::Hello hello;
     hello.name = name;
     // A spectator on a single-race server says Spectate instead of Hello; on a lobby server it says Hello and then picks a race.
@@ -84,15 +81,13 @@ int main(int argc, char** argv)
     std::uint32_t firstTick = 0;
     std::uint32_t verified = 0;
     std::int64_t lastSend = -1000, deadline = NowMs() + 120000;
-    std::uint8_t buffer[4096];
     while (NowMs() < deadline && !gotResult) {
-        const int n = static_cast<int>(recv(s, reinterpret_cast<char*>(buffer), sizeof(buffer), 0));
-        if (n > 0) parser.Feed(buffer, static_cast<std::size_t>(n));
-        else if (n == 0) break;
-        else if (!AuthNet::WouldBlock()) break;
-        std::uint8_t type;
-        std::vector<std::uint8_t> payload;
-        while (parser.Next(type, payload)) {
+        std::vector<AuthFrame> received;
+        const bool open = conn.Pump(received);
+        if (!open && received.empty()) break;
+        for (const AuthFrame& frame : received) {
+            const std::uint8_t type = frame.type;
+            const std::vector<std::uint8_t>& payload = frame.payload;
             using namespace Protocol3;
             if (type == kHelloAck) {
                 HelloAck a;
@@ -191,7 +186,7 @@ int main(int argc, char** argv)
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    AuthNet::CloseSocket(s);
+    conn.Close();
     std::printf("%s (player %d): %u ticks verified, result %s, %s\n", name.c_str(), player, verified, gotResult ? "received" : "MISSING", diverged ? "DIVERGED" : "no divergence");
     return (!diverged && gotResult && verified > 0 && (!spectate || restored)) ? 0 : 1;
 }

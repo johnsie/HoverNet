@@ -74,7 +74,7 @@ No lobby, race or gameplay frame is processed before step 2 succeeds.
 | 20 to 23, 25 | ListRaces, RaceList, HostRace, JoinRace, SpectateRace | lobby | list open races; host a race (track, players, laps, weapons); join or watch one by id |
 | 16 | Result | server to client | ticks, final hash, per player: rank, finished, laps, finish and best lap times |
 
-Not in the code yet: the encrypted session (X25519, Ed25519, ChaCha20-Poly1305) and message counters, the lobby and race
+The encrypted session is implemented, with a simpler key scheme than this draft's first sketch (a pinned server key and X25519, no signatures): see [secure-session.md](secure-session.md). Not in the code yet: the lobby and race
 list messages (still the 2.0 relay's), account tokens, and a separate Events group (lap, pickup and hit events are derived
 from the replayed simulation; the Result is the only authoritative announcement so far). The Resync of the draft is
 SnapshotRequest and SnapshotChunk.

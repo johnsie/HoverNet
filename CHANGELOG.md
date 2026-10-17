@@ -22,6 +22,9 @@ and how to roll one back.
   through the lobby, and anyone can watch a running race a few seconds behind the drivers (`HoverNet --auth-connect HOST:PORT --spectate`). Races support chat,
   blocking and reports; moderators use a loopback console with challenge-response login, and every moderation action goes into a tamper-evident audit log.
   See [docs/online-services.md](docs/online-services.md).
+- **Encrypted, authenticated connections to the authoritative server.** `HoverNetAuthServer --identity-file KEY --require-encryption` serves players over a
+  secure session (ChaCha20-Poly1305 with an X25519 handshake); players pin the server's key with `--server-key`. The cryptography is written out from the RFCs and
+  checked against their test vectors, and has not yet had an independent review. See [docs/specs/secure-session.md](docs/specs/secure-session.md).
 - **Track packages.** `HoverNetTrackPack` wraps a classic track in a versioned, verifiable package with author, licence and hashes without changing the track,
   and imported all 1,012 community tracks. See [docs/specs/track-package.md](docs/specs/track-package.md).
 - Replays can be rewound and fast-forwarded in the game (Left, Right, Home).

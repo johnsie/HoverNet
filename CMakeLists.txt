@@ -170,6 +170,8 @@ add_library(HoverNetSim STATIC
     NetTarget/Authority/TrackPackage.cpp
     NetTarget/Authority/Hmac.cpp
     NetTarget/Authority/Moderation.cpp
+    NetTarget/Authority/Crypto.cpp
+    NetTarget/Authority/SecureChannel.cpp
     NetTarget/Authority/AuthoritativeRace.cpp
     NetTarget/Authority/Protocol3.cpp
     NetTarget/Authority/RaceWorld.cpp
@@ -345,6 +347,7 @@ else()
     endif()
     add_executable(HoverNetAuthBot
         NetTarget/LinuxClient/AuthBot.cpp
+        NetTarget/LinuxClient/AuthConnection.cpp
     )
     target_link_libraries(HoverNetAuthBot PRIVATE HoverNetSim)
     if(WIN32)
@@ -377,6 +380,11 @@ else()
     )
     target_link_libraries(HoverNetLoadTest PRIVATE HoverNetSim)
 
+    add_executable(HoverNetCryptoTest
+        NetTarget/LinuxClient/CryptoTest.cpp
+    )
+    target_link_libraries(HoverNetCryptoTest PRIVATE HoverNetSim)
+
     add_executable(HoverNetSnapshotTest
         NetTarget/LinuxClient/SnapshotTest.cpp
     )
@@ -390,7 +398,7 @@ endif()
 if(EMSCRIPTEN)
     # The simulation-only tools also run as WebAssembly under Node, so the browser build is held to the same replay, snapshot
     # and authority checks as the native builds (no plug-in or resource file is involved: they use HoverNetSim alone).
-    foreach(tool HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest HoverNetLobbyTest HoverNetModerationTest)
+    foreach(tool HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest HoverNetLobbyTest HoverNetModerationTest HoverNetCryptoTest)
         if(tool STREQUAL "HoverNetReplay")
             set(source ReplayTool.cpp)
         elseif(tool STREQUAL "HoverNetSnapshotTest")
@@ -405,6 +413,8 @@ if(EMSCRIPTEN)
             set(source LobbyTest.cpp)
         elseif(tool STREQUAL "HoverNetModerationTest")
             set(source ModerationTest.cpp)
+        elseif(tool STREQUAL "HoverNetCryptoTest")
+            set(source CryptoTest.cpp)
         else()
             set(source PredictionTest.cpp)
         endif()
@@ -587,6 +597,9 @@ if(NOT EMSCRIPTEN)
         NetTarget/Authority/Protocol3.cpp
         NetTarget/Authority/RaceWorld.cpp
         NetTarget/Authority/PredictingClient.cpp
+        NetTarget/Authority/Crypto.cpp
+        NetTarget/Authority/SecureChannel.cpp
+        NetTarget/Authority/Hmac.cpp
     )
     if(WIN32)
         target_link_libraries(HoverNetGame2Player PRIVATE ws2_32)
@@ -752,6 +765,8 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetAuthority COMMAND HoverNetAuthorityTest ClassicH 8)
     add_test(NAME HoverNetAuthorityRiver COMMAND HoverNetAuthorityTest "The River" 8)
     set_tests_properties(HoverNetAuthority HoverNetAuthorityRiver PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetCrypto COMMAND HoverNetCryptoTest)
+    set_tests_properties(HoverNetCrypto PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
     add_test(NAME HoverNetModeration COMMAND HoverNetModerationTest)
     set_tests_properties(HoverNetModeration PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetLoad COMMAND HoverNetLoadTest 4 8 0.5 2)
@@ -798,6 +813,9 @@ if(BUILD_TESTING AND NOT WIN32)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetNetworkConditions
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-network-conditions.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetNetProxy> $<TARGET_FILE:HoverNetGame2Player>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetSecureTcp
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-secure-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetGame2Player>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>

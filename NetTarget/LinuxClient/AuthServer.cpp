@@ -27,6 +27,7 @@
 #include "AuthSocket.h"
 #include "SimHarness.h"
 #include "CrashReporter.h"
+#include "../Authority/SecureChannel.h"
 #include "../Authority/LobbyServer.h"
 #include "../Authority/Moderation.h"
 #include "../Authority/RaceHost.h"
@@ -42,6 +43,18 @@ struct Peer
     int connection = 0;
     std::vector<std::uint8_t> pending;   // bytes not yet accepted by the socket
     std::string address;
+    // Transport security: undecided until the first two bytes arrive, then plain or secure for the life of the connection.
+    bool decided = false;
+    std::vector<std::uint8_t> firstBytes;
+    std::unique_ptr<Secure::Server> secure;
+};
+
+// Whether connections may/must be encrypted, and the server's key.
+struct Security
+{
+    bool enabled = false;                 // an identity is loaded: secure sessions are accepted
+    bool require = false;                 // plain connections are refused
+    std::uint8_t secret[32] = {0};
 };
 
 // Milliseconds since 1970, but advancing with the steady clock: the epoch is read once at start-up, so audit records have real
@@ -68,7 +81,7 @@ bool FlushPeer(Peer& p)
 
 // One pass over the sockets for any server core (RaceHost or LobbyServer): accept, read, advance time, write, reap.
 template <class Core>
-void PumpSockets(Core& core, AuthSocket listener, std::vector<std::unique_ptr<Peer>>& peers, int maxConnections, Moderation* moderation = nullptr)
+void PumpSockets(Core& core, AuthSocket listener, std::vector<std::unique_ptr<Peer>>& peers, int maxConnections, Moderation* moderation, const Security& security)
 {
     // Accept.
         for (;;) {
@@ -97,7 +110,37 @@ void PumpSockets(Core& core, AuthSocket listener, std::vector<std::unique_ptr<Pe
             if (p->socket == kInvalidSocket) continue;
             for (int rounds = 0; rounds < 8; ++rounds) {
                 const int n = static_cast<int>(recv(p->socket, reinterpret_cast<char*>(buffer), sizeof(buffer), 0));
-                if (n > 0) { core.Receive(p->connection, buffer, static_cast<std::size_t>(n), NowMs()); continue; }
+                if (n > 0) {
+                    const std::uint8_t* bytes = buffer;
+                    std::size_t count = static_cast<std::size_t>(n);
+                    std::vector<std::uint8_t> joined;
+                    if (!p->decided) {
+                        // A secure handshake starts "HNS1"; a protocol frame cannot start with "HN" (that length is above the maximum).
+                        p->firstBytes.insert(p->firstBytes.end(), bytes, bytes + count);
+                        if (p->firstBytes.size() < 2) continue;
+                        p->decided = true;
+                        joined.swap(p->firstBytes);
+                        bytes = joined.data();
+                        count = joined.size();
+                        if (security.enabled && Secure::Server::LooksLikeHandshake(bytes, count) && bytes[0] == 'H' && bytes[1] == 'N') {
+                            p->secure.reset(new Secure::Server(security.secret));
+                        }
+                        else if (security.require) {
+                            core.Disconnect(p->connection);   // plain connections are not accepted here
+                            break;
+                        }
+                    }
+                    if (p->secure) {
+                        std::vector<std::uint8_t> plain, reply;
+                        if (!p->secure->Feed(bytes, count, plain, reply)) { core.Disconnect(p->connection); break; }
+                        p->pending.insert(p->pending.end(), reply.begin(), reply.end());
+                        if (!plain.empty()) core.Receive(p->connection, plain.data(), plain.size(), NowMs());
+                    }
+                    else {
+                        core.Receive(p->connection, bytes, count, NowMs());
+                    }
+                    continue;
+                }
                 if (n == 0 || !AuthNet::WouldBlock()) core.Disconnect(p->connection);
                 break;
             }
@@ -107,7 +150,12 @@ void PumpSockets(Core& core, AuthSocket listener, std::vector<std::unique_ptr<Pe
         for (auto& p : peers) {
             if (p->socket == kInvalidSocket) continue;
             const std::vector<std::uint8_t> out = core.TakeOutput(p->connection);
-            p->pending.insert(p->pending.end(), out.begin(), out.end());
+            if (p->secure && p->secure->Ready()) {
+                if (!out.empty()) { const std::vector<std::uint8_t> sealed = p->secure->Seal(out.data(), out.size()); p->pending.insert(p->pending.end(), sealed.begin(), sealed.end()); }
+            }
+            else if (!p->secure) {
+                p->pending.insert(p->pending.end(), out.begin(), out.end());
+            }
             const bool ok = FlushPeer(*p);
             if (!ok || (core.IsClosed(p->connection) && p->pending.empty())) { AuthNet::CloseSocket(p->socket); p->socket = kInvalidSocket; }
             else if (p->pending.size() > (1u << 20)) { core.Disconnect(p->connection); }     // a client that does not read is dropped
@@ -275,6 +323,8 @@ int main(int argc, char** argv)
     int statusPort = -1;
     std::string crashDir;
     bool crashTest = false;
+    std::string identityFile;
+    bool requireEncryption = false;
     std::string trackList;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -295,6 +345,8 @@ int main(int argc, char** argv)
         else if (a == "--status-port") statusPort = std::atoi(value());
         else if (a == "--crash-dir") crashDir = value();
         else if (a == "--crash-test") crashTest = true;
+        else if (a == "--identity-file") identityFile = value();
+        else if (a == "--require-encryption") requireEncryption = true;
         else if (a == "--spectator-delay-ms") cfg.spectatorDelayMs = std::atoi(value());
         else if (a == "--tracks") trackList = value();
         else if (a == "--no-weapons") cfg.race.weapons = false;
@@ -308,6 +360,18 @@ int main(int argc, char** argv)
     MR_DllObjectFactory::MR_DllObjectFactoryCleanup factoryCleanup;
     if (!AuthNet::Startup()) { std::fprintf(stderr, "network start-up failed\n"); return 1; }
 
+    Security security;
+    if (!identityFile.empty()) {
+        std::string error;
+        if (!Secure::LoadOrCreateIdentity(identityFile, security.secret, error)) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }
+        security.enabled = true;
+        std::uint8_t publicKey[32];
+        Crypto::X25519Public(publicKey, security.secret);
+        std::printf("server key %s\n", Crypto::ToHex(publicKey, 32).c_str());
+        std::fflush(stdout);
+    }
+    security.require = requireEncryption;
+    if (requireEncryption && !security.enabled) { std::fprintf(stderr, "--require-encryption needs --identity-file\n"); return 2; }
     int boundPort = 0;
     AuthSocket listener = AuthNet::Listen(bind, port, boundPort);
     if (listener == kInvalidSocket) { std::fprintf(stderr, "cannot listen on %s:%d\n", bind.c_str(), port); return 1; }
@@ -393,7 +457,7 @@ int main(int argc, char** argv)
         metricsText = [&]() { return RenderMetrics(lobby.TotalMetrics(), static_cast<unsigned long long>(lobby.RaceCount()), lobby.RacesHosted(), static_cast<unsigned long long>(lobby.OpenConnections()), NowMs() - serverStart); };
         std::vector<std::unique_ptr<Peer>> lobbyPeers;
         for (;;) {
-            PumpSockets(lobby, listener, lobbyPeers, maxConnections, moderation.get());
+            PumpSockets(lobby, listener, lobbyPeers, maxConnections, moderation.get(), security);
             housekeeping();
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
@@ -409,7 +473,7 @@ int main(int argc, char** argv)
     metricsText = [&]() { return RenderMetrics(host->GetMetrics(), 1, 1, static_cast<unsigned long long>(peers.size()), NowMs() - serverStart); };
     std::int64_t raceEndedAt = -1;
     for (;;) {
-        PumpSockets(*host, listener, peers, maxConnections, moderation.get());
+        PumpSockets(*host, listener, peers, maxConnections, moderation.get(), security);
         housekeeping();
 
         if (host->RaceFinished()) {
