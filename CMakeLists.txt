@@ -172,6 +172,7 @@ add_library(HoverNetSim STATIC
     NetTarget/Authority/RaceWorld.cpp
     NetTarget/Authority/PredictingClient.cpp
     NetTarget/Authority/RaceHost.cpp
+    NetTarget/Authority/LobbyServer.cpp
     NetTarget/LinuxClient/Sha256.cpp
 )
 
@@ -338,6 +339,11 @@ else()
     )
     target_link_libraries(HoverNetPredictionTest PRIVATE HoverNetSim)
 
+    add_executable(HoverNetLobbyTest
+        NetTarget/LinuxClient/LobbyTest.cpp
+    )
+    target_link_libraries(HoverNetLobbyTest PRIVATE HoverNetSim)
+
     add_executable(HoverNetSnapshotTest
         NetTarget/LinuxClient/SnapshotTest.cpp
     )
@@ -351,7 +357,7 @@ endif()
 if(EMSCRIPTEN)
     # The simulation-only tools also run as WebAssembly under Node, so the browser build is held to the same replay, snapshot
     # and authority checks as the native builds (no plug-in or resource file is involved: they use HoverNetSim alone).
-    foreach(tool HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest)
+    foreach(tool HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest HoverNetLobbyTest)
         if(tool STREQUAL "HoverNetReplay")
             set(source ReplayTool.cpp)
         elseif(tool STREQUAL "HoverNetSnapshotTest")
@@ -362,6 +368,8 @@ if(EMSCRIPTEN)
             set(source AuthorityTest.cpp)
         elseif(tool STREQUAL "HoverNetProtocolTest")
             set(source ProtocolTest.cpp)
+        elseif(tool STREQUAL "HoverNetLobbyTest")
+            set(source LobbyTest.cpp)
         else()
             set(source PredictionTest.cpp)
         endif()
@@ -709,6 +717,8 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetAuthority COMMAND HoverNetAuthorityTest ClassicH 8)
     add_test(NAME HoverNetAuthorityRiver COMMAND HoverNetAuthorityTest "The River" 8)
     set_tests_properties(HoverNetAuthority HoverNetAuthorityRiver PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetLobby COMMAND HoverNetLobbyTest)
+    set_tests_properties(HoverNetLobby PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetProtocol COMMAND HoverNetProtocolTest ClassicH 8)
     set_tests_properties(HoverNetProtocol PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetAuthServerTcp
@@ -728,6 +738,9 @@ if(BUILD_TESTING AND NOT WIN32)
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-authclient.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetGame2Player> 4 600 "The River"
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     set_tests_properties(HoverNetAuthClientReconnect PROPERTIES ENVIRONMENT "AUTH_DROP=200")
+    add_test(NAME HoverNetLobbyTcp
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-lobby-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> 400
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

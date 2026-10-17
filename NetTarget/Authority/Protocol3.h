@@ -32,6 +32,10 @@ enum Type : std::uint8_t
     kPing = 14,
     kPong = 15,
     kResult = 16,
+    kListRaces = 20,
+    kRaceList = 21,
+    kHostRace = 22,
+    kJoinRace = 23,
 };
 
 enum RejectReason : std::uint8_t
@@ -41,6 +45,9 @@ enum RejectReason : std::uint8_t
     kBadMessage = 3,
     kRateLimited = 4,
     kNotInRace = 5,
+    kNoSuchRace = 6,
+    kBadSettings = 7,
+    kTooManyRaces = 8,
 };
 
 // ---- framing -----------------------------------------------------------------------------------------------
@@ -80,6 +87,10 @@ struct SnapshotChunk { std::uint32_t id = 0; std::uint16_t index = 0, count = 0;
 struct Ping { std::uint32_t clientTick = 0, token = 0; };
 struct Pong { std::uint32_t clientTick = 0, token = 0, serverTick = 0; };
 struct PlayerResult { std::uint8_t player = 0, rank = 0; bool finished = false; std::uint8_t laps = 0; std::int32_t finishTimeMs = 0, bestLapMs = 0; };
+struct RaceInfo { std::uint32_t id = 0; std::string track; std::uint8_t players = 0, joined = 0, laps = 0; bool weapons = true, started = false; };
+struct RaceList { std::vector<RaceInfo> races; };
+struct HostRace { std::string track; std::uint8_t players = 2, laps = 3; bool weapons = true; };
+struct JoinRace { std::uint32_t id = 0; };
 struct Result { std::uint32_t ticks = 0; std::uint64_t finalHash = 0; std::vector<PlayerResult> players; };
 
 std::vector<std::uint8_t> Encode(const Hello&);
@@ -94,6 +105,9 @@ std::vector<std::uint8_t> Encode(const SnapshotChunk&);
 std::vector<std::uint8_t> Encode(const Ping&);
 std::vector<std::uint8_t> Encode(const Pong&);
 std::vector<std::uint8_t> Encode(const Result&);
+std::vector<std::uint8_t> Encode(const RaceList&);
+std::vector<std::uint8_t> Encode(const HostRace&);
+std::vector<std::uint8_t> Encode(const JoinRace&);
 
 // Each returns false for anything malformed (wrong size, bad count, bad text) and leaves the output unspecified.
 bool Decode(const std::vector<std::uint8_t>& payload, Hello&);
@@ -108,6 +122,9 @@ bool Decode(const std::vector<std::uint8_t>& payload, SnapshotChunk&);
 bool Decode(const std::vector<std::uint8_t>& payload, Ping&);
 bool Decode(const std::vector<std::uint8_t>& payload, Pong&);
 bool Decode(const std::vector<std::uint8_t>& payload, Result&);
+bool Decode(const std::vector<std::uint8_t>& payload, RaceList&);
+bool Decode(const std::vector<std::uint8_t>& payload, HostRace&);
+bool Decode(const std::vector<std::uint8_t>& payload, JoinRace&);
 
 // Text fields (names, track names, messages): UTF-8, one line, no control bytes, at most `maxBytes`. Rejects overlong
 // forms, surrogates, code points above U+10FFFF and truncated sequences.

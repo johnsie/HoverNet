@@ -222,4 +222,42 @@ bool Decode(const std::vector<std::uint8_t>& p, Result& m)
     }
     return in.Done();
 }
+
+std::vector<std::uint8_t> Encode(const RaceList& m)
+{
+    Out o;
+    o.U8(static_cast<std::uint32_t>(m.races.size()));
+    for (const RaceInfo& r : m.races) { o.U32(r.id); o.Str(r.track); o.U8(r.players); o.U8(r.joined); o.U8(r.laps); o.U8(r.weapons ? 1 : 0); o.U8(r.started ? 1 : 0); }
+    return o.b;
+}
+bool Decode(const std::vector<std::uint8_t>& p, RaceList& m)
+{
+    In in(p);
+    const std::uint32_t count = in.U8();
+    if (!in.ok || count > 32) return false;
+    m.races.clear();
+    for (std::uint32_t i = 0; i < count && in.ok; ++i) {
+        RaceInfo r;
+        r.id = in.U32(); r.track = in.Str(64); r.players = static_cast<std::uint8_t>(in.U8()); r.joined = static_cast<std::uint8_t>(in.U8());
+        r.laps = static_cast<std::uint8_t>(in.U8());
+        const std::uint32_t w = in.U8(), st = in.U8();
+        if (w > 1 || st > 1 || r.players < 1 || r.players > 8 || r.joined > r.players) return false;
+        r.weapons = w != 0; r.started = st != 0;
+        m.races.push_back(r);
+    }
+    return in.Done();
+}
+
+std::vector<std::uint8_t> Encode(const HostRace& m) { Out o; o.Str(m.track); o.U8(m.players); o.U8(m.laps); o.U8(m.weapons ? 1 : 0); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, HostRace& m)
+{
+    In in(p);
+    m.track = in.Str(64); m.players = static_cast<std::uint8_t>(in.U8()); m.laps = static_cast<std::uint8_t>(in.U8());
+    const std::uint32_t w = in.U8();
+    m.weapons = w != 0;
+    return in.Done() && w <= 1 && !m.track.empty();
+}
+
+std::vector<std::uint8_t> Encode(const JoinRace& m) { Out o; o.U32(m.id); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, JoinRace& m) { In in(p); m.id = in.U32(); return in.Done(); }
 }

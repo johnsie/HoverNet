@@ -128,12 +128,13 @@ build:game:web:
         scripts/test-physics.sh "node $WEB_BUILD_DIR/HoverNetDeterminismRun.js"
         # The replay, snapshot, authority, protocol and prediction suites on WebAssembly too: a replay or a snapshot made on
         # any platform must mean the same race in the browser (docs/determinism.md, docs/authoritative-race.md).
-        cmake --build "$WEB_BUILD_DIR" --target HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+        cmake --build "$WEB_BUILD_DIR" --target HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest HoverNetLobbyTest --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
         scripts/test-replay.sh "node $WEB_BUILD_DIR/HoverNetReplay.js"
         scripts/test-snapshot.sh "node $WEB_BUILD_DIR/HoverNetSnapshotTest.js"
         node "$WEB_BUILD_DIR/HoverNetFrameRateTest.js" ClassicH 1500
         node "$WEB_BUILD_DIR/HoverNetAuthorityTest.js" ClassicH 8
         node "$WEB_BUILD_DIR/HoverNetProtocolTest.js" ClassicH 8
+        node "$WEB_BUILD_DIR/HoverNetLobbyTest.js"
         node "$WEB_BUILD_DIR/HoverNetPredictionTest.js" ClassicH 8 60
         mkdir -p dist/web
         cp "$WEB_BUILD_DIR/HoverNet.html" dist/web/index.html

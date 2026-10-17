@@ -89,6 +89,13 @@ std::vector<std::uint8_t> RaceHost::TakeOutput(int connection)
     return out;
 }
 
+bool RaceHost::OwnsResumeToken(std::uint64_t token) const
+{
+    if (token == 0) return false;
+    for (std::uint64_t t : mTokens) if (t == token) return true;
+    return false;
+}
+
 int RaceHost::ConnectedPlayers() const
 {
     int n = 0;

@@ -59,6 +59,10 @@ public:
     const Metrics& GetMetrics() const { return mMetrics; }
 
     bool Started() const { return mStarted; }
+    int PlayerSlots() const { return mConfig.race.players; }
+    const HostConfig& Config() const { return mConfig; }
+    bool OwnsResumeToken(std::uint64_t token) const;
+    bool Full() const { return ConnectedPlayers() >= mConfig.race.players; }
     bool RaceFinished() const { return mRace.Finished(); }
     const AuthoritativeRace& Race() const { return mRace; }
     int ConnectedPlayers() const;

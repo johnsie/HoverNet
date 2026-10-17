@@ -123,6 +123,27 @@ exactly as the server simulates them.
 real game client in a headless window: the client verifies every Tick's hash and about 230 restore checks per race with no
 failures, on four tracks at eight players, with a forced disconnect and reconnect, on Linux (also under ASan/UBSan).
 
+## Many races: the lobby
+
+`LobbyServer` (`NetTarget/Authority/LobbyServer.*`, transport-free like `RaceHost`) puts many authoritative races behind one door, and
+`HoverNetAuthServer --lobby [--tracks "ClassicH,The River"] [--replay-dir DIR]` serves it over TCP.
+
+- A connection says Hello and receives the list of open races (id, track, players joined of players wanted, laps, weapons,
+  started). It then **hosts** a race (`HostRace`: a track the operator allows, 2 to 8 players, 1 to 10 laps, weapons on or off) or
+  **joins** one by id (`JoinRace`). From then on its frames go to that race's host unchanged and the conversation is exactly the
+  single-race one (HelloAck, Start, Tick, Result).
+- A returning player sends `Resume` with the token instead of Hello and is routed to the race that issued it.
+- Races are independent: each has its own simulation, limits and replay. Two races running side by side end in exactly the state a
+  standalone race with the same inputs ends in. Finished races linger 15 seconds (late Result, reconnect) and are removed;
+  abandoned races that never started are removed too; the server caps races (16) and connections (256).
+- Refused with a reason: a track the operator does not allow (including names that try to leave the track directory), bad player or
+  lap counts, an unknown, full or already running race, an old protocol version, a request before Hello, a flood of lobby requests, a
+  connection that never says Hello, and too many races.
+
+Tests: `HoverNetLobbyTest` (in memory, ctest `HoverNetLobby`, also as WebAssembly) and `scripts/test-lobby-tcp.sh` (ctest
+`HoverNetLobbyTcp`): nine scripted players host and join three races on three tracks over real TCP; every player verifies every tick
+and the server saves three replays. Linux and Windows x64.
+
 ## Reconnect, tampering, bandwidth and metrics
 
 - **Reconnect.** The HelloAck carries a random resume token for the player's slot. A player who drops keeps the slot (the craft
@@ -161,7 +182,7 @@ a new one when the race ends (`--once` for tests). Options: `--track`, `--player
 
 ## Not built yet
 
-Many races at once and a lobby around `RaceHost`; screens in the game for choosing a server (today it is a command line option); the
+Screens in the game for browsing and choosing races and servers (the lobby protocol exists, the game's command line option still takes one race); screens in the game for choosing a server (today it is a command line option); the
 WebSocket gateway and a browser path for protocol 3.0; authenticated encryption and server identity; account or guest identity;
 a monitoring endpoint, tracing and crash reports (the counters exist); delta coding and compression of the Tick stream; the
 multi-day soak and load runs of the Stage 2 exit gate (the TCP test with a large tick count is the soak); regional pools and rolling

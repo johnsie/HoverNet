@@ -200,7 +200,7 @@ jobs:
         run: |
           # The same golden hashes, replay and snapshot bytes as Linux and WebAssembly (docs/determinism.md): any
           # difference between platforms fails here.
-          cmake --build build/windows-shared --target HoverNetDeterminismRun HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetAuthServer HoverNetAuthBot --config Release --parallel 2
+          cmake --build build/windows-shared --target HoverNetDeterminismRun HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetLobbyTest HoverNetAuthServer HoverNetAuthBot --config Release --parallel 2
           bin=build/windows-shared/Release
           scripts/test-determinism.sh "$bin/HoverNetDeterminismRun.exe"
           scripts/test-physics.sh "$bin/HoverNetDeterminismRun.exe"
@@ -209,6 +209,8 @@ jobs:
           "$bin/HoverNetFrameRateTest.exe" ClassicH 1500
           "$bin/HoverNetAuthorityTest.exe" ClassicH 8
           "$bin/HoverNetProtocolTest.exe" ClassicH 8
+          "$bin/HoverNetLobbyTest.exe"
+          scripts/test-lobby-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 400
           HOVERNET_REPLAY_TOOL="$bin/HoverNetReplay.exe" scripts/test-authserver.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 8 500
           scripts/test-replay-viewer.sh "$bin/HoverNetReplay.exe" "$bin/HoverNet.exe"
           scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 8 400

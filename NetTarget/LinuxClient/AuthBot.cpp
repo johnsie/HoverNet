@@ -29,6 +29,7 @@ int main(int argc, char** argv)
 {
     std::string host = "127.0.0.1", name = "bot", track = "ClassicH";
     int port = 9610, lead = 12;
+    std::string hostTrack, joinTrack;   // lobby servers: host a race ('Track:players[:laps]') or join an open race on a track
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto value = [&]() -> const char* { return i + 1 < argc ? argv[++i] : ""; };
@@ -37,6 +38,8 @@ int main(int argc, char** argv)
         else if (a == "--name") name = value();
         else if (a == "--track") track = value();
         else if (a == "--lead") lead = std::atoi(value());
+        else if (a == "--host-race") hostTrack = value();
+        else if (a == "--join-race") joinTrack = value();
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     }
     MR_InitTrigoTables();
@@ -66,7 +69,7 @@ int main(int argc, char** argv)
 
     SimHarness::World world;
     int player = -1, players = 0;
-    bool started = false, gotResult = false, diverged = false, built = false;
+    bool started = false, gotResult = false, diverged = false, built = false, lobbyDone = false;
     std::uint32_t verified = 0;
     std::int64_t lastSend = -1000, deadline = NowMs() + 120000;
     std::uint8_t buffer[4096];
@@ -85,6 +88,34 @@ int main(int argc, char** argv)
                 player = a.player; players = a.players;
                 built = world.Build(SimHarness::TrackPath(a.track), a.track, players, a.laps, a.weapons);
                 if (!built) { std::fprintf(stderr, "cannot build the race\n"); return 1; }
+            }
+            else if (type == kRaceList && !lobbyDone) {
+                RaceList list;
+                if (!Decode(payload, list)) { std::fprintf(stderr, "bad race list\n"); return 1; }
+                lobbyDone = true;
+                if (!hostTrack.empty()) {
+                    HostRace h;
+                    std::vector<std::string> parts;
+                    std::string part;
+                    for (char ch : hostTrack + ":") { if (ch == ':') { parts.push_back(part); part.clear(); } else part += ch; }
+                    h.track = parts[0];
+                    h.players = static_cast<std::uint8_t>(parts.size() > 1 && !parts[1].empty() ? std::atoi(parts[1].c_str()) : 2);
+                    h.laps = static_cast<std::uint8_t>(parts.size() > 2 && !parts[2].empty() ? std::atoi(parts[2].c_str()) : 3);
+                    track = h.track;
+                    if (!sendFrame(kHostRace, Encode(h))) return 1;
+                }
+                else {
+                    bool joined = false;
+                    for (const RaceInfo& r : list.races) {
+                        if (r.started || r.joined >= r.players || (!joinTrack.empty() && r.track != joinTrack)) continue;
+                        JoinRace j;
+                        j.id = r.id;
+                        if (!sendFrame(kJoinRace, Encode(j))) return 1;
+                        joined = true;
+                        break;
+                    }
+                    if (!joined) { std::fprintf(stderr, "no open race to join\n"); return 1; }
+                }
             }
             else if (type == kStart) started = true;
             else if (type == kTick && built) {
