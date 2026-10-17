@@ -8,7 +8,7 @@ and how to roll one back.
 
 ## 2.1.0 - 2026-10-17
 
-This release adds the HoverNet 3.0 server-side groundwork (authoritative server, lobby, private races, time trials, WebSocket transport, replay tools, signing tool). The desktop game has a HoverNet Servers screen for it; there is no browser client for protocol 3.0 yet, so the web build has no such screen; the deployed 2.0 race server is unchanged.
+This release adds the HoverNet 3.0 server-side groundwork (authoritative server, lobby, private races, time trials, WebSocket transport, replay tools, signing tool). The desktop game and the browser game both have a HoverNet Servers screen for it; the deployed 2.0 race server is unchanged.
 
 ### Added
 - `scripts/soak-authserver.sh`: a real-time soak of the authoritative server (rounds of eight-player races with scripted bots over TCP, memory and health sampled). One 60-minute run: 69 races, no failure, no memory growth; the multi-day gate is still open.
