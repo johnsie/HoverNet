@@ -1,3 +1,8 @@
+// Provenance and licence: these classes are the simulation half of the track elements of HoverRace's ObjFac1 (Missile.cpp, Mine.cpp,
+// PowerUp.cpp, BumperGate.cpp, TestElement.cpp, BitmapSurface.cpp), reorganised for HoverNet. They are derived from source distributed under the
+// GrokkSoft HoverRace SourceCode License v1.0 (see LICENSE), and the conditions of that licence apply to this file.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-10-17.
+// See repository history for authorship and detailed changes.
 // SimElements.h
 //
 // The simulation half of the track elements that take part in a race: surfaces, power-ups, bumper gates, missiles

@@ -1,3 +1,5 @@
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-10-17.
+// See repository history for authorship and detailed changes.
 // MainCharacterView.cpp
 //
 // The presentation side of the hovercraft: its renderer, its sounds and the drawing call. The simulation

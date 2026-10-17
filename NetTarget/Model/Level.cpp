@@ -1,3 +1,5 @@
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-10-17.
+// See repository history for authorship and detailed changes.
 // Level.cpp
 //
 // Copyright (c) 1995-1998 - Richard Langlois and Grokksoft Inc.
