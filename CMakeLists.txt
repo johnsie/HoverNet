@@ -583,6 +583,31 @@ add_executable(HoverNetObserverChatRenderSmoke
 add_dependencies(HoverNetObserverChatRenderSmoke HoverNetHeadlessObjFac1)
 target_link_libraries(HoverNetObserverChatRenderSmoke PRIVATE HoverNetObserver HoverNetClientSession)
 
+if(EMSCRIPTEN)
+    # The same renderer check as WebAssembly under Node (the object factory is compiled in, as in the browser client).
+    add_executable(HoverNetRenderGolden
+        NetTarget/LinuxClient/RenderGoldenRun.cpp
+        NetTarget/LinuxClient/WebFactory.cpp
+        NetTarget/ObjFac1/LinuxPlugin.cpp
+        NetTarget/ObjFac1/SimElements.cpp
+        NetTarget/ObjFac1/FuelSource.cpp
+        NetTarget/ObjFac1/DoubleSpeedSource.cpp
+        NetTarget/ObjFac1/FinishLine.cpp
+    )
+    target_compile_definitions(HoverNetRenderGolden PRIVATE HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    target_link_libraries(HoverNetRenderGolden PRIVATE HoverNetObserver HoverNetClientSession)
+    target_link_options(HoverNetRenderGolden PRIVATE -sNODERAWFS=1 -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=node)
+    set_target_properties(HoverNetRenderGolden PROPERTIES SUFFIX ".js")
+endif()
+if(NOT EMSCRIPTEN)
+    # The classic renderer's output for fixed scenes, as hashes (docs/render-golden.md).
+    add_executable(HoverNetRenderGolden
+        NetTarget/LinuxClient/RenderGoldenRun.cpp
+    )
+    add_dependencies(HoverNetRenderGolden HoverNetHeadlessObjFac1)
+    target_link_libraries(HoverNetRenderGolden PRIVATE HoverNetObserver HoverNetClientSession)
+endif()
+
 add_executable(HoverNetLobby
     NetTarget/LinuxClient/LobbyCli.cpp
 )
@@ -802,6 +827,10 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetDeterminism
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-determinism.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    # The classic renderer draws fixed scenes to the committed hashes (docs/render-golden.md).
+    add_test(NAME HoverNetRenderGolden
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-render-golden.sh $<TARGET_FILE:HoverNetRenderGolden>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     # Netcode prototype at the roadmap's two latency targets (120 ms / 2% loss, 250 ms / 5% loss): both clients must
     # converge to the ideal run bit for bit.
     add_test(NAME HoverNetNetcodeTarget120 COMMAND HoverNetNetcodeProto ClassicH 1200 120 2 --jitter=10)
@@ -864,6 +893,9 @@ if(BUILD_TESTING AND NOT WIN32)
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetOnlineScreenClicks
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-online-screen-clicks.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetRaceView
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-race-view.sh $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetPersonalBestsFlow
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-personal-bests.sh $<TARGET_FILE:HoverNetGame2Player>

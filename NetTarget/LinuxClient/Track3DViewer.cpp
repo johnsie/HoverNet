@@ -328,6 +328,10 @@ namespace
 int kWidth = 1024;
 int kHeight = 768;
 
+#ifdef HOVERNET_GAME2_PLAYER
+void ApplyRaceViewSetting(int& width, int& height);   // the player's "Race view" setting (defined with the other saved settings)
+#endif
+
 void ConfigureGameResolution()
 {
     int testW = 0, testH = 0;
@@ -352,7 +356,11 @@ void ConfigureGameResolution()
         const double aspect = std::max(4.0 / 3.0, std::min(2.4, hovernet_js_landscape_aspect_x1000() / 1000.0));
         kWidth = 960;
         kHeight = static_cast<int>(kWidth / aspect + 0.5) & ~1;
+        return;
     }
+#endif
+#ifdef HOVERNET_GAME2_PLAYER
+    ApplyRaceViewSetting(kWidth, kHeight);
 #endif
 }
 
@@ -1545,6 +1553,70 @@ void SaveWindowSize(const WindowSize& size)
 {
     std::ofstream out(WindowSizePath());
     out << size.width << ' ' << size.height << '\n';
+}
+
+// Race view: the shape of the picture the race is drawn in. The software renderer draws any shape (measured: 1920x1080 in about 6 ms; see
+// docs/render-golden.md) and shows the same horizontal view with less above and below, so a wide window can be filled instead of
+// pillarboxed. Applied when the game starts.
+enum class RaceView { eClassic, eWidescreen, eMatchWindow };
+
+std::string RaceViewPath()
+{
+    return ConfigDirPath() + "/race_view";
+}
+
+RaceView LoadRaceView()
+{
+    std::ifstream in(RaceViewPath());
+    std::string word;
+    if (in >> word) {
+        if (word == "wide") return RaceView::eWidescreen;
+        if (word == "window") return RaceView::eMatchWindow;
+    }
+    return RaceView::eClassic;
+}
+
+void SaveRaceView(RaceView view)
+{
+    std::ofstream out(RaceViewPath());
+    out << (view == RaceView::eWidescreen ? "wide" : view == RaceView::eMatchWindow ? "window" : "classic") << '\n';
+}
+
+// The picture size for a window of the given shape: 1280 wide, as tall as the shape asks, between 4:3 and 2.4:1 (a very wide window gets
+// bars rather than a sliver of a view). Close to 4:3 is the classic 1024x768, so such a window sees no change.
+void RaceViewSizeForWindow(int windowWidth, int windowHeight, int& width, int& height)
+{
+    if (windowWidth <= 0 || windowHeight <= 0) return;
+    const double aspect = std::max(4.0 / 3.0, std::min(2.4, static_cast<double>(windowWidth) / windowHeight));
+    if (aspect < 1.4) return;   // keep the classic size
+    width = 1280;
+    height = static_cast<int>(width / aspect + 0.5) & ~1;
+}
+
+void ApplyRaceViewSetting(int& width, int& height)
+{
+    switch (LoadRaceView()) {
+    case RaceView::eClassic:
+        return;
+    case RaceView::eWidescreen:
+        width = 1280;
+        height = 720;
+        return;
+    case RaceView::eMatchWindow: {
+#ifdef HOVERNET_WEB
+        const int browserWindow = hovernet_js_window_size();
+        RaceViewSizeForWindow(browserWindow >> 16, browserWindow & 0xffff, width, height);
+#else
+        int windowWidth = LoadWindowSize().width, windowHeight = LoadWindowSize().height;
+        if (LoadFullscreen() && SDL_InitSubSystem(SDL_INIT_VIDEO) == 0) {
+            SDL_DisplayMode mode;
+            if (SDL_GetDesktopDisplayMode(0, &mode) == 0) { windowWidth = mode.w; windowHeight = mode.h; }
+        }
+        RaceViewSizeForWindow(windowWidth, windowHeight, width, height);
+#endif
+        return;
+    }
+    }
 }
 
 std::string UiScalePath()
@@ -4122,6 +4194,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     float uiScalePercent = currentUiScale * 100.0f;
     bool applyUiScale = false;
     bool largeHudText = LoadLargeHudText();
+    RaceView raceView = LoadRaceView();
     bool reducedMotion = LoadReducedMotion();
     const bool currentHighContrast = LoadHighContrast();
     bool highContrast = currentHighContrast;
@@ -4247,6 +4320,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         // force scrolling while the screen still has unused space below.
         // Phones: the Save/Cancel row is pinned under the scrolling panel so it never needs a scroll.
         ImGui::BeginChild("SettingsPanel", ImVec2(centerWidth, phoneHeader ? -52.0f : 0.0f), true);
+        if (const char* testScroll = std::getenv("HOVERNET_TEST_SETTINGS_SCROLL")) { if (framesShown >= 2) ImGui::SetScrollY(static_cast<float>(std::atoi(testScroll))); }   // screenshot tests: look further down
 
         ImGui::TextUnformatted("Display Name");
         ImGui::PushItemWidth(-1.0f);
@@ -4366,6 +4440,23 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Separator();
         ImGui::Spacing();
 
+        if (!HoverNetIsTouchDevice()) {   // phones and tablets always use a picture shaped like their screen
+            ImGui::TextUnformatted("Race view");
+            static const char* const raceViewLabels[] = {"Classic (4:3)", "Widescreen (16:9)", "Match my window"};
+            ImGui::PushItemWidth(-1.0f);
+            if (ImGui::BeginCombo("##RaceView", raceViewLabels[static_cast<int>(raceView)])) {
+                for (int index = 0; index < 3; ++index) {
+                    if (ImGui::Selectable(raceViewLabels[index], static_cast<int>(raceView) == index)) raceView = static_cast<RaceView>(index);
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopItemWidth();
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("The shape of the picture while racing. Takes effect the next time you start HoverNet.");
+            ImGui::PopTextWrapPos();
+            ImGui::Spacing();
+        }
+
 #ifdef HOVERNET_WEB
         // Browser: size the gameplay area inside the page (the browser window itself is not resized).
         if (!HoverNetIsTouchDevice()) {
@@ -4447,6 +4538,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             muted = false;
             uiScalePercent = 100.0f;
             largeHudText = false;
+            raceView = RaceView::eClassic;
             reducedMotion = false;
             highContrast = false;
             selectedResolution = 0;
@@ -4505,6 +4597,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        CaptureFrameIfRequested(renderer, framesShown, pFrameLimit);
         SDL_RenderPresent(renderer);
         SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
         if (applyUiScale) {
@@ -4540,6 +4633,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
     }
 
+    if (!cancelled) SaveRaceView(raceView);
 #if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
     if (!cancelled) {
         AuthServerSettings chosen;   // the official server unless an address was typed
@@ -6566,6 +6660,7 @@ int RunClient(int argc, char** argv)
     gControllerBindings = LoadControllerBindings();
 #endif
     ConfigureGameResolution();
+    if (std::getenv("HOVERNET_TEST_PRINT_RES") != nullptr) { std::printf("RACEVIEW %dx%d\n", kWidth, kHeight); std::fflush(stdout); }   // test hook (scripts/test-race-view.sh)
     MR_VideoBuffer buffer(nullptr, 1.0, 0.5, 0.5);
     if (!buffer.SetVideoMode(kWidth, kHeight) || !buffer.Lock()) {
         return FatalClientError("Could not create the 3D framebuffer.");

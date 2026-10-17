@@ -144,6 +144,9 @@ build:game:web:
         cmake --build "$WEB_BUILD_DIR" --target HoverNetDeterminismRun --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
         scripts/test-determinism.sh "node $WEB_BUILD_DIR/HoverNetDeterminismRun.js"
         scripts/test-physics.sh "node $WEB_BUILD_DIR/HoverNetDeterminismRun.js"
+        # The renderer too: the WebAssembly build must draw the fixed scenes to the committed hashes (docs/render-golden.md).
+        cmake --build "$WEB_BUILD_DIR" --target HoverNetRenderGolden --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+        scripts/test-render-golden.sh "node $WEB_BUILD_DIR/HoverNetRenderGolden.js"
         # The replay, snapshot, authority, protocol and prediction suites on WebAssembly too: a replay or a snapshot made on
         # any platform must mean the same race in the browser (docs/determinism.md, docs/authoritative-race.md).
         cmake --build "$WEB_BUILD_DIR" --target HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest HoverNetLobbyTest HoverNetModerationTest HoverNetCryptoTest --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
