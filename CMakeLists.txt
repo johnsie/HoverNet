@@ -364,6 +364,11 @@ else()
     )
     target_link_libraries(HoverNetModerationTest PRIVATE HoverNetSim)
 
+    add_executable(HoverNetLoadTest
+        NetTarget/LinuxClient/LoadTest.cpp
+    )
+    target_link_libraries(HoverNetLoadTest PRIVATE HoverNetSim)
+
     add_executable(HoverNetSnapshotTest
         NetTarget/LinuxClient/SnapshotTest.cpp
     )
@@ -377,7 +382,7 @@ endif()
 if(EMSCRIPTEN)
     # The simulation-only tools also run as WebAssembly under Node, so the browser build is held to the same replay, snapshot
     # and authority checks as the native builds (no plug-in or resource file is involved: they use HoverNetSim alone).
-    foreach(tool HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest HoverNetLobbyTest)
+    foreach(tool HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest HoverNetLobbyTest HoverNetModerationTest)
         if(tool STREQUAL "HoverNetReplay")
             set(source ReplayTool.cpp)
         elseif(tool STREQUAL "HoverNetSnapshotTest")
@@ -390,6 +395,8 @@ if(EMSCRIPTEN)
             set(source ProtocolTest.cpp)
         elseif(tool STREQUAL "HoverNetLobbyTest")
             set(source LobbyTest.cpp)
+        elseif(tool STREQUAL "HoverNetModerationTest")
+            set(source ModerationTest.cpp)
         else()
             set(source PredictionTest.cpp)
         endif()
@@ -739,6 +746,8 @@ if(BUILD_TESTING AND NOT WIN32)
     set_tests_properties(HoverNetAuthority HoverNetAuthorityRiver PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetModeration COMMAND HoverNetModerationTest)
     set_tests_properties(HoverNetModeration PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetLoad COMMAND HoverNetLoadTest 4 8 0.5 2)
+    set_tests_properties(HoverNetLoad PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetLobby COMMAND HoverNetLobbyTest)
     set_tests_properties(HoverNetLobby PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetProtocol COMMAND HoverNetProtocolTest ClassicH 8)
