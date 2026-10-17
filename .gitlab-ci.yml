@@ -281,6 +281,27 @@ deploy:raceserver:
     - !reference [.no_schedule, rules]
     - if: '$CI_COMMIT_TAG'
 
+# The HoverNet 3.0 server is deployed by a person, never automatically: pressing play on this job on a tag's pipeline installs the package
+# on the race-server host through a root-owned wrapper (packaging/server/install-deploy-helper.sh installs it, once). A fresh install is not
+# started; an upgrade drains the running server first. See docs/operators.md, "Deploying from GitLab".
+deploy:server:
+  stage: deploy
+  tags: ["$SERVER_RUNNER_TAG"]
+  needs:
+    - job: package:server:deb
+      artifacts: true
+  resource_group: production-hovernet-server
+  environment:
+    name: production-server
+    deployment_tier: production
+  script:
+    - sudo /usr/local/sbin/hovernet-server-deploy dist/hovernet-server_*_amd64.deb
+  rules:
+    - !reference [.no_schedule, rules]
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+      allow_failure: true
+
 deploy:web:
   stage: deploy
   tags: ["$SERVER_RUNNER_TAG"]

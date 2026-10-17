@@ -75,6 +75,49 @@ front has not been tried here. `HoverNetAbuse` throws 120 hostile connections at
 truncated frames, half-open and giant upgrade requests, bad WebSocket frames) and checks it stays up, healthy and serving, including under
 ASan/UBSan.
 
+## Deploying from GitLab (the race-server host)
+
+The tag pipeline builds the package (`package:server:deb`) and offers a **manual** job, `deploy:server`: nothing installs the 3.0 server until a
+person presses play on it. A fresh install enables the service but leaves it stopped; an upgrade restarts a running server through a drain.
+
+One-time set-up on the host (as root, from a checkout of this repository), which installs the root-owned wrapper and the one sudo rule the
+runner account gets:
+
+    sudo packaging/server/install-deploy-helper.sh
+
+First install by hand (so you review the configuration before anything listens): download `hovernet-server_X.Y.Z_amd64.deb` from the tag's
+GitLab pipeline (`package:server:deb`) or from the GitHub release, then
+
+    sudo apt install ./hovernet-server_X.Y.Z_amd64.deb
+    sudoedit /etc/hovernet/server.conf        # see "Letting the web client in" below
+    sudo systemctl start hovernet-server
+    curl -s http://127.0.0.1:9612/health      # "ok" (needs status-port 9612 uncommented in the configuration)
+    journalctl -u hovernet-server -n 20
+
+After that, later versions go out by pressing play on `deploy:server`.
+
+## Letting the web client in
+
+The web client reaches the server as `wss://hovernet.outiva.com/auth/`. For that to work, on the host:
+
+1. In `/etc/hovernet/server.conf` keep `lobby`, `bind 127.0.0.1` and `port 9610`, uncomment `status-port 9612`, and set
+   `ws-origin https://hovernet.outiva.com`. Then `sudo systemctl restart hovernet-server`. The server stays on the loopback interface: no new
+   firewall port is opened.
+2. In the Apache site (`/etc/apache2/sites-available/hovernet.outiva.com.conf`) remove the `#` from the two `ProxyPass .../auth/` lines (they
+   are in the repository's copy, `packaging/web/hovernet.outiva.com.conf`), then
+   `sudo apachectl configtest && sudo systemctl reload apache2`. Public TLS ends at HAProxy and Apache serves the backend, so HAProxy must
+   pass WebSocket upgrades on `/auth/` the way it already does for `/race/`.
+3. Check the whole path from the host:
+
+        curl -si -H 'Origin: https://hovernet.outiva.com' -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+             -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+             --resolve hovernet.outiva.com:443:127.0.0.1 https://hovernet.outiva.com/auth/ | head -3
+
+   `HTTP/1.1 101 Switching Protocols` means the browser path works; `403` means the Origin does not match `ws-origin`; `404` means the
+   Apache lines are not enabled.
+
+Players then open the web client, choose **HOVERNET SERVERS**, and **Connect** (its default address is exactly this one).
+
 ## Restarting without ending anyone's race (rolling deployment)
 
 Send the server `SIGTERM` (`systemctl stop` or `reload`-style restarts do this). It **drains**: races under way run to their end and their

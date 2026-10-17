@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Installs a hovernet-server package built by the GitLab pipeline. Root-owned, in /usr/local/sbin, and the only thing the runner may run
+# with sudo for this (see packaging/server/install-deploy-helper.sh). It accepts only the pipeline's own artifact path and package name.
+#
+# A fresh install enables the service but does NOT start it: review /etc/hovernet/server.conf first, then start it yourself. An upgrade
+# restarts a running server through a drain, so races under way finish first (the unit allows up to 11 minutes).
+set -euo pipefail
+
+if [[ $# -ne 1 || ! -f $1 ]]; then
+    echo "Usage: hovernet-server-deploy /absolute/path/to/hovernet-server_<version>_amd64.deb" >&2
+    exit 64
+fi
+
+package_path=$(readlink -f -- "$1")
+runner_root=/home/gitlab-runner/builds/
+
+case "$package_path" in
+    "$runner_root"*/dist/hovernet-server_*_amd64.deb) ;;
+    *)
+        echo "Refusing package outside the GitLab Runner build directory." >&2
+        exit 65
+        ;;
+esac
+
+dpkg-deb --field "$package_path" Package | grep -Fxq hovernet-server
+was_active=no
+systemctl is-active --quiet hovernet-server.service && was_active=yes || true
+
+dpkg -i -- "$package_path"
+
+echo
+if [[ $was_active == yes ]]; then
+    echo "Upgraded; the server was running and has been restarted (races under way finished first)."
+else
+    echo "Installed. The server is NOT started: review /etc/hovernet/server.conf, then run: sudo systemctl start hovernet-server"
+fi
+systemctl --no-pager --full status hovernet-server.service || true

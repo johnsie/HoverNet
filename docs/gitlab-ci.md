@@ -97,3 +97,10 @@ and drives it in headless Chrome as a phone: first frames, briefing, main menu, 
 must hide), resume, and the setup screen opened from the pause menu. Screenshots are kept as job artifacts. It needs
 Node and Chrome/Chromium on the web runner; without them the job exits 77, which is allowed, and the deploy never
 waits for it.
+
+## The HoverNet 3.0 server
+
+`build:authserver:linux` builds the server and runs its lobby and protocol tests; `package:server:deb` makes the `hovernet-server` Debian package;
+`deploy:server` (a tag's pipeline only, **manual**) installs it on the race-server host through `/usr/local/sbin/hovernet-server-deploy`. Install
+that wrapper and its one sudo rule with `packaging/server/install-deploy-helper.sh` (see [operators.md](operators.md#deploying-from-gitlab-the-race-server-host)).
+None of these jobs has run on GitLab yet.
