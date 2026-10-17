@@ -55,6 +55,8 @@ licences is a content-curation task (below), not something the importer can inve
 
 1. A package must name its author and a licence that allows HoverNet to distribute it; `unknown` and `unspecified` are acceptable only
    for tracks that were already part of the community library when 3.0 began and are kept for archival compatibility.
+   `HoverNetTrackPack verify FILE --catalogue` enforces this: the author must be named (not `unknown`) and the licence must be one of
+   `CC0-1.0`, `CC-BY-4.0` or `CC-BY-SA-4.0` (SPDX identifiers). The list is short on purpose; widening it is a reviewed change.
 2. `verify` must pass, and the track must also pass the validator at the level the catalogue requires.
 3. Removal on request: a creator can ask for a track to be withdrawn; the catalogue manifest then drops it and clients stop offering it.
 

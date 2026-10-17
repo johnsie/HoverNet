@@ -8,6 +8,8 @@ and how to roll one back.
 
 ### Added
 - `HoverNetReplay results race.hnr` prints each player's rank, laps, finish time and best lap from a replay (the basis for leaderboards and time trials).
+- `HoverNetReplay leaderboard a.hnr b.hnr ...` re-simulates replays and ranks finishers and best laps per track; damaged or non-reproducing replays are skipped, never ranked. `HoverNetAuthServer` also writes a `.results.tsv` table beside each official replay.
+- `HoverNetTrackPack verify FILE --catalogue` enforces the catalogue admission rule: a named author and a CC0-1.0, CC-BY-4.0 or CC-BY-SA-4.0 licence.
 
 ## 2.0.21 - 2026-10-17
 

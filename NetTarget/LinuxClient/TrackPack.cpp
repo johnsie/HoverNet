@@ -1,7 +1,8 @@
 // HoverNetTrackPack -- the importer and packager for the versioned track package (docs/specs/track-package.md).
 //
 //   HoverNetTrackPack pack   IN.trk OUT.hntp [--name N] [--author A] [--licence L] [--description D] [--created YYYY-MM-DD]
-//   HoverNetTrackPack verify FILE.hntp          check the package and re-analyse the track inside it
+//   HoverNetTrackPack verify FILE.hntp [--catalogue]   check the package and re-analyse the track inside it; --catalogue also requires a named
+//                                               author and an approved licence (docs/specs/track-package.md, admission rules)
 //   HoverNetTrackPack info   FILE.hntp          print the manifest
 //   HoverNetTrackPack unpack FILE.hntp OUT.trk  write the original track file back, byte for byte
 //   HoverNetTrackPack corpus DIR OUTDIR REPORT.tsv   import every .trk in DIR; REPORT lists each result and each failure's reason
@@ -184,6 +185,19 @@ int Verify(const std::string& path, bool print)
     return 0;
 }
 
+// Admission rule 1 of the catalogue: a named author and a licence that lets HoverNet distribute the track. The approved list is
+// deliberately short: public-domain dedication, attribution, or attribution with share-alike.
+bool CatalogueRules(const std::map<std::string, std::string>& manifest, std::string& why)
+{
+    static const char* const kApproved[] = { "CC0-1.0", "CC-BY-4.0", "CC-BY-SA-4.0" };
+    const auto get = [&](const char* key) { const auto it = manifest.find(key); return it == manifest.end() ? std::string() : it->second; };
+    const std::string author = get("author"), licence = get("licence");
+    if (author.empty() || author == "unknown") { why = "no author is named"; return false; }
+    for (const char* ok : kApproved) if (licence == ok) return true;
+    why = "the licence \"" + licence + "\" is not one of CC0-1.0, CC-BY-4.0, CC-BY-SA-4.0";
+    return false;
+}
+
 int Info(const std::string& path)
 {
     std::vector<std::uint8_t> bytes;
@@ -324,7 +338,17 @@ int main(int argc, char** argv)
         if (!Pack(argv[2], argv[3], meta, reason)) { std::fprintf(stderr, "%s: cannot import: %s\n", argv[2], reason.c_str()); return 1; }
         return Verify(argv[3], true);
     }
-    if (cmd == "verify") return Verify(argv[2], true);
+    if (cmd == "verify") {
+        const int rc = Verify(argv[2], true);
+        if (rc != 0 || argc < 4 || std::string(argv[3]) != "--catalogue") return rc;
+        std::vector<std::uint8_t> bytes;
+        TrackPackage::Package p;
+        std::string error;
+        if (!ReadFile(argv[2], bytes) || !TrackPackage::Decode(bytes, p, error)) return 1;
+        if (!CatalogueRules(p.manifest, error)) { std::fprintf(stderr, "%s: not admissible to the catalogue: %s\n", argv[2], error.c_str()); return 1; }
+        std::printf("%s: admissible to the catalogue\n", argv[2]);
+        return 0;
+    }
     if (cmd == "info") return Info(argv[2]);
     if (cmd == "unpack" && argc >= 4) return Unpack(argv[2], argv[3]);
     if (cmd == "fuzz" && argc >= 4) return Fuzz(argv[2], std::atoi(argv[3]));

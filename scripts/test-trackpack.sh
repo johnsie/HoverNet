@@ -23,5 +23,13 @@ for n in 0 5 40 100 $((size - 1)); do head -c "$n" "$p" > "$dir/cut.hntp"; "$too
 echo "not a track" > "$dir/junk.trk"; "$tool" pack "$dir/junk.trk" "$dir/j.hntp" >/dev/null 2>&1 && { echo "FAIL: junk was imported"; fail=1; }
 "$tool" fuzz "$p" 5000 >/dev/null 2>&1 || { echo "FAIL: fuzz"; fail=1; }
 info=$("$tool" info "$p"); echo "$info" | grep -q '^licence=GrokkSoft' || { echo "FAIL: manifest lacks the licence"; fail=1; }
+# Catalogue admission: a named author and an approved licence pass; unknown authors, unspecified or unlisted licences do not.
+src="NetTarget/Tracks/ClassicH.trk"
+"$tool" pack "$src" "$dir/ok.hntp" --author "Ada" --licence CC-BY-4.0 >/dev/null 2>&1 && "$tool" verify "$dir/ok.hntp" --catalogue >/dev/null 2>&1 || { echo "FAIL: an attributed CC-BY-4.0 track was refused"; fail=1; }
+for args in "" "--author Ada" "--licence CC-BY-4.0" "--author Ada --licence All-rights-reserved" "--author unknown --licence CC0-1.0"; do
+  "$tool" pack "$src" "$dir/no.hntp" $args >/dev/null 2>&1
+  "$tool" verify "$dir/no.hntp" --catalogue >/dev/null 2>&1 && { echo "FAIL: admitted with [$args]"; fail=1; }
+  "$tool" verify "$dir/no.hntp" >/dev/null 2>&1 || { echo "FAIL: plain verify rejected [$args]"; fail=1; }
+done
 [ $fail -eq 0 ] && echo "trackpack: 7 tracks round trip byte for byte, reproducible; damaged files refused; decoder fuzzed"
 exit $fail
