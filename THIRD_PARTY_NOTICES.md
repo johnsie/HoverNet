@@ -55,6 +55,7 @@ file. Nothing in HoverNet's top-level `LICENSE` overrides those third-party term
 | [Inter](https://github.com/rsms/inter) | variable font from Google Fonts | SIL Open Font License 1.1; see `NetTarget/LinuxClient/assets/Inter-OFL.txt` | menu and interface text | yes |
 | [Oxanium](https://github.com/sevmeyer/oxanium) | variable font from Google Fonts | SIL Open Font License 1.1; see `NetTarget/LinuxClient/assets/Oxanium-OFL.txt` | interface headings | yes |
 | OpenAL API headers (`OpenAL/AL`) | 1.1-era | GNU LGPL (headers state the Library GPL) | Win32 legacy client audio API shape; the implementations (`alstub*.cpp`) are HoverNet's own | legacy Win32 client only |
+| Ed25519 and SHA-512 (`NetTarget/Authority/Ed25519.*`) | algorithms from RFC 8032 and FIPS 180-4; the field and curve arithmetic follows the structure and constants of [TweetNaCl](https://tweetnacl.cr.yp.to/) (public domain), re-typed and checked against the RFC vectors and an independent reference | public domain (TweetNaCl) / HoverNet's own code | signing catalogues and release files | compiled into the tools |
 | Menu artwork `menu-hovercraft.bmp` | n/a | origin not recorded; rights/provenance need confirmation | main menu | yes |
 
 ## Libraries linked at build or run time (not in the repository)

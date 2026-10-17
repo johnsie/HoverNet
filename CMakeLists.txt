@@ -326,6 +326,15 @@ else()
         NetTarget/Authority/WebSocket.cpp
     )
 
+    add_executable(HoverNetEd25519Test
+        NetTarget/LinuxClient/Ed25519Test.cpp
+        NetTarget/Authority/Ed25519.cpp
+    )
+    add_executable(HoverNetSign
+        NetTarget/LinuxClient/SignTool.cpp
+        NetTarget/Authority/Ed25519.cpp
+    )
+
     add_executable(HoverNetProtocolTest
         NetTarget/LinuxClient/ProtocolTest.cpp
     )
@@ -778,6 +787,7 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetLoad COMMAND HoverNetLoadTest 4 8 0.5 2)
     set_tests_properties(HoverNetLoad PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetWebSocket COMMAND HoverNetWebSocketTest)
+    add_test(NAME HoverNetEd25519 COMMAND HoverNetEd25519Test)
     add_test(NAME HoverNetLobby COMMAND HoverNetLobbyTest)
     set_tests_properties(HoverNetLobby PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetProtocol COMMAND HoverNetProtocolTest ClassicH 8)
@@ -803,6 +813,9 @@ if(BUILD_TESTING AND NOT WIN32)
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-lobby-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> 400
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     if(UNIX)
+        add_test(NAME HoverNetSigning
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-signing.sh $<TARGET_FILE:HoverNetSign>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetWebSocketTcp
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-websocket.sh $<TARGET_FILE:HoverNetAuthServer>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
