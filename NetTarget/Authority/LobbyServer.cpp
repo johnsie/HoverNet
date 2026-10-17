@@ -22,6 +22,7 @@ struct LobbyServer::Conn
     bool closed = false;
     bool helloDone = false;
     std::string name;
+    std::uint32_t caps = 0;   // Hello.capabilities, passed on to the race the connection joins
     std::int64_t connectedMs = 0;
     std::vector<std::int64_t> invalidTimes, commandTimes;
     std::uint32_t raceId = 0;       // 0 until attached
@@ -228,6 +229,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         if (h.major != kMajor) { Close(c, kUnsupportedVersion, "this server speaks protocol 3"); return; }
         c.helloDone = true;
         c.name = h.name;
+        c.caps = h.capabilities;
         c.parser.SetMaxFrame(std::min<std::uint16_t>(h.maxFrame, kDefaultMaxFrame));
         SendList(c);
         return;
@@ -272,12 +274,13 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         e->cfg.race.players = m.players;
         e->cfg.race.laps = m.laps;
         e->cfg.race.weapons = m.weapons;
+        e->cfg.raceId = static_cast<std::uint32_t>(e->id);
         e->code = m.code;
         e->cfg.tokenSeed = mSeed + e->id * 7919;
         e->host.reset(new RaceHost(e->cfg));
         std::string error;
         if (!e->host->Init(error)) { Close(c, kBadSettings, "that race could not be created"); return; }
-        Hello hello; hello.name = c.name;
+        Hello hello; hello.name = c.name; hello.capabilities = c.caps;
         Entry& ref = *e;
         mRaces[ref.id] = std::move(e);
         ++mRacesHosted;
@@ -292,7 +295,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         if (it == mRaces.end() || !CodeAccepted(c, *it->second, m.code)) { Close(c, kNoSuchRace, "no such race"); return; }
         RaceHost& h = *it->second->host;
         if (h.Started() || h.Full()) { Close(c, kServerFull, "that race is full or already running"); return; }
-        Hello hello; hello.name = c.name;
+        Hello hello; hello.name = c.name; hello.capabilities = c.caps;
         Attach(c, *it->second, EncodeFrame(kHello, Encode(hello)), nowMs);
         return;
     }
@@ -301,7 +304,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
         auto it = mRaces.find(m.id);
         if (it == mRaces.end() || !CodeAccepted(c, *it->second, m.code)) { Close(c, kNoSuchRace, "no such race"); return; }
-        Hello hello; hello.name = c.name;
+        Hello hello; hello.name = c.name; hello.capabilities = c.caps;
         Attach(c, *it->second, EncodeFrame(kSpectate, Encode(hello)), nowMs);
         return;
     }

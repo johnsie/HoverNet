@@ -21,6 +21,7 @@ namespace Authority
 struct HostConfig
 {
     RaceConfig race;
+    std::uint32_t raceId = 0;         // the lobby's number for this race (0 when the host is not in a lobby); told to clients that ask
     int startDelayMs = 3000;          // countdown shown by the clients before tick 0
     int maxInputFramesPerSecond = 125; // a client sends about one Input frame per tick (62.5/s); twice that is the ceiling
     int maxInvalidPerWindow = 10;

@@ -15,6 +15,9 @@ namespace Protocol3
 constexpr std::uint16_t kMajor = 3;
 constexpr std::uint16_t kMinor = 0;
 constexpr std::uint16_t kDefaultMaxFrame = 1200;
+// Hello.capabilities bits: what this client understands beyond the first 3.0 messages. A server adds the matching optional fields to its
+// answers only to a client that set the bit, so a client built before the bit existed never sees a message longer than it expects.
+constexpr std::uint32_t kCapRaceId = 1;   // HelloAck carries the number of the race (so a host can tell friends which private race to join)
 constexpr std::uint16_t kMinMaxFrame = 64;
 constexpr int kMaxInputsPerMessage = 32;
 
@@ -84,7 +87,8 @@ private:
 // ---- messages ----------------------------------------------------------------------------------------------
 struct Hello { std::uint16_t major = kMajor, minor = kMinor; std::uint32_t capabilities = 0; std::uint16_t maxFrame = kDefaultMaxFrame; std::string name; };
 struct HelloAck { std::uint16_t major = kMajor, minor = kMinor; std::uint32_t capabilities = 0; std::uint16_t maxFrame = kDefaultMaxFrame;
-                  std::uint8_t player = 0, players = 0, tickMs = 16; std::uint32_t rules = 0; std::string track; std::string trackSha256; std::uint8_t laps = 0; bool weapons = true; std::uint64_t resumeToken = 0; };
+                  std::uint8_t player = 0, players = 0, tickMs = 16; std::uint32_t rules = 0; std::string track; std::string trackSha256; std::uint8_t laps = 0; bool weapons = true; std::uint64_t resumeToken = 0;
+                  std::uint32_t raceId = 0; bool includeRaceId = false; };   // raceId: optional trailing field, sent only when the client set kCapRaceId
 struct Reject { std::uint8_t reason = 0; std::string message; };
 struct Resume { std::uint64_t token = 0; };
 struct Start { std::uint32_t countdownMs = 0; };

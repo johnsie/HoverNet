@@ -62,7 +62,7 @@ No lobby, race or gameplay frame is processed before step 2 succeeds.
 | Type | Name | Direction | Payload |
 | ---: | --- | --- | --- |
 | 1 | Hello | client to server | magic `HN3\0`, major, minor, capabilities, max frame, player name (1 to 32 bytes of UTF-8) |
-| 2 | HelloAck | server to client | version, capabilities, negotiated max frame, your player slot, players, tick length, rules version, track name and SHA-256, laps, weapons, resume token |
+| 2 | HelloAck | server to client | version, capabilities, negotiated max frame, your player slot, players, tick length, rules version, track name and SHA-256, laps, weapons, resume token; then, only if the client set capability bit 0 (`kCapRaceId`) in Hello, a `u32` race number (the lobby's number for the race, 0 outside a lobby), so a host can tell friends which private race to join |
 | 3 | Reject | server to client | reason (version, full, bad message, rate limited, not in race), short message; the connection is then closed |
 | 4 | Start | server to client | countdown in ms before tick 0 |
 | 5 | Resume | client to server | the resume token from the HelloAck (replaces Hello when rejoining a running race; answered with a HelloAck for the same slot) |

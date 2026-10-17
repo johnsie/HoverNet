@@ -37,6 +37,8 @@ struct Client
     Protocol3::RaceList list;
     std::uint8_t rejectReason = 0;
     unsigned ticks = 0;
+    std::uint32_t ackRaceId = 0;
+    std::size_t ackBytes = 0;     // the size of the HelloAck payload (an old client must get the old size)
 
     void Open(LobbyServer& l, std::int64_t now) { lobby = &l; conn = l.Connect(now); }
     void Send(std::uint8_t type, const std::vector<std::uint8_t>& payload, std::int64_t now)
@@ -44,10 +46,11 @@ struct Client
         const std::vector<std::uint8_t> f = Protocol3::EncodeFrame(type, payload);
         lobby->Receive(conn, f.data(), f.size(), now);
     }
-    void Hello(const std::string& name, std::int64_t now)
+    void Hello(const std::string& name, std::int64_t now, std::uint32_t capabilities = 0)
     {
         Protocol3::Hello h;
         h.name = name;
+        h.capabilities = capabilities;
         Send(Protocol3::kHello, Protocol3::Encode(h), now);
     }
     void Pump()
@@ -59,7 +62,7 @@ struct Client
         while (parser.Next(type, payload)) {
             using namespace Protocol3;
             if (type == kRaceList) gotList = Decode(payload, list);
-            else if (type == kHelloAck) { HelloAck a; if (Decode(payload, a)) { player = a.player; token = a.resumeToken; } }
+            else if (type == kHelloAck) { HelloAck a; if (Decode(payload, a)) { player = a.player; token = a.resumeToken; ackRaceId = a.raceId; ackBytes = payload.size(); } }
             else if (type == kStart) started = true;
             else if (type == kTick) ++ticks;
             else if (type == kResult) gotResult = true;
@@ -333,6 +336,24 @@ int main()
         join.code = "kestrel7";
         late.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now); late.Pump();
         Check(late.rejected, "a race that has been guessed at 30 times refuses everyone");
+    }
+
+    // ---- the race number reaches a host that asks for it (kCapRaceId), and only that host -------------------------------------
+    {
+        LobbyServer lobby(MakeConfig());
+        std::int64_t now = 1000;
+        Client modern, old, joiner;
+        modern.Open(lobby, now); old.Open(lobby, now); joiner.Open(lobby, now);
+        modern.Hello("modern", now, Protocol3::kCapRaceId); modern.Pump();
+        Protocol3::HostRace priv = Host("ClassicH", 2);
+        priv.code = "kestrel7";
+        modern.Send(Protocol3::kHostRace, Protocol3::Encode(priv), now); modern.Pump();
+        Check(modern.ackRaceId == 1, "a host that asks for it is told the race number (so it can tell friends)");
+        old.Hello("plain", now); old.Pump();
+        Protocol3::JoinRace join; join.id = 1; join.code = "kestrel7";
+        old.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now); old.Pump();
+        Check(old.player == 1 && old.ackRaceId == 0, "a client that did not ask gets the original acknowledgement, without the race number");
+        Check(old.ackBytes + 4 == modern.ackBytes, "the acknowledgement is exactly four bytes longer for a client that asked");
     }
 
     // ---- random bytes ----------------------------------------------------------------------------------------------

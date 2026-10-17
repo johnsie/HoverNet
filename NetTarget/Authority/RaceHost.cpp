@@ -17,6 +17,7 @@ struct RaceHost::Connection
     bool helloDone = false;
     int player = -1;
     bool spectator = false;
+    std::uint32_t caps = 0;             // Hello.capabilities
     std::string name;
     std::set<std::string> blocked;
     double chatTokens = 3;
@@ -140,6 +141,8 @@ void RaceHost::SendHelloAck(Connection& c)
     a.laps = static_cast<std::uint8_t>(mConfig.race.laps);
     a.weapons = mConfig.race.weapons;
     a.resumeToken = mTokens[static_cast<std::size_t>(c.player)];
+    a.raceId = mConfig.raceId;
+    a.includeRaceId = (c.caps & Protocol3::kCapRaceId) != 0;
     Send(c, Protocol3::EncodeFrame(Protocol3::kHelloAck, Protocol3::Encode(a)));
 }
 
@@ -214,6 +217,7 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
         if (mStarted || ConnectedPlayers() >= mConfig.race.players) { Close(c, kServerFull, "the race is full or already running"); return; }
         c.helloDone = true;
         c.name = h.name;
+        c.caps = h.capabilities;
         std::vector<bool> used(static_cast<std::size_t>(mConfig.race.players), false);
         for (const auto& o : mConnections) if (!o->closed && o->player >= 0) used[static_cast<std::size_t>(o->player)] = true;
         for (int slot = 0; slot < mConfig.race.players; ++slot) if (!used[static_cast<std::size_t>(slot)]) { c.player = slot; break; }
@@ -233,6 +237,7 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
         if (Spectators() >= mConfig.maxSpectators) { Close(c, kServerFull, "too many spectators"); return; }
         c.helloDone = true;
         c.name = h.name;
+        c.caps = h.capabilities;
         c.spectator = true;
         c.parser.SetMaxFrame(std::min<std::uint16_t>(h.maxFrame, kDefaultMaxFrame));
         StartSpectator(c, nowMs);
@@ -400,6 +405,8 @@ void RaceHost::StartSpectator(Connection& c, std::int64_t)
     a.laps = static_cast<std::uint8_t>(mConfig.race.laps);
     a.weapons = mConfig.race.weapons;
     a.resumeToken = 0;
+    a.raceId = mConfig.raceId;
+    a.includeRaceId = (c.caps & kCapRaceId) != 0;
     if (c.specCursor == 0 && !c.specResultSent) Send(c, EncodeFrame(kHelloAck, Encode(a)));
     const std::size_t per = 900;
     const std::size_t count = (key->second.size() + per - 1) / per;

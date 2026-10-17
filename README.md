@@ -146,6 +146,9 @@ library: races, battle arenas, tag, hockey, and some stranger things.
 Windows and Linux players can race **together** in the same race. If someone picks a
 community track you do not have, press **Download & Join** and the game fetches it for you.
 
+From version 2.1 the game can also race on the new **HoverNet servers** (main menu: **HOVERNET SERVERS**), with private races, one-player
+time trials, watching, and chat that keeps working after you finish. See [Playing on a HoverNet server](docs/playing-on-servers.md).
+
 Want your own server? Install the `hovernet-raceserver` package (Linux) or use the
 `hovernet-raceserver_*_win32.zip` (Windows), then point **Settings** at it.
 

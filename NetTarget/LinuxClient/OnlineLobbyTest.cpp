@@ -40,6 +40,8 @@ int main(int argc, char** argv)
 
     host.Host("ClassicH", 2, 1, false, "kestrel7");
     Check(host.GetState() == OnlineLobby::State::eWaiting, "hosting waits for a second player");
+    for (int i = 0; i < 300 && host.Ack().raceId == 0; ++i) { host.Pump(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+    Check(host.Ack().raceId == 1, "the host of a private race is told its number, to give to friends");
 
     // A stranger without the code does not see it, and a wrong code is refused with a plain message, leaving them at the list.
     Check(stranger.Connect("127.0.0.1", port, "Stranger", noKey) && WaitFor(stranger, OnlineLobby::State::eBrowsing, 3000), "a stranger connects");

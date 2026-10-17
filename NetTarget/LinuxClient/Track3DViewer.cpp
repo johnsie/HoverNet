@@ -5036,6 +5036,7 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
         std::snprintf(nameBuffer, 33, "%s", saved.c_str());   // at most 32 bytes: the protocol's limit for a name
     }
     std::string name = nameBuffer;
+    std::string hostedCode;              // the code of the private race this player is hosting (empty: a public race)
     std::string problem;                 // a mistake in what the player typed, shown under the button that found it
     bool ready = false, running = true;
     int framesShown = 0;
@@ -5210,9 +5211,17 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
             ImGui::Separator();
             ImGui::Spacing();
             ImGui::TextColored(kHoverNetWhite, "%s", lobby.Message().c_str());
+            if (lobby.Ack().raceId != 0 && !lobby.Spectating()) {
+                if (!hostedCode.empty()) {
+                    ImGui::TextColored(kHoverNetCoral, "Private race number %u, code %s", lobby.Ack().raceId, hostedCode.c_str());
+                    ImGui::TextDisabled("Tell your friends both: they type them under \"A friend's private race\".");
+                }
+                else ImGui::TextDisabled("Race number %u (it is also in everyone's list).", lobby.Ack().raceId);
+            }
             if (HoverNetButton("Leave this race", ImVec2(-FLT_MIN, 40.0f))) lobby.Cancel();
         }
         else if (state == OnlineLobby::State::eBrowsing) {
+            hostedCode.clear();   // set again below if this frame's Host press starts a private race
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
@@ -5285,6 +5294,7 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
             if (HoverNetButton(players == 1 ? "START TIME TRIAL" : (hostCode[0] != '\0' ? "HOST PRIVATE RACE" : "HOST RACE"), ImVec2(-FLT_MIN, 44.0f))) {
                 if (track->mOfficial) {
                     lobby.Host(track->mName, players, laps, weapons, hostCode);
+                    hostedCode = hostCode;
                     prefs.mLaps = laps;
                     prefs.mWeapons = weapons;
                 }
@@ -7018,6 +7028,7 @@ int RunClient(int argc, char** argv)
                 }
             }
 #endif
+#ifdef HOVERNET_GAME2_PLAYER
             else if (event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
                      (event.key.keysym.sym == SDLK_LEFTBRACKET || event.key.keysym.sym == SDLK_RIGHTBRACKET ||
                       // Left and Right also work for a spectator, who has no seeking; in a replay they seek five seconds.
@@ -7035,6 +7046,7 @@ int RunClient(int argc, char** argv)
                      )) {
                 cycleWatch((event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_RIGHTBRACKET) ? 1 : -1);
             }
+#endif
             else if (resultsPending && ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN && event.key.repeat == 0) ||
                                         (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK))) {
                 openResults = true;

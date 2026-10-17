@@ -117,6 +117,7 @@ std::vector<std::uint8_t> Encode(const HelloAck& m)
     Out o;
     o.U16(m.major); o.U16(m.minor); o.U32(m.capabilities); o.U16(m.maxFrame);
     o.U8(m.player); o.U8(m.players); o.U8(m.tickMs); o.U32(m.rules); o.Str(m.track); o.Str(m.trackSha256); o.U8(m.laps); o.U8(m.weapons ? 1 : 0); o.U64(m.resumeToken);
+    if (m.includeRaceId) o.U32(m.raceId);
     return o.b;
 }
 bool Decode(const std::vector<std::uint8_t>& p, HelloAck& m)
@@ -127,6 +128,7 @@ bool Decode(const std::vector<std::uint8_t>& p, HelloAck& m)
     m.tickMs = static_cast<std::uint8_t>(in.U8()); m.rules = in.U32(); m.track = in.Str(64); m.trackSha256 = in.Str(64); m.laps = static_cast<std::uint8_t>(in.U8());
     const std::uint32_t w = in.U8(); m.weapons = w != 0;
     m.resumeToken = in.U64();
+    if (!in.AtEnd()) m.raceId = in.U32();
     return in.Done() && w <= 1 && m.players >= 1 && m.players <= 8 && m.player < m.players && m.tickMs >= 5;
 }
 
