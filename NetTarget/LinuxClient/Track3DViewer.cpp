@@ -5118,7 +5118,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
     std::snprintf(key, sizeof(key), "%s", settings.key.c_str());
     hostCode[0] = joinCode[0] = raceNumber[0] = '\0';
     HostPrefs prefs = LoadLocalRacePrefs();
-    int players = 2;
+    const int players = 8;   // a race always has seats for 8; the host starts it with whoever is there
     int laps = std::max(1, std::min(10, prefs.mLaps));
     bool weapons = prefs.mWeapons;
     int selectedRace = -1;
@@ -5512,7 +5512,6 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 if (!ack.track.empty()) {
                     infoRow("Laps:", briefing.mFreePlay ? "none (free play)" : std::to_string(ack.laps));
                     infoRow("Weapons:", ack.weapons ? "On" : "Off");
-                    infoRow("Seats:", std::to_string(roster.seats != 0 ? roster.seats : ack.players));
                     if (ack.raceId != 0) infoRow("Race:", "number " + std::to_string(ack.raceId));
                 }
                 if (ack.raceId != 0 && !hostedCode.empty()) {
@@ -5690,11 +5689,10 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             const bool trackOk = hostTrack != nullptr && hostTrack->mOfficial;
             if (!trackOk) AccentNote("Servers host the official tracks unless their owner added others: pick one of the first seven.");
             ImGui::Spacing();
-            ImGui::TextUnformatted("Players");
-            ImGui::SameLine();
-            ImGui::TextDisabled(players == 1 ? "A time trial: you race the clock alone" : "The race starts when they are all in");
-            ImGui::SetNextItemWidth(-1.0f);
-            ImGui::SliderInt("##HostPlayers", &players, 1, 8);
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("Up to 8 players can join. You start the race when you are ready, with whoever is there (alone, it is a time trial).");
+            ImGui::PopTextWrapPos();
+            ImGui::Spacing();
             ImGui::BeginDisabled(guide.mFreePlay);
             ImGui::TextUnformatted("Laps");
             ImGui::SameLine();
@@ -5724,7 +5722,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 ImGui::EndChild();
             }
             ImGui::BeginDisabled(!codeOk || !trackOk);
-            if (HoverNetButton(players == 1 ? "Start Time Trial" : (hostCode[0] != '\0' ? "Create Private Race" : "Create Race"), ImVec2(190, 36))) {
+            if (HoverNetButton(hostCode[0] != '\0' ? "Create Private Race" : "Create Race", ImVec2(190, 36))) {
                 lobby.Host(hostTrack->mName, players, laps, weapons, hostCode);
                 hostedCode = hostCode;
                 prefs.mLaps = laps;

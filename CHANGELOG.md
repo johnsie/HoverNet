@@ -8,6 +8,9 @@ and how to roll one back.
 
 ## 2.3.1 - 2026-10-17
 
+### Changed
+- A race on the HoverNet server always has seats for 8; the number-of-players slider is gone from the host dialog (the host starts the race with whoever is there, so it is redundant). A time trial is simply starting alone.
+
 ### Fixed
 - The host can press **Start Race** even when nobody else has joined (to practise); the button was disabled until a second player arrived. Others can still join until the host starts.
 
