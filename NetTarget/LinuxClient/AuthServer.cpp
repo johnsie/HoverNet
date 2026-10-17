@@ -231,6 +231,35 @@ std::string RenderMetrics(const RaceHost::Metrics& m, unsigned long long races, 
 
 int main(int argc, char** argv)
 {
+    // --config FILE: one option per line, "name value" or "name" for a switch (the same names as the command line without the dashes);
+    // '#' starts a comment. Command line options come after the file's and override it.
+    std::vector<std::string> args(argv, argv + argc);
+    for (std::size_t i = 1; i + 1 < args.size(); ++i) {
+        if (args[i] != "--config") continue;
+        std::ifstream file(args[i + 1].c_str());
+        if (!file) { std::fprintf(stderr, "cannot read the configuration file %s\n", args[i + 1].c_str()); return 2; }
+        std::vector<std::string> fromFile;
+        for (std::string line; std::getline(file, line);) {
+            const std::size_t hash = line.find('#');
+            if (hash != std::string::npos) line.resize(hash);
+            std::istringstream words(line);
+            std::string key, value;
+            if (!(words >> key)) continue;
+            std::getline(words, value);
+            while (!value.empty() && (value.front() == ' ' || value.front() == '\t' || value.front() == '=')) value.erase(value.begin());
+            while (!value.empty() && (value.back() == ' ' || value.back() == '\r')) value.pop_back();
+            fromFile.push_back("--" + key);
+            if (!value.empty() && value != "true") fromFile.push_back(value);
+        }
+        args.erase(args.begin() + static_cast<std::ptrdiff_t>(i), args.begin() + static_cast<std::ptrdiff_t>(i) + 2);
+        args.insert(args.begin() + 1, fromFile.begin(), fromFile.end());
+        break;
+    }
+    std::vector<char*> argvStorage;
+    for (std::string& a : args) argvStorage.push_back(&a[0]);
+    argc = static_cast<int>(argvStorage.size());
+    argv = argvStorage.data();
+
     HostConfig cfg;
     cfg.race.trackName = "ClassicH";
     cfg.race.players = 2;

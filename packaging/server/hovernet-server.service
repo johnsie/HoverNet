@@ -1,0 +1,20 @@
+[Unit]
+Description=HoverNet authoritative race server
+After=network.target
+
+[Service]
+User=hovernet
+Group=hovernet
+WorkingDirectory=/usr/share/hovernet
+ExecStart=/usr/bin/HoverNetAuthServer --config /etc/hovernet/server.conf
+Restart=on-failure
+RestartSec=3
+# The server needs no privileges.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/hovernet
+
+[Install]
+WantedBy=multi-user.target
