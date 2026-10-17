@@ -26,6 +26,11 @@ replay=$(ls "$dir"/replays/*.hnr 2>/dev/null | head -1)
 if [ -z "$replay" ]; then echo "FAIL: the server saved no replay"; fail=1
 elif [ -n "${HOVERNET_REPLAY_TOOL:-}" ]; then
   "$HOVERNET_REPLAY_TOOL" verify "$replay" > "$dir/verify.txt" 2>&1 || { echo "FAIL: the server's replay does not verify"; cat "$dir/verify.txt"; fail=1; }
+  tsv="${replay%.hnr}.results.tsv"
+  [ "$(tr -d '\r' < "$tsv" 2>/dev/null | wc -l)" -eq $((players + 1)) ] || { echo "FAIL: the results file is missing or incomplete"; fail=1; }
+  # The table the server wrote and the one recomputed from its replay agree on every player's laps and finish time.
+  a=$(tail -n +2 "$tsv" | tr -d '\r' | awk -F'\t' '{print $1,$2,$3,$5}' | sort); b=$("$HOVERNET_REPLAY_TOOL" results "$replay" 2>/dev/null | tr -d '\r' | awk '/^rank/{print $2,$4,$6,$9}' | sort)
+  [ "$a" = "$b" ] || { echo "FAIL: the server's results differ from the replay's"; echo "$a"; echo "$b"; fail=1; }
 fi
 cat "$dir/bot1.txt" | tail -1
 grep -E "race over|player" "$dir/server.txt" | head -$((players + 1))

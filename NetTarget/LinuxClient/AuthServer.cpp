@@ -228,6 +228,18 @@ std::string Metric(const char* name, const char* help, const char* type, unsigne
     return line;
 }
 
+// The result table beside each official replay (rank, player, laps, finish and best lap): what a leaderboard reads.
+void WriteResults(const std::string& replayPath, const std::vector<Authority::PlayerResult>& results)
+{
+    const std::string path = replayPath.substr(0, replayPath.size() - 4) + ".results.tsv";
+    FILE* f = std::fopen(path.c_str(), "wb");
+    if (f == nullptr) { std::fprintf(stderr, "cannot write the results to %s\n", path.c_str()); return; }
+    std::fprintf(f, "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\n");
+    for (const auto& r : results)
+        std::fprintf(f, "%d\t%d\t%d\t%d\t%lld\t%lld\n", r.rank, r.player, r.laps, r.finished ? 1 : 0, static_cast<long long>(r.finishTimeMs), static_cast<long long>(r.bestLapMs));
+    std::fclose(f);
+}
+
 template <class MetricsFn>
 void PumpStatus(AuthSocket listener, std::vector<std::unique_ptr<StatusPeer>>& peers, MetricsFn metrics)
 {
@@ -449,6 +461,7 @@ int main(int argc, char** argv)
                 if (f != nullptr && std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size()) std::printf("replay saved to %s (%zu bytes)\n", path.c_str(), bytes.size());
                 else std::fprintf(stderr, "cannot write the replay to %s\n", path.c_str());
                 if (f != nullptr) std::fclose(f);
+                WriteResults(path, finished.Race().Results());
             }
             std::fflush(stdout);
         });
@@ -503,6 +516,7 @@ int main(int argc, char** argv)
                     if (f != nullptr && std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size()) std::printf("replay saved to %s (%zu bytes)\n", path.c_str(), bytes.size());
                     else std::fprintf(stderr, "cannot write the replay to %s\n", path.c_str());
                     if (f != nullptr) std::fclose(f);
+                    WriteResults(path, results);
                     std::fflush(stdout);
                 }
                 if (once) break;
