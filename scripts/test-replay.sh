@@ -35,6 +35,12 @@ expect_ok "${tool[@]}" verify "$dir/long.hnr"
 # The result table: one row per player, ranked, and the same on every run (leaderboards and time trials read it).
 r1=$("${tool[@]}" results "$dir/ClassicH.hnr" 2>&1 | tr -d '\r' | grep '^rank'); r2=$("${tool[@]}" results "$dir/ClassicH.hnr" 2>&1 | tr -d '\r' | grep '^rank')
 [ -n "$r1" ] && [ "$r1" = "$r2" ] && [ "$(echo "$r1" | wc -l)" -ge 2 ] || { echo "FAIL: replay results are missing or differ between runs"; fail=1; }
+# A replay's id is stable, 16 hex digits, and differs between different replays.
+i1=$("${tool[@]}" id "$dir/ClassicH.hnr" | tr -d '\r'); i2=$("${tool[@]}" id "$dir/ClassicH.hnr" | tr -d '\r'); i3=$("${tool[@]}" id "$dir/The River.hnr" | tr -d '\r')
+[[ "$i1" =~ ^[0-9a-f]{16}$ ]] && [ "$i1" = "$i2" ] && [ "$i1" != "$i3" ] || { echo "FAIL: replay ids are not stable and distinct ($i1 $i2 $i3)"; fail=1; }
+# The leaderboard skips (and reports) a damaged replay and still ranks the others.
+"${tool[@]}" leaderboard "$dir/ClassicH.hnr" "$dir/flipped.hnr" >/dev/null 2>&1 && { echo "FAIL: leaderboard accepted a damaged replay"; fail=1; }
+"${tool[@]}" leaderboard "$dir/ClassicH.hnr" "$dir/The River.hnr" >/dev/null 2>&1 || { echo "FAIL: leaderboard over two good replays failed"; fail=1; }
 # Mutation fuzzing of the decoder with the CRC repaired (run under the sanitizer build in CI).
 expect_ok "${tool[@]}" fuzz "$dir/ClassicH.hnr" 5000
 [ $fail -eq 0 ] && echo "replay: record/verify round trip and corruption checks passed"

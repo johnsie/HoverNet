@@ -4,6 +4,7 @@
 //   HoverNetReplay verify <file.hnr>                                  re-simulate and check every checkpoint
 //   HoverNetReplay info   <file.hnr>                                  print the header
 //   HoverNetReplay results <file.hnr>                                 replay it and print each player's laps, finish and best lap
+//   HoverNetReplay id <file.hnr>                                      print the replay's shareable identifier (16 hex digits of its SHA-256)
 //   HoverNetReplay leaderboard <file.hnr>... [--track=NAME] [--top=N] rank the verified results of many replays
 //
 // A replay is the track identity, the rules version and each player's input for every tick, plus a state hash
@@ -220,7 +221,24 @@ int Results(const std::string& path)
 // Track leaderboards from stored replays. Every replay is re-simulated, so an entry is only ever a result the rules reproduce:
 // a replay that is damaged, was recorded under other rules or does not reproduce is listed as skipped and never ranked.
 // Finish times are compared only between races over the same track and lap count; best laps across all races on a track.
-// Replays carry player slots, not identities, so an entry names the replay file and slot (the "shareable identifier").
+// Replays carry player slots, not identities, so an entry names the replay (by its id, see ReplayId) and the slot.
+// A replay's shareable identifier: the first 16 hex digits of the SHA-256 of the file. The same bytes always have the same id,
+// whatever the file is called, so a leaderboard line can be traced to exactly one replay.
+std::string ReplayId(const std::string& path)
+{
+    std::vector<std::uint8_t> file;
+    if (!ReadFile(path, file)) return std::string();
+    return Sha256::HashBytes(file.data(), file.size()).substr(0, 16);
+}
+
+int Id(const std::string& path)
+{
+    const std::string id = ReplayId(path);
+    if (id.empty()) { std::fprintf(stderr, "%s: unreadable\n", path.c_str()); return 1; }
+    std::printf("%s\n", id.c_str());
+    return 0;
+}
+
 struct Entry
 {
     std::string track, file;
@@ -263,7 +281,7 @@ int Leaderboard(const std::vector<std::string>& files, const std::string& onlyTr
         ++used;
         for (const Authority::PlayerResult& pr : results) {
             Entry e;
-            e.track = r.track; e.file = BaseName(path); e.laps = r.laps; e.slot = pr.player;
+            e.track = r.track; e.file = ReplayId(path); e.laps = r.laps; e.slot = pr.player;
             if (pr.finished) { e.ms = pr.finishTimeMs; finishes[{r.track, r.laps}].push_back(e); }
             if (pr.bestLapMs > 0) { e.ms = pr.bestLapMs; laps[r.track].push_back(e); }
         }
@@ -307,6 +325,7 @@ int main(int argc, char** argv)
     if (cmd == "verify") return Verify(argv[2]);
     if (cmd == "info") return Info(argv[2]);
     if (cmd == "results") return Results(argv[2]);
+    if (cmd == "id") return Id(argv[2]);
     if (cmd == "leaderboard") {
         std::vector<std::string> files;
         std::string track;

@@ -27,7 +27,7 @@ track, and says so; it never plays something that would not reproduce.
   (tab-separated: rank, player, laps, finished, finish_ms, best_lap_ms), and its test checks the two agree.
 - `HoverNetReplay leaderboard a.hnr b.hnr ... [--track=NAME] [--top=N]` re-simulates every replay and ranks the finishers (per track and lap count)
   and the best laps (per track). A replay that is damaged, recorded under other rules or that does not reproduce is reported as skipped
-  and never ranked (exit status 1). Entries are named `file#slot`; replays carry player slots, not accounts. The scripted bots in the
+  and never ranked (exit status 1). Entries are named `id#slot`, where the id is what `HoverNetReplay id race.hnr` prints (16 hex digits of the file's SHA-256, the same whatever the file is called); replays carry player slots, not accounts. The scripted bots in the
   test suite do not finish a race, so the tests check the ranking is repeatable and agrees with the server's table (both empty); a
   ranking with finishers has not been exercised yet.
 - `HoverNetReplay verify race.hnr` re-simulates it and compares every checkpoint; `info` prints the header.
