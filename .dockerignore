@@ -1,0 +1,9 @@
+build
+dist
+.tools
+.git
+.vs
+*.log
+test_output
+packaging/web
+docs/images
