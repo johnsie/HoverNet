@@ -19,6 +19,8 @@ SolidCompression=yes
 
 [Files]
 Source: "{#SourceDir}\HoverNet.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "{#SourceDir}\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\ObjFac1.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\SDL2.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; DestName: "vc_redist.x64.exe"; Flags: deleteafterinstall

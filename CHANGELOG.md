@@ -19,7 +19,7 @@ and how to roll one back.
 - Lap and finish events: `AuthoritativeRace::Events`, `HoverNetReplay events`, and a `laps` list in the server's event log (the basis for replay timeline markers).
 - Time trials on the authoritative server: a lobby race may have one player. It starts at once, is saved as an official replay, and its result feeds `HoverNetReplay leaderboard`.
 - A `hovernet-server` Debian package for the authoritative server (reproducible, dependency-checked; not yet in the release pipelines).
-- All Debian packages now ship the HoverRace licence text as `/usr/share/doc/<package>/copyright`, as the licence requires of binary distributions.
+- All Debian packages now ship the HoverRace licence text as `/usr/share/doc/<package>/copyright`, as the licence requires of binary distributions. The Windows x64 installer is set to install `LICENSE.txt` and `THIRD_PARTY_NOTICES.md` too (workflow and installer script edited; not yet built or run).
 
 ## 2.0.21 - 2026-10-17
 

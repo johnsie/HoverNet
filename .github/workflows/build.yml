@@ -340,6 +340,7 @@ jobs:
           Copy-Item "NetTarget\ObjFac1.dat" "$x64Release\NetTarget\ObjFac1.dat" -Force
           Copy-Item "NetTarget\Tracks\*.trk" "$x64Release\NetTarget\Tracks\" -Force
           Copy-Item "NetTarget\CommunityTracks.tsv" "$x64Release\NetTarget\CommunityTracks.tsv" -Force
+          Copy-Item "LICENSE", "THIRD_PARTY_NOTICES.md" "$x64Release\" -Force   # the licence conditions travel with the binaries
           foreach ($pattern in "*.bmp", "*.ttf", "*-OFL.txt") {
             Copy-Item "NetTarget\LinuxClient\assets\$pattern" "$x64Release\NetTarget\LinuxClient\assets\" -Force
           }
