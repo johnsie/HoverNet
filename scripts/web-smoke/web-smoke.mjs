@@ -4,7 +4,7 @@
 //
 // With a URL it tests that live site instead of serving a directory. Serves <web-dir> (index.html, HoverNet.js/.wasm/.data) with the headers the build needs, drives it in
 // headless Chrome as a phone in landscape (844x390, touch), and checks the flow a player takes:
-// load -> driver briefing -> main menu -> local race -> pause (race controls hidden) -> resume.
+// load -> driver briefing -> main menu -> local race -> pause (race controls hidden) -> resume -> results screen -> keep driving.
 // Screenshots go to <out-dir>. Exits 0 on success, 1 on a failed check, 77 if Chrome is not installed.
 import { spawn, spawnSync } from 'node:child_process';
 import http from 'node:http';
@@ -101,6 +101,14 @@ await sleep(1500); await shot('5-pause');
 await click(597, 121);
 check(await waitFor(async () => (await inRace()) === 1, 10000), 'Resume Race returns to the race');
 await sleep(1500); await shot('6-resumed');
+// The results screen (shown without driving a whole race: the screen and its buttons are what is under test): its controls are
+// hidden, KEEP DRIVING returns to the race.
+await evalJs("Module.ccall('hovernet_test_show_results','void',[],[])");
+check(await waitFor(async () => (await inRace()) === 0, 10000), 'the results screen opens (race controls hidden)');
+await sleep(1500); await shot('6b-results');
+await click(416, 195);
+check(await waitFor(async () => (await inRace()) === 1, 10000), 'KEEP DRIVING on the results screen returns to the race');
+await sleep(1000);
 await key('Escape', 27); await sleep(2500);
 await click(597, 193); // New Local Race
 await sleep(2500); await shot('7-new-local-race');

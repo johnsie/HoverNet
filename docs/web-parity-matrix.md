@@ -20,12 +20,16 @@ sizes, and `scripts/test-determinism.sh` (native vs WebAssembly).
 | 7 | Race: steering, accelerate, brake, jump, fire, weapon, camera views | Partly | Race runs and responds to pause; keyboard play in a browser is **not verified**; touch pad rendering seen in screenshots; VR controls not tried on a headset |
 | 8 | Race physics, collisions, weapons, pickups | Verified | Scripted two-craft races with missiles replay with identical hashes on native (Release, Debug, sanitizer) and WebAssembly for all seven bundled tracks ([determinism.md](determinism.md)); a native-vs-browser difference in wall bounces was found and fixed |
 | 9 | Pause menu: resume, new local race, online, settings, controls, quit | Verified | Smoke test: Escape pauses, Resume returns, New Local Race opens the setup screen |
-| 10 | Results screen after finishing | Not verified | A full race to the finish line has not been run in a browser |
+| 10 | Results screen after finishing | Partly | The smoke test opens the results screen with a test hook and clicks KEEP DRIVING (phone size, headless Chrome); a real finish in a browser has not been run |
 | 11 | Online lobby: browse, host, join, chat | Not verified | Gateway upgrade and foreign-origin refusal are checked after deploy (`check-web-deploy.sh`); an actual lobby session is **not verified** |
 | 12 | Online race, including mixed browser and native players | Not verified | Same protocol and relay; no mixed race has been run |
 | 13 | Errors recover to a menu with a message | Not verified | Server-down and lost-connection paths not exercised in a browser |
 | 14 | Track and asset loading, caching | Partly | First-load download and IndexedDB cache work in headless runs; slow-network and storage-full cases not tested |
 | 15 | Supported browsers | Not verified | Only Chrome (headless) has been run; Firefox, Edge and Safari/iOS not tested |
+
+## Desktop-only for now
+
+- **HoverNet Servers** (main menu): playing on 3.0 authoritative servers (host, join, private races, time trials, watch). The servers accept browsers over WebSocket (`--ws-origin`), but the browser client has no protocol 3.0 transport or screen yet, so the browser build shows no such button. This is a known parity gap, not a design choice.
 
 ## Browser-only additions (not in the desktop client)
 

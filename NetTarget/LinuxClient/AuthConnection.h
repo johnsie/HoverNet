@@ -26,6 +26,8 @@ public:
     // serverKey, if given (32 bytes), makes the connection a secure session pinned to that server key (docs/specs/secure-session.md).
     bool Connect(const std::string& host, int port, std::string& error, const std::uint8_t* serverKey = nullptr);
     void Close();
+    // Takes over the other object's open connection (the lobby screen hands a connected player to the race).
+    void Swap(AuthConnection& other) { mImpl.swap(other.mImpl); }
     bool IsOpen() const;
     // Queues a frame (type + payload) and writes as much as the socket takes. False once the connection is lost.
     bool Send(std::uint8_t type, const std::vector<std::uint8_t>& payload);

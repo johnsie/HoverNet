@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **HoverNet Servers screen** (desktop client, main menu): connect to a 3.0 server by address (with the server's key for encrypted ones), see its open races, host a race (public, private with a code, or a one-player time trial), join, join a friend's private race by number and code, or watch a running race. Refusals are explained in plain words. The browser build does not have it: no browser transport for these servers exists yet. Tested against a real server (`HoverNetOnlineLobby`) and through the real client end to end (`HoverNetOnlineMenu`: screen, time trial, every tick verified); how it looks was checked in headless screenshots only, and no one has clicked through it yet.
+
 ## 2.1.0 - 2026-10-17
 
 This release adds the HoverNet 3.0 server-side groundwork (authoritative server, lobby, private races, time trials, WebSocket transport, replay tools, signing tool). The game's menus do not use it yet, and no browser client for protocol 3.0 exists; the deployed 2.0 race server is unchanged.

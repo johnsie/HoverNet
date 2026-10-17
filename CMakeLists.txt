@@ -375,6 +375,20 @@ else()
         target_link_libraries(HoverNetAuthBot PRIVATE ws2_32)
     endif()
 
+    add_executable(HoverNetOnlineLobbyTest
+        NetTarget/LinuxClient/OnlineLobbyTest.cpp
+        NetTarget/LinuxClient/OnlineLobby.cpp
+        NetTarget/LinuxClient/Sha256.cpp
+        NetTarget/LinuxClient/AuthConnection.cpp
+        NetTarget/Authority/Protocol3.cpp
+        NetTarget/Authority/Crypto.cpp
+        NetTarget/Authority/SecureChannel.cpp
+        NetTarget/Authority/Hmac.cpp
+    )
+    if(WIN32)
+        target_link_libraries(HoverNetOnlineLobbyTest PRIVATE ws2_32)
+    endif()
+
     add_executable(HoverNetPredictionTest
         NetTarget/LinuxClient/PredictionTest.cpp
     )
@@ -614,6 +628,7 @@ if(NOT EMSCRIPTEN)
     # The connection to an authoritative server (protocol 3.0) and the client side of its prediction.
     target_sources(HoverNetGame2Player PRIVATE
         NetTarget/LinuxClient/AuthConnection.cpp
+        NetTarget/LinuxClient/OnlineLobby.cpp
         NetTarget/Authority/Protocol3.cpp
         NetTarget/Authority/RaceWorld.cpp
         NetTarget/Authority/PredictingClient.cpp
@@ -821,6 +836,12 @@ if(BUILD_TESTING AND NOT WIN32)
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-lobby-tcp.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> 400
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     if(UNIX)
+        add_test(NAME HoverNetOnlineLobby
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-online-lobby.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetOnlineLobbyTest>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetOnlineMenu
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-online-menu.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetSigning
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-signing.sh $<TARGET_FILE:HoverNetSign>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
