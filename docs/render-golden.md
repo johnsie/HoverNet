@@ -8,7 +8,7 @@ the renderer, now or later, shows up as a changed hash instead of as a surprise 
 
 `HoverNetRenderGolden <track> <scene>` plays a scripted two-craft race (the same inputs as the determinism and replay tools) on one of the
 seven bundled tracks, stops at a fixed tick, and draws the **whole race view the way the game does**: the 3D scene, both craft, the
-track map and the HUD, through `MR_Observer::RenderNormalDisplay` into the 8-bit framebuffer. It prints a hash of the framebuffer bytes.
+track map and the HUD, through `MR_Observer::RenderNormalDisplay` into the 8-bit framebuffer. It prints two hashes: of the framebuffer bytes (the palette indices the rasteriser writes) and of the picture after the palette the game builds is applied (`rgb=`; the palette uses gamma and intensity maths in floating point, so it is hashed on its own).
 The simulation is identical on every platform and its time is frozen, so the picture is too.
 
 | Scene | Tick | Size | View |
@@ -26,7 +26,7 @@ so a changed hash can be looked at; `HOVERNET_RENDER_TRACE=1` prints stage marke
 ## Results (2026-10-17, one Linux x86-64 machine)
 
 - Native (GCC, Release): 28 frames, identical on repeated runs.
-- WebAssembly under Node (Emscripten): the same 28 hashes. So the software rasteriser, the HUD and the sprites draw the same pixels in
+- WebAssembly under Node (Emscripten): the same 28 pairs of hashes. So the software rasteriser, the HUD and the sprites draw the same pixels in
   the browser's build as in the desktop build.
 - Not yet run: Windows x64 and Win32 (the tool needs the headless object plug-in there; add it to the Windows CI job next), and a
   comparison with a capture of the original 2.0 build (the committed hashes are of the current renderer, so they guard against change; they
@@ -50,5 +50,5 @@ on a desktop; it is untested on phones and headsets (the Quest build keeps 640x4
 
 ## What this does not cover
 
-The final picture on a screen also depends on the palette and gamma conversion and on scaling by the graphics backend (SDL, or the browser
-canvas); those are not in these hashes. A second layer (the converted RGBA frame) is the next step before changing the renderer.
+The last step to a screen, scaling and presenting by the graphics backend (SDL, or the browser canvas), is not in these hashes, nor is the
+menu and settings UI (drawn by Dear ImGui in window coordinates; it has its own screenshot tests). A layer for those would need a window.

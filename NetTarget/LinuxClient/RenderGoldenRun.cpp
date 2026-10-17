@@ -5,7 +5,7 @@
 // It plays a scripted two-craft race on the track, stops at a fixed tick, draws the whole race view (3D scene, craft, HUD) the way the game
 // does (MR_Observer::RenderNormalDisplay into the 8-bit framebuffer) and prints one line:
 //
-//   <track> <scene> <width>x<height> <hash of the framebuffer bytes> pixels=<non-background pixels>
+//   <track> <scene> <width>x<height> <hash of the framebuffer bytes> rgb=<hash of the picture after the palette> pixels=<non-background pixels>
 //
 // The simulation is fixed-step and identical on every platform (docs/determinism.md) and the simulation time is frozen at the scene's tick,
 // so the line must be identical on every platform and every run. scripts/test-render-golden.sh compares it with docs/render-golden.txt.
@@ -18,9 +18,11 @@
 #include "../Util/DllObjectFactory.h"
 #include "../Util/RecordFile.h"
 #include "../Util/WorldCoordinates.h"
+#include "../VideoServices/ColorPalette.h"
 #include "../VideoServices/VideoBuffer.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -148,8 +150,28 @@ int main(int argc, char** argv)
         }
         std::printf("BENCH %s %s %dx%d: mean %.2f ms, slowest %.2f ms over %d frames\n", trackName.c_str(), scene.c_str(), buffer.GetXRes(), buffer.GetYRes(), total / n, worst, n);
     }
-    std::printf("%s %s %dx%d %016llx pixels=%zu\n", trackName.c_str(), scene.c_str(), buffer.GetXRes(), buffer.GetYRes(),
-                static_cast<unsigned long long>(Fnv1a(frame, pixels)), lit);
+    // The picture as the player sees it: the same palette the game builds (gamma, intensity, the track's background colours), applied to the
+    // indices. Hashed separately, because the palette is computed with floating point (docs/render-golden.md).
+    std::array<std::uint8_t, MR_NB_COLORS * 3> palette{};
+    {
+        PALETTEENTRY* colors = MR_GetColors(0.75, 0.75, 0.05);
+        for (int index = 0; index < MR_BASIC_COLORS; ++index) {
+            const int at = MR_RESERVED_COLORS_BEGINNING + index;
+            palette[at * 3] = colors[index].peRed; palette[at * 3 + 1] = colors[index].peGreen; palette[at * 3 + 2] = colors[index].peBlue;
+        }
+        delete [] colors;
+        if (const MR_UInt8* back = buffer.GetBackPalette()) {
+            for (int index = 0; index < MR_BACK_COLORS; ++index) {
+                const PALETTEENTRY& color = MR_ConvertColor(back[index * 3], back[index * 3 + 1], back[index * 3 + 2], 0.75, 0.75, 0.05);
+                const int at = MR_RESERVED_COLORS_BEGINNING + MR_BASIC_COLORS + index;
+                palette[at * 3] = color.peRed; palette[at * 3 + 1] = color.peGreen; palette[at * 3 + 2] = color.peBlue;
+            }
+        }
+    }
+    std::vector<std::uint8_t> rgb(pixels * 3);
+    for (std::size_t i = 0; i < pixels; ++i) { rgb[i * 3] = palette[frame[i] * 3]; rgb[i * 3 + 1] = palette[frame[i] * 3 + 1]; rgb[i * 3 + 2] = palette[frame[i] * 3 + 2]; }
+    std::printf("%s %s %dx%d %016llx rgb=%016llx pixels=%zu\n", trackName.c_str(), scene.c_str(), buffer.GetXRes(), buffer.GetYRes(),
+                static_cast<unsigned long long>(Fnv1a(frame, pixels)), static_cast<unsigned long long>(Fnv1a(rgb.data(), rgb.size())), lit);
 
     if (const char* dump = std::getenv("HOVERNET_RENDER_DUMP")) {
         std::string name = trackName;
