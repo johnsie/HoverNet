@@ -6345,6 +6345,9 @@ public:
         std::int64_t time = 0;
         if (!MR_RestoreLevelState(mSession.Level(), bytes.data(), bytes.size(), external, ReplayFormat::kSimulationRules, time, error)) return false;
         mSession.SetSimulationTime(static_cast<MR_SimulationTime>(time));
+        // Every frame the prediction is rebuilt and replays ticks the player has already heard. Sounds queued while replaying are dropped; only a
+        // tick newer than any played before is allowed to make a sound.
+        for (MR_MainCharacter* c : mCraft) c->DiscardQueuedSounds();
         return true;
     }
     void StepTick(const std::uint16_t* controls) override
@@ -6352,8 +6355,16 @@ public:
         const MR_SimulationTime now = mSession.GetSimulationTime();
         for (std::size_t i = 0; i < mCraft.size(); ++i) mCraft[i]->SetControlState(controls[i], now);
         mSession.StepTicks(1, nullptr, nullptr);
+        const std::int64_t tick = static_cast<std::int64_t>(mSession.GetSimulationTime()) / 16;
+        if (tick <= mHeardTick) {
+            for (MR_MainCharacter* c : mCraft) c->DiscardQueuedSounds();
+        }
+        else {
+            mHeardTick = tick;
+        }
     }
 private:
+    std::int64_t mHeardTick = -1;   // the newest tick whose sounds have been let through
     MR_ClientSession& mSession;
     std::vector<MR_MainCharacter*>& mCraft;
 };
@@ -7473,7 +7484,7 @@ int RunClient(int argc, char** argv)
                 auth.displayTick += confirmed == 0 ? 0.0 : elapsed;
                 const double error2 = ideal - auth.displayTick;
                 if (std::fabs(error2) > 40.0) auth.displayTick = ideal;                       // lost sync (a long stall): jump
-                else auth.displayTick += error2 * std::min(1.0, 0.06 * elapsed);              // otherwise ease: about 6% of the gap per tick
+                else auth.displayTick += std::max(-0.12, std::min(0.12, error2 * 0.02)) * elapsed;   // otherwise ease: at most 12% faster or slower than the clock
                 if (auth.spectator && auth.displayTick > confirmed) auth.displayTick = confirmed;   // a spectator never runs past what is known
                 if (auth.displayTick < confirmed) auth.displayTick = confirmed;
                 auth.shownTick = static_cast<std::uint32_t>(auth.displayTick);
@@ -7533,6 +7544,9 @@ int RunClient(int argc, char** argv)
         const MR_3DCoordinate previousCamera = camera;
         bool leaveForLobby = false;
         bool startNewLocalRace = false;
+#ifdef HOVERNET_GAME2_PLAYER
+        if (canChat() && !SDL_IsTextInputActive()) SDL_StartTextInput();   // menus opened from the race stop it
+#endif
         bool openResults = false;   // Enter (or the controller's Back button) after a finish: show the results and race options
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -8047,6 +8061,7 @@ int RunClient(int argc, char** argv)
                     }
                     continue;
                 }
+                SDL_StartTextInput();   // the results screen stops text input; chat needs it back
                 session.AddMessage("Press Enter for your results again, or ESC for race options");
                 resultsSeen = true;
             }

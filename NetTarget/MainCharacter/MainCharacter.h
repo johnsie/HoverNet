@@ -216,6 +216,7 @@ class MR_MainCharacter:public MR_FreeElement
          eSoundJump, eSoundMisJump, eSoundFire, eSoundBump, eSoundOutOfControl, eSoundFinish, eSoundLineCrossing
       };
       void QueueSound( eSoundEvent pSound, BOOL pInternal, BOOL pExternal );
+      void DiscardQueuedSounds();   // HoverNet: drop sounds queued by a replayed (already heard) prediction tick
       void ReleaseRenderer();              // destroys the presentation object, if any
       double GetNormalisedSpeed() const;   // horizontal speed as a fraction of the base craft's steady speed
 

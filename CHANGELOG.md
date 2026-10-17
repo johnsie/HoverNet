@@ -6,6 +6,14 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.3 - 2026-10-17
+
+### Fixed
+- **Online: the sound no longer stutters.** The client rebuilds its prediction every frame and replays the last few ticks; the sounds those replayed ticks queued (jump, fire, bump, finish) were played again each time. Only a tick newer than any already heard can now make a sound.
+- **Online: you can chat again after the results screen.** Opening the results screen turned text input off and it was never turned back on in the race, so typing did nothing.
+- **Online: steadier picture.** The picture's clock may now run at most 12% faster or slower than real time while it catches up with the server (it was an unbounded fraction of the gap).
+
+
 ## 2.3.2 - 2026-10-17
 
 ### Fixed

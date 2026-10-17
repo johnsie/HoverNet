@@ -16,6 +16,10 @@ void MR_MainCharacter::QueueSound( eSoundEvent, BOOL, BOOL )
 {
 }
 
+void MR_MainCharacter::DiscardQueuedSounds()
+{
+}
+
 void MR_MainCharacter::AddRenderer()
 {
 }

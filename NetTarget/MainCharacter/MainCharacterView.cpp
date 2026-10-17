@@ -54,6 +54,12 @@ void MR_MainCharacter::QueueSound( eSoundEvent pSound, BOOL pInternal, BOOL pExt
    if( pExternal ) mExternalSoundList.Add( lSound );
 }
 
+void MR_MainCharacter::DiscardQueuedSounds()
+{
+   mInternalSoundList.Clean();
+   mExternalSoundList.Clean();
+}
+
 void MR_MainCharacter::AddRenderer()
 {
    if( mRenderer == NULL )
