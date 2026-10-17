@@ -86,6 +86,35 @@ int main(int argc, char** argv)
     Check(id != 0, "a running public race is listed");
     if (id != 0) { watcher.Spectate(id, ""); Check(WaitFor(watcher, OnlineLobby::State::eReady, 8000) && watcher.Spectating(), "a spectator is let in"); }
 
+    // Choosing to watch a race that has not started: the watcher waits in the list and is let in when the host starts it.
+    {
+        OnlineLobby host2, queued;
+        Check(host2.Connect("127.0.0.1", port, "Host2", noKey) && WaitFor(host2, OnlineLobby::State::eBrowsing, 3000), "a second host connects");
+        Check(queued.Connect("127.0.0.1", port, "Queued", noKey) && WaitFor(queued, OnlineLobby::State::eBrowsing, 3000), "the queued watcher connects");
+        host2.Host("ClassicH", 2, 1, false, "");
+        std::uint32_t waitingId = 0;
+        for (int i = 0; i < 100 && waitingId == 0; ++i) {
+            queued.Refresh();
+            for (int k = 0; k < 10; ++k) { host2.Pump(); queued.Pump(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+            for (const auto& r : queued.Races()) if (!r.started && r.track == "ClassicH") waitingId = r.id;
+        }
+        Check(waitingId != 0, "a race that has not started is listed");
+        if (waitingId != 0) {
+            queued.WatchWhenStarted(waitingId, "");
+            for (int i = 0; i < 100; ++i) { host2.Pump(); queued.Pump(); if (i % 20 == 0) queued.Refresh(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+            Check(queued.GetState() == OnlineLobby::State::eBrowsing && queued.QueuedWatchId() == waitingId && !queued.Spectating(), "the watcher keeps waiting while the race has not started");
+            host2.StartRace();
+            bool in = false;
+            for (int i = 0; i < 800 && !in; ++i) {
+                host2.Pump(); queued.Pump();
+                if (i % 20 == 0 && queued.GetState() == OnlineLobby::State::eBrowsing) queued.Refresh();
+                in = queued.GetState() == OnlineLobby::State::eReady && queued.Spectating();
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            Check(in && queued.QueuedWatchId() == 0, "the waiting watcher is let in when the race starts");
+        }
+    }
+
     // The lobby's chat and who is in it.
     {
         OnlineLobby ann, bob;

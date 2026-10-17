@@ -35,6 +35,11 @@ public:
     void Host(const std::string& track, int players, int laps, bool weapons, const std::string& code);
     void Join(std::uint32_t id, const std::string& code);
     void Spectate(std::uint32_t id, const std::string& code);
+    // Watch a race that may not have started: watches at once if it has, otherwise waits in the list and starts watching when it starts
+    // (the server refuses a spectator before the start). Gives up with a Notice() if the race disappears first.
+    void WatchWhenStarted(std::uint32_t id, const std::string& code);
+    void CancelQueuedWatch() { mQueuedWatchId = 0; }
+    std::uint32_t QueuedWatchId() const { return mQueuedWatchId; }
     void Cancel();                                                             // leave a race that has not started: back to browsing (reconnects)
 
     State GetState() const { return mState; }
@@ -82,6 +87,8 @@ private:
     std::vector<Protocol3::RaceInfo> mRaces;
     Protocol3::HelloAck mAck;
     std::vector<AuthFrame> mBacklog;
+    std::uint32_t mQueuedWatchId = 0;
+    std::string mQueuedWatchCode;
     bool mGotAck = false, mGotStart = false, mSpectating = false;
 };
 

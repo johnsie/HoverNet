@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.4 - 2026-10-17
+
+### Changed
+- **Watch Race works before the race has started.** Choose a race that is still waiting for players and press Watch Race: the lobby waits (the button turns into "Waiting for the race to start", click it to cancel) and lets you in as a spectator the moment the host starts the race. If the race is cancelled first you are told. Nothing changes on the server.
+
 ## 2.3.3 - 2026-10-17
 
 ### Fixed

@@ -5599,8 +5599,13 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 ImGui::BeginDisabled(!canJoin);
                 if (HoverNetButton("Join Game", ImVec2(-FLT_MIN, 40))) lobby.Join(selectedInfo->id, "");
                 ImGui::EndDisabled();
-                ImGui::BeginDisabled(selectedInfo == nullptr || !selectedInfo->started);
-                if (HoverNetQuietButton("Watch Race", ImVec2(-FLT_MIN, 0))) lobby.Spectate(selectedInfo->id, "");
+                // A race that has not started can be chosen too: the client waits in the list and starts watching when the race starts.
+                const bool waitingToWatch = lobby.QueuedWatchId() != 0;
+                ImGui::BeginDisabled(selectedInfo == nullptr && !waitingToWatch);
+                if (waitingToWatch) {
+                    if (HoverNetQuietButton("Waiting for the race to start (click to cancel)", ImVec2(-FLT_MIN, 0))) lobby.CancelQueuedWatch();
+                }
+                else if (HoverNetQuietButton("Watch Race", ImVec2(-FLT_MIN, 0))) lobby.WatchWhenStarted(selectedInfo->id, "");
                 ImGui::EndDisabled();
                 ImGui::Spacing();
                 if (HoverNetButton("HOST A RACE", ImVec2(-FLT_MIN, 44.0f))) requestHostPopup = true;

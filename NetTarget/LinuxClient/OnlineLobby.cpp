@@ -42,6 +42,7 @@ bool OnlineLobby::Connect(const std::string& host, int port, const std::string& 
     hello.capabilities = kCapRaceId | kCapLobbyChat | kCapHostStart;   // this client shows the race number to a host, and the lobby's chat and users
     mRaces.clear(); mBacklog.clear(); mUsers.clear(); mUsersTotal = 0; mChat.clear(); mRoster = Roster(); mIsHost = false;
     mGotAck = mGotStart = mSpectating = false;
+    mQueuedWatchId = 0;
     mState = State::eIdle;
     mMessage = "Connecting...";
     return Send(kHello, Encode(hello));
@@ -101,6 +102,12 @@ void OnlineLobby::Pump()
         else if (f.type == kStart) { mGotStart = true; }
         else if (mGotAck) mBacklog.push_back(f);   // ticks that arrive while the race is being set up
     }
+    if (mQueuedWatchId != 0 && mState == State::eBrowsing) {
+        bool found = false, started = false;
+        for (const auto& r : mRaces) if (r.id == mQueuedWatchId) { found = true; started = r.started; }
+        if (!found) { mQueuedWatchId = 0; mNotice = "The race you were waiting to watch is gone."; }
+        else if (started) { const std::uint32_t id = mQueuedWatchId; mQueuedWatchId = 0; Spectate(id, mQueuedWatchCode); return; }
+    }
     if (mGotAck && (mGotStart || mSpectating) && mState == State::eWaiting) { mState = State::eReady; mMessage = "Starting"; return; }
     if (!open) Fail(mState == State::eWaiting ? "The connection to the server was lost before the race started." : "The connection to the server was lost.");
 }
@@ -150,6 +157,15 @@ void OnlineLobby::Spectate(std::uint32_t id, const std::string& code)
     mSpectating = true;
     mIsHost = false;
     if (Send(kSpectateRace, Encode(s))) { mState = State::eWaiting; mMessage = "Joining as a spectator..."; }
+}
+
+void OnlineLobby::WatchWhenStarted(std::uint32_t id, const std::string& code)
+{
+    if (mState != State::eBrowsing) return;
+    mNotice.clear();
+    for (const auto& r : mRaces) if (r.id == id && r.started) { Spectate(id, code); return; }
+    mQueuedWatchId = id;
+    mQueuedWatchCode = code;
 }
 
 void OnlineLobby::Cancel()
