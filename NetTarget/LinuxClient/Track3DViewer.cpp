@@ -5010,8 +5010,13 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
     int laps = std::max(1, std::min(10, prefs.mLaps));
     bool weapons = prefs.mWeapons;
     int selectedRace = -1;
-    std::string name = LoadUsername();
-    if (name.empty()) name = "Player";
+    char nameBuffer[40];
+    {
+        std::string saved = LoadUsername();
+        if (saved.empty()) saved = "Player";
+        std::snprintf(nameBuffer, 33, "%s", saved.c_str());   // at most 32 bytes: the protocol's limit for a name
+    }
+    std::string name = nameBuffer;
     std::string problem;                 // a mistake in what the player typed, shown under the button that found it
     bool ready = false, running = true;
     int framesShown = 0;
@@ -5047,6 +5052,14 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
         std::vector<std::uint8_t> serverKey;
         const std::string keyText(key);
         if (!keyText.empty() && (!Crypto::FromHex(keyText, serverKey) || serverKey.size() != 32)) { problem = "The server key is 64 characters (0 to 9, a to f), or leave it empty."; return; }
+        {
+            std::string typed = nameBuffer;
+            while (!typed.empty() && typed.back() == ' ') typed.pop_back();
+            while (!typed.empty() && typed.front() == ' ') typed.erase(typed.begin());
+            if (typed.empty() || !Protocol3::IsValidText(typed, 32)) { problem = "Type the name other players will see (1 to 32 letters, no control characters)."; return; }
+            name = typed;
+            SaveUsername(name);
+        }
         problem.clear();
         settings.address = address;
         settings.key = keyText;
@@ -5144,7 +5157,11 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
         if (state == OnlineLobby::State::eFailed || (state == OnlineLobby::State::eIdle && !lobby.Message().empty())) {
             ImGui::TextColored(kHoverNetCoral, "%s", lobby.Message().c_str());
         }
-        ImGui::TextDisabled("Playing as %s (change your name in Settings).", name.c_str());
+        ImGui::BeginDisabled(connected);
+        ImGui::TextUnformatted("Your name (other players see it)");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::InputTextWithHint("##yourname", "your name", nameBuffer, 33);
+        ImGui::EndDisabled();
         if (!lobby.Notice().empty()) ImGui::TextColored(kHoverNetCoral, "%s", lobby.Notice().c_str());
 
         if (state == OnlineLobby::State::eWaiting) {
