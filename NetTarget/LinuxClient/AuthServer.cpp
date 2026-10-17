@@ -29,6 +29,7 @@
 #include "SimHarness.h"
 #include "CrashReporter.h"
 #include "../Authority/SecureChannel.h"
+#include "../Authority/WebSocket.h"
 #include "../Authority/LobbyServer.h"
 #include "../Authority/Moderation.h"
 #include "../Authority/RaceHost.h"
@@ -48,6 +49,7 @@ struct Peer
     bool decided = false;
     std::vector<std::uint8_t> firstBytes;
     std::unique_ptr<Secure::Server> secure;
+    std::unique_ptr<WebSocket::Server> ws;   // a browser: the connection began with an HTTP upgrade request
 };
 
 // Whether connections may/must be encrypted, and the server's key.
@@ -56,6 +58,8 @@ struct Security
     bool enabled = false;                 // an identity is loaded: secure sessions are accepted
     bool require = false;                 // plain connections are refused
     std::uint8_t secret[32] = {0};
+    bool wsEnabled = false;               // browsers may connect over WebSocket (behind a web server that terminates TLS)
+    WebSocket::Config ws;
 };
 
 // Milliseconds since 1970, but advancing with the steady clock: the epoch is read once at start-up, so audit records have real
@@ -95,7 +99,8 @@ void PumpSockets(Core& core, AuthSocket listener, std::vector<std::unique_ptr<Pe
             if (moderation != nullptr && moderation->IsBanned(text)) { AuthNet::CloseSocket(s); continue; }   // a banned address gets nothing
             int sameAddress = 0;
             for (const auto& p : peers) if (p->address == text) ++sameAddress;
-            if (static_cast<int>(peers.size()) >= maxConnections || sameAddress >= 16) { AuthNet::CloseSocket(s); continue; }   // a cap per address and overall
+            const bool viaLocalProxy = security.wsEnabled && std::strcmp(text, "127.0.0.1") == 0;   // every browser arrives from the web server in front
+            if (static_cast<int>(peers.size()) >= maxConnections || (sameAddress >= 16 && !viaLocalProxy)) { AuthNet::CloseSocket(s); continue; }   // a cap per address and overall
             AuthNet::SetNonBlocking(s);
             int one = 1;
             setsockopt(s, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&one), sizeof(one));
@@ -123,7 +128,10 @@ void PumpSockets(Core& core, AuthSocket listener, std::vector<std::unique_ptr<Pe
                         joined.swap(p->firstBytes);
                         bytes = joined.data();
                         count = joined.size();
-                        if (security.enabled && Secure::Server::LooksLikeHandshake(bytes, count) && bytes[0] == 'H' && bytes[1] == 'N') {
+                        if (security.wsEnabled && bytes[0] == 'G' && bytes[1] == 'E') {   // "GE": no protocol frame can start so (that length is above the maximum)
+                            p->ws.reset(new WebSocket::Server(security.ws));
+                        }
+                        else if (security.enabled && Secure::Server::LooksLikeHandshake(bytes, count) && bytes[0] == 'H' && bytes[1] == 'N') {
                             p->secure.reset(new Secure::Server(security.secret));
                         }
                         else if (security.require) {
@@ -131,7 +139,14 @@ void PumpSockets(Core& core, AuthSocket listener, std::vector<std::unique_ptr<Pe
                             break;
                         }
                     }
-                    if (p->secure) {
+                    if (p->ws) {
+                        std::vector<std::uint8_t> plain, reply;
+                        const bool open = p->ws->Feed(bytes, count, plain, reply);
+                        p->pending.insert(p->pending.end(), reply.begin(), reply.end());
+                        if (!plain.empty()) core.Receive(p->connection, plain.data(), plain.size(), NowMs());
+                        if (!open) { core.Disconnect(p->connection); break; }
+                    }
+                    else if (p->secure) {
                         std::vector<std::uint8_t> plain, reply;
                         if (!p->secure->Feed(bytes, count, plain, reply)) { core.Disconnect(p->connection); break; }
                         p->pending.insert(p->pending.end(), reply.begin(), reply.end());
@@ -151,7 +166,10 @@ void PumpSockets(Core& core, AuthSocket listener, std::vector<std::unique_ptr<Pe
         for (auto& p : peers) {
             if (p->socket == kInvalidSocket) continue;
             const std::vector<std::uint8_t> out = core.TakeOutput(p->connection);
-            if (p->secure && p->secure->Ready()) {
+            if (p->ws) {
+                if (p->ws->Ready() && !out.empty()) { const std::vector<std::uint8_t> framed = WebSocket::EncodeFrame(2, out.data(), out.size()); p->pending.insert(p->pending.end(), framed.begin(), framed.end()); }
+            }
+            else if (p->secure && p->secure->Ready()) {
                 if (!out.empty()) { const std::vector<std::uint8_t> sealed = p->secure->Seal(out.data(), out.size()); p->pending.insert(p->pending.end(), sealed.begin(), sealed.end()); }
             }
             else if (!p->secure) {
@@ -342,6 +360,7 @@ int main(int argc, char** argv)
     int adminPort = -1;
     int statusPort = -1;
     int drainTimeoutSeconds = 600;
+    Security security;
     std::string crashDir;
     bool crashTest = false;
     std::string identityFile;
@@ -364,6 +383,8 @@ int main(int argc, char** argv)
         else if (a == "--moderation-dir") moderationDir = value();
         else if (a == "--admin-port") adminPort = std::atoi(value());
         else if (a == "--status-port") statusPort = std::atoi(value());
+        else if (a == "--ws-origin") { std::stringstream list(value()); for (std::string origin; std::getline(list, origin, ',');) if (!origin.empty()) security.ws.origins.push_back(origin); security.wsEnabled = !security.ws.origins.empty(); }
+        else if (a == "--ws-path") security.ws.path = value();
         else if (a == "--drain-timeout") drainTimeoutSeconds = std::atoi(value());
         else if (a == "--crash-dir") crashDir = value();
         else if (a == "--crash-test") crashTest = true;
@@ -382,7 +403,6 @@ int main(int argc, char** argv)
     MR_DllObjectFactory::MR_DllObjectFactoryCleanup factoryCleanup;
     if (!AuthNet::Startup()) { std::fprintf(stderr, "network start-up failed\n"); return 1; }
 
-    Security security;
     if (!identityFile.empty()) {
         std::string error;
         if (!Secure::LoadOrCreateIdentity(identityFile, security.secret, error)) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }

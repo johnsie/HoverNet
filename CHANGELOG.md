@@ -12,6 +12,7 @@ and how to roll one back.
 - `HoverNetTrackPack verify FILE --catalogue` enforces the catalogue admission rule: a named author and a CC0-1.0, CC-BY-4.0 or CC-BY-SA-4.0 licence.
 - `HoverNetAuthServer` drains on SIGTERM/SIGINT for rolling restarts: races under way finish and are saved, new ones are refused (reject reason 10), `/health` returns 503, then it exits 0 (`--drain-timeout`). See docs/operators.md.
 - **Private races on the authoritative server (protocol level).** A race hosted with a code (6 to 16 characters) is not listed and can be joined or watched only by id and code; a wrong code looks like a race that does not exist, and 30 wrong guesses lock the race. The bot takes `--code` and `--race-id`. The game's menus do not offer it yet.
+- **Browser transport for the authoritative server.** `HoverNetAuthServer --ws-origin https://site` accepts WebSocket upgrades on its port (origin allow-list, masked frames, bounded sizes, ping/pong, close codes) and feeds the same protocol 3.0 session layer as TCP. Behind a TLS-terminating web server this is the `wss://` path; no browser client uses it yet. See docs/operators.md.
 
 ## 2.0.21 - 2026-10-17
 

@@ -103,7 +103,7 @@ tick, and one restore plus 5 to 20 ticks of simulation per frame (the whole eigh
 
     HoverNet --auth-connect HOST:PORT
 
-(`HoverNetGame2Player` on Linux; native builds only, the browser needs a WebSocket path first.) The game connects, says Hello with
+(`HoverNetGame2Player` on Linux; native builds only. The server now accepts WebSocket, see operators.md, but the browser client does not use it yet.) The game connects, says Hello with
 the name from its settings, waits for the race to fill and start, checks that its copy of the track is the server's (by SHA-256) and
 that the game rules match, and then plays: your controls go to the server a few ticks ahead of where the race is, the server's Tick
 messages keep an exact copy of the race, and what is drawn is that copy plus a prediction run forward from it (the lead follows the

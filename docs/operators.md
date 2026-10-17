@@ -40,6 +40,7 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 | `--replay-dir DIR` | save a replay of every race |
 | `--moderation-dir DIR`, `--admin-port P` | audit log, moderators and the console ([online-services.md](online-services.md)) |
 | `--status-port P`, `--crash-dir DIR` | `/health`, `/metrics`; crash reports |
+| `--ws-origin ORIGINS`, `--ws-path P` | accept browsers over WebSocket from these comma-separated origins, at this path (default `/auth/`) |
 | `--drain-timeout S` | longest a drain waits for races under way (default 600 seconds) |
 | `--once` | serve one race and exit (tests) |
 | `--config FILE` | read options from a file |
@@ -51,6 +52,18 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 - HoverNet does not use Docker or any other container tooling, for building, testing or deployment; run the server as a service
   as above or from a terminal.
 
+
+## Browsers (WebSocket)
+
+With `--ws-origin https://your.site` the same port also accepts a WebSocket upgrade, and a browser's binary messages carry exactly the same
+protocol 3.0 frames as a TCP connection (the server has one session layer, not a second protocol). The upgrade is refused unless the
+`Origin` header is one of the listed origins and the path matches. The server speaks plain `ws://`: put a web server in front that
+terminates TLS and proxies `wss://your.site/auth/` to the loopback port (Apache `ProxyPass` with `mod_proxy_wstunnel`, or nginx with
+`proxy_set_header Upgrade`/`Connection`), and keep the server bound to loopback. Because every browser then arrives from the proxy's
+address, the per-address connection cap is not applied to loopback in this mode and address bans do not reach individual browsers
+(mutes and kicks by name still do); `--max-connections` still bounds the total. Tested with a scripted client over a real socket
+(`HoverNetWebSocketTcp`) and a unit test with the RFC 6455 vectors and random bytes (`HoverNetWebSocket`); there is no browser client
+for protocol 3.0 yet, so no real browser has been tried.
 
 ## Restarting without ending anyone's race (rolling deployment)
 
