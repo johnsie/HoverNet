@@ -5635,6 +5635,13 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                     ImGui::TextDisabled("Waiting for the host to start the race...");
                     ImGui::PopTextWrapPos();
                 }
+#ifdef HOVERNET_WEB
+                // A browser stops running a tab that is not in front (including its network handling), so a race that starts while the player
+                // is looking at another tab starts without them.
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextDisabled("Keep this tab in front: your browser pauses a tab you cannot see.");
+                ImGui::PopTextWrapPos();
+#endif
                 ImGui::Spacing();
                 if (HoverNetQuietButton("Leave Race", ImVec2(-FLT_MIN, 0))) lobby.Cancel();
             }

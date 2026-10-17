@@ -23,7 +23,7 @@ small screen these are tabs: GAMES, CHAT, USERS.
 
 ## Races
 
-- **Join** a race in the list, or **Watch** one that has already started (you see it a few seconds behind, so nobody can cheat by watching).
+- **Join** a race in the list, or **Watch** one (you see it a few seconds behind, so nobody can cheat by watching). If the race has not started yet, **Watch Race** waits: the button changes to "Waiting for the race to start" and you are let in the moment the host starts it; click it again to stop waiting.
 - **Host a race:** press **HOST A RACE**, pick a track and the laps, and whether weapons are on, then **Create Race**. A race has seats for up to 8 players. You wait in the race's
   waiting room, where you see who has joined; **the race starts when you press Start Race**, with whoever is there (even if some seats are empty).
   Players who join wait for you to start it. If you leave before starting, the others are sent back to the lobby.
@@ -40,6 +40,7 @@ If the server refuses something, the screen says why in plain words (full, resta
 - **Chat** in the race: just type, and press **Enter** to send. It works after you have finished too.
 - **When you cross the finish line the race goes on.** You are told to press **Enter** for your results; take your time, drive on, chat.
   On a touch screen use **MENU**. The results screen lets you keep driving, start another race, or go back to the servers.
+- **In the browser, keep the HoverNet tab in front** while you host, wait for a race or race: a browser pauses a tab you cannot see, so a race that starts while you are looking at another tab starts without you.
 - **Watching:** **Left** and **Right** (or **[** and **]**) move the camera to the other craft.
 - If your connection drops, the game tries to take your place back for about 15 seconds.
 
