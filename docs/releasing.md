@@ -4,6 +4,10 @@ How a release is made, verified, upgraded to, and rolled back.
 
 ## Making a release
 
+`scripts/release.sh X.Y.Z` does steps 1 to 3 below for you, from your own machine, with the checks built in (changelog heading, tag unused on both remotes, main
+fast-forward only, the full local suite, a green GitHub Actions run for the exact commit, your confirmation that GitLab is green, and a typed
+confirmation before the tag that deploys to production). `--dry-run` shows what it would do without changing anything.
+
 1. Make sure `main` is green on GitHub Actions (clients, servers, tests) and on GitLab (web client and Linux server).
 2. Update [CHANGELOG.md](../CHANGELOG.md): move *Unreleased* under the new version
    and date.
