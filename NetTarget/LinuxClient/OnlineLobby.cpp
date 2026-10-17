@@ -84,7 +84,9 @@ void OnlineLobby::Pump()
             LobbyUsers u;
             if (Decode(f.payload, u)) { mUsers = u.names; mUsersTotal = u.total; }
         }
-        else if (f.type == kChatMessage) {
+        else if (f.type == kChatMessage && !mGotStart) {
+            // Lobby chat, and the chat of a race that has not started yet. Once the race has started, chat belongs to the race and is
+            // handed over with the rest of what arrived (the backlog), so a message sent at the start is not lost.
             ChatMessage m;
             if (Decode(f.payload, m)) {
                 mChat.push_back(m.fromServer ? "Server: " + m.text : m.name + ": " + m.text);

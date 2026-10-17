@@ -2076,6 +2076,62 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                                  MR_SimulationTime pFinishTime, MR_SimulationTime pBestLap,
                                  int pRank, int pPlayerCount, int pFrameLimit = -1);
 
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+// The official HoverNet server players are sent to without typing anything. The key is the server's identity for an encrypted connection (64 hex
+// characters) once the owner has made the server reachable from the internet with one; empty means a plain connection. The browser always
+// uses its own site (wss://<site>/auth/, TLS at the web server) and ignores these.
+constexpr const char* kOfficialAuthAddress = "hovernet.outiva.com:9610";
+constexpr const char* kOfficialAuthKey = "";
+
+struct AuthServerSettings
+{
+    std::string address = kOfficialAuthAddress;   // host:port
+    std::string key = kOfficialAuthKey;           // 64 hex characters, or empty
+    bool custom = false;                          // the player chose another server under "Use another server"; otherwise the official one
+};
+
+std::string AuthServerSettingsPath() { return ConfigDirPath() + "/hovernet_server"; }
+
+AuthServerSettings LoadAuthServerSettings()
+{
+    AuthServerSettings s;
+    std::ifstream in(AuthServerSettingsPath());
+    std::string address, key, flag;
+    std::getline(in, address);
+    std::getline(in, key);
+    std::getline(in, flag);
+    if (flag == "custom" && !address.empty()) { s.address = address; s.key = key; s.custom = true; }
+    return s;
+}
+
+void SaveAuthServerSettings(const AuthServerSettings& s)
+{
+    std::ofstream out(AuthServerSettingsPath());
+    out << s.address << '\n' << s.key << '\n' << (s.custom ? "custom" : "official") << '\n';
+}
+
+// "host", "host:port" or "[v6]:port" -> host and port (default 9610). False when it does not look like an address.
+bool SplitServerAddress(const std::string& text, std::string& host, int& port)
+{
+    std::string t = text;
+    while (!t.empty() && (t.back() == ' ' || t.back() == '\t')) t.pop_back();
+    while (!t.empty() && (t.front() == ' ' || t.front() == '\t')) t.erase(t.begin());
+    port = 9610;
+    if (t.empty() || t.size() > 255) return false;
+    const std::size_t colon = t.rfind(':');
+    if (colon != std::string::npos && t.find(':') == colon) {
+        const int p = std::atoi(t.c_str() + colon + 1);
+        if (p < 1 || p > 65535) return false;
+        port = p;
+        t = t.substr(0, colon);
+    }
+    if (t.empty()) return false;
+    host = t;
+    return true;
+}
+
+#endif
+
 struct SettingsResult
 {
     bool confirmed = false;
@@ -3996,6 +4052,18 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     char hostBuf[128] = {0};
     std::snprintf(hostBuf, sizeof(hostBuf), "%s", currentServerHost.c_str());
     int port = static_cast<int>(currentServerPort);
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+    // The HoverNet server for online multiplayer: empty means the official one. Another server (a friend's, a club's) is typed here.
+    char authAddressBuf[256] = {0};
+    char authKeyBuf[80] = {0};
+    {
+        const AuthServerSettings savedAuth = LoadAuthServerSettings();
+        if (savedAuth.custom) {
+            std::snprintf(authAddressBuf, sizeof(authAddressBuf), "%s", savedAuth.address.c_str());
+            std::snprintf(authKeyBuf, sizeof(authKeyBuf), "%s", savedAuth.key.c_str());
+        }
+    }
+#endif
     float volumePercent = static_cast<float>(currentVolume * 100.0);
     bool muted = currentMuted;
     const float currentUiScale = LoadUiScale();
@@ -4141,6 +4209,29 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Separator();
         ImGui::Spacing();
 
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+        bool authAddressValid = true;
+        const char* authAddressProblem = "";
+        if (authAddressBuf[0] != '\0') {
+            const std::string typedAddress = authAddressBuf;
+#ifdef HOVERNET_WEB
+            authAddressValid = typedAddress.compare(0, 6, "wss://") == 0 || typedAddress.compare(0, 5, "ws://") == 0;
+            authAddressProblem = "A web address starts with wss://";
+#else
+            std::string checkHost;
+            int checkPort = 0;
+            authAddressValid = SplitServerAddress(typedAddress, checkHost, checkPort);
+            authAddressProblem = "Type it as name:port, for example race.example.org:9610";
+            Crypto::Bytes checkKey;
+            if (authAddressValid && authKeyBuf[0] != '\0' && (!Crypto::FromHex(authKeyBuf, checkKey) || checkKey.size() != 32)) {
+                authAddressValid = false;
+                authAddressProblem = "The server key is 64 characters (0 to 9, a to f)";
+            }
+#endif
+        }
+#else
+        const bool authAddressValid = true;
+#endif
         ImGui::TextUnformatted("RaceServer Address");
         ImGui::SetNextItemWidth(-96.0f);
         ImGui::InputText("##ServerHost", hostBuf, sizeof(hostBuf));
@@ -4160,6 +4251,30 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             std::snprintf(hostBuf, sizeof(hostBuf), "%s", kDefaultLobbyHost);
             port = static_cast<int>(kDefaultLobbyPort);
         }
+
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::TextUnformatted("HoverNet server (online multiplayer)");
+        ImGui::TextDisabled("Leave empty to use the official HoverNet server. For a friend's or a club's server, type its address.");
+        ImGui::SetNextItemWidth(-1.0f);
+#ifdef HOVERNET_WEB
+        ImGui::InputTextWithHint("##AuthAddress", "official HoverNet server (wss://race.example.org/auth/ for another)", authAddressBuf, sizeof(authAddressBuf));
+#else
+        ImGui::InputTextWithHint("##AuthAddress", "official HoverNet server (race.example.org:9610 for another)", authAddressBuf, sizeof(authAddressBuf));
+        if (authAddressBuf[0] != '\0') {
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::InputTextWithHint("##AuthKey", "server key, 64 characters (optional)", authKeyBuf, sizeof(authKeyBuf));
+        }
+#endif
+        if (authAddressBuf[0] != '\0' && !authAddressValid) HoverNetHint(authAddressProblem);
+        ImGui::Spacing();
+        if (HoverNetButton("Use the official HoverNet server", ImVec2(-FLT_MIN, 0))) {
+            authAddressBuf[0] = '\0';
+            authKeyBuf[0] = '\0';
+        }
+#endif
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -4272,6 +4387,10 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             std::snprintf(usernameBuf, sizeof(usernameBuf), "%s", "Player");
             std::snprintf(hostBuf, sizeof(hostBuf), "%s", kDefaultLobbyHost);
             port = static_cast<int>(kDefaultLobbyPort);
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+            authAddressBuf[0] = '\0';
+            authKeyBuf[0] = '\0';
+#endif
             volumePercent = 100.0f;
             muted = false;
             uiScalePercent = 100.0f;
@@ -4298,7 +4417,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::TextDisabled("Preview only until Save is selected.");
         ImGui::Spacing();
 
-        const bool canSave = !usernameBlank && !hostBlank && portValid;
+        const bool canSave = !usernameBlank && !hostBlank && portValid && authAddressValid;
         if (!phoneHeader) {
             ImGui::BeginDisabled(!canSave);
             if (HoverNetButton("Save", ImVec2(-FLT_MIN, 40))) {
@@ -4369,6 +4488,13 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
     }
 
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+    if (!cancelled) {
+        AuthServerSettings chosen;   // the official server unless an address was typed
+        if (authAddressBuf[0] != '\0') { chosen.address = authAddressBuf; chosen.key = authKeyBuf; chosen.custom = true; }
+        SaveAuthServerSettings(chosen);
+    }
+#endif
     SettingsResult result;
     result.confirmed = !cancelled;
     result.username = usernameBuf;
@@ -4944,59 +5070,6 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
 // ---- Play on a HoverNet server (protocol 3.0): choose a server, then host, join or watch a race ---------------------------------------
 // The lobby logic is OnlineLobby (tested against a real server by HoverNetOnlineLobbyTest); this is only its screen. The browser build
 // has no transport for these servers yet, so the screen is native-only (docs/web-parity-matrix.md).
-// The official HoverNet server players are sent to without typing anything. The key is the server's identity for an encrypted connection (64 hex
-// characters) once the owner has made the server reachable from the internet with one; empty means a plain connection. The browser always
-// uses its own site (wss://<site>/auth/, TLS at the web server) and ignores these.
-constexpr const char* kOfficialAuthAddress = "hovernet.outiva.com:9610";
-constexpr const char* kOfficialAuthKey = "";
-
-struct AuthServerSettings
-{
-    std::string address = kOfficialAuthAddress;   // host:port
-    std::string key = kOfficialAuthKey;           // 64 hex characters, or empty
-    bool custom = false;                          // the player chose another server under "Use another server"; otherwise the official one
-};
-
-std::string AuthServerSettingsPath() { return ConfigDirPath() + "/hovernet_server"; }
-
-AuthServerSettings LoadAuthServerSettings()
-{
-    AuthServerSettings s;
-    std::ifstream in(AuthServerSettingsPath());
-    std::string address, key, flag;
-    std::getline(in, address);
-    std::getline(in, key);
-    std::getline(in, flag);
-    if (flag == "custom" && !address.empty()) { s.address = address; s.key = key; s.custom = true; }
-    return s;
-}
-
-void SaveAuthServerSettings(const AuthServerSettings& s)
-{
-    std::ofstream out(AuthServerSettingsPath());
-    out << s.address << '\n' << s.key << '\n' << (s.custom ? "custom" : "official") << '\n';
-}
-
-// "host", "host:port" or "[v6]:port" -> host and port (default 9610). False when it does not look like an address.
-bool SplitServerAddress(const std::string& text, std::string& host, int& port)
-{
-    std::string t = text;
-    while (!t.empty() && (t.back() == ' ' || t.back() == '\t')) t.pop_back();
-    while (!t.empty() && (t.front() == ' ' || t.front() == '\t')) t.erase(t.begin());
-    port = 9610;
-    if (t.empty() || t.size() > 255) return false;
-    const std::size_t colon = t.rfind(':');
-    if (colon != std::string::npos && t.find(':') == colon) {
-        const int p = std::atoi(t.c_str() + colon + 1);
-        if (p < 1 || p > 65535) return false;
-        port = p;
-        t = t.substr(0, colon);
-    }
-    if (t.empty()) return false;
-    host = t;
-    return true;
-}
-
 // True when the code may be used for a private race (empty = public).
 bool PrivateCodeOk(const std::string& code) { return code.empty() || (code.size() >= 6 && code.size() <= 16); }
 
@@ -5150,7 +5223,6 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
         }
         lobby.Pump();
         if (lobby.GetState() == OnlineLobby::State::eReady) { ready = true; break; }
-        if (std::getenv("HOVERNET_TEST_AUTH_ADVANCED") != nullptr && nameKnown && framesShown == 1) { showCard = true; autoPending = false; }   // test hook for screenshots
         if (lobby.GetState() == OnlineLobby::State::eBrowsing && !chatFocusedOnce) { chatFocusedOnce = true; focusChat = true; }   // ready to type
         if (std::getenv("HOVERNET_TEST_AUTH_AUTOREFRESH") != nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) {
             // Test hook (scripts/test-lobby-autorefresh.sh): nothing is pressed; a race hosted by someone else must appear in the list by itself.
@@ -5308,34 +5380,20 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 if (HoverNetQuietButton("Back to Menu", ImVec2(-FLT_MIN, 0))) running = false;
             }
             else if (showCard) {
-                // ---- another server: the only place with technical fields ----
-                HoverNetSectionHeading("USE ANOTHER SERVER");
+                // ---- a server chosen in Settings could not be reached: say so, and where to change it ----
+                HoverNetSectionHeading("CAN'T REACH THE SERVER");
                 ImGui::Spacing();
                 ImGui::PushTextWrapPos(0.0f);
-                ImGui::TextDisabled("For a server run by someone else, such as a friend's or a club's. Its owner gives you the address.");
+                ImGui::TextDisabled("This is the HoverNet server you chose in Settings. Check it there, or go back to the official HoverNet server.");
                 ImGui::PopTextWrapPos();
                 ImGui::Spacing();
-                bool submitted = false;
-                ImGui::TextUnformatted("Address");
-                ImGui::SetNextItemWidth(-1.0f);
-#ifdef HOVERNET_WEB
-                submitted |= ImGui::InputTextWithHint("##address", "wss://race.example.org/auth/", address, sizeof(address), ImGuiInputTextFlags_EnterReturnsTrue);
-#else
-                submitted |= ImGui::InputTextWithHint("##address", "race.example.org:9610", address, sizeof(address), ImGuiInputTextFlags_EnterReturnsTrue);
-                ImGui::Spacing();
-                ImGui::TextUnformatted("Server key (optional: the 64 characters its owner gives you for a private connection)");
-                ImGui::SetNextItemWidth(-1.0f);
-                submitted |= ImGui::InputTextWithHint("##serverkey", "leave empty for a plain connection", key, sizeof(key), ImGuiInputTextFlags_EnterReturnsTrue);
-#endif
-                ImGui::Spacing();
-                if (!problem.empty()) AccentNote(problem);
                 if (state == OnlineLobby::State::eFailed || (state == OnlineLobby::State::eIdle && !lobby.Message().empty())) AccentNote(lobby.Message());
+                if (!problem.empty()) AccentNote(problem);
                 ImGui::Spacing();
-                const bool clicked = HoverNetButton(state == OnlineLobby::State::eFailed ? "TRY AGAIN" : "CONNECT", ImVec2(-FLT_MIN, 46.0f));
-                connectCenter = centreOfLastItem();
-                if (submitted || clicked) connect(true);
+                const bool clicked = HoverNetButton("TRY AGAIN", ImVec2(-FLT_MIN, 46.0f));
+                if (clicked) { showCard = false; autoPending = true; autoAttempt = false; connectingFrames = 0; problem.clear(); lobby.Close(); }
                 ImGui::Spacing();
-                if (HoverNetQuietButton("Use the HoverNet server", ImVec2(-FLT_MIN, 0))) {
+                if (HoverNetQuietButton("Use the official HoverNet server", ImVec2(-FLT_MIN, 0))) {
                     settings = AuthServerSettings();
                     AuthServerSettings official;
                     SaveAuthServerSettings(official);
@@ -5513,10 +5571,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 ImGui::PopStyleColor();
             }
             // Leaving sits apart at the bottom so it is not hit by mistake.
-            ImGui::SetCursorPosY(std::max(ImGui::GetCursorPosY(), actionsHeight - 2.0f * ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().WindowPadding.y));
-            if (!waitingRoom) {
-                if (HoverNetQuietButton("Use another server...", ImVec2(-FLT_MIN, 0))) { lobby.Close(); selectedRace = -1; selectedRaceId = 0; showCard = true; autoPending = false; autoAttempt = false; }
-            }
+            ImGui::SetCursorPosY(std::max(ImGui::GetCursorPosY(), actionsHeight - ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().WindowPadding.y));
             if (HoverNetQuietButton("Back to Menu", ImVec2(-FLT_MIN, 0))) { lobby.Close(); running = false; }
             ImGui::EndChild();
             }

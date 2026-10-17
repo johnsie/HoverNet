@@ -7,7 +7,7 @@ and how to roll one back.
 ## Unreleased
 
 ### Changed
-- **One way into online play.** The separate HOVERNET SERVERS button is gone: **ONLINE MULTIPLAYER** connects to the HoverNet server by itself (nothing to type but, once, your name) and opens the classic lobby if the HoverNet server is not available. A server address and key are only asked for under **Use another server...** in the lobby. The lobby screen was rebuilt in the classic lobby's layout (game list, details with the track map, actions, host dialog) instead of a plain form.
+- **One way into online play.** The separate HOVERNET SERVERS button is gone: **ONLINE MULTIPLAYER** connects to the HoverNet server by itself (nothing to type but, once, your name) and opens the classic lobby if the HoverNet server is not available. A different server (an address and, optionally, a key) is chosen in **Settings**, under *HoverNet server (online multiplayer)*, not in the lobby. The lobby screen was rebuilt in the classic lobby's layout (game list, details with the track map, actions, host dialog) instead of a plain form.
 
 ### Added
 - The race list refreshes by itself (every two seconds); there is no Refresh button, and your selection stays on the race you chose when the list changes.

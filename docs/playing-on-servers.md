@@ -13,9 +13,7 @@ official HoverNet server by itself: you type nothing. The first time it asks for
 
 If the HoverNet server cannot be reached (it is down, or you are offline), the game says so and opens the **classic lobby** instead.
 
-**Your own server or a friend's:** in the lobby, **Use another server...** asks for its address (for example `race.example.org:9610`; in the
-browser a `wss://` address) and, for a server that gives one, its key (64 characters). The game remembers that choice until you press
-**Use the HoverNet server** on the same screen.
+**Your own server or a friend's:** in **Settings**, under *HoverNet server (online multiplayer)*, type its address (for example `race.example.org:9610`; in the browser a `wss://` address) and, for a server that gives one, its key (64 characters). The game then goes to that server until you press **Use the official HoverNet server** there. If your chosen server cannot be reached, the lobby says so and points you to Settings.
 
 ## The lobby
 
