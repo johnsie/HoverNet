@@ -1,3 +1,4 @@
+#include <cctype>
 #include "LobbyServer.h"
 
 #include <algorithm>
@@ -24,6 +25,8 @@ struct LobbyServer::Conn
     std::string name;
     std::uint32_t caps = 0;   // Hello.capabilities, passed on to the race the connection joins
     std::int64_t connectedMs = 0;
+    double chatTokens = 3;          // chat in the lobby: a burst, then one message a second
+    std::int64_t lastChatMs = 0;
     std::vector<std::int64_t> invalidTimes, commandTimes;
     std::uint32_t raceId = 0;       // 0 until attached
     int hostConn = 0;
@@ -308,11 +311,65 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         Attach(c, *it->second, EncodeFrame(kSpectate, Encode(hello)), nowMs);
         return;
     }
+    if (type == kChat && (c.caps & kCapLobbyChat) != 0) {
+        Chat m;
+        if (!Decode(payload, m) || !IsValidText(m.text, 120)) { Invalid(c, nowMs); return; }
+        const HostConfig& rules = mConfig.raceTemplate;
+        c.chatTokens = std::min<double>(rules.chatBurst, c.chatTokens + (nowMs - c.lastChatMs) / 1000.0);
+        c.lastChatMs = nowMs;
+        ChatMessage notice;
+        notice.fromServer = true;
+        notice.name = "server";
+        if (c.chatTokens < 1) { notice.text = "Slow down: too many messages."; const auto f = EncodeFrame(kChatMessage, Encode(notice)); c.out.insert(c.out.end(), f.begin(), f.end()); return; }
+        c.chatTokens -= 1;
+        if (rules.moderation != nullptr && rules.moderation->IsMuted(c.name, nowMs)) {
+            notice.text = "You are muted.";
+            const auto f = EncodeFrame(kChatMessage, Encode(notice));
+            c.out.insert(c.out.end(), f.begin(), f.end());
+            return;
+        }
+        ChatMessage out;
+        out.name = c.name;
+        out.text = m.text;
+        if (rules.moderation != nullptr) rules.moderation->RememberChat(nowMs, "[lobby] " + c.name + ": " + m.text);
+        const std::vector<std::uint8_t> frame = EncodeFrame(kChatMessage, Encode(out));
+        for (auto& o : mConns) {
+            if (o->closed || !o->helloDone || o->raceId != 0 || (o->caps & kCapLobbyChat) == 0) continue;
+            o->out.insert(o->out.end(), frame.begin(), frame.end());
+        }
+        return;
+    }
     Invalid(c, nowMs);   // anything else is not valid in the lobby
+}
+
+// Everyone who has said Hello and is not yet in a race, in a fixed order; sent to the clients that asked for the lobby's chat whenever it changes.
+void LobbyServer::BroadcastUsersIfChanged()
+{
+    std::vector<std::string> names;
+    for (const auto& c : mConns) if (!c->closed && c->helloDone && c->raceId == 0) names.push_back(c->name);
+    std::sort(names.begin(), names.end(), [](const std::string& a, const std::string& b) {
+        std::string la = a, lb = b;
+        for (char& ch : la) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        for (char& ch : lb) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        return la != lb ? la < lb : a < b;
+    });
+    std::string signature;
+    for (const std::string& n : names) { signature += n; signature += '\n'; }
+    if (signature == mLastUsers) return;
+    mLastUsers = signature;
+    Protocol3::LobbyUsers users;
+    users.total = static_cast<std::uint16_t>(names.size());
+    for (std::size_t i = 0; i < names.size() && static_cast<int>(i) < Protocol3::kMaxLobbyUserNames; ++i) users.names.push_back(names[i]);
+    const std::vector<std::uint8_t> frame = Protocol3::EncodeFrame(Protocol3::kLobbyUsers, Protocol3::Encode(users));
+    for (auto& c : mConns) {
+        if (c->closed || !c->helloDone || c->raceId != 0 || (c->caps & Protocol3::kCapLobbyChat) == 0) continue;
+        c->out.insert(c->out.end(), frame.begin(), frame.end());
+    }
 }
 
 void LobbyServer::Advance(std::int64_t nowMs)
 {
+    BroadcastUsersIfChanged();
     for (auto& c : mConns)
         if (!c->closed && !c->helloDone && c->raceId == 0 && nowMs - c->connectedMs > mConfig.helloTimeoutMs) Close(*c, Protocol3::kBadMessage, "hello timeout");
 

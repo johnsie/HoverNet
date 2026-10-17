@@ -207,8 +207,9 @@ async function menuClick() {
   await click(phone ? 95 : 135, phone ? 331 : 636); await sleep(900);
   for (let i = 0; i < 3; i++) { await click(phone ? 201 : 277, phone ? 331 : 636); await sleep(900); }
   await sleep(1500); await shot('menuclick-1-main-menu');
-  // A real click on the HOVERNET SERVERS button (no test switches are set): the screen must open and the game must keep running.
-  const x = +(process.env.CLICK_X || (phone ? 641 : 618)), y = +(process.env.CLICK_Y || (phone ? 203 : 331));
+  // A real click on ONLINE MULTIPLAYER (no test switches are set): the lobby screen must open (and, with no server at the default address,
+  // the classic lobby takes over) and the game must keep running.
+  const x = +(process.env.CLICK_X || (phone ? 641 : 618)), y = +(process.env.CLICK_Y || (phone ? 148 : 270));
   const before = await frames();
   await click(x, y);
   await sleep(2500); await shot('menuclick-2-after-click');

@@ -2057,7 +2057,6 @@ enum class PauseChoice
     eSettings,
     eControls,
     eQuit,
-    eAuthServer,   // play on a HoverNet 3.0 server (native only; listed after Online Multiplayer on screen)
 };
 
 PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
@@ -2070,7 +2069,6 @@ enum class PostRaceChoice
     eNewLocalRace,
     eOnlineLobby,
     eQuit,
-    eAuthServer,   // play on a HoverNet 3.0 server (native only; listed before Quit on screen)
 };
 
 PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
@@ -3396,18 +3394,12 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         {"RESUME RACE", PauseChoice::eResume},
         {pIsOnline ? "LEAVE RACE" : "NEW LOCAL RACE", PauseChoice::eLeaveRace},
         {"ONLINE MULTIPLAYER", PauseChoice::eOnlineLobby},
-#if defined(HOVERNET_AUTH)
-        {"HOVERNET SERVERS", PauseChoice::eAuthServer},
-#endif
         {"SETTINGS", PauseChoice::eSettings},
         {"CONTROLS", PauseChoice::eControls},
         {"QUIT HOVERNET", PauseChoice::eQuit},
     };
     constexpr int optionCount = sizeof(options) / sizeof(options[0]);
-    int primaryCount = 3;   // the race options above the "GAME & ACCESSIBILITY" heading
-#if defined(HOVERNET_AUTH)
-    primaryCount = 4;
-#endif
+    const int primaryCount = 3;   // the race options above the "GAME & ACCESSIBILITY" heading
     PauseChoice choice = PauseChoice::eResume;
     bool focusFirstButton = true;
     bool running = true;
@@ -3675,9 +3667,6 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             {"KEEP DRIVING", PostRaceChoice::eContinue},
             {"NEW LOCAL RACE", PostRaceChoice::eNewLocalRace},
             {"ONLINE MULTIPLAYER", PostRaceChoice::eOnlineLobby},
-#if defined(HOVERNET_AUTH)
-            {"HOVERNET SERVERS", PostRaceChoice::eAuthServer},
-#endif
             {"QUIT HOVERNET", PostRaceChoice::eQuit},
         };
         for (std::size_t index = 0; index < sizeof(actions) / sizeof(actions[0]); ++index) {
@@ -4955,10 +4944,17 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
 // ---- Play on a HoverNet server (protocol 3.0): choose a server, then host, join or watch a race ---------------------------------------
 // The lobby logic is OnlineLobby (tested against a real server by HoverNetOnlineLobbyTest); this is only its screen. The browser build
 // has no transport for these servers yet, so the screen is native-only (docs/web-parity-matrix.md).
+// The official HoverNet server players are sent to without typing anything. The key is the server's identity for an encrypted connection (64 hex
+// characters) once the owner has made the server reachable from the internet with one; empty means a plain connection. The browser always
+// uses its own site (wss://<site>/auth/, TLS at the web server) and ignores these.
+constexpr const char* kOfficialAuthAddress = "hovernet.outiva.com:9610";
+constexpr const char* kOfficialAuthKey = "";
+
 struct AuthServerSettings
 {
-    std::string address = "127.0.0.1:9610";   // host:port
-    std::string key;                          // 64 hex characters: the server's identity for an encrypted connection, or empty
+    std::string address = kOfficialAuthAddress;   // host:port
+    std::string key = kOfficialAuthKey;           // 64 hex characters, or empty
+    bool custom = false;                          // the player chose another server under "Use another server"; otherwise the official one
 };
 
 std::string AuthServerSettingsPath() { return ConfigDirPath() + "/hovernet_server"; }
@@ -4967,16 +4963,18 @@ AuthServerSettings LoadAuthServerSettings()
 {
     AuthServerSettings s;
     std::ifstream in(AuthServerSettingsPath());
-    std::string line;
-    if (std::getline(in, line) && !line.empty()) s.address = line;
-    if (std::getline(in, line)) s.key = line;
+    std::string address, key, flag;
+    std::getline(in, address);
+    std::getline(in, key);
+    std::getline(in, flag);
+    if (flag == "custom" && !address.empty()) { s.address = address; s.key = key; s.custom = true; }
     return s;
 }
 
 void SaveAuthServerSettings(const AuthServerSettings& s)
 {
     std::ofstream out(AuthServerSettingsPath());
-    out << s.address << '\n' << s.key << '\n';
+    out << s.address << '\n' << s.key << '\n' << (s.custom ? "custom" : "official") << '\n';
 }
 
 // "host", "host:port" or "[v6]:port" -> host and port (default 9610). False when it does not look like an address.
@@ -5002,8 +5000,13 @@ bool SplitServerAddress(const std::string& text, std::string& host, int& port)
 // True when the code may be used for a private race (empty = public).
 bool PrivateCodeOk(const std::string& code) { return code.empty() || (code.size() >= 6 && code.size() <= 16); }
 
-// Shows the screen until a race is ready (true: lobby.GetState() == eReady, the connection is open) or the player leaves (false).
-bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int pFrameLimit)
+// How the HoverNet server screen ended: a race is ready (lobby.GetState() == eReady, the connection is open), the player went back, or the
+// official server could not be reached and the caller should offer the classic lobby instead.
+enum class AuthScreenResult { eRace, eBack, eFallback };
+
+// Opens on the official server by itself: players type nothing but, the first time, their name. The technical fields (an address, a key) are
+// behind "Use another server".
+AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int pFrameLimit)
 {
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
     if (ownsImGuiContext) {
@@ -5018,16 +5021,25 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
     }
 
     AuthServerSettings settings = LoadAuthServerSettings();
+    // The official server: the player's own site in the browser, the built-in address elsewhere. Test hooks may point it at a test server.
+    const char* testServer = std::getenv("HOVERNET_TEST_AUTH_SERVER");
+    const char* clickTest = std::getenv("HOVERNET_TEST_AUTH_CLICKS");
+    std::string officialAddress = kOfficialAuthAddress, officialKey = kOfficialAuthKey;
 #ifdef HOVERNET_WEB
-    // The browser connects by WebSocket to a wss:// address; a remembered TCP-style address from elsewhere is not one.
-    if (settings.address.compare(0, 3, "ws:") != 0 && settings.address.compare(0, 4, "wss:") != 0) {
+    {
         char url[256];
         url[0] = '\0';
         hovernet_js_default_server_url(url, sizeof(url));
-        settings.address = url[0] != '\0' ? std::string(url) : std::string("wss://localhost/auth/");
+        officialAddress = url[0] != '\0' ? std::string(url) : std::string("wss://localhost/auth/");
+        officialKey.clear();
+        // A remembered custom address must be a WebSocket address to be usable here.
+        if (settings.custom && settings.address.compare(0, 3, "ws:") != 0 && settings.address.compare(0, 4, "wss:") != 0) settings.custom = false;
+        if (!settings.custom) settings.key.clear();
     }
-    settings.key.clear();
 #endif
+    if (testServer != nullptr) { officialAddress = testServer; officialKey.clear(); settings.custom = false; }
+    if (clickTest != nullptr) { officialAddress = clickTest; officialKey.clear(); settings.custom = false; }
+    if (!settings.custom) { settings.address = officialAddress; settings.key = officialKey; }
     char address[256], key[80], hostCode[32], joinCode[32], raceNumber[16];
     std::snprintf(address, sizeof(address), "%s", settings.address.c_str());
     std::snprintf(key, sizeof(key), "%s", settings.key.c_str());
@@ -5037,28 +5049,39 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
     int laps = std::max(1, std::min(10, prefs.mLaps));
     bool weapons = prefs.mWeapons;
     int selectedRace = -1;
+    // The name: asked once ("Welcome, racer"), remembered. The tests have no saved name and are not asked.
     char nameBuffer[40];
+    nameBuffer[0] = '\0';
     {
         std::string saved = LoadUsername();
-        if (saved.empty()) saved = "Player";
+        if (saved.empty() && (testServer != nullptr || clickTest != nullptr)) saved = "Player";
         std::snprintf(nameBuffer, 33, "%s", saved.c_str());   // at most 32 bytes: the protocol's limit for a name
     }
     std::string name = nameBuffer;
+    bool nameKnown = !name.empty();
+    bool showCard = false;        // the technical card behind "Use another server"
+    bool autoPending = true;      // connect by itself as soon as the name is known
+    bool autoAttempt = false;     // an automatic attempt on the official server is under way: if it fails, the classic lobby is offered
+    int connectingFrames = 0;
+    AuthScreenResult result = AuthScreenResult::eBack;
     std::string hostedCode;              // the code of the private race this player is hosting (empty: a public race)
     std::string problem;                 // a mistake in what the player typed, shown under the button that found it
     bool ready = false, running = true;
     int framesShown = 0;
-    // Test hook: connect on the first frame, then host a time trial (HOVERNET_TEST_AUTH_SERVER=host:port[:key]); never set in normal play.
-    const char* testServer = std::getenv("HOVERNET_TEST_AUTH_SERVER");
-    int testStep = testServer != nullptr ? 1 : 0;
-    if (testServer != nullptr) std::snprintf(address, sizeof(address), "%s", testServer);
+    // Test hook: with HOVERNET_TEST_AUTH_SERVER=host:port the screen hosts a one-player race by itself once connected; never set in normal play.
+    int testStep = testServer != nullptr ? 2 : 0;
 
-    // Test hook (scripts/test-online-screen-clicks.sh): real SDL mouse events are pushed at the on-screen position of the Connect and the
-    // Host buttons, so the test proves the buttons answer an actual click (HOVERNET_TEST_AUTH_CLICKS=host:port); never set in normal play.
-    const char* clickTest = std::getenv("HOVERNET_TEST_AUTH_CLICKS");
+    // Test hook (scripts/test-online-screen-clicks.sh): real SDL mouse events are pushed at the on-screen position of the HOST A RACE button and
+    // the dialog's create button, so the test proves they answer an actual click (HOVERNET_TEST_AUTH_CLICKS=host:port); never set in normal play.
     int clickStep = 0, clickFrame = 0, clickHold = 0;
-    ImVec2 connectCenter(-1, -1), hostCenter(-1, -1);
-    if (clickTest != nullptr) std::snprintf(address, sizeof(address), "%s", clickTest);
+    ImVec2 connectCenter(-1, -1), hostOpenCenter(-1, -1), createCenter(-1, -1);
+    std::vector<TrackPreview> previews(static_cast<std::size_t>(Tracks().Count()));
+    bool hostPopupOpen = false, requestHostPopup = false, privatePopupOpen = false, requestPrivatePopup = false;
+    int lobbyTab = 0;                   // small screens: 0 games, 1 chat, 2 users
+    char chatInput[128];
+    chatInput[0] = '\0';
+    std::size_t lastChatCount = 0;
+    bool focusChat = false, chatFocusedOnce = false;
     auto pushClick = [](const ImVec2& at, int step) {
         SDL_Event e;
         SDL_memset(&e, 0, sizeof(e));
@@ -5073,7 +5096,7 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
         SDL_PushEvent(&e);
     };
 
-    auto connect = [&]() {
+    auto connect = [&](bool custom) {
         std::string host;
         int port = 0;
         std::vector<std::uint8_t> serverKey;
@@ -5098,8 +5121,14 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
         problem.clear();
         settings.address = address;
         settings.key = keyText;
-        SaveAuthServerSettings(settings);
+        settings.custom = custom;
+        if (custom) SaveAuthServerSettings(settings);   // only another server is remembered; the official one needs no memory
+        else if (!AuthServerSettingsPath().empty()) { AuthServerSettings official; SaveAuthServerSettings(official); }
         lobby.Connect(host, port, name, serverKey);
+    };
+    auto useOfficialServer = [&]() {
+        std::snprintf(address, sizeof(address), "%s", officialAddress.c_str());
+        std::snprintf(key, sizeof(key), "%s", officialKey.c_str());
     };
 
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
@@ -5113,11 +5142,52 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
             }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
                 if (lobby.GetState() == OnlineLobby::State::eWaiting) lobby.Cancel();
+                else if (showCard && lobby.GetState() != OnlineLobby::State::eBrowsing) running = false;
                 else running = false;
             }
         }
         lobby.Pump();
         if (lobby.GetState() == OnlineLobby::State::eReady) { ready = true; break; }
+        if (std::getenv("HOVERNET_TEST_AUTH_ADVANCED") != nullptr && nameKnown && framesShown == 1) { showCard = true; autoPending = false; }   // test hook for screenshots
+        if (lobby.GetState() == OnlineLobby::State::eBrowsing && !chatFocusedOnce) { chatFocusedOnce = true; focusChat = true; }   // ready to type
+        if (std::getenv("HOVERNET_TEST_AUTH_LOBBYCHAT") != nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) {
+            // Test hook (scripts/test-lobby-chat.sh): type a message with real key events and press Enter; it must come back from the server.
+            static int sFrames = 0;
+            ++sFrames;
+            if (sFrames == 20) {
+                SDL_Event text;
+                SDL_memset(&text, 0, sizeof(text));
+                text.type = SDL_TEXTINPUT;
+                SDL_strlcpy(text.text.text, "hello lobby", sizeof(text.text.text));
+                SDL_PushEvent(&text);
+            }
+            if (sFrames == 24 || sFrames == 26) {
+                SDL_Event key;
+                SDL_memset(&key, 0, sizeof(key));
+                key.type = sFrames == 24 ? SDL_KEYDOWN : SDL_KEYUP; key.key.state = sFrames == 24 ? SDL_PRESSED : SDL_RELEASED;
+                key.key.keysym.sym = SDLK_RETURN; key.key.keysym.scancode = SDL_SCANCODE_RETURN;
+                SDL_PushEvent(&key);
+            }
+            bool heard = false;
+            for (const std::string& line : lobby.ChatLines()) if (line == name + ": hello lobby") heard = true;
+            if (heard) { std::printf("LOBBYCHATTEST ok: the message typed in the lobby came back from the server\n"); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
+            if (sFrames > 300) { std::printf("LOBBYCHATTEST FAIL: no echo (%zu chat lines)\n", lobby.ChatLines().size()); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
+        }
+        // Connect by itself once the name is known: one frame shows "Connecting", then the connection is made.
+        if (autoPending && nameKnown && !showCard) {
+            if (++connectingFrames >= 2) {
+                autoPending = false;
+                if (settings.custom) { /* the saved custom server: its address and key are already in the fields */ }
+                else useOfficialServer();
+                autoAttempt = !settings.custom;
+                connect(settings.custom);
+                if (!problem.empty()) { showCard = true; autoAttempt = false; }
+            }
+        }
+        // The official server could not be reached (or is not running): the caller offers the classic lobby. A custom server's failure is
+        // shown on the "Use another server" card instead.
+        if (autoAttempt && lobby.GetState() == OnlineLobby::State::eFailed) { result = AuthScreenResult::eFallback; running = false; break; }
+        if (!autoAttempt && !showCard && nameKnown && lobby.GetState() == OnlineLobby::State::eFailed) showCard = true;
         if (clickTest != nullptr) {
             ++clickFrame;
             const OnlineLobby::State st = lobby.GetState();
@@ -5126,13 +5196,15 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
                 if (at.x < 0) return;
                 if (clickHold == 0) pushClick(at, 0);
                 else if (clickHold == 1) pushClick(at, 1);
-                else if (clickHold == 2) { pushClick(at, 2); clickStep = nextStep; clickHold = -1; }
+                else if (clickHold == 2) { pushClick(at, 2); clickStep = nextStep; clickHold = -1; clickFrame = 0; }
                 ++clickHold;
             };
-            if (clickStep == 0 && clickFrame > 5) click(connectCenter, 1);
-            else if (clickStep == 1 && st == OnlineLobby::State::eBrowsing) { clickStep = 2; clickHold = 0; clickFrame = 0; std::printf("CLICKTEST connect clicked: the lobby answered\n"); }
-            else if (clickStep == 2 && clickFrame > 5) click(hostCenter, 3);
-            else if (clickStep == 3 && st == OnlineLobby::State::eWaiting) { std::printf("CLICKTEST ok: Host clicked, the race is being set up\n"); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
+            // Connected on its own (nothing typed); then HOST A RACE (which opens the dialog), then the dialog's create button: two real clicks.
+            if (clickStep == 0 && st == OnlineLobby::State::eBrowsing && clickFrame > 8) { clickStep = 2; clickHold = 0; clickFrame = 0; std::printf("CLICKTEST connected by itself: no address was typed\n"); }
+            else if (clickStep == 2 && clickFrame > 5) click(hostOpenCenter, 3);
+            else if (clickStep == 3 && hostPopupOpen && clickFrame > 8) { clickStep = 4; clickHold = 0; clickFrame = 0; std::printf("CLICKTEST host dialog opened by a click\n"); }
+            else if (clickStep == 4 && clickFrame > 5) click(createCenter, 5);
+            else if (clickStep == 5 && st == OnlineLobby::State::eWaiting) { std::printf("CLICKTEST ok: Host clicked, the race is being set up\n"); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
             if (clickFrame > 600) { std::printf("CLICKTEST FAIL at step %d (state %d)\n", clickStep, static_cast<int>(st)); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
         }
         if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_SPECTATE") != nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) {
@@ -5146,8 +5218,12 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
                 for (const auto& r : lobby.Races()) if (r.started) { lobby.Spectate(r.id, ""); testStep = 3; break; }
             }
         }
-        if (testStep == 1) { connect(); testStep = 2; }
-        else if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_BROWSE") == nullptr && std::getenv("HOVERNET_TEST_AUTH_SPECTATE") == nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) { lobby.Host(Tracks().Get(0) != nullptr ? Tracks().Get(0)->mName : "ClassicH", std::getenv("HOVERNET_TEST_AUTH_PLAYERS") != nullptr ? std::max(1, std::min(8, std::atoi(std::getenv("HOVERNET_TEST_AUTH_PLAYERS")))) : 1, 1, false, ""); testStep = 3; }
+        if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_POPUP") != nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) {
+            // Test hook for screenshots: open the "Host a race" or the "Join a private race" dialog.
+            static bool sOpened = false;
+            if (!sOpened) { sOpened = true; (std::string(std::getenv("HOVERNET_TEST_AUTH_POPUP")) == "private" ? requestPrivatePopup : requestHostPopup) = true; }
+        }
+        if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_BROWSE") == nullptr && std::getenv("HOVERNET_TEST_AUTH_SPECTATE") == nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) { lobby.Host(Tracks().Get(0) != nullptr ? Tracks().Get(0)->mName : "ClassicH", std::getenv("HOVERNET_TEST_AUTH_PLAYERS") != nullptr ? std::max(1, std::min(8, std::atoi(std::getenv("HOVERNET_TEST_AUTH_PLAYERS")))) : 1, 1, false, ""); testStep = 3; }
 
         SDL_Renderer* renderer = graphics.GetRenderer();
         SDL_RenderSetLogicalSize(renderer, 0, 0);
@@ -5164,158 +5240,417 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
         DrawHoverNetScreenBackdrop(mainViewport);
 
         const OnlineLobby::State state = lobby.GetState();
-        const bool connected = state == OnlineLobby::State::eBrowsing || state == OnlineLobby::State::eWaiting;
-        const bool compact = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
-
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, compact ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, compact ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
-        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(compact ? 1.1f : 1.35f);
-        ImGui::TextUnformatted("HOVERNET SERVERS");
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
+        const bool waitingRoom = state == OnlineLobby::State::eWaiting;
+        const bool connected = state == OnlineLobby::State::eBrowsing || waitingRoom;
+        const bool narrow = mainViewport->WorkSize.x < 640.0f;
+        // The same heading as the online lobby: a small eyebrow, the title, and the status beside it.
+        // Players are told "the HoverNet server", never an address, unless they chose another server themselves.
+        const std::string headerStatus = narrow ? std::string() : (connected ? (settings.custom ? "Connected to " + settings.address : std::string("Connected to the HoverNet server")) + " as " + name : std::string());
+        HoverNetScreenHeading("ONLINE MULTIPLAYER", "HOVERNET LOBBY", headerStatus.c_str());
         ImGui::Spacing();
 
-        const float panelWidth = std::min(900.0f, ImGui::GetContentRegionAvail().x);
-        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
-        ImGui::BeginChild("ServersPanel", ImVec2(panelWidth, 0), true);
+        auto infoRowLabelWidth = ImGui::CalcTextSize("Weapons:").x + 16.0f;
+        auto infoRow = [&](const char* label, const std::string& value) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.62f, 0.62f, 0.69f, 1.0f));
+            ImGui::TextUnformatted(label);
+            ImGui::PopStyleColor();
+            ImGui::SameLine(infoRowLabelWidth);
+            ImGui::TextWrapped("%s", value.c_str());
+        };
+        auto previewFor = [&](int trackIndex) -> TrackPreview& {
+            TrackPreview& preview = previews[static_cast<std::size_t>(trackIndex)];
+            if (!preview.mLoaded) preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(trackIndex).c_str());
+            return preview;
+        };
+        auto centreOfLastItem = [&]() {
+            return ImVec2((ImGui::GetItemRectMin().x + ImGui::GetItemRectMax().x) * 0.5f, (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f);
+        };
 
-        // 1. The server.
-        ImGui::TextColored(kHoverNetCoral, "SERVER");
         if (!connected) {
-            ImGui::PushItemWidth(-1.0f);
+            const float cardWidth = std::min(560.0f, ImGui::GetContentRegionAvail().x);
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - cardWidth) * 0.5f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(10.0f, (ImGui::GetContentRegionAvail().y - 300.0f) * 0.36f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetSurface);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
+            ImGui::BeginChild("EntryCard", ImVec2(cardWidth, 0), ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoScrollbar);
+            if (!nameKnown) {
+                // ---- the first time: only a name, as in the classic lobby ----
+                HoverNetSectionHeading("WELCOME, RACER");
+                ImGui::Spacing();
+                ImGui::TextDisabled("Choose the name other drivers will see in the lobby.");
+                ImGui::Spacing();
+                ImGui::SetNextItemWidth(-1.0f);
+                static bool focusName = true;
+                if (focusName) { SDL_StartTextInput(); ImGui::SetKeyboardFocusHere(); focusName = false; }
+                const bool submitted = ImGui::InputText("##yourname", nameBuffer, 33, ImGuiInputTextFlags_EnterReturnsTrue);
+                ImGui::Spacing();
+                const bool clicked = HoverNetButton("ENTER THE LOBBY", ImVec2(-FLT_MIN, 46.0f));
+                std::string typed = nameBuffer;
+                while (!typed.empty() && typed.back() == ' ') typed.pop_back();
+                while (!typed.empty() && typed.front() == ' ') typed.erase(typed.begin());
+                if ((submitted || clicked) && !typed.empty() && Protocol3::IsValidText(typed, 32)) {
+                    name = typed;
+                    SaveUsername(name);
+                    nameKnown = true;
+                }
+                else if ((submitted || clicked)) AccentNote("Type a name (1 to 32 letters, no control characters).");
+                ImGui::Spacing();
+                if (HoverNetQuietButton("Back to Menu", ImVec2(-FLT_MIN, 0))) running = false;
+            }
+            else if (showCard) {
+                // ---- another server: the only place with technical fields ----
+                HoverNetSectionHeading("USE ANOTHER SERVER");
+                ImGui::Spacing();
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextDisabled("For a server run by someone else, such as a friend's or a club's. Its owner gives you the address.");
+                ImGui::PopTextWrapPos();
+                ImGui::Spacing();
+                bool submitted = false;
+                ImGui::TextUnformatted("Address");
+                ImGui::SetNextItemWidth(-1.0f);
 #ifdef HOVERNET_WEB
-            ImGui::TextUnformatted("Address (a wss:// address from the server's owner)");
-            ImGui::InputTextWithHint("##address", "wss://race.example.org/auth/", address, sizeof(address));
+                submitted |= ImGui::InputTextWithHint("##address", "wss://race.example.org/auth/", address, sizeof(address), ImGuiInputTextFlags_EnterReturnsTrue);
 #else
-            ImGui::TextUnformatted("Address");
-            ImGui::InputTextWithHint("##address", "race.example.org:9610", address, sizeof(address));
-            ImGui::TextUnformatted("Server key (only for encrypted servers: the 64 characters its owner gives you)");
-            ImGui::InputTextWithHint("##serverkey", "leave empty for a plain connection", key, sizeof(key));
+                submitted |= ImGui::InputTextWithHint("##address", "race.example.org:9610", address, sizeof(address), ImGuiInputTextFlags_EnterReturnsTrue);
+                ImGui::Spacing();
+                ImGui::TextUnformatted("Server key (optional: the 64 characters its owner gives you for a private connection)");
+                ImGui::SetNextItemWidth(-1.0f);
+                submitted |= ImGui::InputTextWithHint("##serverkey", "leave empty for a plain connection", key, sizeof(key), ImGuiInputTextFlags_EnterReturnsTrue);
 #endif
-            ImGui::TextUnformatted("Your name (other players see it)");
-            ImGui::InputTextWithHint("##yourname", "your name", nameBuffer, 33);
-            ImGui::PopItemWidth();
-            if (HoverNetButton(state == OnlineLobby::State::eFailed ? "Try again" : "Connect", ImVec2(-FLT_MIN, 40.0f))) connect();
-            connectCenter = ImVec2((ImGui::GetItemRectMin().x + ImGui::GetItemRectMax().x) * 0.5f, (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f);
+                ImGui::Spacing();
+                if (!problem.empty()) AccentNote(problem);
+                if (state == OnlineLobby::State::eFailed || (state == OnlineLobby::State::eIdle && !lobby.Message().empty())) AccentNote(lobby.Message());
+                ImGui::Spacing();
+                const bool clicked = HoverNetButton(state == OnlineLobby::State::eFailed ? "TRY AGAIN" : "CONNECT", ImVec2(-FLT_MIN, 46.0f));
+                connectCenter = centreOfLastItem();
+                if (submitted || clicked) connect(true);
+                ImGui::Spacing();
+                if (HoverNetQuietButton("Use the HoverNet server", ImVec2(-FLT_MIN, 0))) {
+                    settings = AuthServerSettings();
+                    AuthServerSettings official;
+                    SaveAuthServerSettings(official);
+                    showCard = false; autoPending = true; autoAttempt = false; connectingFrames = 0; problem.clear();
+                    lobby.Close();
+                }
+                ImGui::Spacing();
+                if (HoverNetQuietButton("Back to Menu", ImVec2(-FLT_MIN, 0))) running = false;
+            }
+            else {
+                // ---- the normal way in: nothing to type ----
+                HoverNetSectionHeading("CONNECTING");
+                ImGui::Spacing();
+                ImGui::TextDisabled("Looking for the HoverNet server...");
+                ImGui::Spacing();
+                if (HoverNetQuietButton("Back to Menu", ImVec2(-FLT_MIN, 0))) running = false;
+            }
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
         }
         else {
-            // Connected: one line instead of the fields, so a small screen keeps its room for the races.
-            ImGui::TextWrapped("Connected to %s as %s", address, name.c_str());
-            if (HoverNetButton("Disconnect", ImVec2(-FLT_MIN, 36.0f))) { lobby.Close(); selectedRace = -1; }
-        }
-        if (!problem.empty()) ImGui::TextColored(kHoverNetCoral, "%s", problem.c_str());
-        if (state == OnlineLobby::State::eFailed || (state == OnlineLobby::State::eIdle && !lobby.Message().empty())) {
-            ImGui::TextColored(kHoverNetCoral, "%s", lobby.Message().c_str());
-        }
-        if (!lobby.Notice().empty()) ImGui::TextColored(kHoverNetCoral, "%s", lobby.Notice().c_str());
-
-        if (state == OnlineLobby::State::eWaiting) {
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::TextColored(kHoverNetWhite, "%s", lobby.Message().c_str());
-            if (lobby.Ack().raceId != 0 && !lobby.Spectating()) {
-                if (!hostedCode.empty()) {
-                    ImGui::TextColored(kHoverNetCoral, "Private race number %u, code %s", lobby.Ack().raceId, hostedCode.c_str());
-                    ImGui::TextDisabled("Tell your friends both: they type them under \"A friend's private race\".");
+            // ---- the panel grid of the lobby: race list | race details | actions ----
+            if (!waitingRoom) hostedCode.clear();   // set again below if this frame's Create press starts a private race
+            const float spacing = ImGui::GetStyle().ItemSpacing.x;
+            const float availWidth = ImGui::GetContentRegionAvail().x;
+            // Small screens show one panel group at a time behind tabs, as the classic lobby does.
+            const bool tabbed = availWidth < 640.0f || ImGui::GetContentRegionAvail().y < 560.0f;
+            const bool stacked = availWidth < 640.0f;
+            if (tabbed) {
+                const char* tabNames[3] = {waitingRoom ? "RACE" : "GAMES", "CHAT", "USERS"};
+                const int tabCount = waitingRoom ? 2 : 3;
+                if (lobbyTab >= tabCount) lobbyTab = 0;
+                const float tabWidth = (availWidth - spacing * (tabCount - 1)) / tabCount;
+                for (int tab = 0; tab < tabCount; ++tab) {
+                    if (tab > 0) ImGui::SameLine();
+                    const bool active = lobbyTab == tab;
+                    const bool clickedTab = active ? HoverNetButton(tabNames[tab], ImVec2(tabWidth, 40.0f)) : HoverNetQuietButton(tabNames[tab], ImVec2(tabWidth, 40.0f));
+                    if (clickedTab) lobbyTab = tab;
                 }
-                else ImGui::TextDisabled("Race number %u (it is also in everyone's list).", lobby.Ack().raceId);
             }
-            if (HoverNetButton("Leave this race", ImVec2(-FLT_MIN, 40.0f))) lobby.Cancel();
-        }
-        else if (state == OnlineLobby::State::eBrowsing) {
-            hostedCode.clear();   // set again below if this frame's Host press starts a private race
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            // 2. Open races.
-            ImGui::TextColored(kHoverNetCoral, "RACES ON THIS SERVER");
+            const float availHeight = ImGui::GetContentRegionAvail().y;
+            // The top row needs about 360 px for a race and the seven actions; the chat keeps the rest (at least ~190 px).
+            const float topHeight = tabbed ? availHeight : std::max(360.0f, std::min(availHeight * 0.58f, availHeight - 190.0f));
+            const float stackGap = ImGui::GetStyle().ItemSpacing.y;
+            const float listHeight = stacked ? (waitingRoom ? 0.0f : std::max(96.0f, availHeight * 0.26f)) : topHeight;
+            const float detailsHeight = stacked ? std::max(150.0f, availHeight * (waitingRoom ? 0.55f : 0.38f)) : topHeight;
+            const float actionsHeight = stacked ? std::max(150.0f, availHeight - listHeight - detailsHeight - stackGap * (waitingRoom ? 1.0f : 2.0f)) : topHeight;
+            const float actionsWidth = std::max(232.0f, availWidth * 0.21f);
+            const float listWidth = availWidth * 0.28f;
+            const float detailsWidth = waitingRoom ? availWidth - actionsWidth - spacing : availWidth - listWidth - actionsWidth - 2.0f * spacing;
             const auto& races = lobby.Races();
+            if (selectedRace < 0 && !races.empty() && std::getenv("HOVERNET_TEST_AUTH_SELECT") != nullptr) selectedRace = 0;   // test hook for screenshots
             if (selectedRace >= static_cast<int>(races.size())) selectedRace = -1;
-            if (ImGui::BeginListBox("##races", ImVec2(-FLT_MIN, compact ? 90.0f : 150.0f))) {
-                if (races.empty()) ImGui::TextDisabled("No open races: host one below.");
-                for (std::size_t i = 0; i < races.size(); ++i) {
-                    const Protocol3::RaceInfo& r = races[i];
-                    char line[160];
-                    std::snprintf(line, sizeof(line), "#%u  %s  %d/%d players  %d lap%s  %s%s", r.id, r.track.c_str(), r.joined, r.players, r.laps,
-                                  r.laps == 1 ? "" : "s", r.weapons ? "weapons" : "no weapons", r.started ? "  (running)" : "");
-                    if (ImGui::Selectable(line, selectedRace == static_cast<int>(i))) selectedRace = static_cast<int>(i);
+            const Protocol3::RaceInfo* selectedInfo = (!waitingRoom && selectedRace >= 0) ? &races[static_cast<std::size_t>(selectedRace)] : nullptr;
+            const bool canJoin = selectedInfo != nullptr && !selectedInfo->started && selectedInfo->joined < selectedInfo->players;
+
+            if (!tabbed || lobbyTab == 0) {
+            if (!waitingRoom) {
+                ImGui::BeginChild("GameListPanel", ImVec2(stacked ? 0.0f : listWidth, listHeight), true);
+                HoverNetSectionHeading("Game list");
+                if (ImGui::BeginListBox("##races", ImVec2(-FLT_MIN, -FLT_MIN))) {
+                    if (races.empty()) {
+                        ImGui::PushTextWrapPos(0.0f);
+                        ImGui::TextDisabled("No open races - host one to get started");
+                        ImGui::PopTextWrapPos();
+                    }
+                    for (int i = 0; i < static_cast<int>(races.size()); ++i) {
+                        const Protocol3::RaceInfo& r = races[static_cast<std::size_t>(i)];
+                        char label[200];
+                        std::snprintf(label, sizeof(label), "%s  (%d/%d)%s", r.track.c_str(), r.joined, r.players, r.started ? "  (racing)" : "");
+                        if (ImGui::Selectable(label, i == selectedRace, ImGuiSelectableFlags_AllowDoubleClick)) {
+                            selectedRace = i;
+                            const Protocol3::RaceInfo& chosen = races[static_cast<std::size_t>(i)];
+                            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !chosen.started && chosen.joined < chosen.players) lobby.Join(chosen.id, "");
+                        }
+                    }
+                    ImGui::EndListBox();
                 }
-                ImGui::EndListBox();
+                ImGui::EndChild();
+                if (!stacked) ImGui::SameLine();
             }
-            const Protocol3::RaceInfo* chosen = selectedRace >= 0 ? &races[static_cast<std::size_t>(selectedRace)] : nullptr;
-            const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2.0f) / 3.0f;
-            ImGui::BeginDisabled(chosen == nullptr || chosen->started || chosen->joined >= chosen->players);
-            if (HoverNetButton("Join", ImVec2(half, 38.0f))) lobby.Join(chosen->id, "");
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-            ImGui::BeginDisabled(chosen == nullptr || !chosen->started);
-            if (HoverNetButton("Watch", ImVec2(half, 38.0f))) lobby.Spectate(chosen->id, "");
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-            if (HoverNetButton("Refresh", ImVec2(half, 38.0f))) lobby.Refresh();
 
-            // 3. A private race by number and code.
-            ImGui::Spacing();
-            ImGui::TextColored(kHoverNetCoral, "A FRIEND'S PRIVATE RACE");
-            ImGui::TextDisabled("Private races are not listed. Type the race number and the code your friend gave you.");
-            ImGui::SetNextItemWidth(compact ? 80.0f : 110.0f);
-            ImGui::InputTextWithHint("##racenumber", "number", raceNumber, sizeof(raceNumber), ImGuiInputTextFlags_CharsDecimal);
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(compact ? 140.0f : 220.0f);
-            ImGui::InputTextWithHint("##joincode", "code", joinCode, sizeof(joinCode));
-            ImGui::SameLine();
-            const std::uint32_t number = static_cast<std::uint32_t>(std::strtoul(raceNumber, nullptr, 10));
-            ImGui::BeginDisabled(number == 0 || joinCode[0] == '\0');
-            if (HoverNetButton("Join", ImVec2(70.0f, 0.0f))) lobby.Join(number, joinCode);
-            ImGui::SameLine();
-            if (HoverNetButton("Watch", ImVec2(80.0f, 0.0f))) lobby.Spectate(number, joinCode);
-            ImGui::EndDisabled();
+            ImGui::BeginChild("GameDetailsPanel", ImVec2(stacked ? 0.0f : detailsWidth, detailsHeight), true,
+                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            HoverNetSectionHeading(waitingRoom ? "Your race" : "Game details");
+            if (waitingRoom) {
+                const Protocol3::HelloAck& ack = lobby.Ack();
+                const int trackIndex = FindHostableTrack(ack.track);
+                const TrackBriefing briefing = BriefingFor(trackIndex);
+                const float infoWidth = stacked ? 0.0f : std::max(250.0f, ImGui::GetContentRegionAvail().x * 0.46f);
+                ImGui::BeginChild("RaceInfoColumn", stacked ? ImVec2(0.0f, ImGui::GetContentRegionAvail().y * 0.55f) : ImVec2(infoWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
+                infoRow("Track:", ack.track.empty() ? "-" : ack.track);
+                if (!ack.track.empty()) {
+                    infoRow("Laps:", briefing.mFreePlay ? "none (free play)" : std::to_string(ack.laps));
+                    infoRow("Weapons:", ack.weapons ? "On" : "Off");
+                    infoRow("Players:", ack.players == 1 ? std::string("1 (a time trial: you race the clock)") : std::to_string(ack.players));
+                    if (ack.raceId != 0) infoRow("Race:", "number " + std::to_string(ack.raceId));
+                }
+                ImGui::Spacing();
+                if (ack.raceId != 0 && !hostedCode.empty()) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
+                    ImGui::TextWrapped("Private race: tell your friends number %u and code %s. They type both under \"Join a private race\".", ack.raceId, hostedCode.c_str());
+                    ImGui::PopStyleColor();
+                }
+                ImGui::EndChild();
+                if (!stacked) ImGui::SameLine();
+                ImGui::BeginChild("RaceMapColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
+                if (trackIndex >= 0) DrawTrackPreview(previewFor(trackIndex), 80.0f, false);
+                ImGui::EndChild();
+            }
+            else if (selectedInfo != nullptr) {
+                const int trackIndex = FindHostableTrack(selectedInfo->track);
+                const TrackBriefing briefing = BriefingFor(trackIndex);
+                const float mapWidth = std::min(190.0f, ImGui::GetContentRegionAvail().x * 0.36f);
+                const float infoHeight = 178.0f;
+                ImGui::BeginChild("SelectedRaceMap", ImVec2(mapWidth, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
+                DrawTrackPreview(trackIndex >= 0 ? previewFor(trackIndex) : TrackPreview(), 96.0f, false);
+                ImGui::EndChild();
+                ImGui::SameLine();
+                ImGui::BeginChild("SelectedRaceInfo", ImVec2(0, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f));
+                infoRow("Track:", selectedInfo->track);
+                infoRow("Laps:", briefing.mFreePlay ? "none (free play)" : std::to_string(selectedInfo->laps));
+                infoRow("Weapons:", selectedInfo->weapons ? "On" : "Off");
+                infoRow("Players:", std::to_string(selectedInfo->joined) + " / " + std::to_string(selectedInfo->players));
+                if (trackIndex >= 0) infoRow("Style:", briefing.mCharacter + " - " + briefing.mDifficulty);
+                infoRow("Status:", selectedInfo->started ? "Race in progress" : "Waiting for players");
+                infoRow("Race:", "number " + std::to_string(selectedInfo->id));
+                ImGui::PopStyleVar();
+                ImGui::EndChild();
+                if (trackIndex >= 0 && !briefing.mDescription.empty()) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.62f, 0.62f, 0.69f, 1.0f));
+                    ImGui::TextWrapped("%s", briefing.mDescription.c_str());
+                    ImGui::PopStyleColor();
+                }
+            }
+            else {
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextDisabled("Select a race in the list to see its track, laps, weapons and players, or host your own.");
+                ImGui::PopTextWrapPos();
+            }
+            ImGui::EndChild();
 
-            // 4. Host.
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::TextColored(kHoverNetCoral, "HOST A RACE");
-            ImGui::PushItemWidth(-1.0f);
+            if (!stacked) ImGui::SameLine();
+            ImGui::BeginChild("ActionsPanel", ImVec2(0, actionsHeight), true);
+            if (waitingRoom) {
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextDisabled("%s", lobby.Message().c_str());
+                ImGui::PopTextWrapPos();
+                ImGui::Spacing();
+                if (HoverNetQuietButton("Leave Race", ImVec2(-FLT_MIN, 0))) lobby.Cancel();
+            }
+            else {
+                ImGui::BeginDisabled(!canJoin);
+                if (HoverNetButton("Join Game", ImVec2(-FLT_MIN, 40))) lobby.Join(selectedInfo->id, "");
+                ImGui::EndDisabled();
+                ImGui::BeginDisabled(selectedInfo == nullptr || !selectedInfo->started);
+                if (HoverNetQuietButton("Watch Race", ImVec2(-FLT_MIN, 0))) lobby.Spectate(selectedInfo->id, "");
+                ImGui::EndDisabled();
+                if (HoverNetQuietButton("Refresh", ImVec2(-FLT_MIN, 0))) lobby.Refresh();
+                ImGui::Spacing();
+                if (HoverNetButton("HOST A RACE", ImVec2(-FLT_MIN, 44.0f))) requestHostPopup = true;
+                hostOpenCenter = centreOfLastItem();
+                if (HoverNetQuietButton("Join a private race", ImVec2(-FLT_MIN, 0))) requestPrivatePopup = true;
+            }
+            if (!lobby.Notice().empty() || !problem.empty()) {
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+                ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
+                if (!lobby.Notice().empty()) ImGui::TextWrapped("%s", lobby.Notice().c_str());
+                if (!problem.empty()) ImGui::TextWrapped("%s", problem.c_str());
+                ImGui::PopStyleColor();
+            }
+            // Leaving sits apart at the bottom so it is not hit by mistake.
+            ImGui::SetCursorPosY(std::max(ImGui::GetCursorPosY(), actionsHeight - 2.0f * ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().WindowPadding.y));
+            if (!waitingRoom) {
+                if (HoverNetQuietButton("Use another server...", ImVec2(-FLT_MIN, 0))) { lobby.Close(); selectedRace = -1; showCard = true; autoPending = false; autoAttempt = false; }
+            }
+            if (HoverNetQuietButton("Back to Menu", ImVec2(-FLT_MIN, 0))) { lobby.Close(); running = false; }
+            ImGui::EndChild();
+            }
+
+            // ---- the bottom row: who is here, and the chat, as in the classic lobby ----
+            if (!waitingRoom && (!tabbed || lobbyTab == 2)) {
+                ImGui::BeginChild("UsersListPanel", ImVec2(tabbed ? 0.0f : listWidth, 0), true);
+                char heading[48];
+                std::snprintf(heading, sizeof(heading), "In the lobby (%d)", lobby.UsersTotal() > 0 ? lobby.UsersTotal() : 1);
+                HoverNetSectionHeading(heading);
+                ImGui::BeginChild("UsersListBox", ImVec2(-FLT_MIN, -FLT_MIN), true);
+                bool listedYou = false;
+                for (const std::string& user : lobby.Users()) {
+                    if (!listedYou && user == name) { ImGui::BulletText("%s (you)", user.c_str()); listedYou = true; }
+                    else ImGui::BulletText("%s", user.c_str());
+                }
+                if (lobby.Users().empty()) ImGui::BulletText("%s (you)", name.c_str());
+                if (lobby.UsersTotal() > static_cast<int>(lobby.Users().size())) ImGui::TextDisabled("+ %d more", lobby.UsersTotal() - static_cast<int>(lobby.Users().size()));
+                ImGui::EndChild();
+                ImGui::EndChild();
+                if (!tabbed) ImGui::SameLine();
+            }
+            if (!tabbed || lobbyTab == 1) {
+                ImGui::BeginChild("ChatPanel", ImVec2(0, 0), true);
+                HoverNetSectionHeading(waitingRoom ? "Race chat" : "Lobby chat");
+                const float inputRow = ImGui::GetFrameHeightWithSpacing() + 4.0f;
+                ImGui::BeginChild("ChatLog", ImVec2(0, std::max(40.0f, ImGui::GetContentRegionAvail().y - inputRow)), true);
+                for (const std::string& line : lobby.ChatLines()) {
+                    ImGui::PushTextWrapPos(0.0f);
+                    ImGui::TextUnformatted(line.c_str());
+                    ImGui::PopTextWrapPos();
+                }
+                if (lobby.ChatLines().size() != lastChatCount) { ImGui::SetScrollHereY(1.0f); lastChatCount = lobby.ChatLines().size(); }
+                ImGui::EndChild();
+                ImGui::SetNextItemWidth(std::max(60.0f, ImGui::GetContentRegionAvail().x - 84.0f));
+                if (focusChat) { SDL_StartTextInput(); ImGui::SetKeyboardFocusHere(); focusChat = false; }
+                bool sendChat = ImGui::InputTextWithHint("##lobbychat", "Say something...", chatInput, sizeof(chatInput), ImGuiInputTextFlags_EnterReturnsTrue);
+                ImGui::SameLine();
+                sendChat = HoverNetButton("Send", ImVec2(-FLT_MIN, 0)) || sendChat;
+                if (sendChat && chatInput[0] != '\0') { lobby.SendChat(chatInput); chatInput[0] = '\0'; focusChat = true; }
+                ImGui::EndChild();
+            }
+        }
+
+        // Popups are opened at the window's own scope (the same ID-stack depth as BeginPopupModal), as in the lobby.
+        if (requestHostPopup) { hostPopupOpen = true; ImGui::OpenPopup("HostRace"); requestHostPopup = false; problem.clear(); }
+        if (requestPrivatePopup) { privatePopupOpen = true; ImGui::OpenPopup("PrivateRace"); requestPrivatePopup = false; problem.clear(); }
+        const ImGuiViewport* popupViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowSize(ImVec2(std::min(860.0f, popupViewport->WorkSize.x - 40.0f), std::min(690.0f, popupViewport->WorkSize.y - 30.0f)), ImGuiCond_Appearing);
+        if (ImGui::BeginPopupModal("HostRace", &hostPopupOpen)) {
+            HoverNetSectionHeading("Host a race");
+            const float contentWidth = ImGui::GetContentRegionAvail().x;
+            const float selectorHeight = ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().ItemSpacing.y;
+            const bool sideBySide = contentWidth >= 610.0f;
+            const float gap = ImGui::GetStyle().ItemSpacing.x;
+            const float controlsWidth = sideBySide ? contentWidth * 0.52f : contentWidth;
+            ImGui::BeginChild("HostRaceOptions", ImVec2(controlsWidth, sideBySide ? selectorHeight : 330.0f), false);
             ImGui::TextUnformatted("Track");
-            TrackSelector("##hosttrack", 2, prefs.mTrackIndex);
-            ImGui::TextUnformatted("Players (1 is a time trial: you race the clock alone)");
-            ImGui::SliderInt("##players", &players, 1, 8);
+            ImGui::SetNextItemWidth(-1.0f);
+            TrackSelector("##HostTrack", 2, prefs.mTrackIndex);
+            const TrackBriefing guide = BriefingFor(prefs.mTrackIndex);
+            const TrackEntry* hostTrack = Tracks().Get(prefs.mTrackIndex);
+            ImGui::Spacing();
+            HoverNetSectionHeading("Course briefing");
+            ImGui::Text("Style: %s", guide.mCharacter.c_str());
+            ImGui::SameLine();
+            ImGui::TextDisabled("  Difficulty: %s", guide.mDifficulty.c_str());
+            ImGui::TextWrapped("%s", guide.mDescription.c_str());
+            const bool trackOk = hostTrack != nullptr && hostTrack->mOfficial;
+            if (!trackOk) AccentNote("Servers host the official tracks unless their owner added others: pick one of the first seven.");
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Players");
+            ImGui::SameLine();
+            ImGui::TextDisabled(players == 1 ? "A time trial: you race the clock alone" : "The race starts when they are all in");
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::SliderInt("##HostPlayers", &players, 1, 8);
+            ImGui::BeginDisabled(guide.mFreePlay);
             ImGui::TextUnformatted("Laps");
-            ImGui::SliderInt("##laps", &laps, 1, 10);
-            ImGui::PopItemWidth();
+            ImGui::SameLine();
+            ImGui::TextDisabled(guide.mFreePlay ? "Not used on a free-play track" : "Suggested: %d", guide.mSuggestedLaps);
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::SliderInt("##HostLaps", &laps, 1, 10);
+            ImGui::EndDisabled();
             ImGui::Checkbox("Weapons enabled", &weapons);
-            ImGui::TextUnformatted("Private code (6 to 16 characters; leave empty for a public race)");
+            ImGui::TextUnformatted("Private code");
+            ImGui::SameLine();
+            ImGui::TextDisabled("6 to 16 characters; empty for a public race");
             ImGui::SetNextItemWidth(-1.0f);
             ImGui::InputTextWithHint("##hostcode", "e.g. kestrel7", hostCode, sizeof(hostCode));
             const bool codeOk = PrivateCodeOk(hostCode);
-            if (!codeOk) ImGui::TextColored(kHoverNetCoral, "A private code needs 6 to 16 characters.");
-            const TrackEntry* track = Tracks().Get(prefs.mTrackIndex);
-            ImGui::BeginDisabled(!codeOk || track == nullptr);
-            if (HoverNetButton(players == 1 ? "START TIME TRIAL" : (hostCode[0] != '\0' ? "HOST PRIVATE RACE" : "HOST RACE"), ImVec2(-FLT_MIN, 44.0f))) {
-                if (track->mOfficial) {
-                    lobby.Host(track->mName, players, laps, weapons, hostCode);
-                    hostedCode = hostCode;
-                    prefs.mLaps = laps;
-                    prefs.mWeapons = weapons;
-                }
-                else problem = "Servers host the official tracks unless their owner added others: pick one of the first seven.";
+            if (!codeOk) AccentNote("A private code needs 6 to 16 characters.");
+            ImGui::EndChild();
+            if (sideBySide) {
+                ImGui::SameLine(0.0f, gap);
+                ImGui::BeginChild("HostTrackPreview", ImVec2(0, selectorHeight), false);
+                DrawTrackPreview(previewFor(prefs.mTrackIndex));
+                ImGui::EndChild();
             }
-            hostCenter = ImVec2((ImGui::GetItemRectMin().x + ImGui::GetItemRectMax().x) * 0.5f, (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f);
-            if (clickTest != nullptr && clickStep >= 2) ImGui::SetScrollHereY(0.7f);   // the test scrolls the Host button into view (a player uses the wheel)
+            else {
+                ImGui::Spacing();
+                ImGui::BeginChild("HostTrackPreview", ImVec2(0, 190.0f), false);
+                DrawTrackPreview(previewFor(prefs.mTrackIndex));
+                ImGui::EndChild();
+            }
+            ImGui::BeginDisabled(!codeOk || !trackOk);
+            if (HoverNetButton(players == 1 ? "Start Time Trial" : (hostCode[0] != '\0' ? "Create Private Race" : "Create Race"), ImVec2(190, 36))) {
+                lobby.Host(hostTrack->mName, players, laps, weapons, hostCode);
+                hostedCode = hostCode;
+                prefs.mLaps = laps;
+                prefs.mWeapons = weapons;
+                hostPopupOpen = false;
+                ImGui::CloseCurrentPopup();
+            }
+            createCenter = centreOfLastItem();
             ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (HoverNetButton("Cancel", ImVec2(120, 36))) { hostPopupOpen = false; ImGui::CloseCurrentPopup(); }
+            ImGui::EndPopup();
         }
-        ImGui::Spacing();
-        if (state != OnlineLobby::State::eWaiting && HoverNetButton("Back", ImVec2(-FLT_MIN, 40.0f))) running = false;
-        HoverNetHint("Esc: back");
-        ImGui::EndChild();
+        ImGui::SetNextWindowSize(ImVec2(std::min(560.0f, popupViewport->WorkSize.x - 40.0f), 0.0f), ImGuiCond_Appearing);
+        if (ImGui::BeginPopupModal("PrivateRace", &privatePopupOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
+            HoverNetSectionHeading("Join a private race");
+            ImGui::Spacing();
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("Private races are not listed. Type the race number and the code your friend gave you.");
+            ImGui::PopTextWrapPos();
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Race number");
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::InputTextWithHint("##racenumber", "number", raceNumber, sizeof(raceNumber), ImGuiInputTextFlags_CharsDecimal);
+            ImGui::TextUnformatted("Code");
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::InputTextWithHint("##joincode", "code", joinCode, sizeof(joinCode));
+            ImGui::Spacing();
+            const std::uint32_t number = static_cast<std::uint32_t>(std::strtoul(raceNumber, nullptr, 10));
+            ImGui::BeginDisabled(number == 0 || joinCode[0] == '\0');
+            if (HoverNetButton("Join", ImVec2(120, 36))) { lobby.Join(number, joinCode); privatePopupOpen = false; ImGui::CloseCurrentPopup(); }
+            ImGui::SameLine();
+            if (HoverNetQuietButton("Watch", ImVec2(120, 36))) { lobby.Spectate(number, joinCode); privatePopupOpen = false; ImGui::CloseCurrentPopup(); }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (HoverNetQuietButton("Cancel", ImVec2(120, 36))) { privatePopupOpen = false; ImGui::CloseCurrentPopup(); }
+            ImGui::EndPopup();
+        }
+
         ImGui::End();
 
         ImGui::Render();
@@ -5334,7 +5669,8 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
         ImGui_ImplSDL2_Shutdown();
         ImGui::DestroyContext();
     }
-    return ready;
+    if (ready) return AuthScreenResult::eRace;
+    return result;
 }
 #endif
 
@@ -5342,7 +5678,6 @@ enum class MenuChoice
 {
     eLocalPlay,
     eOnlineLobby,
-    eAuthServer,   // play on a HoverNet 3.0 server (native only)
     eSettings,
     eControls,
     eHowToPlay,
@@ -5379,11 +5714,11 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     constexpr int optionCount = sizeof(options) / sizeof(options[0]);
     MenuChoice choice = MenuChoice::eLocalPlay;
 #if defined(HOVERNET_AUTH)
-    // Test hook: a bounded run picks "HoverNet Servers" (scripts/test-online-menu.sh); never set in normal play.
+    // Test hook: a bounded run picks ONLINE MULTIPLAYER (scripts/test-online-menu.sh); never set in normal play.
     const char* testMenu = std::getenv("HOVERNET_TEST_MENU");
     static bool sPickedForTest = false;   // once: after the screen is left without a race, a bounded run falls back to Local Play
     const bool pickAuthServerForTest = !sPickedForTest && (pFrameLimit >= 0 || std::getenv("HOVERNET_TEST_MENU_FORCE") != nullptr) && testMenu != nullptr && std::string(testMenu) == "authserver";
-    if (pickAuthServerForTest) { choice = MenuChoice::eAuthServer; sPickedForTest = true; }
+    if (pickAuthServerForTest) { choice = MenuChoice::eOnlineLobby; sPickedForTest = true; }
 #else
     const bool pickAuthServerForTest = false;
 #endif
@@ -5574,13 +5909,6 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             choice = MenuChoice::eOnlineLobby;
             running = false;
         }
-#if defined(HOVERNET_AUTH)
-        ImGui::Spacing();
-        if (HoverNetButton("HOVERNET SERVERS", ImVec2(-FLT_MIN, secondaryHeight))) {
-            choice = MenuChoice::eAuthServer;
-            running = false;
-        }
-#endif
         ImGui::PopStyleVar();
 
         ImGui::Spacing();
@@ -6516,12 +6844,13 @@ int RunClient(int argc, char** argv)
 #endif
 
 #if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
-    // The HoverNet Servers screen and, once a race is ready, the race itself. True when a race is now running; false when the player
-    // left the screen (or the race could not be set up: the reason is printed) and nothing changed.
-    auto playOnAuthServer = [&]() -> bool {
+    // The HoverNet server screen and, once a race is ready, the race itself. eRace: a race is now running. eBack: the player went back (or
+    // the race could not be set up: the reason is printed). eFallback: the official server could not be reached.
+    auto tryAuthServer = [&]() -> AuthScreenResult {
         endAuthRace();
         OnlineLobby lobby;
-        if (!RunAuthServerScreen(graphics, lobby, frameLimit)) return false;
+        const AuthScreenResult screen = RunAuthServerScreen(graphics, lobby, frameLimit);
+        if (screen != AuthScreenResult::eRace) return screen;
         auth.ack = lobby.Ack();
         auth.backlog = lobby.TakeBacklog();
         auth.spectator = lobby.Spectating();
@@ -6535,11 +6864,22 @@ int RunClient(int argc, char** argv)
         if (!startError.empty()) {
             endAuthRace();
             std::fprintf(stderr, "%s\n", startError.c_str());
-            return false;
+            return AuthScreenResult::eBack;
         }
-        return true;
+        return AuthScreenResult::eRace;
     };
 #endif
+    // The one way into online play (main menu, pause menu, results screen): the HoverNet server first, and the classic lobby when the
+    // HoverNet server is not available. True when a race is set up, false when the player went back.
+    auto enterOnlineMultiplayer = [&]() -> bool {
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+        const AuthScreenResult tried = tryAuthServer();
+        if (tried == AuthScreenResult::eRace) return true;
+        if (tried == AuthScreenResult::eBack) return false;
+        std::printf("The HoverNet server is not available: using the classic lobby\n");
+#endif
+        return joinOnlineRace();
+    };
 
     if (playerMode && menuFontHandle == nullptr) {
         return FatalClientError("Could not load the menu font from ObjFac1.dat.");
@@ -6692,7 +7032,7 @@ int RunClient(int argc, char** argv)
                 // and so exits immediately without ever rendering a frame.
             }
             else if (choice == MenuChoice::eOnlineLobby) {
-                if (!joinOnlineRace()) {
+                if (!enterOnlineMultiplayer()) {
                     std::printf("Lobby skipped or unavailable; returning to the main menu\n");
                     pickingMode = !g_QuitConfirmed;
                 }
@@ -6725,9 +7065,6 @@ int RunClient(int argc, char** argv)
                 pickingMode = !g_QuitConfirmed;
             }
 #if defined(HOVERNET_AUTH)
-            else if (choice == MenuChoice::eAuthServer) {
-                if (!playOnAuthServer()) pickingMode = !g_QuitConfirmed;
-            }
 #endif
             else if (choice == MenuChoice::eControls) {
                 RunControlsScreen(graphics, frameLimit);
@@ -6989,7 +7326,6 @@ int RunClient(int argc, char** argv)
         const MR_3DCoordinate previousCamera = camera;
         bool leaveForLobby = false;
         bool startNewLocalRace = false;
-        bool openAuthServer = false;   // the pause menu's HoverNet Servers
         bool openResults = false;   // Enter (or the controller's Back button) after a finish: show the results and race options
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -7086,9 +7422,6 @@ int RunClient(int argc, char** argv)
                             startNewLocalRace = true;
                         }
                     }
-                    else if (pauseChoice == PauseChoice::eAuthServer) {
-                        openAuthServer = true;
-                    }
                     else if (pauseChoice == PauseChoice::eOnlineLobby) {
                         // Same as "Leave Race" when already online -- reset and
                         // rejoin the lobby -- but always offered, so offline
@@ -7142,27 +7475,13 @@ int RunClient(int argc, char** argv)
         if (leaveForLobby) {
             missileSeen = false;
             finishAnnounced = false; resultsPending = false;
-            if (!resetRaceSession() || !joinOnlineRace()) {
+            if (!resetRaceSession() || !enterOnlineMultiplayer()) {
                 running = false;
                 break;
             }
             wasOnlineConnected = onlineClient.IsConnected();
             continue;
         }
-#if defined(HOVERNET_AUTH)
-        if (openAuthServer) {
-            if (playOnAuthServer()) {
-                missileSeen = false;
-                finishAnnounced = false; resultsPending = false;
-                wasOnlineConnected = onlineClient.IsConnected();
-            }
-            else if (g_QuitConfirmed) {
-                running = false;
-                break;
-            }
-            continue;
-        }
-#endif
         if (startNewLocalRace) {
             const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
                                                             *menuFontHandle->GetSprite(), frameLimit);
@@ -7502,25 +7821,12 @@ int RunClient(int argc, char** argv)
                 if (resultChoice == PostRaceChoice::eOnlineLobby) {
                     missileSeen = false;
                     finishAnnounced = false; resultsPending = false;
-                    if (!resetRaceSession() || !joinOnlineRace()) {
+                    if (!resetRaceSession() || !enterOnlineMultiplayer()) {
                         running = false;
                     }
                     wasOnlineConnected = onlineClient.IsConnected();
                     continue;
                 }
-#if defined(HOVERNET_AUTH)
-                if (resultChoice == PostRaceChoice::eAuthServer) {
-                    if (playOnAuthServer()) {
-                        missileSeen = false;
-                        finishAnnounced = false; resultsPending = false;
-                        wasOnlineConnected = onlineClient.IsConnected();
-                    }
-                    else if (g_QuitConfirmed) {
-                        running = false;
-                    }
-                    continue;
-                }
-#endif
                 if (resultChoice == PostRaceChoice::eNewLocalRace) {
                     const LocalRaceSetup setup = RunLocalRaceSetup(
                         graphics, buffer, viewport, *menuFontHandle->GetSprite(), frameLimit);

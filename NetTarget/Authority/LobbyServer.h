@@ -71,6 +71,7 @@ private:
     void Invalid(Conn& c, std::int64_t nowMs);
     void Handle(Conn& c, std::uint8_t type, const std::vector<std::uint8_t>& payload, std::int64_t nowMs);
     void SendList(Conn& c);
+    void BroadcastUsersIfChanged();
     bool CodeAccepted(Conn& c, Entry& e, const std::string& code);
     void Attach(Conn& c, Entry& e, const std::vector<std::uint8_t>& firstFrame, std::int64_t nowMs);
 
@@ -83,6 +84,7 @@ private:
     RaceHost::Metrics mRemoved;      // counters of races already removed
     std::uint64_t mRacesHosted = 0;
     bool mDraining = false;
+    std::string mLastUsers;          // the lobby's user list as last sent (a change is sent to those that asked for it)
     std::function<void(std::uint32_t, const RaceHost&)> mOnFinished;
 };
 }

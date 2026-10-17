@@ -117,3 +117,6 @@ SnapshotRequest and SnapshotChunk.
 Decoder fuzzing for every frame type and the handshake, fragmented and coalesced frames, a malformed-nested-length corpus,
 replay-attack tests (duplicate and reordered counters), downgrade attempts (v3 hello answered with a v2 accept), slow-loris
 frames, and the load, soak and abuse runs through the WebSocket gateway.
+
+
+**Lobby chat (capability bit 1, `kCapLobbyChat`).** A client that sets it in Hello gets `LobbyUsers` (type 34: `u16` total, `u8` count, up to 30 names; sent whenever who is in the lobby changes) and may send Chat / receive ChatMessage while it is still in the lobby (before it hosts, joins or watches a race); the server rate limits lobby chat (a burst, then one a second) and applies mutes. A client that does not set the bit never sees the new message type.

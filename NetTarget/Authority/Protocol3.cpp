@@ -226,6 +226,25 @@ bool Decode(const std::vector<std::uint8_t>& p, Result& m)
     return in.Done();
 }
 
+std::vector<std::uint8_t> Encode(const LobbyUsers& m)
+{
+    Out o;
+    o.U16(m.total);
+    o.U8(static_cast<std::uint32_t>(m.names.size()));
+    for (const std::string& n : m.names) o.Str(n);
+    return o.b;
+}
+bool Decode(const std::vector<std::uint8_t>& p, LobbyUsers& m)
+{
+    In in(p);
+    m.total = static_cast<std::uint16_t>(in.U16());
+    const std::uint32_t count = in.U8();
+    if (!in.ok || count > static_cast<std::uint32_t>(kMaxLobbyUserNames)) return false;
+    m.names.clear();
+    for (std::uint32_t i = 0; i < count && in.ok; ++i) m.names.push_back(in.Str(32));
+    return in.Done() && m.total >= m.names.size();
+}
+
 std::vector<std::uint8_t> Encode(const RaceList& m)
 {
     Out o;

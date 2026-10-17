@@ -6,6 +6,13 @@ and how to roll one back.
 
 ## Unreleased
 
+### Changed
+- **One way into online play.** The separate HOVERNET SERVERS button is gone: **ONLINE MULTIPLAYER** connects to the HoverNet server by itself (nothing to type but, once, your name) and opens the classic lobby if the HoverNet server is not available. A server address and key are only asked for under **Use another server...** in the lobby. The lobby screen was rebuilt in the classic lobby's layout (game list, details with the track map, actions, host dialog) instead of a plain form.
+
+### Added
+- **Lobby chat and a list of who is in the lobby** on the HoverNet server and in both clients (protocol: capability bit 1 and message 34, additive; older clients are unaffected). Messages are rate limited and mutes apply.
+- The client connects to a server by **name** (it only accepted a numeric IPv4 address), gives up after four seconds instead of hanging, and a missing server is reported at once.
+
 ## 2.1.1 - 2026-10-17
 
 ### Fixed

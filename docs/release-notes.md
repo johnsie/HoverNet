@@ -1,10 +1,7 @@
 ## HoverNet 2.1
 
 ### What's new in 2.1
-- **HoverNet servers.** A new main-menu screen (**HOVERNET SERVERS**, also on the pause and results screens, and in the browser) connects to the
-  new HoverNet servers, where the server runs the race: host a race, join one, watch one, race **privately** with a code, or start a
-  **one-player time trial**. See [Playing on a HoverNet server](playing-on-servers.md). There is no public server built in; the server's
-  owner gives you its address.
+- **One way into online play.** **ONLINE MULTIPLAYER** (main menu, pause menu, results screen, and in the browser) now connects to the HoverNet server by itself: you type nothing but, once, your name. The lobby has the classic layout (game list, race details, actions, who is in the lobby, and lobby chat), with private races, one-player time trials, watching, and a map of every track. If the HoverNet server is not available the classic lobby opens instead. **Use another server...** is there for a friend's or a club's server. See [Playing on a HoverNet server](playing-on-servers.md).
 - **Finishing no longer takes the race away.** You are told to press **Enter** for your results; keep driving and chatting as long as you like.
 - **Chat** in races on the new servers, during and after the race.
 - **Spectator camera:** **[** and **]** (and Left/Right when watching a live race) switch between the craft.

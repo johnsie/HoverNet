@@ -6,6 +6,7 @@
 #define ONLINE_LOBBY_H
 
 #include <cstdint>
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,12 @@ public:
     State GetState() const { return mState; }
     const std::string& Message() const { return mMessage; }                   // the last error or status, for display
     const std::vector<Protocol3::RaceInfo>& Races() const { return mRaces; }
+    // Who is in the lobby (the first few names and how many in all) and what has been said: lobby chat before a race, the race's chat while
+    // waiting in one. Empty against a server that does not offer lobby chat.
+    const std::vector<std::string>& Users() const { return mUsers; }
+    int UsersTotal() const { return mUsersTotal; }
+    const std::deque<std::string>& ChatLines() const { return mChat; }
+    void SendChat(const std::string& text);
     const std::string& Notice() const { return mNotice; }                    // why the last host/join/watch was refused (cleared by the next request)
     bool Spectating() const { return mSpectating; }
     const Protocol3::HelloAck& Ack() const { return mAck; }
@@ -60,6 +67,9 @@ private:
     AuthConnection mConn;
     State mState = State::eIdle;
     std::string mMessage, mNotice;
+    std::vector<std::string> mUsers;
+    int mUsersTotal = 0;
+    std::deque<std::string> mChat;
     std::string mHost, mName;
     int mPort = 0;
     std::vector<std::uint8_t> mKey;

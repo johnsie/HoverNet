@@ -76,6 +76,28 @@ int main(int argc, char** argv)
     Check(id != 0, "a running public race is listed");
     if (id != 0) { watcher.Spectate(id, ""); Check(WaitFor(watcher, OnlineLobby::State::eReady, 8000) && watcher.Spectating(), "a spectator is let in"); }
 
-    std::printf("%s\n", gFailures == 0 ? "online lobby: browse, private race, refusal message, join, time trial, spectate" : "FAILED");
+    // The lobby's chat and who is in it.
+    {
+        OnlineLobby ann, bob;
+        Check(ann.Connect("127.0.0.1", port, "Ann", noKey) && bob.Connect("127.0.0.1", port, "Bob", noKey), "two players connect to chat");
+        bool seen = false;
+        for (int i = 0; i < 300 && !seen; ++i) {
+            ann.Pump(); bob.Pump();
+            auto has = [](const OnlineLobby& l, const char* n) { for (const auto& u : l.Users()) if (u == n) return true; return false; };
+            seen = has(ann, "Ann") && has(ann, "Bob") && has(bob, "Ann") && has(bob, "Bob");
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        Check(seen, "each player sees the other in the lobby's user list");
+        ann.SendChat("hello lobby");
+        bool heard = false;
+        for (int i = 0; i < 300 && !heard; ++i) {
+            ann.Pump(); bob.Pump();
+            heard = !bob.ChatLines().empty() && bob.ChatLines().back() == "Ann: hello lobby" && !ann.ChatLines().empty();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        Check(heard, "a lobby message reaches the others, and the sender sees it too");
+    }
+
+    std::printf("%s\n", gFailures == 0 ? "online lobby: browse, private race, refusal message, join, time trial, spectate, lobby chat and users" : "FAILED");
     return gFailures == 0 ? 0 : 1;
 }

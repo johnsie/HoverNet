@@ -117,7 +117,7 @@ The web client reaches the server as `wss://hovernet.outiva.com/auth/`. For that
    `HTTP/1.1 101 Switching Protocols` means the browser path works; `403` means the Origin does not match `ws-origin`; `404` means the
    Apache lines are not enabled.
 
-Players then open the web client, choose **HOVERNET SERVERS**, and **Connect** (its default address is exactly this one).
+Players then open the web client and choose **ONLINE MULTIPLAYER**: it connects to this address by itself (and opens the classic lobby if the server is not reachable).
 
 ## Restarting without ending anyone's race (rolling deployment)
 

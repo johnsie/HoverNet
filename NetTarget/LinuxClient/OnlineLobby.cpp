@@ -39,8 +39,8 @@ bool OnlineLobby::Connect(const std::string& host, int port, const std::string& 
     if (!mConn.Connect(host, port, error, serverKey.empty() ? nullptr : serverKey.data())) { Fail(error.empty() ? "Could not connect to the server." : error); return false; }
     Hello hello;
     hello.name = name.substr(0, 32);
-    hello.capabilities = kCapRaceId;   // this client shows the race number to a host
-    mRaces.clear(); mBacklog.clear();
+    hello.capabilities = kCapRaceId | kCapLobbyChat;   // this client shows the race number to a host, and the lobby's chat and users
+    mRaces.clear(); mBacklog.clear(); mUsers.clear(); mUsersTotal = 0; mChat.clear();
     mGotAck = mGotStart = mSpectating = false;
     mState = State::eIdle;
     mMessage = "Connecting...";
@@ -79,6 +79,17 @@ void OnlineLobby::Pump()
                 return;
             }
             Fail(text);
+        }
+        else if (f.type == kLobbyUsers) {
+            LobbyUsers u;
+            if (Decode(f.payload, u)) { mUsers = u.names; mUsersTotal = u.total; }
+        }
+        else if (f.type == kChatMessage) {
+            ChatMessage m;
+            if (Decode(f.payload, m)) {
+                mChat.push_back(m.fromServer ? "Server: " + m.text : m.name + ": " + m.text);
+                while (mChat.size() > 200) mChat.pop_front();
+            }
         }
         else if (f.type == kHelloAck) { mGotAck = Decode(f.payload, mAck); }
         else if (f.type == kStart) { mGotStart = true; }
@@ -139,4 +150,12 @@ void OnlineLobby::Cancel()
     const int port = mPort;
     const std::vector<std::uint8_t> key = mKey;
     Connect(host, port, name, key);
+}
+
+void OnlineLobby::SendChat(const std::string& text)
+{
+    if (mState != State::eBrowsing && mState != State::eWaiting) return;
+    Chat c;
+    c.text = text.substr(0, 120);
+    Send(kChat, Encode(c));
 }

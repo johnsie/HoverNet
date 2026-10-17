@@ -38,6 +38,9 @@ struct Client
     std::uint8_t rejectReason = 0;
     unsigned ticks = 0;
     std::uint32_t ackRaceId = 0;
+    Protocol3::LobbyUsers users;
+    bool gotUsers = false;
+    std::vector<std::string> chats;           // "name: text"
     std::size_t ackBytes = 0;     // the size of the HelloAck payload (an old client must get the old size)
 
     void Open(LobbyServer& l, std::int64_t now) { lobby = &l; conn = l.Connect(now); }
@@ -63,6 +66,8 @@ struct Client
             using namespace Protocol3;
             if (type == kRaceList) gotList = Decode(payload, list);
             else if (type == kHelloAck) { HelloAck a; if (Decode(payload, a)) { player = a.player; token = a.resumeToken; ackRaceId = a.raceId; ackBytes = payload.size(); } }
+            else if (type == kLobbyUsers) gotUsers = Decode(payload, users);
+            else if (type == kChatMessage) { ChatMessage m; if (Decode(payload, m)) chats.push_back((m.fromServer ? std::string("(server) ") : std::string()) + m.name + ": " + m.text); }
             else if (type == kStart) started = true;
             else if (type == kTick) ++ticks;
             else if (type == kResult) gotResult = true;
@@ -354,6 +359,43 @@ int main()
         old.Send(Protocol3::kJoinRace, Protocol3::Encode(join), now); old.Pump();
         Check(old.player == 1 && old.ackRaceId == 0, "a client that did not ask gets the original acknowledgement, without the race number");
         Check(old.ackBytes + 4 == modern.ackBytes, "the acknowledgement is exactly four bytes longer for a client that asked");
+    }
+
+    // ---- the lobby's chat and who is in it (kCapLobbyChat) -----------------------------------------------------------------------
+    {
+        LobbyServer lobby(MakeConfig());
+        std::int64_t now = 1000;
+        Client ann, bob, oldie;
+        ann.Open(lobby, now); bob.Open(lobby, now); oldie.Open(lobby, now);
+        ann.Hello("Ann", now, Protocol3::kCapLobbyChat); bob.Hello("bob", now, Protocol3::kCapLobbyChat); oldie.Hello("Oldie", now);
+        lobby.Advance(now += 20);
+        ann.Pump(); bob.Pump(); oldie.Pump();
+        Check(ann.gotUsers && ann.users.total == 3 && ann.users.names.size() == 3, "a client that asked is told who is in the lobby");
+        Check(ann.users.names.size() == 3 && ann.users.names[0] == "Ann" && ann.users.names[1] == "bob" && ann.users.names[2] == "Oldie", "the user list is in a fixed (case-insensitive) order");
+        Check(!oldie.gotUsers, "a client that did not ask gets no user list (it would not understand the message)");
+        Protocol3::Chat say; say.text = "anyone for a race?";
+        ann.Send(Protocol3::kChat, Protocol3::Encode(say), now); lobby.Advance(now += 20);
+        ann.Pump(); bob.Pump(); oldie.Pump();
+        Check(ann.chats.size() == 1 && ann.chats[0] == "Ann: anyone for a race?", "the sender sees its own lobby message come back");
+        Check(bob.chats.size() == 1 && bob.chats[0] == "Ann: anyone for a race?", "everyone in the lobby gets a lobby message");
+        Check(oldie.chats.empty() && !oldie.rejected, "a client that did not ask neither gets lobby chat nor is disturbed by it");
+        // Flooding is slowed down, not tolerated: a burst, then a server notice.
+        for (int i = 0; i < 8; ++i) { ann.Send(Protocol3::kChat, Protocol3::Encode(say), now); }
+        lobby.Advance(now += 20);
+        ann.Pump();
+        bool slowed = false;
+        for (const std::string& c : ann.chats) if (c.find("Slow down") != std::string::npos) slowed = true;
+        Check(slowed && !ann.rejected, "lobby chat flooding is answered with a notice and the connection stays open");
+        // A player who joins a race leaves the lobby's list.
+        Protocol3::HostRace host = Host("ClassicH", 2);
+        bob.Send(Protocol3::kHostRace, Protocol3::Encode(host), now);
+        lobby.Advance(now += 20);
+        ann.Pump();
+        Check(ann.users.total == 2, "a player who joins a race is no longer listed in the lobby");
+        // Someone not asking for chat who sends it is a protocol error, as before.
+        Protocol3::Chat bad; bad.text = "hi";
+        oldie.Send(Protocol3::kChat, Protocol3::Encode(bad), now); oldie.Pump();
+        Check(!oldie.rejected, "one stray message does not close a connection (it counts as invalid, and only many do)");
     }
 
     // ---- random bytes ----------------------------------------------------------------------------------------------
