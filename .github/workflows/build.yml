@@ -202,6 +202,7 @@ jobs:
           # difference between platforms fails here.
           cmake --build build/windows-shared --target HoverNetDeterminismRun HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetLobbyTest HoverNetModerationTest HoverNetTrackPack HoverNetCryptoTest HoverNetModTool HoverNetNetProxy HoverNetAuthServer HoverNetAuthBot --config Release --parallel 2
           bin=build/windows-shared/Release
+          t() { if ! out=$("$@" 2>&1); then echo "::error title=$1::$(echo "$out" | tail -c 3000 | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; fi; echo "$out"; }
           scripts/test-determinism.sh "$bin/HoverNetDeterminismRun.exe"
           scripts/test-physics.sh "$bin/HoverNetDeterminismRun.exe"
           scripts/test-replay.sh "$bin/HoverNetReplay.exe"
@@ -212,21 +213,18 @@ jobs:
           "$bin/HoverNetLobbyTest.exe"
           "$bin/HoverNetModerationTest.exe"
           "$bin/HoverNetCryptoTest.exe"
-          if ! out=$(scripts/test-secure-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 2>&1); then
-            echo "::error title=secure-tcp::$(echo "$out" | head -c 3000 | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1
-          fi
-          echo "$out"
-          scripts/test-trackpack.sh "$bin/HoverNetTrackPack.exe"
-          scripts/test-moderation-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNetModTool.exe"
-          scripts/test-network-conditions.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNetNetProxy.exe" "$bin/HoverNet.exe"
-          scripts/test-observability.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe"
-          scripts/test-lobby-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 400
-          scripts/test-spectator-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe"
-          AUTH_SPECTATE=1 scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 3 700
-          HOVERNET_REPLAY_TOOL="$bin/HoverNetReplay.exe" scripts/test-authserver.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 8 500
-          scripts/test-replay-viewer.sh "$bin/HoverNetReplay.exe" "$bin/HoverNet.exe"
-          scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 8 400
-          AUTH_DROP=150 scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 4 500
+          scripts/test-secure-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe"
+          t scripts/test-trackpack.sh "$bin/HoverNetTrackPack.exe"
+          t scripts/test-moderation-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNetModTool.exe"
+          t scripts/test-network-conditions.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNetNetProxy.exe" "$bin/HoverNet.exe"
+          t scripts/test-observability.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe"
+          t scripts/test-lobby-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 400
+          t scripts/test-spectator-tcp.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe"
+          t env AUTH_SPECTATE=1 scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 3 700
+          t env HOVERNET_REPLAY_TOOL="$bin/HoverNetReplay.exe" scripts/test-authserver.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 8 500
+          t scripts/test-replay-viewer.sh "$bin/HoverNetReplay.exe" "$bin/HoverNet.exe"
+          t scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 8 400
+          t env AUTH_DROP=150 scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 4 500
 
       - name: Smoke-test shared x64 SDL2 client
         shell: pwsh
