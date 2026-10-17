@@ -5127,7 +5127,7 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
             if (clickFrame > 600) { std::printf("CLICKTEST FAIL at step %d (state %d)\n", clickStep, static_cast<int>(st)); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
         }
         if (testStep == 1) { connect(); testStep = 2; }
-        else if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_BROWSE") == nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) { lobby.Host(Tracks().Get(0) != nullptr ? Tracks().Get(0)->mName : "ClassicH", 1, 1, false, ""); testStep = 3; }
+        else if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_BROWSE") == nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) { lobby.Host(Tracks().Get(0) != nullptr ? Tracks().Get(0)->mName : "ClassicH", std::getenv("HOVERNET_TEST_AUTH_PLAYERS") != nullptr ? std::max(1, std::min(8, std::atoi(std::getenv("HOVERNET_TEST_AUTH_PLAYERS")))) : 1, 1, false, ""); testStep = 3; }
 
         SDL_Renderer* renderer = graphics.GetRenderer();
         SDL_RenderSetLogicalSize(renderer, 0, 0);
@@ -6860,7 +6860,7 @@ int RunClient(int argc, char** argv)
                 if (Decode(f.payload, m)) {
                     const std::string line = (m.fromServer ? std::string("Server: ") : m.name + ": ") + m.text;
                     session.AddMessage(line.c_str());
-                    if (std::getenv("HOVERNET_TEST_CHAT") != nullptr) { std::printf("CHATTEST received: %s\n", line.c_str()); std::fflush(stdout); }
+                    if (std::getenv("HOVERNET_TEST_CHAT") != nullptr || std::getenv("HOVERNET_TEST_CHATLOG") != nullptr) { std::printf("CHATTEST received: %s\n", line.c_str()); std::fflush(stdout); }
                 }
             }
             else if (f.type == kReject) {

@@ -95,22 +95,42 @@ async function waitFor(fn, ms) { for (let t = 0; t < ms; t += 500) { if (await f
 
 await send('Runtime.enable'); await send('Page.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: 837, height: 715, deviceScaleFactor: 1, mobile: false });
-await send('Page.navigate', { url });
-
-check(await waitFor(async () => (await frames()) >= 5, 120000), 'the game draws its first frames');
-await sleep(1500);
-// The test switches (the same ones the native tests use) are set while the driver briefing is on screen; the main menu then opens the
-// HoverNet Servers screen by itself, which connects to the server below and hosts a time trial.
-await setenv('HOVERNET_TEST_MENU', 'authserver'); await setenv('HOVERNET_TEST_MENU_FORCE', '1');
-await setenv('HOVERNET_TEST_AUTH_SERVER', `ws://127.0.0.1:${gamePort}/auth/`);
-await setenv('HOVERNET_TEST_AUTH_VERIFY', '1'); await setenv('HOVERNET_TEST_AUTH_SCRIPT', '1');
-// Driver briefing at 837x715: Next, then Next x3 (the last is Finish).
-await click(135, 636); await sleep(900);
-for (let i = 0; i < 3; i++) { await click(277, 636); await sleep(900); }
-check(await waitFor(async () => (await inRace()) === 1, 60000), 'the browser connected to the server over WebSocket and a race started');
-await sleep(2000); await shot('servers-1-race');
-check(await waitFor(async () => consoleLines.some((l) => /auth client: [1-9][0-9]* ticks verified, 0 tick failures, [0-9]+ restore checks, 0 restore failures/.test(l)), 90000),
-      'the browser followed the whole race exactly (every tick verified)');
+async function scenario(name, players, withBot) {
+  console.log(`-- ${name}`);
+  consoleLines.length = 0;
+  if (name !== 'first') {
+    await send('Storage.clearDataForOrigin', { origin: new URL(url).origin, storageTypes: 'all' });   // the briefing shows again
+  }
+  await send('Page.navigate', { url });
+  check(await waitFor(async () => (await frames()) >= 5, 120000), 'the game draws its first frames');
+  await sleep(1500);
+  // The test switches (the same ones the native tests use) are set while the driver briefing is on screen; the main menu then opens the
+  // HoverNet Servers screen by itself, which connects to the server below and hosts a race.
+  await setenv('HOVERNET_TEST_MENU', 'authserver'); await setenv('HOVERNET_TEST_MENU_FORCE', '1');
+  await setenv('HOVERNET_TEST_AUTH_SERVER', `ws://127.0.0.1:${gamePort}/auth/`);
+  await setenv('HOVERNET_TEST_AUTH_VERIFY', '1'); await setenv('HOVERNET_TEST_AUTH_SCRIPT', '1');
+  await setenv('HOVERNET_TEST_AUTH_PLAYERS', String(players));
+  await setenv('HOVERNET_TEST_CHATLOG', '1');   // print the chat messages that arrive
+  // Driver briefing at 837x715: Next, then Next x3 (the last is Finish).
+  await click(135, 636); await sleep(900);
+  for (let i = 0; i < 3; i++) { await click(277, 636); await sleep(900); }
+  let bot = null;
+  if (withBot) {
+    await sleep(6000);   // the browser has connected and is hosting a race that waits for a second player
+    bot = spawn(botBin, ['--port', String(gamePort), '--name', 'Botty', '--join-race', 'ClassicH', '--track', 'ClassicH', '--say', 'hello from the bot'], { stdio: 'ignore' });
+  }
+  check(await waitFor(async () => (await inRace()) === 1, 60000), `${name}: the browser connected over WebSocket and a race started`);
+  await sleep(1500); await shot(`servers-${name}-race`);
+  check(await waitFor(async () => consoleLines.some((l) => /auth client: [1-9][0-9]* ticks verified, 0 tick failures, [0-9]+ restore checks, 0 restore failures/.test(l)), 120000),
+        `${name}: the browser followed the whole race exactly (every tick verified)`);
+  if (withBot) {
+    check(consoleLines.some((l) => /CHATTEST received: Botty: hello from the bot/.test(l)), `${name}: a chat message from another player arrived in the browser`);
+    try { bot.kill(); } catch (e) {}
+  }
+}
+const botBin = path.join(path.dirname(path.resolve(serverBin)), 'HoverNetAuthBot');
+await scenario('first', 1, false);
+await scenario('two-players-and-chat', 2, true);
 check(exceptions.length === 0, `no uncaught page exceptions${exceptions.length ? ': ' + exceptions[0] : ''}`);
 if (failures) { await shot('servers-2-end'); console.log(consoleLines.slice(-12).join('\n')); console.log('server output:\n' + gameOut.split('\n').slice(-12).join('\n')); }
 await finish();
