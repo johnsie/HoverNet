@@ -30,11 +30,11 @@ sizes, and `scripts/test-determinism.sh` (native vs WebAssembly).
 ## HoverNet 3.0 servers in the browser
 
 The browser build has the same HoverNet Servers screen (main menu, results and pause screens) and plays on protocol 3.0 servers over a
-WebSocket. **Verified** (headless Chrome, a real `HoverNetAuthServer` on the loopback interface with the page's origin allowed, a plain
-`ws://` connection; `scripts/web-smoke/web-servers-screen.mjs`): connect through the screen, host a one-player time trial and follow the
+WebSocket. **Verified** (headless Chrome, a real `HoverNetAuthServer` on the loopback interface with the page's origin allowed, reached over
+`wss://` through a small TLS-terminating proxy in the test (a self-signed certificate, the same job Apache or nginx does in production); `scripts/web-smoke/web-servers-screen.mjs`): connect through the screen, host a one-player time trial and follow the
 whole race exactly (every tick's state hash and every snapshot restore); host a two-player race that a native bot joins, follow it exactly,
 receive the bot's chat message, type a chat message with real key presses and see it come back, and watch a race two bots are running as a
-spectator (also followed exactly). **Not verified:** `wss://` through the production web server, phones and tablets (including the soft
+spectator (also followed exactly). **Not verified:** `wss://` through the real production web server (Apache) and its certificate, phones and tablets (including the soft
 keyboard), Firefox/Safari. The browser takes a `wss://` address (its
 default is `wss://<this site>/auth/`, the server's default path) and has no server-key field: encryption is TLS at the web server.
 

@@ -70,7 +70,8 @@ address, the per-address connection cap is not applied to loopback in this mode 
 (mutes and kicks by name still do); `--max-connections` still bounds the total. Tested with a scripted client over a real socket
 (`HoverNetWebSocketTcp`) and a unit test with the RFC 6455 vectors and random bytes (`HoverNetWebSocket`); the game's browser
 client plays on it (its address field takes `wss://your.site/auth/`; its default is the page's own site and that path), checked in headless Chrome
-against a local server over plain `ws://` (`scripts/web-smoke/web-servers-screen.mjs`); a real `wss://` proxy has not been tried. `HoverNetAbuse` throws 120 hostile connections at a live server (garbage, oversized and
+against a local server over `wss://` through a small test proxy that terminates TLS (`scripts/web-smoke/web-servers-screen.mjs`); Apache or nginx in
+front has not been tried here. `HoverNetAbuse` throws 120 hostile connections at a live server (garbage, oversized and
 truncated frames, half-open and giant upgrade requests, bad WebSocket frames) and checks it stays up, healthy and serving, including under
 ASan/UBSan.
 

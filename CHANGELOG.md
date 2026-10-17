@@ -7,7 +7,7 @@ and how to roll one back.
 ## Unreleased
 
 ### Added
-- **The browser plays on HoverNet 3.0 servers.** The web client has the HoverNet Servers screen and speaks protocol 3.0 over a WebSocket (a `wss://` address; the server side exists since `--ws-origin`). Checked in headless Chrome against a real server on the loopback interface: connect, host a time trial, a two-player race with a native bot (followed exactly), a chat message arriving, and watching a race as a spectator. Not yet checked: `wss://` through the production web server, phones.
+- **The browser plays on HoverNet 3.0 servers.** The web client has the HoverNet Servers screen and speaks protocol 3.0 over a WebSocket (a `wss://` address; the server side exists since `--ws-origin`). Checked in headless Chrome against a real server on the loopback interface: connect, host a time trial, a two-player race with a native bot (followed exactly), a chat message arriving, and watching a race as a spectator. The connection is `wss://` through a test TLS proxy; not yet checked: Apache/nginx in front, phones.
 
 ### Changed
 - Watching a replay or a race as a spectator: `[` and `]` move the camera and the HUD between the craft (a spectator can also use Left and Right; in a replay those still seek).

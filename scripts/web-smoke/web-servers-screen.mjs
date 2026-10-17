@@ -13,6 +13,9 @@
 // load -> driver briefing -> main menu -> local race -> pause (race controls hidden) -> resume -> results screen -> keep driving.
 // Screenshots go to <out-dir>. Exits 0 on success, 1 on a failed check, 77 if Chrome is not installed.
 import { spawn, spawnSync } from 'node:child_process';
+import https from 'node:https';
+import net from 'node:net';
+import os from 'node:os';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -49,10 +52,35 @@ for (let i = 0; i < 100 && !gamePort; i++) { const m = /listening on [0-9.]*:(\d
 for (let i = 0; i < 50 && !statusPort; i++) { const m = /status[^\n]*?127\.0\.0\.1:(\d+)/i.exec(gameOut); if (m) statusPort = +m[1]; else await sleep(100); }
 if (!gamePort) { console.log('FAIL: the game server did not start'); console.log(gameOut); process.exit(1); }
 
+// What the web server in front of the game server does in production: terminate TLS and pass the WebSocket upgrade on to the loopback
+// port (docs/operators.md). A self-signed certificate; Chrome is told to accept it.
+let wssPort = 0;
+{
+  const certDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hn-cert-'));
+  const made = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(certDir, 'k.pem'), '-out', path.join(certDir, 'c.pem'),
+    '-days', '2', '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'], { stdio: 'ignore' });
+  if (made.status === 0) {
+    const proxy = https.createServer({ key: fs.readFileSync(path.join(certDir, 'k.pem')), cert: fs.readFileSync(path.join(certDir, 'c.pem')) }, (req, res) => { res.writeHead(404); res.end(); });
+    proxy.on('upgrade', (req, socket, head) => {
+      const back = net.connect(gamePort, '127.0.0.1', () => {
+        let raw = `${req.method} ${req.url} HTTP/1.1\r\n`;
+        for (let i = 0; i < req.rawHeaders.length; i += 2) raw += `${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`;
+        back.write(raw + '\r\n'); if (head && head.length) back.write(head);
+        socket.pipe(back); back.pipe(socket);
+      });
+      back.on('error', () => socket.destroy()); socket.on('error', () => back.destroy()); socket.on('close', () => back.destroy());
+    });
+    await new Promise((r) => proxy.listen(0, '127.0.0.1', r));
+    wssPort = proxy.address().port;
+  }
+}
+const gameUrl = wssPort ? `wss://127.0.0.1:${wssPort}/auth/` : `ws://127.0.0.1:${gamePort}/auth/`;
+console.log(wssPort ? 'the browser connects through a TLS proxy (wss://)' : 'openssl not found: plain ws:// is used');
+
 const port = 9400 + Math.floor(Math.random() * 500);
 const profile = fs.mkdtempSync('/tmp/hn-servers-');
 const chrome = spawn(chromeBin, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${port}`, '--use-gl=angle',
-  '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${profile}`, '--window-size=837,715', 'about:blank'],
+  '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-certificate-errors', `--user-data-dir=${profile}`, '--window-size=837,715', 'about:blank'],
   { stdio: 'ignore' });
 let failures = 0;
 const check = (ok, what) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${what}`); if (!ok) failures++; };
@@ -114,7 +142,7 @@ async function scenario(name, players, withBot, spectate = false, typeChat = fal
   // The test switches (the same ones the native tests use) are set while the driver briefing is on screen; the main menu then opens the
   // HoverNet Servers screen by itself, which connects to the server below and hosts a race.
   await setenv('HOVERNET_TEST_MENU', 'authserver'); await setenv('HOVERNET_TEST_MENU_FORCE', '1');
-  await setenv('HOVERNET_TEST_AUTH_SERVER', `ws://127.0.0.1:${gamePort}/auth/`);
+  await setenv('HOVERNET_TEST_AUTH_SERVER', gameUrl);
   await setenv('HOVERNET_TEST_AUTH_VERIFY', '1'); await setenv('HOVERNET_TEST_AUTH_SCRIPT', '1');
   await setenv('HOVERNET_TEST_AUTH_PLAYERS', String(players));
   if (spectate) await setenv('HOVERNET_TEST_AUTH_SPECTATE', '1');
