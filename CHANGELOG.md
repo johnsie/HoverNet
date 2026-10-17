@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **The browser plays on HoverNet 3.0 servers.** The web client has the HoverNet Servers screen and speaks protocol 3.0 over a WebSocket (a `wss://` address; the server side exists since `--ws-origin`). Checked in headless Chrome against a real server on the loopback interface: connect, host a time trial and follow the race exactly. Not yet checked: `wss://` through the production web server, multi-player and spectating in a browser, phones.
+
 ### Changed
 - Watching a replay or a race as a spectator: `[` and `]` move the camera and the HUD between the craft (a spectator can also use Left and Right; in a replay those still seek).
 - Crossing the finish line no longer opens the results screen over the race. The player is told, in the race, that they can press Enter (the controller's Back button, or MENU on a touch screen) for their results and race options, and may keep driving as long as they like; the finish time is kept from the moment of the finish. Chat keeps working after the finish, and now also in races on HoverNet 3.0 servers (type, Enter to send; messages from the others appear on screen). The HoverNet Servers button is also on the results screen.

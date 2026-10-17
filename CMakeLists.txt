@@ -652,6 +652,16 @@ if(EMSCRIPTEN)
         NetTarget/ObjFac1/DoubleSpeedSource.cpp
         NetTarget/ObjFac1/FinishLine.cpp
     )
+    # Playing on a HoverNet 3.0 server from the browser: protocol 3.0 over a WebSocket (AuthConnection.cpp has the browser variant).
+    target_sources(HoverNetGame2Player PRIVATE
+        NetTarget/LinuxClient/AuthConnection.cpp
+        NetTarget/LinuxClient/OnlineLobby.cpp
+        NetTarget/Authority/Protocol3.cpp
+        NetTarget/Authority/RaceWorld.cpp
+        NetTarget/Authority/PredictingClient.cpp
+        NetTarget/Authority/Crypto.cpp
+    )
+    target_compile_definitions(HoverNetGame2Player PRIVATE HOVERNET_WEB_AUTH)
     target_compile_definitions(HoverNetGame2Player PRIVATE HOVERNET_WEB)
     target_compile_definitions(HoverNetGame2Player PRIVATE
         "HOVERNET_WEB_SOCKET_URL=\"${HOVERNET_WEB_SOCKET_URL}\"")

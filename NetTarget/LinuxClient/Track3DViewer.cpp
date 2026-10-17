@@ -9,7 +9,11 @@
 #include "../Authority/ReplayFormat.h"
 #include "../Model/StateHash.h"
 #include "../Model/StateSnapshot.h"
-#if !defined(HOVERNET_WEB)
+// Playing on a HoverNet 3.0 server: over TCP in the desktop client, over a WebSocket in the browser build (HOVERNET_WEB_AUTH).
+#if !defined(HOVERNET_WEB) || defined(HOVERNET_WEB_AUTH)
+#define HOVERNET_AUTH 1
+#endif
+#if defined(HOVERNET_AUTH)
 #include "AuthConnection.h"
 #include "OnlineLobby.h"
 #include "../Authority/PredictingClient.h"
@@ -169,6 +173,12 @@ static int gHoverNetTestResults = 0;
 extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_test_show_results(void)
 {
     gHoverNetTestResults = 1;
+}
+
+// Test hook for the browser tests: set one of the HOVERNET_TEST_ switches the native tests pass in the environment (only those).
+extern "C" EMSCRIPTEN_KEEPALIVE void hovernet_test_setenv(const char* name, const char* value)
+{
+    if (name != nullptr && value != nullptr && std::strncmp(name, "HOVERNET_TEST_", 14) == 0) setenv(name, value, 1);
 }
 
 // Soft-keyboard bridge. Menu text fields are drawn by ImGui inside the canvas,
@@ -3379,7 +3389,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         {"RESUME RACE", PauseChoice::eResume},
         {pIsOnline ? "LEAVE RACE" : "NEW LOCAL RACE", PauseChoice::eLeaveRace},
         {"ONLINE MULTIPLAYER", PauseChoice::eOnlineLobby},
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
         {"HOVERNET SERVERS", PauseChoice::eAuthServer},
 #endif
         {"SETTINGS", PauseChoice::eSettings},
@@ -3388,7 +3398,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
     };
     constexpr int optionCount = sizeof(options) / sizeof(options[0]);
     int primaryCount = 3;   // the race options above the "GAME & ACCESSIBILITY" heading
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
     primaryCount = 4;
 #endif
     PauseChoice choice = PauseChoice::eResume;
@@ -3658,7 +3668,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             {"KEEP DRIVING", PostRaceChoice::eContinue},
             {"NEW LOCAL RACE", PostRaceChoice::eNewLocalRace},
             {"ONLINE MULTIPLAYER", PostRaceChoice::eOnlineLobby},
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
             {"HOVERNET SERVERS", PostRaceChoice::eAuthServer},
 #endif
             {"QUIT HOVERNET", PostRaceChoice::eQuit},
@@ -4934,7 +4944,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
     }
 }
 
-#if defined(HOVERNET_GAME2_PLAYER) && !defined(HOVERNET_WEB)
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
 // ---- Play on a HoverNet server (protocol 3.0): choose a server, then host, join or watch a race ---------------------------------------
 // The lobby logic is OnlineLobby (tested against a real server by HoverNetOnlineLobbyTest); this is only its screen. The browser build
 // has no transport for these servers yet, so the screen is native-only (docs/web-parity-matrix.md).
@@ -5001,6 +5011,15 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
     }
 
     AuthServerSettings settings = LoadAuthServerSettings();
+#ifdef HOVERNET_WEB
+    // The browser connects by WebSocket to a wss:// address; a remembered TCP-style address from elsewhere is not one.
+    if (settings.address.compare(0, 3, "ws:") != 0 && settings.address.compare(0, 4, "wss:") != 0) {
+        const char* pageHost = emscripten_run_script_string("location.host");
+        const char* scheme = emscripten_run_script_string("location.protocol === 'https:' ? 'wss://' : 'ws://'");
+        settings.address = std::string(scheme) + (pageHost != nullptr ? pageHost : "localhost") + "/auth/";
+    }
+    settings.key.clear();
+#endif
     char address[256], key[80], hostCode[32], joinCode[32], raceNumber[16];
     std::snprintf(address, sizeof(address), "%s", settings.address.c_str());
     std::snprintf(key, sizeof(key), "%s", settings.key.c_str());
@@ -5048,10 +5067,17 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
     auto connect = [&]() {
         std::string host;
         int port = 0;
-        if (!SplitServerAddress(address, host, port)) { problem = "Type the server as name:port, for example race.example.org:9610."; return; }
         std::vector<std::uint8_t> serverKey;
         const std::string keyText(key);
+#ifdef HOVERNET_WEB
+        host = address;
+        while (!host.empty() && host.back() == ' ') host.pop_back();
+        while (!host.empty() && host.front() == ' ') host.erase(host.begin());
+        if (host.compare(0, 6, "wss://") != 0 && host.compare(0, 5, "ws://") != 0) { problem = "Type the server as a wss:// address, for example wss://race.example.org/auth/."; return; }
+#else
+        if (!SplitServerAddress(address, host, port)) { problem = "Type the server as name:port, for example race.example.org:9610."; return; }
         if (!keyText.empty() && (!Crypto::FromHex(keyText, serverKey) || serverKey.size() != 32)) { problem = "The server key is 64 characters (0 to 9, a to f), or leave it empty."; return; }
+#endif
         {
             std::string typed = nameBuffer;
             while (!typed.empty() && typed.back() == ' ') typed.pop_back();
@@ -5142,10 +5168,15 @@ bool RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int 
         ImGui::TextColored(kHoverNetCoral, "SERVER");
         ImGui::BeginDisabled(connected);
         ImGui::PushItemWidth(-1.0f);
+#ifdef HOVERNET_WEB
+        ImGui::TextUnformatted("Address (a wss:// address from the server's owner)");
+        ImGui::InputTextWithHint("##address", "wss://race.example.org/auth/", address, sizeof(address));
+#else
         ImGui::TextUnformatted("Address");
         ImGui::InputTextWithHint("##address", "race.example.org:9610", address, sizeof(address));
         ImGui::TextUnformatted("Server key (only for encrypted servers: the 64 characters its owner gives you)");
         ImGui::InputTextWithHint("##serverkey", "leave empty for a plain connection", key, sizeof(key));
+#endif
         ImGui::PopItemWidth();
         ImGui::EndDisabled();
         if (!connected) {
@@ -5319,11 +5350,11 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     const char* options[] = {"Local Play", "Online Lobby", "Settings", "Controls", "How to Play"};
     constexpr int optionCount = sizeof(options) / sizeof(options[0]);
     MenuChoice choice = MenuChoice::eLocalPlay;
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
     // Test hook: a bounded run picks "HoverNet Servers" (scripts/test-online-menu.sh); never set in normal play.
     const char* testMenu = std::getenv("HOVERNET_TEST_MENU");
     static bool sPickedForTest = false;   // once: after the screen is left without a race, a bounded run falls back to Local Play
-    const bool pickAuthServerForTest = !sPickedForTest && pFrameLimit >= 0 && testMenu != nullptr && std::string(testMenu) == "authserver";
+    const bool pickAuthServerForTest = !sPickedForTest && (pFrameLimit >= 0 || std::getenv("HOVERNET_TEST_MENU_FORCE") != nullptr) && testMenu != nullptr && std::string(testMenu) == "authserver";
     if (pickAuthServerForTest) { choice = MenuChoice::eAuthServer; sPickedForTest = true; }
 #else
     const bool pickAuthServerForTest = false;
@@ -5515,7 +5546,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             choice = MenuChoice::eOnlineLobby;
             running = false;
         }
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
         ImGui::Spacing();
         if (HoverNetButton("HOVERNET SERVERS", ImVec2(-FLT_MIN, secondaryHeight))) {
             choice = MenuChoice::eAuthServer;
@@ -5834,7 +5865,7 @@ bool ReadWholeFile(const std::string& path, std::vector<std::uint8_t>& out)
     return true;
 }
 
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
 // The game's own rendered session as a prediction target: the confirmed snapshot is restored into it and it is stepped
 // forward, so what is drawn is the prediction (docs/authoritative-race.md).
 class RenderedWorld : public Authority::PredictedWorld
@@ -5988,10 +6019,10 @@ int RunClient(int argc, char** argv)
     replay.seekTest = HasArgument(argc, argv, "--replay-seek-test");
     replay.watch = std::atoi(ParseStringArg(argc, argv, "--replay-player").c_str());
     const std::string authServer = ParseStringArg(argc, argv, "--auth-connect");     // host:port of an authoritative server
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
     AuthOnline auth;
-    auth.verify = HasArgument(argc, argv, "--auth-verify");
-    auth.scripted = HasArgument(argc, argv, "--auth-script");
+    auth.verify = HasArgument(argc, argv, "--auth-verify") || std::getenv("HOVERNET_TEST_AUTH_VERIFY") != nullptr;   // the environment is how a browser test sets them
+    auth.scripted = HasArgument(argc, argv, "--auth-script") || std::getenv("HOVERNET_TEST_AUTH_SCRIPT") != nullptr;
     auth.spectator = HasArgument(argc, argv, "--spectate");
     {
         const std::string keyText = ParseStringArg(argc, argv, "--server-key");
@@ -6222,7 +6253,7 @@ int RunClient(int argc, char** argv)
     LoadServerUrl(lobbyHost, lobbyPort);  // a Settings change from a previous run, if any
     ParseLobbyArg(argc, argv, lobbyHost, lobbyPort);  // --lobby always wins, for dev/testing
 
-#if defined(HOVERNET_GAME2_PLAYER) && !defined(HOVERNET_WEB)
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
     bool keepAuthForLoad = false;   // set while startAuthRace loads the race, so loading it does not drop the connection it is about to use
     // Leaving an authoritative race (to a menu or another race): drop the connection and the prediction.
     auto endAuthRace = [&]() {
@@ -6237,7 +6268,7 @@ int RunClient(int argc, char** argv)
     };
 #endif
     auto resetRaceSession = [&]() -> bool {
-#if defined(HOVERNET_GAME2_PLAYER) && !defined(HOVERNET_WEB)
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
         endAuthRace();
 #endif
         session.SetElementCreationBroadcastHook(nullptr, nullptr);
@@ -6252,7 +6283,7 @@ int RunClient(int argc, char** argv)
 
     // Create the first gameplay session only after Local Play has selected it.
     auto loadLocalRace = [&](const std::string& newTrackName, int newLaps, bool newWeapons) -> bool {
-#if defined(HOVERNET_GAME2_PLAYER) && !defined(HOVERNET_WEB)
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
         if (!keepAuthForLoad) endAuthRace();
 #endif
         session.SetElementCreationBroadcastHook(nullptr, nullptr);
@@ -6424,7 +6455,7 @@ int RunClient(int argc, char** argv)
         return std::string();
     };
 
-#if defined(HOVERNET_GAME2_PLAYER) && !defined(HOVERNET_WEB)
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
     // Everything after the server has said HelloAck and Start (auth.ack, auth.backlog, auth.spectator and the open auth.conn are set):
     // check the track and the rules, load the race, put the craft on the grid, and start predicting. Returns an error or "".
     auto startAuthRace = [&]() -> std::string {
@@ -6456,7 +6487,7 @@ int RunClient(int argc, char** argv)
     };
 #endif
 
-#if defined(HOVERNET_GAME2_PLAYER) && !defined(HOVERNET_WEB)
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
     // The HoverNet Servers screen and, once a race is ready, the race itself. True when a race is now running; false when the player
     // left the screen (or the race could not be set up: the reason is printed) and nothing changed.
     auto playOnAuthServer = [&]() -> bool {
@@ -6469,6 +6500,9 @@ int RunClient(int argc, char** argv)
         auth.conn.Swap(lobby.Connection());
         lobby.AddressOf(auth.host, auth.port, auth.serverKey);
         auth.name = LoadUsername();
+        // The browser tests set these switches after the page has started (see hovernet_test_setenv).
+        if (std::getenv("HOVERNET_TEST_AUTH_VERIFY") != nullptr) auth.verify = true;
+        if (std::getenv("HOVERNET_TEST_AUTH_SCRIPT") != nullptr) auth.scripted = true;
         const std::string startError = startAuthRace();
         if (!startError.empty()) {
             endAuthRace();
@@ -6507,7 +6541,7 @@ int RunClient(int argc, char** argv)
             session.AddMessage("Replay: P pauses, 1-5 sets the speed, [ and ] switch craft, Esc leaves");
         }
         else if (!authServer.empty()) {
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
             const std::size_t colon = authServer.rfind(':');
             auth.host = colon == std::string::npos ? authServer : authServer.substr(0, colon);
             auth.port = colon == std::string::npos ? 9610 : std::atoi(authServer.c_str() + colon + 1);
@@ -6617,7 +6651,7 @@ int RunClient(int argc, char** argv)
             if (RunOnboardingScreen(graphics, frameLimit)) SaveOnboardingComplete();
         }
         bool pickingMode = !g_QuitConfirmed && !replay.active;
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
         if (auth.active) pickingMode = false;
 #endif
         while (pickingMode) {
@@ -6662,7 +6696,7 @@ int RunClient(int argc, char** argv)
                 }
                 pickingMode = !g_QuitConfirmed;
             }
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
             else if (choice == MenuChoice::eAuthServer) {
                 if (!playOnAuthServer()) pickingMode = !g_QuitConfirmed;
             }
@@ -6753,7 +6787,7 @@ int RunClient(int argc, char** argv)
         std::vector<MR_MainCharacter*>* crafts = nullptr;
         int* watch = nullptr;
         if (replay.active) { crafts = &replay.craft; watch = &replay.watch; }
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
         else if (auth.active && auth.spectator) { crafts = &auth.craft; watch = &auth.watch; }
 #endif
         if (crafts == nullptr || crafts->size() < 2) return;
@@ -6766,7 +6800,7 @@ int RunClient(int argc, char** argv)
     // Chat works in a race on the old lobby server and in one on a HoverNet 3.0 server, during the race and after the player has finished.
     auto canChat = [&]() -> bool {
         if (onlineClient.IsConnected()) return true;
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
         return auth.active && auth.conn.IsOpen();
 #else
         return false;
@@ -6783,7 +6817,7 @@ int RunClient(int argc, char** argv)
         ~InRaceFlag() { gHoverNetInRace = 0; }
     } inRaceFlag;
 #endif
-#if defined(HOVERNET_GAME2_PLAYER) && !defined(HOVERNET_WEB)
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
     // One frame of an authoritative race: take in the server's messages, send our input, draw the prediction.
     auto stepAuth = [&](int controlState) -> int {   // returns 0 to carry on, or an exit code + 1 to leave the program
         std::vector<AuthFrame> frames;
@@ -6956,7 +6990,7 @@ int RunClient(int argc, char** argv)
             }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN &&
                      canChat() && !chatBuffer.empty()) {
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
                 if (!onlineClient.IsConnected()) {
                     // A 3.0 server sends every message back to everyone in the race, the sender included: it is shown when it returns.
                     Protocol3::Chat chat;
@@ -6978,14 +7012,14 @@ int RunClient(int argc, char** argv)
                      (event.key.keysym.sym == SDLK_LEFTBRACKET || event.key.keysym.sym == SDLK_RIGHTBRACKET ||
                       // Left and Right also work for a spectator, who has no seeking; in a replay they seek five seconds.
                       ((event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_RIGHT)
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
                        && auth.active && auth.spectator && !replay.active
 #else
                        && false
 #endif
                       )) &&
                      (replay.active
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
                       || (auth.active && auth.spectator)
 #endif
                      )) {
@@ -7085,7 +7119,7 @@ int RunClient(int argc, char** argv)
             wasOnlineConnected = onlineClient.IsConnected();
             continue;
         }
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
         if (openAuthServer) {
             if (playOnAuthServer()) {
                 missileSeen = false;
@@ -7243,7 +7277,7 @@ int RunClient(int argc, char** argv)
             if (selectWeapon) controlState |= MR_MainCharacter::eSelectWeapon;
 #ifdef HOVERNET_GAME2_PLAYER
             if (!replay.active
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
                 && !auth.active
 #endif
                 )
@@ -7329,7 +7363,7 @@ int RunClient(int argc, char** argv)
                 if (keyboard[SDL_SCANCODE_P]) { replay.paused = !replay.paused; SDL_Delay(200); }
                 for (int step = 0; step < 5; ++step) if (keyboard[SDL_SCANCODE_1 + step]) replay.speedStep = step;
             }
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
             else if (auth.active) {
                 const int authExit = stepAuth(controlState);
                 if (authExit != 0) return authExit - 1;
@@ -7444,7 +7478,7 @@ int RunClient(int argc, char** argv)
                     wasOnlineConnected = onlineClient.IsConnected();
                     continue;
                 }
-#if !defined(HOVERNET_WEB)
+#if defined(HOVERNET_AUTH)
                 if (resultChoice == PostRaceChoice::eAuthServer) {
                     if (playOnAuthServer()) {
                         missileSeen = false;

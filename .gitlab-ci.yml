@@ -185,15 +185,17 @@ test:web:smoke:
   needs:
     - job: build:game:web
       artifacts: true
+    - job: build:authserver:linux
+      artifacts: true
   tags: ["$WEB_RUNNER_TAG"]
-  # Drives the built client in headless Chrome (menus, a local race, pause and resume). Skips itself
+  # Drives the built client in headless Chrome (menus, a local race, pause and resume, and a race on a HoverNet 3.0 server over WebSocket). Skips itself
   # when the runner has no Chrome, and never blocks the deploy.
   script:
     - mkdir -p dist/web-unpacked dist/web-smoke
     - tar -xzf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web-unpacked
     # Exit 77 means "no Chrome on this runner": pass with a note instead of failing (the shell executor turns any
     # non-zero exit into a job failure). Any other non-zero exit is a real failure.
-    - scripts/test-web-client.sh dist/web-unpacked dist/web-smoke || rc=$?; if [ "${rc:-0}" = "77" ]; then echo "web smoke test skipped (no Chrome on this runner)"; elif [ "${rc:-0}" != "0" ]; then exit "$rc"; fi
+    - scripts/test-web-client.sh dist/web-unpacked dist/web-smoke "$PWD/build/authserver/HoverNetAuthServer" || rc=$?; if [ "${rc:-0}" = "77" ]; then echo "web smoke test skipped (no Chrome on this runner)"; elif [ "${rc:-0}" != "0" ]; then exit "$rc"; fi
   artifacts:
     when: always
     expire_in: 7 days

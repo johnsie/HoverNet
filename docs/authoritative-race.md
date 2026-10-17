@@ -227,8 +227,7 @@ a new one when the race ends (`--once` for tests). Options: `--track`, `--player
 
 ## Not built yet
 
-- A browser client for protocol 3.0: the server accepts browsers over WebSocket (`--ws-origin`), but nothing in the browser build speaks the
-  protocol, so the browser has no HoverNet Servers screen (the desktop client has one; see the parity matrix).
+- Browser checks beyond one time trial on a local server: `wss://` through the production web server, several players, spectating, chat and phones in a browser. (The browser client itself exists: it speaks protocol 3.0 over a WebSocket and has the servers screen.)
 - Accounts or any identity beyond a session name (a device-key design was proposed; the owner has not decided, see the roadmap).
 - Distributed tracing (counters, a status port, an event log and crash reports exist), delta coding and compression of the Tick stream.
 - The multi-day soak of the Stage 2 exit gate: `scripts/soak-authserver.sh` runs a real-time soak of any length (results below or in the

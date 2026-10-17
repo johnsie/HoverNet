@@ -27,9 +27,14 @@ sizes, and `scripts/test-determinism.sh` (native vs WebAssembly).
 | 14 | Track and asset loading, caching | Partly | First-load download and IndexedDB cache work in headless runs; slow-network and storage-full cases not tested |
 | 15 | Supported browsers | Not verified | Only Chrome (headless) has been run; Firefox, Edge and Safari/iOS not tested |
 
-## Desktop-only for now
+## HoverNet 3.0 servers in the browser
 
-- **HoverNet Servers** (main menu): playing on 3.0 authoritative servers (host, join, private races, time trials, watch). The servers accept browsers over WebSocket (`--ws-origin`), but the browser client has no protocol 3.0 transport or screen yet, so the browser build shows no such button. This is a known parity gap, not a design choice.
+The browser build has the same HoverNet Servers screen (main menu, results and pause screens) and plays on protocol 3.0 servers over a
+WebSocket. **Verified** (headless Chrome, a real `HoverNetAuthServer` on the loopback interface with the page's origin allowed, a plain
+`ws://` connection): connect through the screen, host a one-player time trial, and follow the whole race exactly (every tick's state hash
+and every snapshot restore; `scripts/web-smoke/web-servers-screen.mjs`). **Not verified:** `wss://` through the production web server, a
+race with several players or a spectator in a browser, chat, phones and tablets, Firefox/Safari. The browser takes a `wss://` address (its
+default is `wss://<this site>/auth/`, the server's default path) and has no server-key field: encryption is TLS at the web server.
 
 ## Browser-only additions (not in the desktop client)
 
