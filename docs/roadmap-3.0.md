@@ -328,9 +328,9 @@ Depends on Stage 1's determinism.
 
 - Compact deterministic replays (versioned inputs, events, periodic snapshots) that
   re-verify against the server's recorded result. *Status (16 October 2026): replay format v1 (inputs and periodic hashes), the server's official replay, verification, and in-game playback with the real renderer are done and tested on Linux and Windows, see [replays.md](replays.md); events and embedded snapshots are not.*
-- Seeking, camera controls, timeline markers, and export-friendly playback. *Status: seeking (Left/Right/Home, from snapshots) is done in the game; camera controls, markers and export are not.*
+- Seeking, camera controls, timeline markers, and export-friendly playback. *Status: seeking (Left/Right/Home, from snapshots) and switching the camera between craft (`[` and `]`; Left/Right for a spectator) are done in the game; a free camera, markers on the timeline and export are not (`HoverNetReplay events` lists the laps and finishes for tools).*
 - Delayed live spectating (protects competitive integrity) using the server's spectator
-  snapshots. *Status: done in the server, the protocol, the bot and the game client (`--spectate`), see [authoritative-race.md](authoritative-race.md); a menu for choosing a race to watch is not.*
+  snapshots. *Status: done in the server, the protocol, the bot and the game client (`--spectate`), see [authoritative-race.md](authoritative-race.md); the HoverNet Servers screen lists running races to watch (desktop and browser).*
 - Ghosts, time trials, personal bests, track leaderboards, and shareable replay identifiers.
 
 **Exit gate:** a race can be saved, shared, replayed, and independently verified from the
