@@ -453,6 +453,21 @@ int main()
         Check(host.acks == 2 && a.acks == 2, "each player is sent a new acknowledgement before Start when the player count changes");
     }
     {
+        // The host starts with nobody else: a race of one (to practise).
+        LobbyServer lobby(MakeConfig());
+        std::int64_t now = 1000;
+        Client host;
+        host.Open(lobby, now);
+        host.Hello("host", now, Protocol3::kCapHostStart); host.Pump();
+        Protocol3::HostRace four = Host("ClassicH", 4);
+        host.Send(Protocol3::kHostRace, Protocol3::Encode(four), now);
+        for (int i = 0; i < 4; ++i) { lobby.Advance(now += 20); host.Pump(); }
+        Check(!host.started, "a race with empty seats waits for its host");
+        host.Send(Protocol3::kStartRace, std::vector<std::uint8_t>(), now);
+        for (int i = 0; i < 4; ++i) { lobby.Advance(now += 20); host.Pump(); }
+        Check(host.started && host.ackPlayers == 1 && host.player == 0, "the host can start alone: a race of one");
+    }
+    {
         // The host leaves before starting: the others cannot wait for ever.
         LobbyServer lobby(MakeConfig());
         std::int64_t now = 1000;

@@ -5580,13 +5580,12 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             if (waitingRoom) {
                 const bool alone = lobby.GetRoster().members.size() < 2;
                 if (lobby.IsHost()) {
-                    // The one primary action: the only filled red button on the screen. The race starts when the host presses it.
-                    ImGui::BeginDisabled(alone);
+                    // The one primary action: the only filled red button on the screen. The race starts when the host presses it, with whoever is
+                    // there, even nobody else (to practise).
                     if (HoverNetButton("Start Race", ImVec2(-FLT_MIN, 40))) lobby.StartRace();
-                    ImGui::EndDisabled();
                     startRaceCenter = centreOfLastItem();
                     ImGui::PushTextWrapPos(0.0f);
-                    ImGui::TextDisabled(alone ? "Waiting for other players to join..." : "Start the race when you are ready.");
+                    ImGui::TextDisabled(alone ? "Others can still join until you start." : "Start the race when you are ready.");
                     ImGui::PopTextWrapPos();
                 }
                 else {

@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.1 - 2026-10-17
+
+### Fixed
+- The host can press **Start Race** even when nobody else has joined (to practise); the button was disabled until a second player arrived. Others can still join until the host starts.
+
 ## 2.3.0 - 2026-10-17
 
 ### Changed
