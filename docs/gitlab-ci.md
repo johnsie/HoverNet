@@ -104,3 +104,8 @@ waits for it.
 `deploy:server` (a tag's pipeline only, automatic, after the package job) installs it on the race-server host through `/usr/local/sbin/hovernet-server-deploy`. Install
 that wrapper and its one sudo rule with `packaging/server/install-deploy-helper.sh` (see [operators.md](operators.md#deploying-from-gitlab-the-race-server-host)).
 None of these jobs has run on GitLab yet.
+
+## When a pipeline runs
+
+`workflow:` in `.gitlab-ci.yml` creates a pipeline only for a merge request, the `main` branch and a tag. A push to another branch (for example
+`gitlab-mobile`) starts nothing on GitLab: that is by design, not a failure. GitHub Actions runs on every branch.

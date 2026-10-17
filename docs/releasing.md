@@ -4,9 +4,15 @@ How a release is made, verified, upgraded to, and rolled back.
 
 ## Making a release
 
-`scripts/release.sh X.Y.Z` does steps 1 to 3 below for you, from your own machine, with the checks built in (changelog heading, tag unused on both remotes, main
-fast-forward only, the full local suite, a green GitHub Actions run for the exact commit, your confirmation that GitLab is green, and a typed
-confirmation before the tag that deploys to production). `--dry-run` shows what it would do without changing anything.
+`scripts/release.sh X.Y.Z` does the steps below for you, from your own machine, with the checks built in (changelog heading, tag unused on both
+remotes, main fast-forward only, the full local suite, a green GitHub Actions run for the exact commit, your confirmation that GitLab's pipeline
+on main is green, and a typed confirmation at each of the two steps that reach production). `--dry-run` shows what it would do without changing
+anything.
+
+**GitLab only runs pipelines for `main`, tags and merge requests** (`workflow:` in `.gitlab-ci.yml`). A push to any other branch starts none
+there, so GitLab cannot be checked before `main` is pushed; GitHub Actions does run on every branch, which is why the commit is checked there
+first. Pushing `main` already deploys the web client to production from GitLab (a build named after the commit); pushing the tag deploys the web
+client again, the race server and the 3.0 server.
 
 1. Make sure `main` is green on GitHub Actions (clients, servers, tests) and on GitLab (web client and Linux server).
 2. Update [CHANGELOG.md](../CHANGELOG.md): move *Unreleased* under the new version
