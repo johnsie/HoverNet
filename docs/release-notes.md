@@ -1,13 +1,13 @@
-## HoverNet 2.1
+## HoverNet 2.2
 
-### What's new in 2.1
-- **One way into online play.** **ONLINE MULTIPLAYER** (main menu, pause menu, results screen, and in the browser) now connects to the HoverNet server by itself: you type nothing but, once, your name. The lobby has the classic layout (game list, race details, actions, who is in the lobby, and lobby chat), with private races, one-player time trials, watching, and a map of every track. If the HoverNet server is not available the classic lobby opens instead. A friend's or a club's server is chosen in **Settings** (*HoverNet server*). See [Playing on a HoverNet server](playing-on-servers.md).
+### What's new in 2.2
+- **One way into online play.** **ONLINE MULTIPLAYER** (main menu, pause menu, results screen, and in the browser) connects to the HoverNet server by itself: you type nothing but, once, your name. The lobby has the classic layout (game list, race details with the track map, actions, who is in the lobby, and lobby chat), with private races, one-player time trials and watching. The race list refreshes by itself. If the HoverNet server is not available, the classic lobby opens instead. A friend's or a club's server is chosen in **Settings** (*HoverNet server*). See [Playing on a HoverNet server](playing-on-servers.md).
 - **Finishing no longer takes the race away.** You are told to press **Enter** for your results; keep driving and chatting as long as you like.
-- **Chat** in races on the new servers, during and after the race.
+- **Chat** in the lobby and in races on the new servers, during and after the race.
 - **Spectator camera:** **[** and **]** (and Left/Right when watching a live race) switch between the craft.
-- **For server owners:** the `hovernet-server` package, graceful restarts that let races finish, the browser path over WebSocket, replay
-  verification and leaderboards (`HoverNetReplay`), an Ed25519 signing tool, and an operator guide. The old `hovernet-raceserver` is unchanged.
-- The Linux packages now carry the licence text, as the HoverRace licence requires.
+- **Fixed:** the web client no longer freezes when opening the online lobby (2.1.0 and 2.1.1 shipped fixes for the browser build).
+- **For server owners:** the `hovernet-server` package (deployed from the GitLab tag pipeline), graceful restarts that let races finish, the browser path over WebSocket, replay verification and leaderboards (`HoverNetReplay`), an Ed25519 signing tool, and an operator guide. The old `hovernet-raceserver` is unchanged.
+- The Linux packages carry the licence text, as the HoverRace licence requires.
 
 ### Known limits of this release
 - No one has clicked through the new screen on a real phone or on Windows by hand, and nobody has installed the Windows installer by hand

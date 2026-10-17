@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.2.0 - 2026-10-17
+
 ### Changed
 - **One way into online play.** The separate HOVERNET SERVERS button is gone: **ONLINE MULTIPLAYER** connects to the HoverNet server by itself (nothing to type but, once, your name) and opens the classic lobby if the HoverNet server is not available. A different server (an address and, optionally, a key) is chosen in **Settings**, under *HoverNet server (online multiplayer)*, not in the lobby. The lobby screen was rebuilt in the classic lobby's layout (game list, details with the track map, actions, host dialog) instead of a plain form.
 
