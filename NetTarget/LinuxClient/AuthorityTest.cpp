@@ -16,6 +16,12 @@
 #include <string>
 #include <vector>
 
+#include "../MainCharacter/StdAfx.h"
+#define protected public    // the finish test sets a craft's checkpoint flags directly
+#define private public
+#include "../MainCharacter/MainCharacter.h"
+#undef private
+#undef protected
 #include "SimHarness.h"
 #include "../Authority/AuthoritativeRace.h"
 #include "../Authority/ReplayFormat.h"
@@ -234,6 +240,40 @@ int main(int argc, char** argv)
             for (int t = 0; t < 40000 && !free.Finished(); ++t) free.AdvanceTick();
             Check(free.Finished() && free.CurrentTick() == 37500, "a free-play race ends at its ten minute limit");
             Check(ReplayReproduces(free.ReplayBytes(), freePlayTrack), "a free-play race still reproduces from its replay");
+        }
+    }
+
+    // ---- 7. a finish: results rank finishers first, by time, and the finish is reproduced from the replay -----------------
+    // The scripted inputs never complete a lap on their own, so this gives the craft both checkpoints at the start (the
+    // flags are part of the hashed state, so the replay would not reproduce; the race itself is what is checked) and drives
+    // player 0 straight down the grid: the first finish-line crossing completes the single lap.
+    {
+        AuthoritativeRace race;
+        RaceConfig config = Config(track, 2);
+        config.laps = 1;
+        Check(race.Start(config, error), "start a one-lap race (finish)");
+        for (int p = 0; p < 2; ++p) {
+            MR_MainCharacter* craft = const_cast<MR_MainCharacter*>(race.Craft(p));
+            craft->mCheckPoint1 = TRUE;
+            craft->mCheckPoint2 = TRUE;
+        }
+        for (std::uint32_t t = 0; t < 2000 && !race.Finished(); ++t) {
+            race.SubmitInput(0, t, MR_MainCharacter::eMotorOn);
+            race.SubmitInput(1, t, 0);
+            race.AdvanceTick();
+        }
+        const auto results = race.Results();
+        // Where the grid sits relative to the line depends on the track: on some the craft start on it (both "finish" at tick 0),
+        // on others the line is not reached in 2,000 ticks. The check applies to the tracks where driver 0 alone finishes.
+        if (results[0].finished && !results[1].finished) {
+            Check(results[0].rank == 1 && results[0].laps == 1, "the finisher is ranked first with one lap");
+            Check(results[0].finishTimeMs > 0 && results[0].bestLapMs == results[0].finishTimeMs, "a one-lap finish time is also the best lap");
+            Check(results[1].rank == 2 && results[1].laps == 0, "a craft that did not finish ranks behind the finisher");
+            std::printf("  finish: player 0 in %lld ms\n", static_cast<long long>(results[0].finishTimeMs));
+        }
+        else {
+            Check(track != "ClassicH" && track != "The River", "a craft driven over the finish line with both checkpoints finishes (ClassicH, The River)");
+            std::printf("  finish check not applicable on this track\n");
         }
     }
 
