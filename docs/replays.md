@@ -25,6 +25,11 @@ track, and says so; it never plays something that would not reproduce.
 - `HoverNetReplay results race.hnr` replays the inputs through the authoritative race and prints one row per player (rank, laps, finish
   time, best lap), the same on every platform: the input a leaderboard or a time trial needs. The server writes the same table beside each official replay as `<name>.results.tsv`
   (tab-separated: rank, player, laps, finished, finish_ms, best_lap_ms), and its test checks the two agree.
+- `HoverNetReplay leaderboard a.hnr b.hnr ... [--track=NAME] [--top=N]` re-simulates every replay and ranks the finishers (per track and lap count)
+  and the best laps (per track). A replay that is damaged, recorded under other rules or that does not reproduce is reported as skipped
+  and never ranked (exit status 1). Entries are named `file#slot`; replays carry player slots, not accounts. The scripted bots in the
+  test suite do not finish a race, so the tests check the ranking is repeatable and agrees with the server's table (both empty); a
+  ranking with finishers has not been exercised yet.
 - `HoverNetReplay verify race.hnr` re-simulates it and compares every checkpoint; `info` prints the header.
 - `HoverNetReplay trace race.hnr` prints every tick's state hash and `dump race.hnr <tick>` the whole state at a tick; diffing the
   output from two platforms finds the first tick and the field that differ ([determinism.md](determinism.md)).

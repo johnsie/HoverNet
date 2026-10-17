@@ -4,6 +4,7 @@
 //   HoverNetReplay verify <file.hnr>                                  re-simulate and check every checkpoint
 //   HoverNetReplay info   <file.hnr>                                  print the header
 //   HoverNetReplay results <file.hnr>                                 replay it and print each player's laps, finish and best lap
+//   HoverNetReplay leaderboard <file.hnr>... [--track=NAME] [--top=N] rank the verified results of many replays
 //
 // A replay is the track identity, the rules version and each player's input for every tick, plus a state hash
 // every kCheckpointTicks ticks. Because the simulation is deterministic, that is enough to reproduce the race on any
@@ -11,7 +12,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <algorithm>
 #include <cstring>
+#include <map>
 #include <fstream>
 #include <iterator>
 #include <memory>
@@ -173,16 +176,15 @@ int Replay_(const std::string& path, long dumpTick, bool trace)
     return 0;
 }
 
-// Replays the inputs through the authoritative race and prints the result table: what a leaderboard or a time trial needs
+// Replays the inputs through the authoritative race and returns the result table: what a leaderboard or a time trial needs
 // from a replay. The same inputs always give the same table on every platform.
-int Results(const std::string& path)
+bool ComputeResults(const std::string& path, Replay& r, std::vector<Authority::PlayerResult>& results, std::uint32_t& ticks)
 {
     std::vector<std::uint8_t> file;
-    Replay r;
     std::string error;
-    if (!ReadFile(path, file) || !Decode(file, r, error)) { std::fprintf(stderr, "%s: %s\n", path.c_str(), error.empty() ? "unreadable" : error.c_str()); return 1; }
-    if (r.rules != kSimulationRules) { std::fprintf(stderr, "%s: recorded under simulation rules %u, this build is %u\n", path.c_str(), r.rules, kSimulationRules); return 1; }
-    if (Sha256::HashFile(TrackPath(r.track)) != r.trackSha256) { std::fprintf(stderr, "%s: the track file differs from the one recorded\n", path.c_str()); return 1; }
+    if (!ReadFile(path, file) || !Decode(file, r, error)) { std::fprintf(stderr, "%s: %s\n", path.c_str(), error.empty() ? "unreadable" : error.c_str()); return false; }
+    if (r.rules != kSimulationRules) { std::fprintf(stderr, "%s: recorded under simulation rules %u, this build is %u\n", path.c_str(), r.rules, kSimulationRules); return false; }
+    if (Sha256::HashFile(TrackPath(r.track)) != r.trackSha256) { std::fprintf(stderr, "%s: the track file differs from the one recorded\n", path.c_str()); return false; }
     Authority::RaceConfig config;
     config.trackName = r.track;
     config.trackPath = TrackPath(r.track);
@@ -191,17 +193,85 @@ int Results(const std::string& path)
     config.weapons = r.weapons;
     config.maxTicks = r.ticks;
     Authority::AuthoritativeRace race;
-    if (!race.Start(config, error)) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }
+    if (!race.Start(config, error)) { std::fprintf(stderr, "%s\n", error.c_str()); return false; }
     for (std::uint32_t t = 0; t < r.ticks; ++t) {
         for (int p = 0; p < r.players; ++p) race.SubmitInput(p, t, r.inputs[static_cast<std::size_t>(t) * r.players + p]);
         if (!race.AdvanceTick()) break;
     }
-    if (race.StateHash() != r.finalHash && race.CurrentTick() == r.ticks) { std::printf("DIVERGED at the end\n"); return 1; }
-    std::printf("results for %s after %u ticks\n", r.track.c_str(), race.CurrentTick());
-    for (const Authority::PlayerResult& pr : race.Results())
+    if (race.StateHash() != r.finalHash && race.CurrentTick() == r.ticks) { std::fprintf(stderr, "%s: DIVERGED at the end\n", path.c_str()); return false; }
+    results = race.Results();
+    ticks = race.CurrentTick();
+    return true;
+}
+
+int Results(const std::string& path)
+{
+    Replay r;
+    std::vector<Authority::PlayerResult> results;
+    std::uint32_t ticks = 0;
+    if (!ComputeResults(path, r, results, ticks)) return 1;
+    std::printf("results for %s after %u ticks\n", r.track.c_str(), ticks);
+    for (const Authority::PlayerResult& pr : results)
         std::printf("rank %d player %d laps %d %s finish_ms %lld best_lap_ms %lld\n", pr.rank, pr.player, pr.laps, pr.finished ? "finished" : "unfinished",
                     static_cast<long long>(pr.finishTimeMs), static_cast<long long>(pr.bestLapMs));
     return 0;
+}
+
+// Track leaderboards from stored replays. Every replay is re-simulated, so an entry is only ever a result the rules reproduce:
+// a replay that is damaged, was recorded under other rules or does not reproduce is listed as skipped and never ranked.
+// Finish times are compared only between races over the same track and lap count; best laps across all races on a track.
+// Replays carry player slots, not identities, so an entry names the replay file and slot (the "shareable identifier").
+struct Entry
+{
+    std::string track, file;
+    int laps = 0, slot = 0;
+    long long ms = 0;
+};
+
+std::string BaseName(const std::string& path)
+{
+    const std::size_t cut = path.find_last_of("/\\");
+    return cut == std::string::npos ? path : path.substr(cut + 1);
+}
+
+void PrintBoard(const char* title, std::vector<Entry>& entries, int top)
+{
+    std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+        if (a.ms != b.ms) return a.ms < b.ms;
+        if (a.file != b.file) return a.file < b.file;
+        return a.slot < b.slot;
+    });
+    std::printf("%s\n", title);
+    int rank = 0;
+    for (const Entry& e : entries) {
+        if (++rank > top) break;
+        std::printf("  %d. %lld.%03lld s  %s#%d\n", rank, e.ms / 1000, e.ms % 1000, e.file.c_str(), e.slot);
+    }
+}
+
+int Leaderboard(const std::vector<std::string>& files, const std::string& onlyTrack, int top)
+{
+    std::map<std::pair<std::string, int>, std::vector<Entry>> finishes;   // (track, laps) -> finishers
+    std::map<std::string, std::vector<Entry>> laps;                       // track -> best laps
+    int used = 0, skipped = 0;
+    for (const std::string& path : files) {
+        Replay r;
+        std::vector<Authority::PlayerResult> results;
+        std::uint32_t ticks = 0;
+        if (!ComputeResults(path, r, results, ticks)) { ++skipped; continue; }
+        if (!onlyTrack.empty() && r.track != onlyTrack) continue;
+        ++used;
+        for (const Authority::PlayerResult& pr : results) {
+            Entry e;
+            e.track = r.track; e.file = BaseName(path); e.laps = r.laps; e.slot = pr.player;
+            if (pr.finished) { e.ms = pr.finishTimeMs; finishes[{r.track, r.laps}].push_back(e); }
+            if (pr.bestLapMs > 0) { e.ms = pr.bestLapMs; laps[r.track].push_back(e); }
+        }
+    }
+    for (auto& kv : finishes) { const std::string t = kv.first.first + ", " + std::to_string(kv.first.second) + " laps: fastest finish"; PrintBoard(t.c_str(), kv.second, top); }
+    for (auto& kv : laps) { const std::string t = kv.first + ": fastest lap"; PrintBoard(t.c_str(), kv.second, top); }
+    std::printf("%d replays ranked, %d skipped\n", used, skipped);
+    return skipped == 0 ? 0 : 1;
 }
 
 int Info(const std::string& path)
@@ -237,6 +307,18 @@ int main(int argc, char** argv)
     if (cmd == "verify") return Verify(argv[2]);
     if (cmd == "info") return Info(argv[2]);
     if (cmd == "results") return Results(argv[2]);
+    if (cmd == "leaderboard") {
+        std::vector<std::string> files;
+        std::string track;
+        int top = 10;
+        for (int i = 2; i < argc; ++i) {
+            if (std::strncmp(argv[i], "--track=", 8) == 0) track = argv[i] + 8;
+            else if (std::strncmp(argv[i], "--top=", 6) == 0) top = std::atoi(argv[i] + 6);
+            else files.push_back(argv[i]);
+        }
+        if (files.empty() || top < 1) { std::fprintf(stderr, "usage: leaderboard <file.hnr>... [--track=NAME] [--top=N]\n"); return 2; }
+        return Leaderboard(files, track, top);
+    }
     if (cmd == "trace") return Replay_(argv[2], -1, true);
     if (cmd == "dump" && argc >= 4) return Replay_(argv[2], std::atol(argv[3]), false);
     if (cmd == "fuzz" && argc >= 4) return Fuzz(argv[2], std::atoi(argv[3]));

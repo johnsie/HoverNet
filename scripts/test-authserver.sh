@@ -31,6 +31,11 @@ elif [ -n "${HOVERNET_REPLAY_TOOL:-}" ]; then
   # The table the server wrote and the one recomputed from its replay agree on every player's laps and finish time.
   a=$(tail -n +2 "$tsv" | tr -d '\r' | awk -F'\t' '{print $1,$2,$3,$5}' | sort); b=$("$HOVERNET_REPLAY_TOOL" results "$replay" 2>/dev/null | tr -d '\r' | awk '/^rank/{print $2,$4,$6,$9}' | sort)
   [ "$a" = "$b" ] || { echo "FAIL: the server's results differ from the replay's"; echo "$a"; echo "$b"; fail=1; }
+  # The leaderboard lists exactly the players the server recorded as finished, and ranks the same replay identically twice.
+  finished=$(tail -n +2 "$tsv" | tr -d '\r' | awk -F'\t' '$4==1' | wc -l)
+  l1=$("$HOVERNET_REPLAY_TOOL" leaderboard "$replay" 2>/dev/null | tr -d '\r'); l2=$("$HOVERNET_REPLAY_TOOL" leaderboard "$replay" 2>/dev/null | tr -d '\r')
+  listed=$(echo "$l1" | awk '/fastest finish/{on=1;next} /fastest lap/{on=0} on && /^ +[0-9]+\./' | wc -l)
+  [ "$l1" = "$l2" ] && [ "$listed" -eq "$finished" ] || { echo "FAIL: the leaderboard lists $listed finishers, the server recorded $finished"; echo "$l1"; fail=1; }
 fi
 cat "$dir/bot1.txt" | tail -1
 grep -E "race over|player" "$dir/server.txt" | head -$((players + 1))
