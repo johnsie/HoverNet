@@ -52,7 +52,8 @@ server user only.
 
 **Deletion.** A player can ask an operator to delete a report that names them or an audit entry that records their name; because the
 audit log is a hash chain, the operator removes a line by purging up to it, which is recorded, rather than editing it. Replays hold
-no personal data, so they need no deletion for privacy reasons. There is no account to delete.
+no personal data, so they need no deletion for privacy reasons. There is no account to delete today; the draft policy for the optional accounts planned for 3.0
+(device-key sign-in, email only) is [account-privacy-policy-draft.md](account-privacy-policy-draft.md), awaiting legal review.
 
 **Children.** The server collects no age, email or real name. Operators who run public servers are responsible for their own rules and
 for complying with the law where they operate.
