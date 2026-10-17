@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.0.21 - 2026-10-17
+
 ### Added
 - **Replay playback.** `HoverNet --replay race.hnr [--replay-player N]` plays a replay file back with the normal renderer, exactly as
   the race happened (P pauses, 1 to 5 set the speed). Replays are small, verifiable files; see [docs/replays.md](docs/replays.md).
