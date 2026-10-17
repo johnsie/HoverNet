@@ -167,6 +167,7 @@ add_library(HoverNetSim STATIC
     NetTarget/ObjFac1/DoubleSpeedSource.cpp
     NetTarget/ObjFac1/FinishLine.cpp
     NetTarget/Authority/ReplayFormat.cpp
+    NetTarget/Authority/TrackPackage.cpp
     NetTarget/Authority/AuthoritativeRace.cpp
     NetTarget/Authority/Protocol3.cpp
     NetTarget/Authority/RaceWorld.cpp
@@ -343,6 +344,11 @@ else()
         NetTarget/LinuxClient/LobbyTest.cpp
     )
     target_link_libraries(HoverNetLobbyTest PRIVATE HoverNetSim)
+
+    add_executable(HoverNetTrackPack
+        NetTarget/LinuxClient/TrackPack.cpp
+    )
+    target_link_libraries(HoverNetTrackPack PRIVATE HoverNetSim)
 
     add_executable(HoverNetSnapshotTest
         NetTarget/LinuxClient/SnapshotTest.cpp
@@ -748,6 +754,9 @@ if(BUILD_TESTING AND NOT WIN32)
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-authclient.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetGame2Player> 3 700
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     set_tests_properties(HoverNetAuthClientSpectate PROPERTIES ENVIRONMENT "AUTH_SPECTATE=1")
+    add_test(NAME HoverNetTrackPack
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-trackpack.sh $<TARGET_FILE:HoverNetTrackPack>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetPhysicsGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-physics.sh $<TARGET_FILE:HoverNetDeterminismRun>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

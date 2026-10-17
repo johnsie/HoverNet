@@ -67,6 +67,7 @@ public:
 
     std::uint32_t CurrentTick() const { return mTick; }           // ticks simulated so far
     bool Finished() const { return mFinished; }
+    bool FreePlay() const { return mFreePlay; }                   // the track has no finish line: the race runs to a time limit
     std::uint64_t StateHash() const;                              // MR_HashLevelState of the whole race
     std::vector<PlayerResult> Results() const;
 
@@ -88,6 +89,7 @@ private:
     std::vector<MR_MainCharacter*> mCraft;
     std::uint32_t mTick;
     bool mFinished;
+    bool mFreePlay;
     std::vector<std::uint16_t> mLastInput;                           // per player
     std::vector<std::vector<std::int32_t>> mPending;                 // per player, ring of future inputs (-1 = none)
     std::vector<std::uint16_t> mHistory;                             // [tick * players + player], what was actually simulated

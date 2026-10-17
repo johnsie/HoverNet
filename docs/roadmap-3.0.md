@@ -207,12 +207,12 @@ Content is HoverNet's strength: there are already about a thousand community tra
 stage makes them durable and makes new ones easy.
 
 - **Versioned, portable formats** for tracks, materials, meshes, sounds, spawn points,
-  checkpoints, and gameplay objects, replacing the unversioned archive, with a documented
+  checkpoints, and gameplay objects, replacing the unversioned archive, *(status: the track package v1 wraps the classic archive with a version, manifest, author, licence and hashes without altering it, see [specs/track-package.md](specs/track-package.md); a native level format is not started)* with a documented
   migration path and a compile-time guard against platform-dependent fields (carried over
   from 2.0).
 - **Deterministic importers** for classic `.trk` files. The 1,009-track library is the
   conversion test corpus: every track converts, or is listed with the exact reason it
-  cannot.
+  cannot. *Status: done: `HoverNetTrackPack corpus` imports and verifies all 1,012 tracks, none failed.*
 - A supported **visual editor**: validation as you work, undo and redo, preview, object
   placement, checkpoint tooling, and one-click playtesting. Free-play tracks (no finish
   line) become a first-class mode, not an accident of missing objects.

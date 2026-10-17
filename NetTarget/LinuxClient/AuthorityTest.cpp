@@ -222,6 +222,21 @@ int main(int argc, char** argv)
         Check(follows, "the spectator follows the server's race tick for tick");
     }
 
+    // ---- 6. free play: a track without a finish line runs to a time limit -------------------------------------------
+    {
+        AuthoritativeRace race;
+        Check(race.Start(Config(track, players), error), "start a race (free play check)");
+        Check(!race.FreePlay(), "a bundled track with a finish line is a race, not free play");
+        if (const char* freePlayTrack = std::getenv("HOVERNET_FREEPLAY_TRACK")) {
+            AuthoritativeRace free;
+            Check(free.Start(Config(freePlayTrack, 2), error), "start a free-play track");
+            Check(free.FreePlay(), "a track without a finish line is free play");
+            for (int t = 0; t < 40000 && !free.Finished(); ++t) free.AdvanceTick();
+            Check(free.Finished() && free.CurrentTick() == 37500, "a free-play race ends at its ten minute limit");
+            Check(ReplayReproduces(free.ReplayBytes(), freePlayTrack), "a free-play race still reproduces from its replay");
+        }
+    }
+
     std::printf("%s %d players: %s\n", track.c_str(), players, gFailures == 0 ? "authority tests passed" : "FAILED");
     return gFailures == 0 ? 0 : 1;
 }

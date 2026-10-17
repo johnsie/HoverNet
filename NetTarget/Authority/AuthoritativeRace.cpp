@@ -14,7 +14,7 @@
 
 namespace Authority
 {
-AuthoritativeRace::AuthoritativeRace() : mTick( 0 ), mFinished( false ) {}
+AuthoritativeRace::AuthoritativeRace() : mTick( 0 ), mFinished( false ), mFreePlay( false ) {}
 AuthoritativeRace::~AuthoritativeRace() {}
 
 bool AuthoritativeRace::Start( const RaceConfig& config, std::string& error )
@@ -52,6 +52,18 @@ bool AuthoritativeRace::Start( const RaceConfig& config, std::string& error )
         if( lLevel->InsertElement( lCraft, lRoom, FALSE ) == NULL ) { error = "cannot place a craft"; return false; }
         mCraft.push_back( lCraft );
     }
+    // A track without a finish line is free play: it has no laps to complete, so the race runs to a time limit (10 minutes unless
+    // the configuration says otherwise) and the result ranks nobody by laps.
+    mFreePlay = true;
+    for( int lRoom = -1; lRoom < lLevel->GetRoomCount() && mFreePlay; ++lRoom )
+    {
+        for( MR_FreeElementHandle lHandle = lLevel->GetFirstFreeElement( lRoom ); lHandle != NULL; lHandle = MR_Level::GetNextFreeElement( lHandle ) )
+        {
+            const MR_FreeElement* lElement = MR_Level::GetFreeElement( lHandle );
+            if( lElement->GetTypeId().mDllId == 1 && lElement->GetTypeId().mClassId == 202 ) { mFreePlay = false; break; }
+        }
+    }
+    if( mFreePlay && mConfig.maxTicks == 0 ) mConfig.maxTicks = 37500;
     // The countdown is the clients' presentation phase; the authoritative race begins at tick 0 for everybody at once.
     mSession->SetSimulationTime( 0 );
     mLastInput.assign( config.players, 0 );
