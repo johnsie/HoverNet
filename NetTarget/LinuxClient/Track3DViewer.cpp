@@ -6410,6 +6410,7 @@ struct AuthOnline
     Protocol3::HelloAck ack;
     std::vector<MR_MainCharacter*> craft;
     std::unique_ptr<RenderedWorld> world;
+    bool interpolationOff = std::getenv("HOVERNET_TEST_NO_INTERPOLATION") != nullptr;   // test: the picture without the between-tick interpolation
     std::uint32_t lead = 12;     // ticks ahead of the confirmed tick that the client aims its inputs at
     Uint32 lastSend = 0, lastPing = 0, lastSnapshotRequest = 0, lastReconnect = 0;
     // The picture's own clock: it runs smoothly with real time and is only eased toward the server's (confirmed tick + lead), so a burst of Ticks
@@ -7493,12 +7494,42 @@ int RunClient(int argc, char** argv)
                 if (auth.spectator && auth.displayTick > confirmed) auth.displayTick = confirmed;   // a spectator never runs past what is known
                 if (auth.displayTick < confirmed) auth.displayTick = confirmed;
                 auth.shownTick = static_cast<std::uint32_t>(auth.displayTick);
+                const Uint64 predictStart = SDL_GetPerformanceCounter();
                 auth.predictor.PredictOn(*auth.world, auth.shownTick, error);
+                // The simulation moves in whole 16 ms ticks but frames do not fall on tick boundaries (a 60 Hz screen shows 1 tick in most frames,
+                // sometimes 0 or 2; a 30 Hz one alternates 2 and 3), so showing the whole tick makes the speed judder. Single player does not: its
+                // clock is continuous. So the craft are drawn between this tick and the next, by how far the clock is into it.
+                const double frac = auth.displayTick - auth.shownTick;
+                if (frac > 0.01 && !auth.interpolationOff && !auth.craft.empty()) {
+                    struct Pose { MR_3DCoordinate position; MR_Angle heading; int room; };
+                    std::vector<Pose> before;
+                    for (const MR_MainCharacter* c : auth.craft) before.push_back({c->mPosition, c->GetCabinOrientation(), c->mRoom});
+                    auth.predictor.PredictOn(*auth.world, auth.shownTick + 1, error);
+                    for (std::size_t i = 0; i < auth.craft.size(); ++i) {
+                        MR_MainCharacter* c = auth.craft[i];
+                        const Pose& a = before[i];
+                        const double dx = c->mPosition.mX - a.position.mX, dy = c->mPosition.mY - a.position.mY, dz = c->mPosition.mZ - a.position.mZ;
+                        if (dx * dx + dy * dy + dz * dz > 4000.0 * 4000.0) continue;   // a respawn or a teleport: no sweeping across the track
+                        c->mPosition.mX = a.position.mX + static_cast<int>(std::lround(dx * frac));
+                        c->mPosition.mY = a.position.mY + static_cast<int>(std::lround(dy * frac));
+                        c->mPosition.mZ = a.position.mZ + static_cast<int>(std::lround(dz * frac));
+                        int turn = (c->GetCabinOrientation() - a.heading) % MR_2PI;
+                        if (turn > MR_2PI / 2) turn -= MR_2PI; else if (turn < -MR_2PI / 2) turn += MR_2PI;
+                        c->SetDisplayOrientation(MR_NORMALIZE_ANGLE(a.heading + static_cast<int>(std::lround(turn * frac))));
+                        if (frac < 0.5) c->mRoom = a.room;
+                    }
+                }
+                if (std::getenv("HOVERNET_TEST_PREDICT_COST") != nullptr) {
+                    static double sTotal = 0, sMax = 0; static int sN = 0;
+                    const double ms = (SDL_GetPerformanceCounter() - predictStart) * 1000.0 / SDL_GetPerformanceFrequency();
+                    sTotal += ms; sMax = std::max(sMax, ms);
+                    if (++sN % 300 == 0) { std::printf("PREDICTCOST avg %.2f ms max %.2f ms over %d frames (ticks replayed this frame %u, lead %u)\n", sTotal / sN, sMax, sN, auth.shownTick - confirmed, auth.lead); std::fflush(stdout); }
+                }
             }
         }
         // Test instrumentation (HOVERNET_TEST_JITTER): how smoothly does the craft move on screen? Per frame: how many ticks the picture advanced
         // against how many the clock says it should have (1.0 = exactly in step), and how far the craft jumped.
-        static std::vector<double> sRatios, sJumps;
+        static std::vector<double> sRatios, sJumps, sDts, sSteps, sVel;
         static Uint32 sLastFrame = 0;
         static std::uint32_t sLastDisplay = 0;
         static double sLastX = 0, sLastY = 0;
@@ -7512,6 +7543,9 @@ int RunClient(int argc, char** argv)
                 const double expected = (now - sLastFrame) / 16.0;
                 sRatios.push_back((static_cast<double>(displayTick) - sLastDisplay) / expected);
                 sJumps.push_back(std::sqrt((x - sLastX) * (x - sLastX) + (y - sLastY) * (y - sLastY)));
+                sDts.push_back(static_cast<double>(now - sLastFrame));
+                sVel.push_back(sJumps.back() / static_cast<double>(now - sLastFrame));
+                sSteps.push_back(static_cast<double>(displayTick) - sLastDisplay);
             }
             sHave = true; sLastFrame = now; sLastDisplay = displayTick; sLastX = x; sLastY = y;
         }
@@ -7522,7 +7556,21 @@ int RunClient(int argc, char** argv)
             std::printf("JITTERTEST frames=%zu pace(ticks shown per tick elapsed) p5=%.2f p50=%.2f p95=%.2f max=%.2f   craft jump per frame (mm) p50=%.0f p95=%.0f max=%.0f\n",
                         r.size(), pct(r, 0.05), pct(r, 0.5), pct(r, 0.95), r.back(), pct(j, 0.5), pct(j, 0.95), j.back());
             std::fflush(stdout);
-            sRatios.clear(); sJumps.clear();
+            {
+                std::sort(sDts.begin(), sDts.end());
+                int zero = 0, multi = 0;
+                for (double d : sSteps) { if (d == 0) ++zero; else if (d >= 2) ++multi; }
+                std::printf("JITTERTEST frame time (ms) p5=%.0f p50=%.0f p95=%.0f max=%.0f; frames showing 0 new ticks %d, 2 or more %d of %zu\n", pct(sDts, 0.05), pct(sDts, 0.5), pct(sDts, 0.95), sDts.back(), zero, multi, sSteps.size());
+            }
+            {
+                // How much the craft's on-screen speed (distance per ms of real time) changes from one frame to the next, against its average:
+                // 0 is perfectly steady motion.
+                double change = 0, mean = 0;
+                for (std::size_t i = 0; i < sVel.size(); ++i) { mean += sVel[i]; if (i > 0) change += std::fabs(sVel[i] - sVel[i - 1]); }
+                mean /= static_cast<double>(sVel.size());
+                std::printf("JITTERTEST on-screen speed changes by %.1f%% of its average from frame to frame\n", 100.0 * change / static_cast<double>(sVel.size() - 1) / mean);
+            }
+            sRatios.clear(); sJumps.clear(); sDts.clear(); sSteps.clear(); sVel.clear();
             return 1;   // the measurement is done: leave (exit status 0)
         }
         if (auth.resultReceived && auth.verify) {
@@ -7946,6 +7994,40 @@ int RunClient(int argc, char** argv)
 #endif
             else {
                 session.Process();
+#ifndef HOVERNET_WEB
+                // Test instrumentation (HOVERNET_TEST_JITTER_SP, with --autoplay): the same measurement as HOVERNET_TEST_JITTER gives online
+                // (ticks shown per tick of real time, craft jump per frame), for single player, so the two can be compared.
+                if (std::getenv("HOVERNET_TEST_JITTER_SP") != nullptr && mainCharacter != nullptr && session.GetSimulationTime() > 0) {
+                    static std::vector<double> sRatios, sJumps, sDts, sVel;
+                    static Uint32 sLastFrame = 0;
+                    static double sLastTick = 0, sLastX = 0, sLastY = 0;
+                    static int sWarmup = 0;
+                    const Uint32 nowMs = SDL_GetTicks();
+                    const double tick = session.GetSimulationTime() / 16.0;
+                    const double x = mainCharacter->mPosition.mX, y = mainCharacter->mPosition.mY;
+                    if (sLastFrame != 0 && nowMs > sLastFrame && ++sWarmup > 30) {
+                        sRatios.push_back((tick - sLastTick) / ((nowMs - sLastFrame) / 16.0));
+                        sJumps.push_back(std::sqrt((x - sLastX) * (x - sLastX) + (y - sLastY) * (y - sLastY)));
+                        sDts.push_back(static_cast<double>(nowMs - sLastFrame));
+                        sVel.push_back(sJumps.back() / static_cast<double>(nowMs - sLastFrame));
+                    }
+                    sLastFrame = nowMs; sLastTick = tick; sLastX = x; sLastY = y;
+                    if (sRatios.size() >= 600) {
+                        std::sort(sRatios.begin(), sRatios.end()); std::sort(sJumps.begin(), sJumps.end());
+                        auto pct = [](const std::vector<double>& v, double q) { return v[static_cast<std::size_t>(q * (v.size() - 1))]; };
+                        std::printf("JITTERTEST single player frames=%zu pace p5=%.2f p50=%.2f p95=%.2f max=%.2f   craft jump per frame (mm) p50=%.0f p95=%.0f max=%.0f\n",
+                                    sRatios.size(), pct(sRatios, 0.05), pct(sRatios, 0.5), pct(sRatios, 0.95), sRatios.back(), pct(sJumps, 0.5), pct(sJumps, 0.95), sJumps.back());
+                        double change = 0, mean = 0;
+                        for (std::size_t i = 0; i < sVel.size(); ++i) { mean += sVel[i]; if (i > 0) change += std::fabs(sVel[i] - sVel[i - 1]); }
+                        mean /= static_cast<double>(sVel.size());
+                        std::printf("JITTERTEST on-screen speed changes by %.1f%% of its average from frame to frame (single player)\n", 100.0 * change / static_cast<double>(sVel.size() - 1) / mean);
+                        std::sort(sDts.begin(), sDts.end());
+                        std::printf("JITTERTEST single player frame time (ms) p5=%.0f p50=%.0f p95=%.0f max=%.0f\n", pct(sDts, 0.05), pct(sDts, 0.5), pct(sDts, 0.95), sDts.back());
+                        std::fflush(stdout);
+                        return 0;
+                    }
+                }
+#endif
             }
 #else
             session.Process();

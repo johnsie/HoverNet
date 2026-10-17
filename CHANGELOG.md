@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.5 - 2026-10-17
+
+### Fixed
+- **Online: smoother motion (desktop and web).** The simulation moves in whole 16 ms ticks, but frames do not fall on tick boundaries, so the craft's on-screen speed swung from frame to frame (single player does not have this, its clock is continuous). The craft are now drawn between the current tick and the next. Measured on a scripted race: the speed change from one frame to the next fell from 14% to 4% on a clean link, and from 16-19% to 7-8% with 60 +- 40 ms of network jitter. The simulation and the rules version are unchanged. `scripts/test-smooth-motion.sh` now checks this too.
+
 ## 2.3.4 - 2026-10-17
 
 ### Changed

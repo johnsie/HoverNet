@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # On a network with jitter the craft must move smoothly on screen: the picture's pace (ticks shown against ticks of real time elapsed, per frame)
-# must stay close to 1.0. Before the fix, 60 +- 40 ms of jitter made it swing between 0.44 and 1.88 (up to 3.4): the picture jumped.
+# must stay close to 1.0, and the craft's on-screen speed must not change by more than 12% from one frame to the next (drawn between two ticks: 4-8%; whole ticks: 15-19%). Before the fix, 60 +- 40 ms of jitter made it swing between 0.44 and 1.88 (up to 3.4): the picture jumped.
 #   scripts/test-smooth-motion.sh build/HoverNetAuthServer build/HoverNetNetProxy build/HoverNetGame2Player
 set -uo pipefail
 server="${1:?usage: $0 <server> <proxy> <client>}"; proxy="${2:?}"; client="${3:?}"
@@ -20,4 +20,8 @@ line=$(grep JITTERTEST "$dir/client.txt" | head -1)
 pace=$(grep -o 'pace.*craft' <<< "$line")
 p5=$(sed -n 's/.*p5=\([0-9.]*\).*/\1/p' <<< "$pace"); p95=$(sed -n 's/.*p95=\([0-9.]*\) max.*/\1/p' <<< "$pace")
 python3 -c "import sys; p5=float('$p5'); p95=float('$p95'); sys.exit(0 if (p5 >= 0.65 and p95 <= 1.65) else 1)" || { echo "FAIL: the picture is not smooth (p5=$p5 p95=$p95; want >= 0.65 and <= 1.65)"; echo "$line"; exit 1; }
+chg=$(grep -o 'speed changes by [0-9.]*' "$dir/client.txt" | head -1 | grep -o '[0-9.]*$')
+[ -n "$chg" ] || { echo "FAIL: no on-screen speed measurement"; exit 1; }
+python3 -c "import sys; sys.exit(0 if float('$chg') <= 12.0 else 1)" || { echo "FAIL: the craft's on-screen speed changes by ${chg}% from frame to frame (want <= 12%; whole-tick drawing gives 15-19%)"; exit 1; }
+echo "smooth motion: the craft's on-screen speed changed by ${chg}% between frames"
 echo "smooth motion: with 60 +- 40 ms of jitter the picture's pace stayed between ${p5} and ${p95} of real time"

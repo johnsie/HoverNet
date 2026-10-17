@@ -228,6 +228,9 @@ class MR_MainCharacter:public MR_FreeElement
       
       // State interogation functions
       MR_DllDeclare MR_Angle GetCabinOrientation()const;
+      // For drawing only: a client that shows a moment between two simulation ticks sets the interpolated heading (the state is rebuilt from the
+      // simulation before the next tick, so this is never simulated from).
+      void SetDisplayOrientation( MR_Angle pAngle ) { mCabinOrientation = pAngle; }
 
 
       MR_DllDeclare double GetFuelLevel()const;
