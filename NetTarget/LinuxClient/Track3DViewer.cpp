@@ -6433,7 +6433,7 @@ int RunClient(int argc, char** argv)
         auth.chunks.clear();
         auth.needSnapshot = auth.spectator;   // the server sends the keyframe first; nothing is drawn or applied before it
         auth.lastSend = auth.lastPing = SDL_GetTicks();
-        session.AddMessage(auth.spectator ? "Watching the race"
+        session.AddMessage(auth.spectator ? "Watching the race: Left and Right (or [ and ]) switch craft"
                                           : ("Connected: you are player " + std::to_string(auth.ack.player + 1) + " of " + std::to_string(auth.ack.players)).c_str());
         return std::string();
     };
@@ -6487,7 +6487,7 @@ int RunClient(int argc, char** argv)
             session.SetSimulationTime(0);
             replay.active = true;
             replay.lastTicks = SDL_GetTicks();
-            session.AddMessage("Replay: P pauses, 1-5 sets the speed, Esc leaves");
+            session.AddMessage("Replay: P pauses, 1-5 sets the speed, [ and ] switch craft, Esc leaves");
         }
         else if (!authServer.empty()) {
 #if !defined(HOVERNET_WEB)
@@ -6731,6 +6731,21 @@ int RunClient(int argc, char** argv)
     // anything once online, but it's harmless to leave enabled for local play.
     std::string chatBuffer;
 #ifdef HOVERNET_GAME2_PLAYER
+    // Watching a replay or a race as a spectator: Left and Right move the camera (and the HUD) to the previous or next craft.
+    auto cycleWatch = [&](int direction) {
+        std::vector<MR_MainCharacter*>* crafts = nullptr;
+        int* watch = nullptr;
+        if (replay.active) { crafts = &replay.craft; watch = &replay.watch; }
+#if !defined(HOVERNET_WEB)
+        else if (auth.active && auth.spectator) { crafts = &auth.craft; watch = &auth.watch; }
+#endif
+        if (crafts == nullptr || crafts->size() < 2) return;
+        const int count = static_cast<int>(crafts->size());
+        *watch = (*watch + direction + count) % count;
+        mainCharacter = (*crafts)[static_cast<std::size_t>(*watch)];
+        session.AddMessage(("Watching player " + std::to_string(*watch + 1) + " of " + std::to_string(count)).c_str());
+        if (std::getenv("HOVERNET_TEST_WATCH") != nullptr) { std::printf("WATCHTEST watching player %d of %d\n", *watch + 1, count); std::fflush(stdout); }
+    };
     // Chat works in a race on the old lobby server and in one on a HoverNet 3.0 server, during the race and after the player has finished.
     auto canChat = [&]() -> bool {
         if (onlineClient.IsConnected()) return true;
@@ -6942,6 +6957,23 @@ int RunClient(int argc, char** argv)
                 }
             }
 #endif
+            else if (event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
+                     (event.key.keysym.sym == SDLK_LEFTBRACKET || event.key.keysym.sym == SDLK_RIGHTBRACKET ||
+                      // Left and Right also work for a spectator, who has no seeking; in a replay they seek five seconds.
+                      ((event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_RIGHT)
+#if !defined(HOVERNET_WEB)
+                       && auth.active && auth.spectator && !replay.active
+#else
+                       && false
+#endif
+                      )) &&
+                     (replay.active
+#if !defined(HOVERNET_WEB)
+                      || (auth.active && auth.spectator)
+#endif
+                     )) {
+                cycleWatch((event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_RIGHTBRACKET) ? 1 : -1);
+            }
             else if (resultsPending && ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN && event.key.repeat == 0) ||
                                         (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK))) {
                 openResults = true;
@@ -7320,6 +7352,25 @@ int RunClient(int argc, char** argv)
                     SDL_Event key;
                     SDL_memset(&key, 0, sizeof(key));
                     key.type = SDL_KEYDOWN; key.key.state = SDL_PRESSED; key.key.keysym.sym = SDLK_RETURN; key.key.keysym.scancode = SDL_SCANCODE_RETURN;
+                    SDL_PushEvent(&key);
+                }
+            }
+            if (std::getenv("HOVERNET_TEST_WATCH") != nullptr) {
+                // Test hook (scripts/test-spectator-camera.sh): Right on frame 40, then Left twice on frame 60 and 80.
+                ++sTestFrames;
+                if (sTestFrames == 40 || sTestFrames == 60 || sTestFrames == 80) {
+                    SDL_Event key;
+                    SDL_memset(&key, 0, sizeof(key));
+                    key.type = SDL_KEYDOWN; key.key.state = SDL_PRESSED;
+                    // In a replay Left and Right seek, so the camera keys there are [ and ]; a spectator can use either pair.
+                    if (replay.active) {
+                        key.key.keysym.sym = sTestFrames == 40 ? SDLK_RIGHTBRACKET : SDLK_LEFTBRACKET;
+                        key.key.keysym.scancode = sTestFrames == 40 ? SDL_SCANCODE_RIGHTBRACKET : SDL_SCANCODE_LEFTBRACKET;
+                    }
+                    else {
+                        key.key.keysym.sym = sTestFrames == 40 ? SDLK_RIGHT : SDLK_LEFT;
+                        key.key.keysym.scancode = sTestFrames == 40 ? SDL_SCANCODE_RIGHT : SDL_SCANCODE_LEFT;
+                    }
                     SDL_PushEvent(&key);
                 }
             }
