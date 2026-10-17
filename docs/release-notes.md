@@ -13,8 +13,8 @@
 - The Linux packages now carry the licence text, as the HoverRace licence requires.
 
 ### Known limits of this release
-- No one has clicked through the new screen on a real phone, and the Windows installer's licence-file change was not built or run by the author
-  before release (the CI build is the check).
+- No one has clicked through the new screen on a real phone or on Windows by hand, and nobody has installed the Windows installer by hand
+  (the CI build builds and validates it, including the licence files).
 - The browser reaches the new servers through a TLS proxy in front of them; the proxy was tried with a test proxy, not the production web server.
 - Nothing is signed yet: there is no project signing key.
 
