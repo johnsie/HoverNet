@@ -6,20 +6,18 @@ and how to roll one back.
 
 ## Unreleased
 
-### Added
-- **HoverNet Servers screen** (desktop client, main menu): connect to a 3.0 server by address (with the server's key for encrypted ones), see its open races, host a race (public, private with a code, or a one-player time trial), join, join a friend's private race by number and code, or watch a running race. Refusals are explained in plain words. The browser build does not have it: no browser transport for these servers exists yet. Tested against a real server (`HoverNetOnlineLobby`) and through the real client end to end (`HoverNetOnlineMenu`: screen, time trial, every tick verified); how it looks was checked in headless screenshots only, and no one has clicked through it yet.
-
 ## 2.1.0 - 2026-10-17
 
-This release adds the HoverNet 3.0 server-side groundwork (authoritative server, lobby, private races, time trials, WebSocket transport, replay tools, signing tool). The game's menus do not use it yet, and no browser client for protocol 3.0 exists; the deployed 2.0 race server is unchanged.
+This release adds the HoverNet 3.0 server-side groundwork (authoritative server, lobby, private races, time trials, WebSocket transport, replay tools, signing tool). The desktop game has a HoverNet Servers screen for it; there is no browser client for protocol 3.0 yet, so the web build has no such screen; the deployed 2.0 race server is unchanged.
 
 ### Added
+- **HoverNet Servers screen** (desktop client, main menu): connect to a 3.0 server by address (with the server's key for encrypted ones), see its open races, host a race (public, private with a code, or a one-player time trial), join, join a friend's private race by number and code, or watch a running race. Refusals are explained in plain words. The browser build does not have it: no browser transport for these servers exists yet. Tested against a real server (`HoverNetOnlineLobby`) and through the real client end to end (`HoverNetOnlineMenu`: screen, time trial, every tick verified); how it looks was checked in headless screenshots only, and no one has clicked through it yet.
 - `HoverNetReplay results race.hnr` prints each player's rank, laps, finish time and best lap from a replay (the basis for leaderboards and time trials).
 - `HoverNetDriver`, a search tool that drives a craft around a track and writes the replay, so leaderboards and events are tested with real finishers (`HoverNetLeaderboard`, Linux).
 - `HoverNetReplay leaderboard a.hnr b.hnr ...` re-simulates replays and ranks finishers and best laps per track; damaged or non-reproducing replays are skipped, never ranked. `HoverNetAuthServer` also writes a `.results.tsv` table beside each official replay.
 - `HoverNetTrackPack verify FILE --catalogue` enforces the catalogue admission rule: a named author and a CC0-1.0, CC-BY-4.0 or CC-BY-SA-4.0 licence.
 - `HoverNetAuthServer` drains on SIGTERM/SIGINT for rolling restarts: races under way finish and are saved, new ones are refused (reject reason 10), `/health` returns 503, then it exits 0 (`--drain-timeout`). See docs/operators.md.
-- **Private races on the authoritative server (protocol level).** A race hosted with a code (6 to 16 characters) is not listed and can be joined or watched only by id and code; a wrong code looks like a race that does not exist, and 30 wrong guesses lock the race. The bot takes `--code` and `--race-id`. The game's menus do not offer it yet.
+- **Private races on the authoritative server (protocol level).** A race hosted with a code (6 to 16 characters) is not listed and can be joined or watched only by id and code; a wrong code looks like a race that does not exist, and 30 wrong guesses lock the race. The bot takes `--code` and `--race-id`. The desktop game's HoverNet Servers screen offers it.
 - **Browser transport for the authoritative server.** `HoverNetAuthServer --ws-origin https://site` accepts WebSocket upgrades on its port (origin allow-list, masked frames, bounded sizes, ping/pong, close codes) and feeds the same protocol 3.0 session layer as TCP. Behind a TLS-terminating web server this is the `wss://` path; no browser client uses it yet. See docs/operators.md.
 - `HoverNetTrackPack lint FILE [--strict]` explains why a track is not a race (missing checkpoints), duplicate finish lines and short grids; the corpus report counts tracks with warnings.
 - `HoverNetAuthServer --event-log FILE` writes server and race events as JSON lines for operators' tooling (no names or addresses).
