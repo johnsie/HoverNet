@@ -32,7 +32,7 @@ sleep 0.4
 "$bot" --port "$port" --name o2 --join-race ClassicH --track ClassicH > "$dir/o2.txt" 2>&1 &
 wait %2 %3 2>/dev/null
 sleep 1
-m=""; [ -z "$PY" ] || m=$(get "$status" /metrics)
+m=""; [ -z "$PY" ] || m=$(get "$status" /metrics | tr -d "\r")
 [ -z "$PY" ] || echo "$m" | grep -q "^hovernet_races_hosted_total 1$" || { echo "FAIL: races hosted"; echo "$m" | grep hosted; fail=1; }
 ticks=$(echo "$m" | sed -n 's/^hovernet_ticks_simulated_total \([0-9]*\)$/\1/p')
 [ -z "$PY" ] || [ "${ticks:-0}" -ge 290 ] || { echo "FAIL: ticks simulated is ${ticks:-none}"; fail=1; }
