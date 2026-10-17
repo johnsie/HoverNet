@@ -2052,6 +2052,7 @@ enum class PostRaceChoice
     eNewLocalRace,
     eOnlineLobby,
     eQuit,
+    eAuthServer,   // play on a HoverNet 3.0 server (native only; listed before Quit on screen)
 };
 
 PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
@@ -3636,10 +3637,19 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             ImGui::SetKeyboardFocusHere();
             focusFirstButton = false;
         }
-        const char* actions[] = {"KEEP DRIVING", "NEW LOCAL RACE", "ONLINE MULTIPLAYER", "QUIT HOVERNET"};
-        for (int index = 0; index < 4; ++index) {
-            if (HoverNetButton(actions[index], ImVec2(-FLT_MIN, index == 0 ? 54.0f : 44.0f))) {
-                choice = static_cast<PostRaceChoice>(index);
+        struct PostRaceAction { const char* label; PostRaceChoice choice; };
+        const PostRaceAction actions[] = {
+            {"KEEP DRIVING", PostRaceChoice::eContinue},
+            {"NEW LOCAL RACE", PostRaceChoice::eNewLocalRace},
+            {"ONLINE MULTIPLAYER", PostRaceChoice::eOnlineLobby},
+#if !defined(HOVERNET_WEB)
+            {"HOVERNET SERVERS", PostRaceChoice::eAuthServer},
+#endif
+            {"QUIT HOVERNET", PostRaceChoice::eQuit},
+        };
+        for (std::size_t index = 0; index < sizeof(actions) / sizeof(actions[0]); ++index) {
+            if (HoverNetButton(actions[index].label, ImVec2(-FLT_MIN, index == 0 ? 54.0f : 44.0f))) {
+                choice = actions[index].choice;
                 running = false;
             }
             ImGui::Spacing();
@@ -6373,6 +6383,29 @@ int RunClient(int argc, char** argv)
     };
 #endif
 
+#if defined(HOVERNET_GAME2_PLAYER) && !defined(HOVERNET_WEB)
+    // The HoverNet Servers screen and, once a race is ready, the race itself. True when a race is now running; false when the player
+    // left the screen (or the race could not be set up: the reason is printed) and nothing changed.
+    auto playOnAuthServer = [&]() -> bool {
+        endAuthRace();
+        OnlineLobby lobby;
+        if (!RunAuthServerScreen(graphics, lobby, frameLimit)) return false;
+        auth.ack = lobby.Ack();
+        auth.backlog = lobby.TakeBacklog();
+        auth.spectator = lobby.Spectating();
+        auth.conn.Swap(lobby.Connection());
+        lobby.AddressOf(auth.host, auth.port, auth.serverKey);
+        auth.name = LoadUsername();
+        const std::string startError = startAuthRace();
+        if (!startError.empty()) {
+            endAuthRace();
+            std::fprintf(stderr, "%s\n", startError.c_str());
+            return false;
+        }
+        return true;
+    };
+#endif
+
     if (playerMode && menuFontHandle == nullptr) {
         return FatalClientError("Could not load the menu font from ObjFac1.dat.");
     }
@@ -6558,24 +6591,7 @@ int RunClient(int argc, char** argv)
             }
 #if !defined(HOVERNET_WEB)
             else if (choice == MenuChoice::eAuthServer) {
-                OnlineLobby lobby;
-                if (RunAuthServerScreen(graphics, lobby, frameLimit)) {
-                    auth.ack = lobby.Ack();
-                    auth.backlog = lobby.TakeBacklog();
-                    auth.spectator = lobby.Spectating();
-                    auth.conn.Swap(lobby.Connection());
-                    lobby.AddressOf(auth.host, auth.port, auth.serverKey);
-                    auth.name = LoadUsername();
-                    const std::string startError = startAuthRace();
-                    if (!startError.empty()) {
-                        endAuthRace();
-                        std::fprintf(stderr, "%s\n", startError.c_str());
-                        pickingMode = !g_QuitConfirmed;
-                    }
-                }
-                else {
-                    pickingMode = !g_QuitConfirmed;
-                }
+                if (!playOnAuthServer()) pickingMode = !g_QuitConfirmed;
             }
 #endif
             else if (choice == MenuChoice::eControls) {
@@ -7195,6 +7211,19 @@ int RunClient(int argc, char** argv)
                     wasOnlineConnected = onlineClient.IsConnected();
                     continue;
                 }
+#if !defined(HOVERNET_WEB)
+                if (resultChoice == PostRaceChoice::eAuthServer) {
+                    if (playOnAuthServer()) {
+                        missileSeen = false;
+                        finishAnnounced = false;
+                        wasOnlineConnected = onlineClient.IsConnected();
+                    }
+                    else if (g_QuitConfirmed) {
+                        running = false;
+                    }
+                    continue;
+                }
+#endif
                 if (resultChoice == PostRaceChoice::eNewLocalRace) {
                     const LocalRaceSetup setup = RunLocalRaceSetup(
                         graphics, buffer, viewport, *menuFontHandle->GetSprite(), frameLimit);
