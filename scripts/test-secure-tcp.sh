@@ -7,7 +7,7 @@ server="${1:?usage: $0 <server> <bot> <client>}"; bot="${2:?}"; client="${3:?}"
 export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
 dir="$(mktemp -d)"; trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$dir"' EXIT
 fail=0
-"$server" --track ClassicH --players 3 --port 0 --once --limit-ticks 500 --start-delay-ms 1500 --identity-file "$dir/identity.key" --require-encryption > "$dir/server.txt" 2>&1 &
+"$server" --track ClassicH --players 3 --port 0 --once --limit-ticks 500 --start-delay-ms 3000 --identity-file "$dir/identity.key" --require-encryption > "$dir/server.txt" 2>&1 &
 spid=$!
 for _ in $(seq 1 100); do grep -q "listening on" "$dir/server.txt" 2>/dev/null && break; sleep 0.1; done
 port=$(sed -n 's/.*listening on [0-9.]*:\([0-9]*\),.*/\1/p' "$dir/server.txt" | head -1)
@@ -26,5 +26,6 @@ for p in "${pids[@]}"; do wait "$p" || fail=1; done
 wait "$spid" 2>/dev/null
 for i in 1 2; do grep -q "no divergence" "$dir/s$i.txt" || { echo "FAIL: secure bot $i"; cat "$dir/s$i.txt"; fail=1; }; done
 grep "auth client" "$dir/client.txt"
+[ $fail -eq 0 ] || for f in server plain wrong s1 s2 client; do echo "--- $f.txt"; tail -15 "$dir/$f.txt" 2>/dev/null; done
 [ $fail -eq 0 ] && echo "secure-tcp: players who pin the server key race over an encrypted, authenticated session; plain and wrong-key clients are refused"
 exit $fail
