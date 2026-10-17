@@ -7,6 +7,7 @@ and how to roll one back.
 ## Unreleased
 
 ### Added
+- `scripts/soak-authserver.sh`: a real-time soak of the authoritative server (rounds of eight-player races with scripted bots over TCP, memory and health sampled). One 60-minute run: 69 races, no failure, no memory growth; the multi-day gate is still open.
 - **The browser plays on HoverNet 3.0 servers.** The web client has the HoverNet Servers screen and speaks protocol 3.0 over a WebSocket (a `wss://` address; the server side exists since `--ws-origin`). Checked in headless Chrome against a real server on the loopback interface: connect, host a time trial, a two-player race with a native bot (followed exactly), a chat message arriving, and watching a race as a spectator. The connection is `wss://` through a test TLS proxy; not yet checked: Apache/nginx in front, phones.
 
 ### Changed

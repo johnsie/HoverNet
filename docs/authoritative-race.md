@@ -188,6 +188,14 @@ after a long unbroken run of them.
   real time; 9 rounds of 8 races x 8 players left memory flat at 13.8 MB after the first round; 16 races x 8 players x 3 rounds ran
   clean. Passes on Linux and Windows x64. This does not replace the multi-day real-time soak of the Stage 2 exit gate (run
   `scripts/test-authserver.sh ... 8 <large tick count>` or the load test with many rounds for that).
+- **Real-time soak** (`scripts/soak-authserver.sh BUILD MINUTES LOG`): one lobby server and round after round of eight-player ClassicH races
+  (3,000 ticks, 50 seconds each) played by scripted bots over real TCP, checking every round that each bot saw its race through with no
+  divergence, and sampling the server's resident memory, connections, races running and replay files. **Run on 17 October 2026 (Linux,
+  x86-64, 8 cores, build of commit `c29d286`, under `nice` while other work and tests ran on the same machine): 60 minutes, 69 rounds
+  (69 races, 552 player connections), 0 bad rounds, server still healthy at the end. Resident memory was 5.6 MB after the first round and
+  2.6 MB after the last (between 2.6 and 5.8 MB throughout, no upward trend); no connections left open; one finished race listed at a time;
+  69 replay files written.** That is one hour with scripted players on one track, not the days the exit gate asks for, and it does not cover
+  browsers, many simultaneous lobbies or real networks; the multi-day run remains open.
 
 ## Reconnect, tampering, bandwidth and metrics
 
