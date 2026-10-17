@@ -1,6 +1,9 @@
-## HoverNet 2.2
+## HoverNet 2.3
 
-### What's new in 2.2
+### What's new in 2.3
+- **The host starts the race.** In the HoverNet lobby the race no longer starts when the last seat fills: the host sees who has joined in the waiting room and presses **Start Race**; the race starts with whoever is there.
+
+### Also in 2.2
 - **One way into online play.** **ONLINE MULTIPLAYER** (main menu, pause menu, results screen, and in the browser) connects to the HoverNet server by itself: you type nothing but, once, your name. The lobby has the classic layout (game list, race details with the track map, actions, who is in the lobby, and lobby chat), with private races, one-player time trials and watching. The race list refreshes by itself. If the HoverNet server is not available, the classic lobby opens instead. A friend's or a club's server is chosen in **Settings** (*HoverNet server*). See [Playing on a HoverNet server](playing-on-servers.md).
 - **Finishing no longer takes the race away.** You are told to press **Enter** for your results; keep driving and chatting as long as you like.
 - **Chat** in the lobby and in races on the new servers, during and after the race.
