@@ -6,20 +6,13 @@ and how to roll one back.
 
 ## Unreleased
 
-### Added
-- `scripts/soak-authserver.sh`: a real-time soak of the authoritative server (rounds of eight-player races with scripted bots over TCP, memory and health sampled). One 60-minute run: 69 races, no failure, no memory growth; the multi-day gate is still open.
-- **The browser plays on HoverNet 3.0 servers.** The web client has the HoverNet Servers screen and speaks protocol 3.0 over a WebSocket (a `wss://` address; the server side exists since `--ws-origin`). Checked in headless Chrome against a real server on the loopback interface: connect, host a time trial, a two-player race with a native bot (followed exactly), a chat message arriving, and watching a race as a spectator. The connection is `wss://` through a test TLS proxy; not yet checked: Apache/nginx in front, phones.
-
-### Changed
-- The host of a private race is shown the race's number (and told to give it to friends with the code): the server sends it in the join acknowledgement, only to clients that ask for it (capability bit 0), so a client built before it is unaffected. Without this a private race could not be shared.
-- Watching a replay or a race as a spectator: `[` and `]` move the camera and the HUD between the craft (a spectator can also use Left and Right; in a replay those still seek).
-- Crossing the finish line no longer opens the results screen over the race. The player is told, in the race, that they can press Enter (the controller's Back button, or MENU on a touch screen) for their results and race options, and may keep driving as long as they like; the finish time is kept from the moment of the finish. Chat keeps working after the finish, and now also in races on HoverNet 3.0 servers (type, Enter to send; messages from the others appear on screen). The HoverNet Servers button is also on the results screen.
-
 ## 2.1.0 - 2026-10-17
 
 This release adds the HoverNet 3.0 server-side groundwork (authoritative server, lobby, private races, time trials, WebSocket transport, replay tools, signing tool). The desktop game has a HoverNet Servers screen for it; there is no browser client for protocol 3.0 yet, so the web build has no such screen; the deployed 2.0 race server is unchanged.
 
 ### Added
+- `scripts/soak-authserver.sh`: a real-time soak of the authoritative server (rounds of eight-player races with scripted bots over TCP, memory and health sampled). One 60-minute run: 69 races, no failure, no memory growth; the multi-day gate is still open.
+- **The browser plays on HoverNet 3.0 servers.** The web client has the HoverNet Servers screen and speaks protocol 3.0 over a WebSocket (a `wss://` address; the server side exists since `--ws-origin`). Checked in headless Chrome against a real server on the loopback interface: connect, host a time trial, a two-player race with a native bot (followed exactly), a chat message arriving, and watching a race as a spectator. The connection is `wss://` through a test TLS proxy; not yet checked: Apache/nginx in front, phones.
 - **HoverNet Servers screen** (desktop client, main menu): connect to a 3.0 server by address (with the server's key for encrypted ones), see its open races, host a race (public, private with a code, or a one-player time trial), join, join a friend's private race by number and code, or watch a running race. Refusals are explained in plain words. The browser build does not have it: no browser transport for these servers exists yet. Tested against a real server (`HoverNetOnlineLobby`) and through the real client end to end (`HoverNetOnlineMenu`: screen, time trial, every tick verified); how it looks was checked in headless screenshots only, and no one has clicked through it yet.
 - `HoverNetReplay results race.hnr` prints each player's rank, laps, finish time and best lap from a replay (the basis for leaderboards and time trials).
 - `HoverNetDriver`, a search tool that drives a craft around a track and writes the replay, so leaderboards and events are tested with real finishers (`HoverNetLeaderboard`, Linux).
@@ -35,6 +28,11 @@ This release adds the HoverNet 3.0 server-side groundwork (authoritative server,
 - Time trials on the authoritative server: a lobby race may have one player. It starts at once, is saved as an official replay, and its result feeds `HoverNetReplay leaderboard`.
 - A `hovernet-server` Debian package for the authoritative server (reproducible, dependency-checked; built by the GitHub Actions Linux job as a workflow artifact, and by two GitLab jobs (`build:authserver:linux`, `package:server:deb`; packaged only, never deployed automatically)).
 - All Debian packages now ship the HoverRace licence text as `/usr/share/doc/<package>/copyright`, as the licence requires of binary distributions. The Windows x64 installer is set to install `LICENSE.txt` and `THIRD_PARTY_NOTICES.md` too.
+
+### Changed
+- The host of a private race is shown the race's number (and told to give it to friends with the code): the server sends it in the join acknowledgement, only to clients that ask for it (capability bit 0), so a client built before it is unaffected. Without this a private race could not be shared.
+- Watching a replay or a race as a spectator: `[` and `]` move the camera and the HUD between the craft (a spectator can also use Left and Right; in a replay those still seek).
+- Crossing the finish line no longer opens the results screen over the race. The player is told, in the race, that they can press Enter (the controller's Back button, or MENU on a touch screen) for their results and race options, and may keep driving as long as they like; the finish time is kept from the moment of the finish. Chat keeps working after the finish, and now also in races on HoverNet 3.0 servers (type, Enter to send; messages from the others appear on screen). The HoverNet Servers button is also on the results screen.
 
 ## 2.0.21 - 2026-10-17
 
