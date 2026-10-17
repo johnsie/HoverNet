@@ -227,8 +227,12 @@ a new one when the race ends (`--once` for tests). Options: `--track`, `--player
 
 ## Not built yet
 
-Screens in the game for browsing and choosing races and servers (the lobby protocol exists, the game's command line option still takes one race); screens in the game for choosing a server (today it is a command line option); the
-WebSocket gateway and a browser path for protocol 3.0; authenticated encryption and server identity; account or guest identity;
-tracing (counters, a status port and crash reports exist); delta coding and compression of the Tick stream; the
-multi-day soak and load runs of the Stage 2 exit gate (the TCP test with a large tick count is the soak); regional pools and rolling
-deployment; and the 2.0 fallback path.
+- A browser client for protocol 3.0: the server accepts browsers over WebSocket (`--ws-origin`), but nothing in the browser build speaks the
+  protocol, so the browser has no HoverNet Servers screen (the desktop client has one; see the parity matrix).
+- Accounts or any identity beyond a session name (a device-key design was proposed; the owner has not decided, see the roadmap).
+- Distributed tracing (counters, a status port, an event log and crash reports exist), delta coding and compression of the Tick stream.
+- The multi-day soak of the Stage 2 exit gate: `scripts/soak-authserver.sh` runs a real-time soak of any length (results below or in the
+  release notes say how long it was actually run); regional pools; and the 2.0 fallback path in the client.
+
+Built since this page was first written, and described elsewhere: the lobby and private races, time trials, encrypted sessions with a pinned
+server key, the WebSocket transport, a graceful drain for rolling restarts, the desktop screen for choosing a server, and chat on these servers.

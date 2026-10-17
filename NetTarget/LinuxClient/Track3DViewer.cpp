@@ -2040,6 +2040,7 @@ enum class PauseChoice
     eSettings,
     eControls,
     eQuit,
+    eAuthServer,   // play on a HoverNet 3.0 server (native only; listed after Online Multiplayer on screen)
 };
 
 PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
@@ -3373,9 +3374,23 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
     } pausedFlag;
 #endif
 
-    const char* options[] = {"RESUME RACE", pIsOnline ? "LEAVE RACE" : "NEW LOCAL RACE",
-                             "ONLINE MULTIPLAYER", "SETTINGS", "CONTROLS", "QUIT HOVERNET"};
+    struct PauseOption { const char* label; PauseChoice choice; };
+    const PauseOption options[] = {
+        {"RESUME RACE", PauseChoice::eResume},
+        {pIsOnline ? "LEAVE RACE" : "NEW LOCAL RACE", PauseChoice::eLeaveRace},
+        {"ONLINE MULTIPLAYER", PauseChoice::eOnlineLobby},
+#if !defined(HOVERNET_WEB)
+        {"HOVERNET SERVERS", PauseChoice::eAuthServer},
+#endif
+        {"SETTINGS", PauseChoice::eSettings},
+        {"CONTROLS", PauseChoice::eControls},
+        {"QUIT HOVERNET", PauseChoice::eQuit},
+    };
     constexpr int optionCount = sizeof(options) / sizeof(options[0]);
+    int primaryCount = 3;   // the race options above the "GAME & ACCESSIBILITY" heading
+#if !defined(HOVERNET_WEB)
+    primaryCount = 4;
+#endif
     PauseChoice choice = PauseChoice::eResume;
     bool focusFirstButton = true;
     bool running = true;
@@ -3465,12 +3480,12 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
             focusFirstButton = false;
         }
         for (int index = 0; index < optionCount; ++index) {
-            const float height = index < 3 ? 54.0f : 42.0f;
-            if (HoverNetButton(options[index], ImVec2(-FLT_MIN, height))) {
-                choice = static_cast<PauseChoice>(index);
+            const float height = index < primaryCount ? 54.0f : 42.0f;
+            if (HoverNetButton(options[index].label, ImVec2(-FLT_MIN, height))) {
+                choice = options[index].choice;
                 running = false;
             }
-            if (index == 2) {
+            if (index == primaryCount - 1) {
                 ImGui::Spacing();
                 ImGui::TextDisabled("GAME & ACCESSIBILITY");
                 ImGui::Separator();
@@ -6880,6 +6895,7 @@ int RunClient(int argc, char** argv)
         const MR_3DCoordinate previousCamera = camera;
         bool leaveForLobby = false;
         bool startNewLocalRace = false;
+        bool openAuthServer = false;   // the pause menu's HoverNet Servers
         bool openResults = false;   // Enter (or the controller's Back button) after a finish: show the results and race options
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -6957,6 +6973,9 @@ int RunClient(int argc, char** argv)
                             startNewLocalRace = true;
                         }
                     }
+                    else if (pauseChoice == PauseChoice::eAuthServer) {
+                        openAuthServer = true;
+                    }
                     else if (pauseChoice == PauseChoice::eOnlineLobby) {
                         // Same as "Leave Race" when already online -- reset and
                         // rejoin the lobby -- but always offered, so offline
@@ -7017,6 +7036,20 @@ int RunClient(int argc, char** argv)
             wasOnlineConnected = onlineClient.IsConnected();
             continue;
         }
+#if !defined(HOVERNET_WEB)
+        if (openAuthServer) {
+            if (playOnAuthServer()) {
+                missileSeen = false;
+                finishAnnounced = false; resultsPending = false;
+                wasOnlineConnected = onlineClient.IsConnected();
+            }
+            else if (g_QuitConfirmed) {
+                running = false;
+                break;
+            }
+            continue;
+        }
+#endif
         if (startNewLocalRace) {
             const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
                                                             *menuFontHandle->GetSprite(), frameLimit);
