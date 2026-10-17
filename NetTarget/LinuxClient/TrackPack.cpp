@@ -3,6 +3,7 @@
 //   HoverNetTrackPack pack   IN.trk OUT.hntp [--name N] [--author A] [--licence L] [--description D] [--created YYYY-MM-DD]
 //   HoverNetTrackPack verify FILE.hntp [--catalogue]   check the package and re-analyse the track inside it; --catalogue also requires a named
 //                                               author and an approved licence (docs/specs/track-package.md, admission rules)
+//   HoverNetTrackPack lint   FILE.trk|FILE.hntp [--strict]   authoring warnings (why it is not a race, duplicate finish lines, short grid)
 //   HoverNetTrackPack info   FILE.hntp          print the manifest
 //   HoverNetTrackPack unpack FILE.hntp OUT.trk  write the original track file back, byte for byte
 //   HoverNetTrackPack corpus DIR OUTDIR REPORT.tsv   import every .trk in DIR; REPORT lists each result and each failure's reason
@@ -88,6 +89,22 @@ Analysis Analyze(const std::string& path)
     a.mode = (a.finish > 0 && a.check1 > 0 && a.check2 > 0) ? "race" : "freeplay";
     a.ok = true;
     return a;
+}
+
+// Authoring checks that do not stop a track from importing but that a creator wants to know about: why a track with a finish line
+// is not a race, duplicate finish lines, too few start positions for a full grid. Each message is one line, no trailing newline.
+std::vector<std::string> Lint(const Analysis& a)
+{
+    std::vector<std::string> w;
+    if (a.finish > 0 && (a.check1 == 0 || a.check2 == 0)) {
+        w.push_back(std::string("has a finish line but no ") + (a.check1 == 0 && a.check2 == 0 ? "checkpoints" : a.check1 == 0 ? "first checkpoint" : "second checkpoint") +
+                    ", so no lap can be completed and it plays as free play");
+    }
+    if (a.finish == 0 && (a.check1 > 0 || a.check2 > 0)) w.push_back("has checkpoints but no finish line, so it plays as free play");
+    if (a.finish > 1) w.push_back(std::to_string(a.finish) + " finish lines (check that both are meant to be on the lap route)");
+    if (a.mode == "race" && a.starts < 8) w.push_back("only " + std::to_string(a.starts) + " start positions: with more players some share a start");
+    if (a.mode == "race" && a.powerUps == 0 && a.fuel == 0) w.push_back("no power-ups or fuel zones: weapons and refuelling are unavailable");
+    return w;
 }
 
 bool ReadFile(const std::string& path, std::vector<std::uint8_t>& out)
@@ -198,6 +215,30 @@ bool CatalogueRules(const std::map<std::string, std::string>& manifest, std::str
     return false;
 }
 
+// lint FILE.trk|FILE.hntp [--strict]: import it as the game would and print the authoring warnings. Exit status 1 when it cannot be
+// imported, or (with --strict) when there is any warning.
+int LintFile(const std::string& path, bool strict)
+{
+    std::string trk = path;
+    std::string temp;
+    if (path.size() > 5 && path.compare(path.size() - 5, 5, ".hntp") == 0) {
+        std::vector<std::uint8_t> bytes;
+        TrackPackage::Package p;
+        std::string error;
+        if (!ReadFile(path, bytes) || !TrackPackage::Decode(bytes, p, error)) { std::fprintf(stderr, "%s: %s\n", path.c_str(), error.empty() ? "unreadable" : error.c_str()); return 1; }
+        temp = path + ".lint.trk";
+        if (!WriteFile(temp, p.payload)) { std::fprintf(stderr, "cannot write a temporary file\n"); return 1; }
+        trk = temp;
+    }
+    const Analysis a = Analyze(trk);
+    if (!temp.empty()) std::remove(temp.c_str());
+    if (!a.ok) { std::fprintf(stderr, "%s: cannot import: %s\n", path.c_str(), a.reason.c_str()); return 1; }
+    const std::vector<std::string> warnings = Lint(a);
+    std::printf("%s: %s, %d rooms, %d starts, %d finish, %d+%d checkpoints, %d power-ups\n", path.c_str(), a.mode.c_str(), a.rooms, a.starts, a.finish, a.check1, a.check2, a.powerUps);
+    for (const std::string& m : warnings) std::printf("  warning: %s\n", m.c_str());
+    return (strict && !warnings.empty()) ? 1 : 0;
+}
+
 int Info(const std::string& path)
 {
     std::vector<std::uint8_t> bytes;
@@ -284,6 +325,7 @@ int Corpus(const std::string& dir, const std::string& outDir, const std::string&
     std::fprintf(report, "# name\\tresult\\tmode\\trooms\\tstarts\\tpackage bytes\\treason\n");
     int ok = 0, failed = 0, freeplay = 0, verifyFailures = 0;
     std::map<std::string, int> reasons;
+    int warned = 0;
     for (const std::string& file : files) {
         const std::string in = dir + "/" + file;
         const std::string out = outDir + "/" + std::to_string(ok + failed) + ".hntp";
@@ -296,6 +338,7 @@ int Corpus(const std::string& dir, const std::string& outDir, const std::string&
         if (Pack(in, out, meta, reason, &a)) {
             ++ok;
             if (a.mode == "freeplay") ++freeplay;
+            if (!Lint(a).empty()) ++warned;
             std::vector<std::uint8_t> packed;
             ReadFile(out, packed);
             if (Verify(out, false) != 0) { ++verifyFailures; }
@@ -310,8 +353,8 @@ int Corpus(const std::string& dir, const std::string& outDir, const std::string&
     }
     std::fclose(report);
     const int total = ok + failed;
-    std::printf("imported %d of %d tracks (%.1f%%): %d races, %d free play; %d failed; %d packages failed to verify\n", ok, total,
-                total ? 100.0 * ok / total : 0.0, ok - freeplay, freeplay, failed, verifyFailures);
+    std::printf("imported %d of %d tracks (%.1f%%): %d races, %d free play; %d failed; %d packages failed to verify; %d with authoring warnings\n", ok, total,
+                total ? 100.0 * ok / total : 0.0, ok - freeplay, freeplay, failed, verifyFailures, warned);
     for (const auto& r : reasons) std::printf("  %d x %s\n", r.second, r.first.c_str());
     return (total > 0 && ok * 100 >= total * 95 && verifyFailures == 0) ? 0 : 1;
 }
@@ -350,6 +393,7 @@ int main(int argc, char** argv)
         return 0;
     }
     if (cmd == "info") return Info(argv[2]);
+    if (cmd == "lint") return LintFile(argv[2], argc >= 4 && std::string(argv[3]) == "--strict");
     if (cmd == "unpack" && argc >= 4) return Unpack(argv[2], argv[3]);
     if (cmd == "fuzz" && argc >= 4) return Fuzz(argv[2], std::atoi(argv[3]));
     if (cmd == "corpus" && argc >= 5) return Corpus(argv[2], argv[3], argv[4]);

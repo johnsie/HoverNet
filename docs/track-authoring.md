@@ -25,6 +25,15 @@ Commit both the editable `.track.txt` source and compiled `.trk`. Register the
 display name in the shared client's `kHostableTracks`/`kTrackGuides` tables and
 the RaceServer host whitelist. Add it to the validation list in `CMakeLists.txt`.
 
+Then lint it for authoring problems the validator accepts, such as a finish line without both checkpoints (the track then plays as free
+play), a second finish line, or fewer than eight start positions:
+
+```sh
+build/linux/HoverNetTrackPack lint "NetTarget/Tracks/My Track.trk"            # add --strict to fail on any warning
+build/linux/HoverNetTrackPack pack "My Track.trk" "My Track.hntp" --author "You" --licence CC-BY-4.0
+build/linux/HoverNetTrackPack verify "My Track.hntp" --catalogue              # what the catalogue requires (ADR 0002)
+```
+
 ## Sharing a track with the community library
 
 Bundled (official) tracks must pass the strict validator above. Third-party

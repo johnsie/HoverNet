@@ -31,5 +31,11 @@ for args in "" "--author Ada" "--licence CC-BY-4.0" "--author Ada --licence All-
   "$tool" verify "$dir/no.hntp" --catalogue >/dev/null 2>&1 && { echo "FAIL: admitted with [$args]"; fail=1; }
   "$tool" verify "$dir/no.hntp" >/dev/null 2>&1 || { echo "FAIL: plain verify rejected [$args]"; fail=1; }
 done
+# Authoring lint: clean tracks pass --strict, a track with two finish lines is warned about, junk is refused; packages lint too.
+"$tool" lint "NetTarget/Tracks/ClassicH.trk" --strict >/dev/null 2>&1 || { echo "FAIL: lint --strict flagged ClassicH"; fail=1; }
+"$tool" lint "NetTarget/Tracks/The Alley2.trk" 2>&1 | grep -q "2 finish lines" || { echo "FAIL: lint missed The Alley2's second finish line"; fail=1; }
+"$tool" lint "NetTarget/Tracks/The Alley2.trk" --strict >/dev/null 2>&1 && { echo "FAIL: lint --strict passed a track with a warning"; fail=1; }
+"$tool" lint "$dir/junk.trk" >/dev/null 2>&1 && { echo "FAIL: lint accepted junk"; fail=1; }
+"$tool" lint "$dir/ok.hntp" --strict >/dev/null 2>&1 || { echo "FAIL: lint of a package failed"; fail=1; }
 [ $fail -eq 0 ] && echo "trackpack: 7 tracks round trip byte for byte, reproducible; damaged files refused; decoder fuzzed"
 exit $fail
