@@ -16,16 +16,18 @@ checking) remove several stages of work the first draft of this roadmap assumed.
 
 ## Progress
 
-*Updated 17 October 2026. The work below was done on the 2.0 line ahead of the 3.0 kickoff; "done" means built, tested in CI-style
+*Updated 17 October 2026 (rules version 6). The work below was done on the 2.0 line ahead of the 3.0 kickoff; "done" means built, tested in CI-style
 runs on Linux (plain and under ASan/UBSan), Windows x64 and Win32 where applicable, and WebAssembly where applicable.*
 
 | Stage | State |
 | --- | --- |
 | 0: Experiments and decisions | Determinism experiment done on Linux, Windows x64 and Win32, WebAssembly (identical on 7 tracks, 18 physics scenarios, snapshots and 1,012 community tracks); golden physics suite; netcode prototype; **ADR 0001 proposed (evolve the existing simulation)**; Win32 inventory with three decisions open; replay, simulation-state and protocol specs written. Open: confirm the ADR and the latency targets, the three Win32 decisions, the versioned track container (Stage 4). |
 | 1: Shared deterministic simulation core | Simulation and presentation separated (`HoverNetSim` links no video, audio or resources, enforced by a link and an include check); one state hash and versioned snapshots from one field list; fixed-step entry proven frame-rate independent (client opt-in); divergence reports, property tests, fuzzing, a 100,000-tick replay; golden files and snapshot digests identical on every platform. Open: make fixed-step the client default (needs render interpolation), numeric rules for the `double` speeds, the legacy plug-in goes with the legacy client. |
-| 2: Authoritative networking and dedicated server | Authoritative race, protocol 3.0 framing and messages, transport-free race host, dedicated TCP server, scripted players, predicting client, the game client playing on the server (reconnect, resync), eight players on every bundled track, tampering, bandwidth and abuse tests. Open: encryption and identity, lobby and many races, browser path, observability endpoint, soak, regional pools. |
-| 5 (early): Replays | Replay format v1, official replays from the server, in-game playback with the real renderer; exact on Linux and Windows. Open: seeking, events, spectating UI, time trials. |
-| 3, 4, 5 (rest), 6, 7 | Not started. |
+| 2: Authoritative networking and dedicated server | Authoritative race, protocol 3.0 framing and messages, race host and lobby (many races), dedicated TCP server and scripted players, predicting client, the game client playing on the server (reconnect, resync), delayed spectating, eight players on every bundled track, tampering, bandwidth and abuse tests, a network-condition harness (delay, jitter, bandwidth, freezes, disconnects), a load and soak harness, health and metrics endpoint, crash reports, operator guide. Open: encryption and identity, the browser path for the new protocol, server-choosing screens, the multi-day real-time soak, regional pools and rolling deployment, the 2.0 fallback. |
+| 4: Content pipeline | Track package v1 (versioned wrapper with author, licence and hashes), importer and packager, all 1,012 community tracks import and verify, free-play races. Open: native level format, visual editor, signed catalogue. |
+| 5: Replays, spectating | Replay format v1, official replays from the server, playback with the real renderer and seeking, delayed spectating. Open: events, camera controls, spectator menus, time trials and ghosts. |
+| 6a: Online services basics | Chat, block, report with context, authenticated moderator console, mutes, kicks, bans, tamper-evident audit log, retention and privacy policy. Open: accounts and sign-in, parties and private lobbies, regions. |
+| 3 (modern client), 6b, 7, 8 | Not started, apart from the pieces named above (operator guide, observability). |
 
 Where to look: [determinism.md](determinism.md), [netcode-prototype.md](netcode-prototype.md), [authoritative-race.md](authoritative-race.md),
 [replays.md](replays.md), [win32-client-inventory.md](win32-client-inventory.md), [adr/0001-simulation-core.md](adr/0001-simulation-core.md),
