@@ -325,7 +325,8 @@ void MR_MainCharacter::VisitLogicState( MR_StateVisitor& pVisitor )
    pVisitor.Int( mBestLapDuration );
    pVisitor.Int( mCheckPoint1 );
    pVisitor.Int( mCheckPoint2 );
-   VisitFifo( pVisitor, mLastHits );
+   // mLastHits (who hit me) is an event queue that the game empties as it scores and announces hits; like the sound queues
+   // it is output, not input to the simulation, and so is not part of the state.
    pVisitor.Int( mLastCollisionTime );
    pVisitor.Int( mNetPriority );
 }

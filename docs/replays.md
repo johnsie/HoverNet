@@ -10,7 +10,7 @@ race happened; a state hash every 250 ticks lets anything detect a replay that n
     HoverNet --replay race.hnr [--replay-player N]
 
 (`HoverNetGame2Player` on Linux.) The game plays the race back with its normal renderer, from the point of view of player `N`
-(default 0, the first on the grid). **P** pauses, **1** to **5** set the speed (a quarter, a half, normal, double, four times),
+(default 0, the first on the grid). **P** pauses, **1** to **5** set the speed (a quarter, a half, normal, double, four times), **Left** and **Right** jump five seconds back and forward and **Home** restarts (the game keeps a snapshot of the race every 250 ticks as it plays and seeks from the nearest one),
 **Esc** opens the pause menu. The game refuses a replay recorded under different game rules, or on a different version of the
 track, and says so; it never plays something that would not reproduce.
 
@@ -36,5 +36,4 @@ so a replay made on one platform is the same race on the other.
 ## Not yet
 
 A replay browser in the menus, saving a replay of a race you played yourself (the local game is not run on the fixed 16 ms tick
-yet, see [ADR 0001](adr/0001-simulation-core.md) step 6), seeking and rewinding (the snapshot format makes this possible; a
-future replay version can carry snapshots), switching the watched player during playback, and a free camera.
+yet, see [ADR 0001](adr/0001-simulation-core.md) step 6), switching the watched player during playback, and a free camera.

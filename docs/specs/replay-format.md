@@ -14,7 +14,7 @@ All integers are little-endian and unsigned. There is no padding and no host-nat
 | magic | 4 | ASCII `HNRP` |
 | version | 2 | `1`. A reader rejects any other value |
 | flags | 2 | Race settings: low byte = laps (1 to 255), bit 8 = weapons enabled; `0` (older files) means 5 laps with weapons; any other bit is refused |
-| rules | 4 | Simulation rules version the race was recorded under (`1` for the first portable simulation, `2` once the original missile speed was restored, `3` once the hash covered the full simulation state, `4` since the snapshot field list, `5` since each craft's hover id is its grid slot (shots and hits are attributed to it)). Bumped when a deliberate change alters the golden hashes ([determinism.md](../determinism.md)) |
+| rules | 4 | Simulation rules version the race was recorded under (`1` for the first portable simulation, `2` once the original missile speed was restored, `3` once the hash covered the full simulation state, `4` since the snapshot field list, `5` since each craft's hover id is its grid slot (shots and hits are attributed to it), `6` since presentation events (pending hit announcements, a missile's bounce sound flag) were taken out of the state because the game consumes them as it plays). Bumped when a deliberate change alters the golden hashes ([determinism.md](../determinism.md)) |
 | tick_ms | 4 | Tick length in milliseconds. `16` in v1 |
 | track name | 1 + n | Length byte, then the name as the game knows it (bytes, no terminator) |
 | track sha256 | 1 + 64 | Length byte (`64`), then lower-case hex SHA-256 of the `.trk` file (the manifest hash) |
@@ -36,7 +36,7 @@ every free element of the level in list order (room, factory and class id, posit
 logic state through `MR_Element::HashLogicState`), then the element count. Hovercraft contribute their whole behavioural
 state (speeds and fuel by exact bit pattern, control and weapon state, countdowns, mine and power-up stocks, lap and
 checkpoint progress, the last-hit list, race time); missiles, mines, bumper gates, power-ups and the physical test element
-contribute theirs. The hash definition is part of the format: changing it requires a new `rules` value (current: `5`). See
+contribute theirs. The hash definition is part of the format: changing it requires a new `rules` value (current: `6`). See
 [simulation-state.md](simulation-state.md).
 
 ## Reader rules

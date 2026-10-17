@@ -5414,6 +5414,9 @@ struct ReplayPlayback
     int speedStep = 2;           // index into kReplaySpeeds
     Uint32 lastTicks = 0;
     std::vector<MR_MainCharacter*> craft;   // by player slot
+    std::map<std::uint32_t, std::vector<std::uint8_t>> snapshots;   // state every 250 ticks, taken as the replay plays (for seeking)
+    bool seekTest = false;       // test mode: play to tick 1000, jump back to tick 400, play on to the end
+    bool seekTestDone = false;
 };
 const double kReplaySpeeds[] = {0.25, 0.5, 1.0, 2.0, 4.0};
 
@@ -5580,7 +5583,8 @@ int RunClient(int argc, char** argv)
 #ifdef HOVERNET_GAME2_PLAYER
     ReplayPlayback replay;
     const std::string replayPath = ParseStringArg(argc, argv, "--replay");
-    replay.hashMode = HasArgument(argc, argv, "--replay-hash");
+    replay.hashMode = HasArgument(argc, argv, "--replay-hash") || HasArgument(argc, argv, "--replay-seek-test");
+    replay.seekTest = HasArgument(argc, argv, "--replay-seek-test");
     replay.watch = std::atoi(ParseStringArg(argc, argv, "--replay-player").c_str());
     const std::string authServer = ParseStringArg(argc, argv, "--auth-connect");     // host:port of an authoritative server
 #if !defined(HOVERNET_WEB)
@@ -6704,10 +6708,43 @@ int RunClient(int argc, char** argv)
                     ticks = static_cast<int>(replay.carryMs / 16.0);
                     replay.carryMs -= ticks * 16.0;
                 }
+                // Seeking: Left and Right jump 5 seconds back and forward, Home restarts. The state is restored from the nearest
+                // snapshot taken while the replay played (every 250 ticks) and stepped forward to the target.
+                int seekTarget = -1;
+                if (keyboard[SDL_SCANCODE_LEFT]) seekTarget = std::max<int>(0, static_cast<int>(replay.tick) - 312);
+                if (keyboard[SDL_SCANCODE_RIGHT]) seekTarget = std::min<int>(static_cast<int>(replay.data.ticks), static_cast<int>(replay.tick) + 312);
+                if (keyboard[SDL_SCANCODE_HOME]) seekTarget = 0;
+                if (replay.seekTest && !replay.seekTestDone && replay.tick >= 1000) { replay.seekTestDone = true; seekTarget = 400; }
+                if (seekTarget >= 0) {
+                    auto best = replay.snapshots.upper_bound(static_cast<std::uint32_t>(seekTarget));
+                    if (best != replay.snapshots.begin()) {
+                        --best;
+                        std::vector<MR_FreeElement*> external(replay.craft.begin(), replay.craft.end());
+                        std::int64_t restoredTime = 0;
+                        std::string seekError;
+                        if (MR_RestoreLevelState(session.Level(), best->second.data(), best->second.size(), external, ReplayFormat::kSimulationRules, restoredTime, seekError)) {
+                            session.SetSimulationTime(static_cast<MR_SimulationTime>(restoredTime));
+                            replay.tick = best->first;
+                            replay.finished = false;
+                            ticks = std::max<int>(0, seekTarget - static_cast<int>(replay.tick));   // run up to the target now
+                            if (!replay.seekTest) SDL_Delay(150);   // debounce the key
+                        }
+                    }
+                }
                 ticks = std::min<int>(ticks, static_cast<int>(replay.data.ticks - replay.tick));
-                if (ticks > 0) {
-                    session.StepTicks(ticks, ReplayTickHook, &replay);
-                    replay.tick += static_cast<std::uint32_t>(ticks);
+                while (ticks > 0) {
+                    // Take a snapshot at every 250th tick on the way (so a later seek can start from it).
+                    if (replay.snapshots.find(replay.tick) == replay.snapshots.end() && replay.tick % 250 == 0) {
+                        std::vector<MR_FreeElement*> external(replay.craft.begin(), replay.craft.end());
+                        replay.snapshots[replay.tick] = MR_SaveLevelState(session.Level(), session.GetSimulationTime(), external, ReplayFormat::kSimulationRules);
+                    }
+                    const int untilBoundary = static_cast<int>(250 - replay.tick % 250);
+                    int n = std::min(ticks, untilBoundary);
+                    if (std::getenv("HOVERNET_REPLAY_TRACE") != nullptr) n = 1;   // debugging: one tick at a time, hash printed
+                    session.StepTicks(n, ReplayTickHook, &replay);
+                    replay.tick += static_cast<std::uint32_t>(n);
+                    ticks -= n;
+                    if (std::getenv("HOVERNET_REPLAY_TRACE") != nullptr) std::printf("%u %016llx\n", replay.tick, static_cast<unsigned long long>(MR_HashLevelState(session.Level(), session.GetSimulationTime())));
                 }
                 if (replay.tick >= replay.data.ticks && !replay.finished) {
                     replay.finished = true;

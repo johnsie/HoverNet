@@ -418,7 +418,6 @@ void MR_SimMissile::VisitLogicState( MR_StateVisitor& pVisitor )
     pVisitor.Int( mLived );
     pVisitor.Double( mXSpeed );
     pVisitor.Double( mYSpeed );
-    pVisitor.Int( mBounceSoundEvent );
     if( pVisitor.IsLoading() ) {
         mLostOfControlEffect.mHoverId = mHoverId;
     }

@@ -1,14 +1,14 @@
-ClassicH 400 1240 0456aa688f0a3af6
-ClassicH 1400 1352 c5d453ec46062f96
-Metro Spiral 400 1432 18e8f8e6a3d3b514
-Metro Spiral 1400 1552 0866f22163c4a8fc
-Steeplechase 400 1768 1218f57fc5a7f14d
-Steeplechase 1400 1880 a740ffdbf389e301
-Switchback 400 1432 dc24bd7eabeafaa7
-Switchback 1400 1656 09eabaa93790d9c4
-The Alley2 400 1592 3c89e030db8a1341
-The Alley2 1400 1712 78a3a1b7bf91d014
-The River 400 1336 7dc4483effc5e354
-The River 1400 1336 3b02d91eee0f3541
-Tidal Causeway 400 1544 a9b75c9d54b77eed
-Tidal Causeway 1400 1656 ac7f43eff373d620
+ClassicH 400 1208 9a7300a2b4cbf2f6
+ClassicH 1400 1312 8714c36dbf1d9ab2
+Metro Spiral 400 1408 e32b90507b8c0e23
+Metro Spiral 1400 1512 c51a343d9d008d61
+Steeplechase 400 1736 756d2a8faef01f0d
+Steeplechase 1400 1840 598e3327129217e7
+Switchback 400 1408 5effa987fc071d23
+Switchback 1400 1616 6adfddfc148c9430
+The Alley2 400 1576 1c6b3acd6ad5a0e2
+The Alley2 1400 1680 11afe2b057dc27f6
+The River 400 1304 b374971491579ef9
+The River 1400 1304 9b829888626f7b11
+Tidal Causeway 400 1512 56030c05d44f2306
+Tidal Causeway 1400 1616 bdd05c06971344a2
