@@ -40,12 +40,13 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 | `--once` | serve one race and exit (tests) |
 | `--config FILE` | read options from a file |
 
-## Running it as a service or a container
+## Running it as a service
 
 - systemd: copy the binary to `/usr/bin`, the configuration to `/etc/hovernet/server.conf`, the tracks to `/usr/share/hovernet/NetTarget/Tracks`
   and `packaging/server/hovernet-server.service` to `/etc/systemd/system/`; create a `hovernet` user and `/var/lib/hovernet`.
-- Container: `packaging/server/Dockerfile` builds the server from this checkout. Publish the port to the loopback interface of the host
-  (`-p 127.0.0.1:9610:9610`) and put TLS termination in front of it for public use. The Dockerfile has not been built by the project's CI.
+- HoverNet does not use Docker or any other container tooling, for building, testing or deployment; run the server as a service
+  as above or from a terminal.
+
 
 ## Watching a server
 
