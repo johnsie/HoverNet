@@ -77,8 +77,9 @@ ASan/UBSan.
 
 ## Deploying from GitLab (the race-server host)
 
-The tag pipeline builds the package (`package:server:deb`) and offers a **manual** job, `deploy:server`: nothing installs the 3.0 server until a
-person presses play on it. A fresh install enables the service but leaves it stopped; an upgrade restarts a running server through a drain.
+The tag pipeline builds the package (`package:server:deb`) and installs it automatically (`deploy:server`), after the package job, like the race
+server. A fresh install enables the service but leaves it stopped (you review the configuration and start it once); an upgrade restarts a
+running server through a drain, so races under way finish first.
 
 One-time set-up on the host (as root, from a checkout of this repository), which installs the root-owned wrapper and the one sudo rule the
 runner account gets:
@@ -94,7 +95,7 @@ GitLab pipeline (`package:server:deb`) or from the GitHub release, then
     curl -s http://127.0.0.1:9612/health      # "ok" (needs status-port 9612 uncommented in the configuration)
     journalctl -u hovernet-server -n 20
 
-After that, later versions go out by pressing play on `deploy:server`.
+After that, every tagged version is installed by `deploy:server` and a running server is restarted through a drain.
 
 ## Letting the web client in
 

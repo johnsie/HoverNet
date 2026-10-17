@@ -101,6 +101,6 @@ waits for it.
 ## The HoverNet 3.0 server
 
 `build:authserver:linux` builds the server and runs its lobby and protocol tests; `package:server:deb` makes the `hovernet-server` Debian package;
-`deploy:server` (a tag's pipeline only, **manual**) installs it on the race-server host through `/usr/local/sbin/hovernet-server-deploy`. Install
+`deploy:server` (a tag's pipeline only, automatic, after the package job) installs it on the race-server host through `/usr/local/sbin/hovernet-server-deploy`. Install
 that wrapper and its one sudo rule with `packaging/server/install-deploy-helper.sh` (see [operators.md](operators.md#deploying-from-gitlab-the-race-server-host)).
 None of these jobs has run on GitLab yet.
