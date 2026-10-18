@@ -7,6 +7,7 @@
 #include "TrackDownloader.h"
 #include "Sha256.h"
 #include "PersonalBests.h"
+#include "GhostRun.h"
 #include "../Authority/ReplayFormat.h"
 #include "../Model/StateHash.h"
 #include "../Model/StateSnapshot.h"
@@ -1662,6 +1663,26 @@ bool LoadLargeHudText()
 void SaveLargeHudText(bool enabled)
 {
     std::ofstream out(LargeHudTextPath());
+    out << (enabled ? 1 : 0) << '\n';
+}
+
+// "Show my best run as a ghost" (on unless the player switched it off): the player's best run on this track and lap count is drawn beside
+// their craft in later races (GhostRun.h).
+std::string ShowGhostPath()
+{
+    return ConfigDirPath() + "/ghost_run";
+}
+
+bool LoadShowGhost()
+{
+    std::ifstream in(ShowGhostPath());
+    int enabled = 1;
+    return !(in >> enabled) || enabled != 0;
+}
+
+void SaveShowGhost(bool enabled)
+{
+    std::ofstream out(ShowGhostPath());
     out << (enabled ? 1 : 0) << '\n';
 }
 
@@ -4195,6 +4216,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     bool applyUiScale = false;
     bool largeHudText = LoadLargeHudText();
     RaceView raceView = LoadRaceView();
+    bool showGhost = LoadShowGhost();
     bool reducedMotion = LoadReducedMotion();
     const bool currentHighContrast = LoadHighContrast();
     bool highContrast = currentHighContrast;
@@ -4431,6 +4453,10 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::TextDisabled("Keeps race information and chat at the font's native size.");
         ImGui::Checkbox("Reduced motion", &reducedMotion);
         ImGui::TextDisabled("Disables animated menu speed streaks.");
+        ImGui::Checkbox("Show my best run as a ghost", &showGhost);
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("Draws your fastest run on this track beside your craft, so you race your own best time. It never touches the race.");
+        ImGui::PopTextWrapPos();
         if (ImGui::Checkbox("High contrast menus", &highContrast)) {
             applyUiScale = true;
         }
@@ -4539,6 +4565,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             uiScalePercent = 100.0f;
             largeHudText = false;
             raceView = RaceView::eClassic;
+            showGhost = true;
             reducedMotion = false;
             highContrast = false;
             selectedResolution = 0;
@@ -4633,7 +4660,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
     }
 
-    if (!cancelled) SaveRaceView(raceView);
+    if (!cancelled) { SaveRaceView(raceView); SaveShowGhost(showGhost); }
 #if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
     if (!cancelled) {
         AuthServerSettings chosen;   // the official server unless an address was typed
@@ -7476,6 +7503,15 @@ int RunClient(int argc, char** argv)
     MR_SimulationTime finishTotalTime = 0, finishBestLap = 0;
     PersonalBests::Outcome finishBests;
 #ifdef HOVERNET_GAME2_PLAYER
+    // The ghost of the player's best run on this track and lap count (GhostRun.h): the run being driven is recorded as it goes, the saved
+    // best is drawn beside the craft. A craft that is only drawn: it is not in the level, so it cannot change the race or its state hash.
+    GhostRun ghostRecording, ghostBest;
+    std::string ghostKey;                 // "track/laps" the ghostBest belongs to
+    MR_MainCharacter* ghostCraft = nullptr;
+    MR_SimulationTime ghostLastTime = 0;  // a time that goes back means the race was restarted
+    bool ghostShownReported = false;      // test hook: say once that the ghost was on screen
+#endif
+#ifdef HOVERNET_GAME2_PLAYER
     // A mid-race RaceServer drop (crash, network outage) currently just makes
     // every onlineClient.IsConnected() check below quietly stop sending/polling --
     // the local player keeps racing solo with no indication multiplayer died.
@@ -8372,7 +8408,7 @@ int RunClient(int argc, char** argv)
             }
             if (std::getenv("HOVERNET_TEST_FINISH") != nullptr || std::getenv("HOVERNET_TEST_CHAT") != nullptr) {
                 ++sTestFrames;
-                testFinish = sTestFrames == 30;
+                testFinish = sTestFrames == (std::getenv("HOVERNET_TEST_FINISH_FRAME") ? std::atoi(std::getenv("HOVERNET_TEST_FINISH_FRAME")) : 30);
                 if (sTestFrames == 70 && !resultsSeen) std::printf("FINISHTEST still driving, results screen not open\n");
                 if (sTestFrames == 80) {
                     SDL_Event key;
@@ -8398,6 +8434,18 @@ int RunClient(int argc, char** argv)
                     bests.Load(bestsPath);
                     finishBests = bests.Record(currentTrackName.empty() ? initialTrackName : currentTrackName, session.GetNbLap(), finishTotalTime, finishBestLap);
                     if (finishBests.newRaceBest || finishBests.newLapBest) bests.Save(bestsPath);
+                    bool ghostWatching = replay.active;
+#if defined(HOVERNET_AUTH)
+                    ghostWatching = ghostWatching || (auth.active && auth.spectator);
+#endif
+                    if (finishBests.newRaceBest && !ghostWatching && !ghostRecording.Empty() && finishTotalTime > 0) {
+                        // A new best finish: this run becomes the ghost for next time.
+                        ghostRecording.track = currentTrackName.empty() ? initialTrackName : currentTrackName;
+                        ghostRecording.laps = session.GetNbLap();
+                        ghostRecording.finishMs = static_cast<std::int32_t>(finishTotalTime);
+                        const bool saved = ghostRecording.Save(ConfigDirPath() + "/" + GhostRun::FileName(ghostRecording.track, ghostRecording.laps));
+                        if (std::getenv("HOVERNET_TEST_GHOST") != nullptr) { std::printf("GHOSTTEST %s %zu samples\n", saved ? "saved" : "not saved", ghostRecording.samples.size()); std::fflush(stdout); }
+                    }
                 }
                 lastResultsHint = SDL_GetTicks();
                 if (testResults) {
@@ -8645,6 +8693,49 @@ int RunClient(int argc, char** argv)
                     }
                     else {
                         observer->SetNetworkLatency(-2);
+                    }
+                    {   // The ghost: record this run, and show the saved best run beside it.
+                        bool watching = replay.active;
+#if defined(HOVERNET_AUTH)
+                        watching = watching || (auth.active && auth.spectator);
+#endif
+                        const std::string ghostTrack = currentTrackName.empty() ? initialTrackName : currentTrackName;
+                        const int ghostLaps = session.GetNbLap();
+                        const std::string key = ghostTrack + "/" + std::to_string(ghostLaps);
+                        const MR_SimulationTime ghostTime = session.GetSimulationTime();
+                        if (key != ghostKey || ghostTime < ghostLastTime - 1000) {   // another track or lap count, or a restarted race: the best on file is the ghost
+                            ghostKey = key;
+                            ghostRecording.Clear();
+                            ghostBest.Clear();
+                            if (!ghostTrack.empty()) ghostBest.Load(ConfigDirPath() + "/" + GhostRun::FileName(ghostTrack, ghostLaps));
+                        }
+                        ghostLastTime = ghostTime;
+                        if (!watching && !finishAnnounced) {
+                            ghostRecording.Record(ghostTime, mainCharacter->mPosition.mX, mainCharacter->mPosition.mY, mainCharacter->mPosition.mZ,
+                                                  mainCharacter->GetCabinOrientation(), mainCharacter->mRoom);
+                        }
+                        GhostRun::Sample at;
+                        if (!watching && !ghostBest.Empty() && LoadShowGhost() && ghostBest.At(ghostTime, at)) {
+                            if (ghostCraft == nullptr) {
+                                ghostCraft = MR_MainCharacter::New(ghostLaps, FALSE);
+                                if (ghostCraft != nullptr) { ghostCraft->AddRenderer(); ghostCraft->SetHoverId(7); }
+                            }
+                            if (ghostCraft != nullptr) {
+                                ghostCraft->SetHoverModel(mainCharacter->GetHoverModel());
+                                ghostCraft->mPosition = MR_3DCoordinate(at.x, at.y, at.z);
+                                ghostCraft->SetOrientation(at.orientation);
+                                ghostCraft->mRoom = at.room;
+                                observer->SetGhost(ghostCraft);
+                                if (!ghostShownReported && std::getenv("HOVERNET_TEST_GHOST") != nullptr) {
+                                    ghostShownReported = true;
+                                    std::printf("GHOSTTEST ghost shown at %d ms in room %d\n", static_cast<int>(ghostTime), at.room);
+                                    std::fflush(stdout);
+                                }
+                            }
+                        }
+                        else {
+                            observer->SetGhost(nullptr);
+                        }
                     }
                     if (HoverNetVrActive()) {
                         // VR camera: two views of the same moment, each eye shifted sideways.

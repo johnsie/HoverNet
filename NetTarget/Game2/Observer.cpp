@@ -91,6 +91,7 @@ MR_Observer::MR_Observer()
 
    mCockpitView = FALSE;
    mChaseScale = 100;
+   mGhost = NULL;
    mNetworkLatencyMs = -2;
    mLargeHudText = FALSE;
    mFeedbackCharacter = NULL;
@@ -711,6 +712,12 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
             }
 
             lHandle = MR_Level::GetNextFreeElement( lHandle );
+         }
+
+         // The ghost is drawn with the craft of the room it is in, so the walls in front of it hide it as they hide any craft.
+         if( mGhost != NULL && mGhost != pViewingCharacter && mGhost->mRoom == lRoomId )
+         {
+            const_cast<MR_MainCharacter*>(mGhost)->Render( &m3DView, pTime );
          }
       }
    }

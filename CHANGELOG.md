@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **Ghost of your best run.** When you set a new best finish on a track, the game keeps the path you drove and draws it beside your craft in your next race on that track and lap count, so you race your own best time (**Settings, Show my best run as a ghost**; on by default). It is only drawn: it cannot touch the race or the results, and it never leaves your device. See [docs/ghosts.md](docs/ghosts.md).
+
 ## 2.3.7 - 2026-10-18
 
 ### Fixed

@@ -401,6 +401,8 @@ else()
 
     add_executable(HoverNetPersonalBestsTest NetTarget/LinuxClient/PersonalBestsTest.cpp)
     add_test(NAME HoverNetPersonalBests COMMAND HoverNetPersonalBestsTest)
+    add_executable(HoverNetGhostRunTest NetTarget/LinuxClient/GhostRunTest.cpp)
+    add_test(NAME HoverNetGhostRun COMMAND HoverNetGhostRunTest)
 
     add_executable(HoverNetPredictionTest
         NetTarget/LinuxClient/PredictionTest.cpp
@@ -899,6 +901,9 @@ if(BUILD_TESTING AND NOT WIN32)
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetPersonalBestsFlow
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-personal-bests.sh $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetGhost
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-ghost.sh $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetFinishFlow
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-finish-flow.sh $<TARGET_FILE:HoverNetGame2Player>

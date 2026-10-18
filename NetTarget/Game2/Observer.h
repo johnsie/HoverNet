@@ -49,6 +49,7 @@ class MR_Observer
       int             mEyeOffset;   // VR: sideways camera shift in mm (0 = normal view)
       BOOL            mReuseCamera; // VR second eye: reuse the first eye's smoothed camera
       BOOL            mCockpitView;
+      const MR_MainCharacter* mGhost;   // a craft that is only drawn (a recorded run shown beside the race); never part of the level
       int             mChaseScale;  // chase camera distance and height as a percentage of the classic view (100 = as 2.0)
       // -2 local race, -1 online but awaiting a sample, -3 connection lost,
       // otherwise the most recent server TCP round-trip in milliseconds.
@@ -123,6 +124,7 @@ class MR_Observer
       void PlayersListPageDn();
 
       void SetCockpitView( BOOL pOn );
+      void SetGhost( const MR_MainCharacter* pGhost ) { mGhost = pGhost; }
       void SetChaseScale( int pPercent ) { mChaseScale = pPercent < 40 ? 40 : (pPercent > 300 ? 300 : pPercent); }
       void SetNetworkLatency( int pLatencyMs );
       void SetLargeHudText( BOOL pEnabled );
