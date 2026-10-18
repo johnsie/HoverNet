@@ -5099,6 +5099,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
                 {"Scroll HUD", "Page Up / Page Down", "-"},
                 {"HUD zoom", "Insert / Delete", "-"},
                 {"Reset HUD", "Home", "-"},
+                {"Camera distance (replays, spectating)", "C", "-"},
                 {"Pause menu", "Escape", "Start"},
             };
             for (int index = 0; index < static_cast<int>(sizeof(bindings) / sizeof(bindings[0])); ++index) {
@@ -7238,7 +7239,7 @@ int RunClient(int argc, char** argv)
             replay.lapsSeen.assign(static_cast<std::size_t>(replay.data.players), 0);
             if (const char* speed = std::getenv("HOVERNET_TEST_REPLAY_SPEED")) replay.speedStep = std::max(0, std::min(4, std::atoi(speed)));   // test hook: start at this speed step
             replay.lastTicks = SDL_GetTicks();
-            session.AddMessage("Replay: P pause, 1-5 speed, [ ] craft, PgUp/PgDn camera, Esc leaves");
+            session.AddMessage("Replay: P pause, 1-5 speed, [ ] craft, C camera distance, Esc leaves");
         }
         else if (!authServer.empty()) {
 #if defined(HOVERNET_AUTH)
@@ -7884,15 +7885,16 @@ int RunClient(int argc, char** argv)
                 cycleWatch((event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_RIGHTBRACKET) ? 1 : -1);
             }
             else if (event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
-                     (event.key.keysym.sym == SDLK_PAGEUP || event.key.keysym.sym == SDLK_PAGEDOWN) &&
+                     event.key.keysym.sym == SDLK_c &&
                      (replay.active
 #if defined(HOVERNET_AUTH)
                       || (auth.active && auth.spectator)
 #endif
                      )) {
-                // Camera distance for a replay or a spectator (Page Up closer, Page Down farther); the race itself is unaffected.
-                chaseStep = std::max(0, std::min(kChaseSteps - 1, chaseStep + (event.key.keysym.sym == SDLK_PAGEDOWN ? 1 : -1)));
+                // Camera distance for a replay or a spectator: C steps through 50% to 300% of the classic distance and round again (picture only).
+                chaseStep = (chaseStep + 1) % kChaseSteps;
                 session.AddMessage(("Camera distance " + std::to_string(kChasePercents[chaseStep]) + "%").c_str());
+                if (std::getenv("HOVERNET_TEST_WATCH") != nullptr) { std::printf("WATCHTEST camera distance %d%%\n", kChasePercents[chaseStep]); std::fflush(stdout); }
             }
 #endif
             else if (resultsPending && ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN && event.key.repeat == 0) ||
@@ -8346,6 +8348,12 @@ int RunClient(int argc, char** argv)
             if (std::getenv("HOVERNET_TEST_WATCH") != nullptr) {
                 // Test hook (scripts/test-spectator-camera.sh): Right on frame 40, then Left twice on frame 60 and 80.
                 ++sTestFrames;
+                if (sTestFrames == 100) {   // C steps the chase camera distance (a replay or a spectator)
+                    SDL_Event key;
+                    SDL_memset(&key, 0, sizeof(key));
+                    key.type = SDL_KEYDOWN; key.key.state = SDL_PRESSED; key.key.keysym.sym = SDLK_c; key.key.keysym.scancode = SDL_SCANCODE_C;
+                    SDL_PushEvent(&key);
+                }
                 if (sTestFrames == 40 || sTestFrames == 60 || sTestFrames == 80) {
                     SDL_Event key;
                     SDL_memset(&key, 0, sizeof(key));

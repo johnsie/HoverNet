@@ -26,5 +26,7 @@ if [ -n "$replay" ]; then
   "$replay" record ClassicH 600 "$dir/camera.hnr" --players=3 > /dev/null 2>&1 || { echo "FAIL: could not record a replay"; exit 1; }
   HOVERNET_TEST_WATCH=1 timeout 200 "$client" --replay "$dir/camera.hnr" --frames 120 > "$dir/replay.txt" 2>&1
   grep -q "WATCHTEST watching player 2 of 3" "$dir/replay.txt" && grep -q "WATCHTEST watching player 3 of 3" "$dir/replay.txt" || { echo "FAIL: [ and ] did not switch craft in a replay"; grep WATCHTEST "$dir/replay.txt"; tail -3 "$dir/replay.txt"; exit 1; }
+  grep -q "WATCHTEST camera distance 150%" "$dir/replay.txt" || { echo "FAIL: C did not step the camera distance in a replay"; grep WATCHTEST "$dir/replay.txt"; exit 1; }
 fi
+grep -q "WATCHTEST camera distance 150%" "$dir/client.txt" || { echo "FAIL: C did not step the camera distance for a spectator"; grep WATCHTEST "$dir/client.txt"; exit 1; }
 echo "spectator camera: Right, Left and wrap-around moved between the craft, and the race was still followed exactly"
