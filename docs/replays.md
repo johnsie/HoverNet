@@ -24,6 +24,13 @@ them), built from the Tick messages the game already receives (`ReplayRecorder.h
 in which the connection broke and ticks were missed, is not saved, because it would not be the whole race. Races you play against the clock locally
 are not saved yet (the local game is not run on the fixed tick, see below).
 
+## Whose craft am I watching?
+
+A replay file holds player slots (the grid position), never names. Before a replay with several players starts, Watch a Replay asks which craft to follow:
+your own for a race you drove (the game remembers your slot in a small `.hnr.slot` file beside the saved replay), the winner for a server replay (the
+server sends the winner's slot with the list), the record holder for a track record. The replay says "Following player N of M (why)" at the start and on
+every `[` / `]`, and the timeline shows "Player N".
+
 ## Everyone's races: server replays and track records
 
 The server keeps the newest official replays (`--replay-keep`, default 200) and offers them in the lobby to every player, whether or not they were in the

@@ -6,6 +6,14 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.10 - 2026-10-18
+
+### Added
+- **You can tell whose craft you are watching in a replay.** Before a replay with more than one player starts, **Watch a Replay** asks which craft to follow, with the likely one marked and preselected: your own craft for a race you drove (**(you)**), the winner for a server replay (**(winner, 2:34.00)**). Track records still follow the player who set the record. The replay then says "Following player 2 of 3 (the winner)" when it starts and whenever you switch craft with `[` and `]`, and the timeline label shows "Player 2". Replays hold player slots, not names, so "player 2" is the grid slot.
+
+### Changed
+- The server's replay list carries the winner's slot, so **update the game together with the server**: a 2.3.9 game cannot read the list from a 2.3.10 server (it stays on "Loading the list...").
+
 ## 2.3.9 - 2026-10-18
 
 ### Fixed

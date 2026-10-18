@@ -57,9 +57,10 @@ bool ReadFileBytes(const std::string& path, std::vector<std::uint8_t>& bytes)
     return true;
 }
 
-// The fastest finish in the results table beside a replay (rank, player, laps, finished, finish_ms, best_lap_ms), 0 if nobody finished.
-std::int32_t WinnerMs(const std::string& replayPath)
+// The fastest finish in the results table beside a replay (rank, player, laps, finished, finish_ms, best_lap_ms), 0 if nobody finished; `slot` is that player.
+std::int32_t WinnerMs(const std::string& replayPath, std::uint8_t& slot)
 {
+    slot = 255;
     const std::string path = replayPath.substr(0, replayPath.size() - 4) + ".results.tsv";
     std::FILE* f = std::fopen(path.c_str(), "r");
     if (f == nullptr) return 0;
@@ -68,8 +69,8 @@ std::int32_t WinnerMs(const std::string& replayPath)
     while (std::fgets(line, sizeof line, f) != nullptr) {
         int rank, player, laps, finished;
         long long finishMs, bestLap;
-        if (std::sscanf(line, "%d\t%d\t%d\t%d\t%lld\t%lld", &rank, &player, &laps, &finished, &finishMs, &bestLap) == 6 && finished == 1 && finishMs > 0)
-            if (best == 0 || finishMs < best) best = finishMs;
+        if (std::sscanf(line, "%d\t%d\t%d\t%d\t%lld\t%lld", &rank, &player, &laps, &finished, &finishMs, &bestLap) == 6 && finished == 1 && finishMs > 0 && player >= 0 && player < 8)
+            if (best == 0 || finishMs < best) { best = finishMs; slot = static_cast<std::uint8_t>(player); }
     }
     std::fclose(f);
     return best > 0 && best < 2000000000LL ? static_cast<std::int32_t>(best) : 0;
@@ -119,7 +120,7 @@ void DirReplayStore::Refresh()
         item.info.ticks = r.ticks;
         item.info.savedAt = static_cast<std::uint32_t>(item.mtime);
         item.info.bytes = static_cast<std::uint32_t>(bytes.size());
-        item.info.winnerMs = WinnerMs(path);
+        item.info.winnerMs = WinnerMs(path, item.info.winnerSlot);
         ReadRuns(path, item.runs);
         mItems[name] = item;
     }

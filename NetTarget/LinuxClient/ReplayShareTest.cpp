@@ -90,7 +90,8 @@ int main()
     std::vector<Protocol3::ReplayInfo> list = store.List("", 20);
     Check(list.size() == 4, "four valid replays are listed (a damaged file and a text file are not)");
     Check(!list.empty() && list[0].track == "The River" && list[0].players == 4 && list[0].laps == 5 && list[0].ticks == 400 && list[0].bytes == d.size(), "the newest first, with its details from the file's own header");
-    Check(list.size() == 4 && list[3].track == "ClassicH" && list[3].winnerMs == 95000, "the oldest last; the winner's time comes from the results table");
+    Check(list.size() == 4 && list[3].track == "ClassicH" && list[3].winnerMs == 95000 && list[3].winnerSlot == 2, "the oldest last; the winner's time and slot come from the results table");
+    Check(list.size() == 4 && list[0].winnerSlot == 255, "a replay with no results table has no winner");
     Check(store.List("ClassicH", 20).size() == 3 && store.List("Nowhere", 20).empty(), "listing by track");
     Check(store.List("", 2).size() == 2, "a limit");
     const std::string hex = Sha256::HashBytes(a.data(), a.size()).substr(0, 16);

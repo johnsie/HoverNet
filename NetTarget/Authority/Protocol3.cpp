@@ -306,7 +306,7 @@ std::vector<std::uint8_t> Encode(const ReplayList& m)
     Out o;
     o.U8(static_cast<std::uint32_t>(m.replays.size()));
     for (const ReplayInfo& r : m.replays) {
-        o.U64(r.id); o.Str(r.track); o.U8(r.players); o.U8(r.laps); o.U32(r.ticks); o.U32(r.savedAt); o.U32(r.bytes); o.U32(static_cast<std::uint32_t>(r.winnerMs));
+        o.U64(r.id); o.Str(r.track); o.U8(r.players); o.U8(r.laps); o.U32(r.ticks); o.U32(r.savedAt); o.U32(r.bytes); o.U32(static_cast<std::uint32_t>(r.winnerMs)); o.U8(r.winnerSlot);
     }
     return o.b;
 }
@@ -319,8 +319,8 @@ bool Decode(const std::vector<std::uint8_t>& p, ReplayList& m)
     for (std::uint32_t i = 0; i < count && in.ok; ++i) {
         ReplayInfo r;
         r.id = in.U64(); r.track = in.Str(64); r.players = static_cast<std::uint8_t>(in.U8()); r.laps = static_cast<std::uint8_t>(in.U8());
-        r.ticks = in.U32(); r.savedAt = in.U32(); r.bytes = in.U32(); r.winnerMs = static_cast<std::int32_t>(in.U32());
-        if (r.players < 1 || r.players > 8 || r.track.empty()) return false;
+        r.ticks = in.U32(); r.savedAt = in.U32(); r.bytes = in.U32(); r.winnerMs = static_cast<std::int32_t>(in.U32()); r.winnerSlot = static_cast<std::uint8_t>(in.U8());
+        if (r.players < 1 || r.players > 8 || r.track.empty() || (r.winnerSlot >= 8 && r.winnerSlot != 255)) return false;
         m.replays.push_back(r);
     }
     return in.Done();

@@ -35,6 +35,7 @@ public:
         std::string track;
         int players = 0;
         int laps = 0;
+        int mySlot = -1;            // the craft the player drove in this race (-1: they only watched, or it is not known)
         std::uint32_t ticks = 0;
         long long durationMs() const { return static_cast<long long>(ticks) * ReplayFormat::kFrameMs; }
         std::string when;           // "2026-10-18 14:23" from the file name, empty when it has none
@@ -61,7 +62,8 @@ public:
     }
 
     // Writes a replay (bytes as ReplayRecorder::Bytes made them) and prunes. Returns the file name, or empty on failure.
-    std::string Save(const std::vector<std::uint8_t>& bytes, const std::string& track, std::time_t now)
+    // mySlot: the player's own slot in the race, kept in a small file beside it (<name>.hnr.slot) so the replay itself stays the server's exact bytes.
+    std::string Save(const std::vector<std::uint8_t>& bytes, const std::string& track, std::time_t now, int mySlot = -1)
     {
         if (bytes.empty() || bytes.size() > kMaxFileBytes) return std::string();
         MakeDirectory();
@@ -77,6 +79,9 @@ public:
         const bool written = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
         const bool closed = std::fclose(f) == 0;
         if (!written || !closed || std::rename(temp.c_str(), path.c_str()) != 0) { std::remove(temp.c_str()); return std::string(); }
+        if (mySlot >= 0 && mySlot < 8) {
+            if (std::FILE* sf = std::fopen((path + ".slot").c_str(), "w")) { std::fprintf(sf, "%d\n", mySlot); std::fclose(sf); }
+        }
         Prune();
         return name;
     }
@@ -98,6 +103,11 @@ public:
             std::string error;
             if (Read(e.path, bytes) && ReplayFormat::Decode(bytes, r, error)) {
                 e.valid = true; e.track = r.track; e.players = r.players; e.laps = r.laps; e.ticks = r.ticks;
+                if (std::FILE* sf = std::fopen((e.path + ".slot").c_str(), "r")) {
+                    int slot = -1;
+                    if (std::fscanf(sf, "%d", &slot) == 1 && slot >= 0 && slot < r.players) e.mySlot = slot;
+                    std::fclose(sf);
+                }
             }
             entries.push_back(e);
         }
@@ -107,6 +117,7 @@ public:
     bool Remove(const std::string& name) const
     {
         if (!IsReplayName(name)) return false;
+        std::remove((mDir + "/" + name + ".slot").c_str());
         return std::remove((mDir + "/" + name).c_str()) == 0;
     }
 
@@ -183,7 +194,7 @@ private:
     void Prune() const
     {
         std::vector<Entry> all = List();   // newest first
-        for (std::size_t i = kKeep; i < all.size(); ++i) std::remove(all[i].path.c_str());
+        for (std::size_t i = kKeep; i < all.size(); ++i) { std::remove(all[i].path.c_str()); std::remove((all[i].path + ".slot").c_str()); }
     }
 
     std::string mDir;

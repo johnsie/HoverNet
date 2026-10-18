@@ -5379,8 +5379,8 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
 // "My races" are the files of ReplayLibrary.h on this device. "Server replays" and "Track records" ask the HoverNet server the player plays on
 // (the lobby's replay messages, OnlineLobby): the newest replays of every race it ran, whether or not the player was in it, and the fastest
 // finishes and laps per track and lap count, each with the replay it came from. Returns true when a replay was started (the caller then
-// drops into the race loop); false when the player went back. `start(path, slot, fatal)` plays a file following the craft of `slot` and
-// returns an error text, which is shown here without leaving the screen.
+// drops into the race loop); false when the player went back. `start(path, slot, note, fatal)` plays a file following the craft of `slot` (the note
+// says why that craft, e.g. "the winner") and returns an error text, which is shown here without leaving the screen.
 #if defined(HOVERNET_AUTH)
 // Connects an OnlineLobby to the server the player uses (the official one unless another was chosen in the HoverNet servers screen).
 bool ConnectLobbyForReplays(OnlineLobby& lobby)
@@ -5415,7 +5415,7 @@ bool ConnectLobbyForReplays(OnlineLobby& lobby)
 }
 #endif
 
-bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::function<std::string(const std::string&, int, bool&)>& start)
+bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::function<std::string(const std::string&, int, const std::string&, bool&)>& start)
 {
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
     if (ownsImGuiContext) {
@@ -5436,6 +5436,8 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
     if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) { std::printf("REPLAYSCREEN %zu replays\n", entries.size()); std::fflush(stdout); }
     std::string message;
     int confirmDelete = -1;
+    // Which craft to follow: asked before a replay with more than one player starts (the file holds slots, not names).
+    struct CraftChoice { bool active = false, opened = false, server = false; std::string path, title; std::uint64_t id = 0; int players = 0, mySlot = -1, winnerSlot = -1; long long winnerMs = 0; } craftChoice;
     bool started = false;
     bool focusFirst = true;
     bool running = true;
@@ -5449,6 +5451,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
     bool needReplays = true, needRecords = true;
     std::uint64_t downloadSlotId = 0;    // the replay being fetched, and the craft to follow in it
     int downloadSlot = 0;
+    std::string downloadNote;
     const std::string cachePath = ConfigDirPath() + "/replays/shared_replay.hnr.cache";   // the last downloaded replay (".cache": not listed in My races)
     const int officialTracks = Tracks().OfficialCount();
     int wantTab = 0;
@@ -5478,8 +5481,13 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
         }
         std::string startPath;   // set by a WATCH button (or the test hook) and acted on after the frame is drawn
         int startSlot = 0;
+        std::string startNote;
         if (framesShown == 3 && std::getenv("HOVERNET_TEST_REPLAY_PICK") != nullptr) {
-            for (const ReplayLibrary::Entry& e : entries) if (e.valid) { startPath = e.path; break; }
+            for (const ReplayLibrary::Entry& e : entries) if (e.valid) {
+                if (std::getenv("HOVERNET_TEST_REPLAY_PICK_CRAFT") != nullptr && e.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.path = e.path; craftChoice.title = e.track; craftChoice.players = e.players; craftChoice.mySlot = e.mySlot; }   // through the question
+                else startPath = e.path;
+                break;
+            }
         }
 #if defined(HOVERNET_AUTH)
         server.Pump();
@@ -5494,7 +5502,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
             std::FILE* f = std::fopen(cachePath.c_str(), "wb");
             const bool written = f != nullptr && std::fwrite(downloaded.data(), 1, downloaded.size(), f) == downloaded.size();
             if (f != nullptr) std::fclose(f);
-            if (written) { startPath = cachePath; startSlot = downloadSlot; }
+            if (written) { startPath = cachePath; startSlot = downloadSlot; startNote = downloadNote; }
             else message = "Could not save the replay on this device.";
             downloadSlotId = 0;
         }
@@ -5504,7 +5512,12 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
         }
         if (std::getenv("HOVERNET_TEST_REPLAY_SERVER_PICK") != nullptr && framesShown > 3 && downloadSlotId == 0 && startPath.empty() && server.ReplaysLoaded() && !server.Replays().empty()) {
             static bool picked = false;   // test hook (scripts/test-shared-replays.sh): download and play the newest server replay
-            if (!picked) { picked = true; downloadSlotId = server.Replays()[0].id; downloadSlot = 0; server.FetchReplay(downloadSlotId); }
+            if (!picked) {
+                picked = true;
+                const Protocol3::ReplayInfo& r = server.Replays()[0];
+                if (std::getenv("HOVERNET_TEST_REPLAY_PICK_CRAFT") != nullptr && r.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.server = true; craftChoice.id = r.id; craftChoice.title = r.track; craftChoice.players = r.players; craftChoice.winnerSlot = r.winnerSlot < 8 ? r.winnerSlot : -1; craftChoice.winnerMs = r.winnerMs; }
+                else { downloadSlotId = r.id; downloadSlot = 0; downloadNote.clear(); server.FetchReplay(downloadSlotId); }
+            }
         }
 #endif
 
@@ -5563,7 +5576,10 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                     const float buttonWidth = std::max(90.0f, (ImGui::GetContentRegionAvail().x - 14.0f) * 0.5f);
                     if (e.valid) {
                         if (focusFirst) { ImGui::SetKeyboardFocusHere(); focusFirst = false; }
-                        if (HoverNetButton("WATCH", ImVec2(buttonWidth, 34))) startPath = e.path;
+                        if (HoverNetButton("WATCH", ImVec2(buttonWidth, 34))) {
+                            if (e.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.path = e.path; craftChoice.title = e.track; craftChoice.players = e.players; craftChoice.mySlot = e.mySlot; }
+                            else { startPath = e.path; startSlot = 0; }
+                        }
                         ImGui::SameLine();
                     }
                     if (HoverNetButton(confirmDelete == index ? "SURE? DELETE" : "DELETE", ImVec2(e.valid ? buttonWidth : -FLT_MIN, 34))) {
@@ -5618,7 +5634,11 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                         char label[48];
                         if (busy && downloadSlotId == r.id) std::snprintf(label, sizeof label, "DOWNLOADING %d%%", server.DownloadPercent());
                         else std::snprintf(label, sizeof label, "WATCH");
-                        if (HoverNetButton(label, ImVec2(-FLT_MIN, 34)) && !busy) { downloadSlotId = r.id; downloadSlot = 0; message.clear(); server.FetchReplay(r.id); }
+                        if (HoverNetButton(label, ImVec2(-FLT_MIN, 34)) && !busy) {
+                            message.clear();
+                            if (r.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.server = true; craftChoice.id = r.id; craftChoice.title = r.track; craftChoice.players = r.players; craftChoice.winnerSlot = r.winnerSlot < 8 ? r.winnerSlot : -1; craftChoice.winnerMs = r.winnerMs; }
+                            else { downloadSlotId = r.id; downloadSlot = 0; downloadNote.clear(); server.FetchReplay(r.id); }
+                        }
                         ImGui::PopID();
                         ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
                     }
@@ -5655,7 +5675,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                                 ImGui::Text("%zu.  %s   player %d   %s", i + 1, time, e.slot + 1, when);
                                 ImGui::SameLine(ImGui::GetContentRegionMax().x - 120.0f);
                                 const bool busy = downloadSlotId != 0;
-                                if (HoverNetButton(busy && downloadSlotId == e.replay ? "..." : "WATCH", ImVec2(110, 0)) && !busy) { downloadSlotId = e.replay; downloadSlot = e.slot; message.clear(); server.FetchReplay(e.replay); }
+                                if (HoverNetButton(busy && downloadSlotId == e.replay ? "..." : "WATCH", ImVec2(110, 0)) && !busy) { downloadSlotId = e.replay; downloadSlot = e.slot; downloadNote = kind == 0 ? "the record holder" : "the fastest lap"; message.clear(); server.FetchReplay(e.replay); }
                                 ImGui::PopID();
                             }
                             ImGui::Spacing();
@@ -5666,6 +5686,45 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
             }
 #endif
             ImGui::EndTabBar();
+        }
+        if (craftChoice.active && !craftChoice.opened) { ImGui::OpenPopup("Follow which craft?"); craftChoice.opened = true; }
+        if (craftChoice.active) {
+            ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            bool open = true;
+            if (ImGui::BeginPopupModal("Follow which craft?", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::Text("%s: which craft do you want to follow?", craftChoice.title.c_str());
+                ImGui::TextDisabled("You can switch craft while it plays with [ and ].");
+                ImGui::Spacing();
+                int chosen = -1;
+                const int defaultSlot = craftChoice.mySlot >= 0 ? craftChoice.mySlot : (craftChoice.winnerSlot >= 0 ? craftChoice.winnerSlot : 0);
+                if (const char* pickCraft = std::getenv("HOVERNET_TEST_REPLAY_PICK_CRAFT")) if (std::string(pickCraft) != "show") chosen = std::string(pickCraft) == "default" ? defaultSlot : std::atoi(pickCraft);   // test hook: answer the question ("show" leaves it open for a screenshot)
+                for (int slot = 0; slot < craftChoice.players; ++slot) {
+                    char label[96];
+                    std::string suffix;
+                    if (slot == craftChoice.mySlot) suffix += "  (you)";
+                    if (slot == craftChoice.winnerSlot) {
+                        char t[32]; formatMs(craftChoice.winnerMs, t, sizeof t);
+                        suffix += std::string("  (winner, ") + t + ")";
+                    }
+                    std::snprintf(label, sizeof label, "PLAYER %d%s##craft%d", slot + 1, suffix.c_str(), slot);
+                    if (slot == defaultSlot && ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+                    if (HoverNetButton(label, ImVec2(360, 38))) chosen = slot;
+                }
+                ImGui::Spacing();
+                if (HoverNetButton("CANCEL", ImVec2(360, 34))) { craftChoice.active = false; ImGui::CloseCurrentPopup(); }
+                if (chosen >= 0) {
+                    std::string note;
+                    if (chosen == craftChoice.mySlot) note = "you";
+                    else if (chosen == craftChoice.winnerSlot) note = "the winner";
+                    if (craftChoice.server) { downloadSlotId = craftChoice.id; downloadSlot = chosen; downloadNote = note; server.FetchReplay(craftChoice.id); }
+                    else { startPath = craftChoice.path; startSlot = chosen; startNote = note; }
+                    craftChoice.active = false;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+            else craftChoice.active = false;
+            if (!open) craftChoice.active = false;
         }
         if (!message.empty()) {
             ImGui::PushTextWrapPos(0.0f);
@@ -5688,7 +5747,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
 
         if (!startPath.empty()) {
             bool fatal = false;
-            message = start(startPath, startSlot, fatal);
+            message = start(startPath, startSlot, startNote, fatal);
             if (message.empty()) started = true;
             else if (fatal) { g_QuitConfirmed = true; running = false; }
             confirmDelete = -1;
@@ -7726,7 +7785,7 @@ int RunClient(int argc, char** argv)
     // Plays a replay file in the normal game window (from the command line or from the Watch a Replay screen): checks the file, the rules and the track
     // first, then loads the track and puts the craft on the grid. An error before the track is loaded changes nothing (the caller shows it and
     // carries on); after that, fatal is set and the race in the session is no longer usable.
-    auto startReplayFile = [&](const std::string& path, int watch, bool& fatal) -> std::string {
+    auto startReplayFile = [&](const std::string& path, int watch, bool& fatal, const std::string& note = std::string()) -> std::string {
         fatal = false;
         ReplayPlayback next;
         next.hashMode = replay.hashMode; next.seekTest = replay.seekTest; next.markerTest = replay.markerTest;   // test modes set on the command line
@@ -7755,7 +7814,8 @@ int RunClient(int argc, char** argv)
         replay.lapsSeen.assign(static_cast<std::size_t>(replay.data.players), 0);
         if (const char* speed = std::getenv("HOVERNET_TEST_REPLAY_SPEED")) replay.speedStep = std::max(0, std::min(4, std::atoi(speed)));   // test hook: start at this speed step
         replay.lastTicks = SDL_GetTicks();
-        session.AddMessage("Replay: P pause, 1-5 speed, [ ] craft, C camera distance, Esc leaves");
+        if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) { std::printf("REPLAYTEST following player %d of %d (%s)\n", replay.watch + 1, replay.data.players, note.c_str()); std::fflush(stdout); }
+        session.AddMessage(("Following player " + std::to_string(replay.watch + 1) + " of " + std::to_string(replay.data.players) + (note.empty() ? std::string() : " (" + note + ")") + ".  P pause, 1-5 speed, [ ] craft, C camera, Esc menu").c_str());
         fatal = false;
         return std::string();
     };
@@ -7784,7 +7844,7 @@ int RunClient(int argc, char** argv)
                 }
             }
             else if (choice == MenuChoice::eWatchReplay) {
-                const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, int slot, bool& fatal) { return startReplayFile(path, slot, fatal); });
+                const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, int slot, const std::string& note, bool& fatal) { return startReplayFile(path, slot, fatal, note); });
                 pickingMode = !started && !g_QuitConfirmed;   // a replay is playing, or back to the main menu
             }
             else if (choice == MenuChoice::eSettings) {
@@ -7941,7 +8001,7 @@ int RunClient(int argc, char** argv)
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--replays-screen")) {   // the screen on its own (screenshots); "Watch" reports instead of playing
-            RunReplayBrowser(graphics, frameLimit, [](const std::string&, int, bool& fatal) { fatal = false; return std::string("(screenshot mode: nothing is played)"); });
+            RunReplayBrowser(graphics, frameLimit, [](const std::string&, int, const std::string&, bool& fatal) { fatal = false; return std::string("(screenshot mode: nothing is played)"); });
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--pause-menu")) {
@@ -8065,7 +8125,7 @@ int RunClient(int argc, char** argv)
         const int count = static_cast<int>(crafts->size());
         *watch = (*watch + direction + count) % count;
         mainCharacter = (*crafts)[static_cast<std::size_t>(*watch)];
-        session.AddMessage(("Watching player " + std::to_string(*watch + 1) + " of " + std::to_string(count)).c_str());
+        session.AddMessage(("Following player " + std::to_string(*watch + 1) + " of " + std::to_string(count)).c_str());
         if (std::getenv("HOVERNET_TEST_WATCH") != nullptr) { std::printf("WATCHTEST watching player %d of %d\n", *watch + 1, count); std::fflush(stdout); }
     };
     // Chat works in a race on the old lobby server and in one on a HoverNet 3.0 server, during the race and after the player has finished.
@@ -8130,7 +8190,7 @@ int RunClient(int argc, char** argv)
                     auth.replaySaved = true;
                     const std::vector<std::uint8_t> bytes = auth.recorder.Bytes();
                     if (!bytes.empty()) {
-                        const std::string saved = ReplayLibrary(ConfigDirPath() + "/replays").Save(bytes, auth.ack.track, std::time(nullptr));
+                        const std::string saved = ReplayLibrary(ConfigDirPath() + "/replays").Save(bytes, auth.ack.track, std::time(nullptr), auth.spectator ? -1 : static_cast<int>(auth.ack.player));
                         if (!saved.empty()) {
                             session.AddMessage("This race was saved: Watch a Replay in the menu");
                             if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) { std::printf("REPLAYTEST saved %s %u ticks\n", saved.c_str(), auth.recorder.Ticks()); std::fflush(stdout); }
@@ -8561,7 +8621,7 @@ int RunClient(int argc, char** argv)
         }
 #ifdef HOVERNET_GAME2_PLAYER
         if (watchReplayMenu) {
-            const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, int slot, bool& fatal) { return startReplayFile(path, slot, fatal); });
+            const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, int slot, const std::string& note, bool& fatal) { return startReplayFile(path, slot, fatal, note); });
             if (g_QuitConfirmed) { running = false; break; }
             if (started) {
                 missileSeen = false;
@@ -8598,7 +8658,7 @@ int RunClient(int argc, char** argv)
                 continue;
             }
             if (endChoice == ReplayEndChoice::eAnotherReplay) {
-                const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, int slot, bool& fatal) { return startReplayFile(path, slot, fatal); });
+                const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, int slot, const std::string& note, bool& fatal) { return startReplayFile(path, slot, fatal, note); });
                 if (g_QuitConfirmed) { running = false; break; }
                 if (started) { missileSeen = false; finishAnnounced = false; resultsPending = false; }
                 else replay.ended = true;   // came back without choosing: the end screen again
@@ -9409,7 +9469,7 @@ int RunClient(int argc, char** argv)
                     if (menuFontHandle != nullptr) {
                         const int sec = static_cast<int>(replay.tick * 16 / 1000), total = static_cast<int>(static_cast<std::int64_t>(replay.data.ticks) * 16 / 1000);
                         char label[96];
-                        std::snprintf(label, sizeof label, "%d:%02d / %d:%02d   x%g%s", sec / 60, sec % 60, total / 60, total % 60,
+                        std::snprintf(label, sizeof label, "Player %d   %d:%02d / %d:%02d   x%g%s", replay.watch + 1, sec / 60, sec % 60, total / 60, total % 60,
                                       kReplaySpeeds[replay.speedStep], replay.paused ? "   paused" : "");
                         DrawUiText(*menuFontHandle->GetSprite(), barX + barW, barY - 44, label, &viewport, MR_Sprite::eRight, MR_Sprite::eBottom, 1);
                     }

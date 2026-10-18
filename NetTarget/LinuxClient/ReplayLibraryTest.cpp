@@ -49,7 +49,7 @@ int main()
     Check(hostile.find('/') == std::string::npos && hostile.find('\\') == std::string::npos && hostile[0] != '.', "a track name cannot name another folder");
 
     const std::string first = library.Save(MakeReplay("ClassicH", 2, 600), "ClassicH", base);
-    const std::string second = library.Save(MakeReplay("The River", 4, 1250), "The River", base + 60);
+    const std::string second = library.Save(MakeReplay("The River", 4, 1250), "The River", base + 60, 2);
     Check(!first.empty() && !second.empty(), "saves");
     const std::string repeat = library.Save(MakeReplay("ClassicH", 2, 600), "ClassicH", base);   // the same second again
     Check(!repeat.empty() && repeat != first, "two races in one second keep both");
@@ -60,6 +60,7 @@ int main()
     Check(list.size() == 3 && list[0].track == "The River" && list[0].players == 4 && list[0].laps == 3 && list[0].ticks == 1250 && list[0].valid, "the newest is first, with its details");
     Check(list.size() == 3 && list[0].durationMs() == 20000 && list[0].when == "2026-10-18 14:24", "its length and time");
     Check(list.size() == 3 && list[2].track == "ClassicH", "older ones follow");
+    Check(list.size() == 3 && list[0].mySlot == 2 && list[1].mySlot == -1 && list[2].mySlot == -1, "the craft the player drove is remembered beside the replay (and is unknown when they only watched)");
 
     { std::FILE* f = std::fopen((dir + "/Broken_20261018-150000.hnr").c_str(), "wb"); std::fputs("not a replay", f); std::fclose(f); }
     { std::FILE* f = std::fopen((dir + "/notes.txt").c_str(), "wb"); std::fputs("x", f); std::fclose(f); }
@@ -73,7 +74,7 @@ int main()
     Check(list.size() == ReplayLibrary::kKeep, "only the newest are kept");
     Check(!list.empty() && list[0].track == "Steeplechase" && list.back().track == "Steeplechase", "the older replays were the ones removed");
 
-    for (const ReplayLibrary::Entry& e : list) std::remove(e.path.c_str());
+    for (const ReplayLibrary::Entry& e : list) { std::remove(e.path.c_str()); std::remove((e.path + ".slot").c_str()); }
     std::remove((dir + "/notes.txt").c_str());
 #ifdef _WIN32
     _rmdir(dir.c_str());

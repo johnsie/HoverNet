@@ -128,7 +128,7 @@ struct SpectateRace { std::uint32_t id = 0; std::string code; };
 constexpr int kMaxReplayList = 30;
 constexpr std::size_t kReplayChunkBytes = 1000;
 struct ListReplays { std::string track; std::uint8_t max = 20; };                  // track empty = every track
-struct ReplayInfo { std::uint64_t id = 0; std::string track; std::uint8_t players = 0, laps = 0; std::uint32_t ticks = 0, savedAt = 0, bytes = 0; std::int32_t winnerMs = 0; };   // savedAt: unix seconds; winnerMs: the fastest finish, 0 = nobody finished
+struct ReplayInfo { std::uint64_t id = 0; std::string track; std::uint8_t players = 0, laps = 0; std::uint32_t ticks = 0, savedAt = 0, bytes = 0; std::int32_t winnerMs = 0; std::uint8_t winnerSlot = 255; };   // savedAt: unix seconds; winnerMs: the fastest finish, 0 = nobody finished; winnerSlot: that player's slot (255 = nobody), the craft a viewer follows by default
 struct ReplayList { std::vector<ReplayInfo> replays; };
 struct GetReplay { std::uint64_t id = 0; };
 struct ReplayChunk { std::uint64_t id = 0; std::uint16_t index = 0, count = 0; std::vector<std::uint8_t> data; };
