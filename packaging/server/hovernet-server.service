@@ -6,7 +6,9 @@ After=network.target
 User=hovernet
 Group=hovernet
 WorkingDirectory=/usr/share/hovernet
-ExecStart=/usr/bin/HoverNetAuthServer --config /etc/hovernet/server.conf
+# --replay-dir is given here, not only in the configuration file: the file is kept across upgrades (it is a conffile), so a server installed
+# before replays were shared would otherwise keep saving none, and the players' Server replays and Track records would stay empty.
+ExecStart=/usr/bin/HoverNetAuthServer --config /etc/hovernet/server.conf --replay-dir /var/lib/hovernet/replays
 Restart=on-failure
 RestartSec=3
 # SIGTERM starts a drain: races under way finish first (drain-timeout in the configuration, 600 s by default).

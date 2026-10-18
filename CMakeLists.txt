@@ -926,6 +926,12 @@ if(BUILD_TESTING AND NOT WIN32)
         add_test(NAME HoverNetSharedReplays
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-shared-replays.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetReplayEnd
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-replay-end.sh $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetMainMenu
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-main-menu.sh $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetGhost
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-ghost.sh $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

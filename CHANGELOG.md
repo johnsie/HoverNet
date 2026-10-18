@@ -6,6 +6,13 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.9 - 2026-10-18
+
+### Fixed
+- **Track records were never saved on a server installed from the package.** The server only saves a race's replay (and with it the records and the shared replays) when it is given a replay folder, and the packaged configuration had that line switched off. The packaged service now always passes `--replay-dir /var/lib/hovernet/replays`, the packaged configuration turns it on (and sets `replay-keep 200`), so servers upgraded from an older install start saving too. Only races on the server count for the records: a race against the clock on your own device counts toward your personal bests (the Track records tab now shows yours beside the server's, and says so when a track has no records).
+- **Several menus had no way back to the main menu, and leaving the online lobby could quit the game.** The pause menu and the results screen now have a **MAIN MENU** button, and leaving the online lobby (or failing to reach the server) from a race, a replay or the results screen goes to the main menu instead of closing HoverNet.
+- **A replay ended abruptly on a frozen picture.** It now ends with a screen that says the replay is finished, lists who finished and when, and offers **Watch again**, **Watch another replay**, **Main menu** and **Quit** (Esc stays on the last frame; Left or Home rewinds). Starting a race or going to the lobby from a replay now leaves the replay cleanly.
+
 ## 2.3.8 - 2026-10-18
 
 ### Fixed

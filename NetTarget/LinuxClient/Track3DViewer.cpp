@@ -2152,6 +2152,7 @@ enum class PauseChoice
     eLeaveRace,
     eOnlineLobby,
     eWatchReplay,
+    eMainMenu,
     eSettings,
     eControls,
     eQuit,
@@ -2166,6 +2167,7 @@ enum class PostRaceChoice
     eContinue,
     eNewLocalRace,
     eOnlineLobby,
+    eMainMenu,
     eQuit,
 };
 
@@ -3552,6 +3554,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
     };
     if (pOfferReplays) options.push_back({"WATCH A REPLAY", PauseChoice::eWatchReplay});
     const int primaryCount = static_cast<int>(options.size());   // the race options above the "GAME & ACCESSIBILITY" heading
+    if (pOfferReplays) options.push_back({"MAIN MENU", PauseChoice::eMainMenu});   // (not in the classic lobby, which has its own way out)
     options.push_back({"SETTINGS", PauseChoice::eSettings});
     options.push_back({"CONTROLS", PauseChoice::eControls});
     options.push_back({"QUIT HOVERNET", PauseChoice::eQuit});
@@ -3563,6 +3566,9 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
 
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
+        if (framesShown == 3 && pOfferReplays && std::getenv("HOVERNET_TEST_PAUSE_CHOICE") != nullptr && std::string(std::getenv("HOVERNET_TEST_PAUSE_CHOICE")) == "main") {
+            choice = PauseChoice::eMainMenu; running = false; break;   // test hook (scripts/test-main-menu.sh)
+        }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
@@ -3681,6 +3687,125 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
 }
 
 
+// What the player may do when a replay has played to its end.
+enum class ReplayEndChoice { eStay, eWatchAgain, eAnotherReplay, eMainMenu, eQuit };
+
+ReplayEndChoice RunReplayEndScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport, const MR_Sprite& font,
+                                   const std::string& track, int players, int laps, long long durationMs, const std::vector<std::string>& finishers, int pFrameLimit)
+{
+    const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
+    if (ownsImGuiContext) {
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+        LoadHoverNetMenuFonts(io);
+        ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
+        ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+        ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+    }
+#ifdef HOVERNET_WEB
+    struct PausedFlag {
+        int mSaved = gHoverNetInRace;
+        PausedFlag() { gHoverNetInRace = 0; }
+        ~PausedFlag() { gHoverNetInRace = mSaved; }
+    } pausedFlag;
+#endif
+    ReplayEndChoice choice = ReplayEndChoice::eStay;
+    bool focusFirst = true, running = true;
+    int framesShown = 0;
+    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_QUIT) { if (ConfirmQuit(graphics, buffer, viewport, font)) { choice = ReplayEndChoice::eQuit; running = false; } }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) running = false;
+            else if (event.type == SDL_CONTROLLERBUTTONDOWN && (event.cbutton.button == SDL_CONTROLLER_BUTTON_B || event.cbutton.button == SDL_CONTROLLER_BUTTON_START)) running = false;
+        }
+        if (framesShown == 3) {
+            // Test hook (scripts/test-replay-end.sh): a comma-separated list of choices (again, another, main, quit, stay), one for each time the screen is shown.
+            static int shown = 0;
+            ++shown;
+            if (const char* script = std::getenv("HOVERNET_TEST_REPLAY_END")) {
+                std::string list = script, word;
+                std::vector<std::string> words;
+                for (char c : list + ",") { if (c == ',') { words.push_back(word); word.clear(); } else word += c; }
+                const std::string pick = static_cast<std::size_t>(shown) <= words.size() ? words[static_cast<std::size_t>(shown) - 1] : std::string("quit");
+                std::printf("REPLAYEND shown %d: %s\n", shown, pick.c_str());
+                std::fflush(stdout);
+                choice = pick == "again" ? ReplayEndChoice::eWatchAgain : pick == "another" ? ReplayEndChoice::eAnotherReplay : pick == "main" ? ReplayEndChoice::eMainMenu : pick == "stay" ? ReplayEndChoice::eStay : ReplayEndChoice::eQuit;
+                running = false;
+                continue;
+            }
+        }
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_RenderSetLogicalSize(renderer, 0, 0);
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::Begin("HoverNet Replay Finished", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+        DrawHoverNetScreenBackdrop(mainViewport);
+        const ImVec2 workSize = mainViewport->WorkSize;
+        ImGui::SetCursorPos(ImVec2(54.0f, 64.0f));
+        ImGui::BeginGroup();
+        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+        if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
+        ImGui::TextUnformatted("REPLAY FINISHED");
+        if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
+        ImGui::PopStyleColor();
+        ImGui::TextColored(kHoverNetCoral, "%s", track.c_str());
+        ImGui::TextDisabled("%d player%s, %d lap%s, %lld:%02lld", players, players == 1 ? "" : "s", laps, laps == 1 ? "" : "s", durationMs / 60000, (durationMs % 60000) / 1000);
+        ImGui::Spacing();
+        for (const std::string& line : finishers) ImGui::TextUnformatted(line.c_str());
+        ImGui::EndGroup();
+
+        const float panelWidth = std::min(430.0f, workSize.x * 0.48f);
+        const float panelHeight = std::min(420.0f, workSize.y - 72.0f);
+        ImGui::SetCursorPos(ImVec2(workSize.x - panelWidth - 38.0f, 36.0f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.96f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 20.0f));
+        ImGui::BeginChild("ReplayEndPanel", ImVec2(panelWidth, panelHeight), true);
+        HoverNetSectionHeading("WHAT NEXT?");
+        ImGui::Spacing();
+        struct Action { const char* label; ReplayEndChoice choice; };
+        const Action actions[] = {
+            {"WATCH AGAIN", ReplayEndChoice::eWatchAgain},
+            {"WATCH ANOTHER REPLAY", ReplayEndChoice::eAnotherReplay},
+            {"MAIN MENU", ReplayEndChoice::eMainMenu},
+            {"QUIT HOVERNET", ReplayEndChoice::eQuit},
+        };
+        for (std::size_t i = 0; i < sizeof(actions) / sizeof(actions[0]); ++i) {
+            if (focusFirst) { ImGui::SetKeyboardFocusHere(); focusFirst = false; }
+            if (HoverNetButton(actions[i].label, ImVec2(-FLT_MIN, i == 0 ? 54.0f : 44.0f))) { choice = actions[i].choice; running = false; }
+            ImGui::Spacing();
+        }
+        HoverNetHint("Esc / B: stay and look around (Left or Home rewinds)");
+        ImGui::EndChild();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor();
+        ImGui::End();
+        ImGui::Render();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        CaptureFrameIfRequested(renderer, framesShown, pFrameLimit);
+        SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
+        HoverNetFrameDelay();
+    }
+    if (ownsImGuiContext) {
+        ImGui_ImplSDLRenderer2_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+    }
+    return choice;
+}
+
 void FormatRaceTime(MR_SimulationTime pTime, char* pBuffer, std::size_t pBufferSize)
 {
     const MR_SimulationTime safeTime = std::max<MR_SimulationTime>(0, pTime);
@@ -3718,6 +3843,9 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
+        if (framesShown == 2 && std::getenv("HOVERNET_TEST_RESULTS_CHOICE") != nullptr && std::string(std::getenv("HOVERNET_TEST_RESULTS_CHOICE")) == "main") {
+            choice = PostRaceChoice::eMainMenu; running = false; break;   // test hook (scripts/test-main-menu.sh)
+        }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
@@ -3855,6 +3983,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             {"KEEP DRIVING", PostRaceChoice::eContinue},
             {"NEW LOCAL RACE", PostRaceChoice::eNewLocalRace},
             {"ONLINE MULTIPLAYER", PostRaceChoice::eOnlineLobby},
+            {"MAIN MENU", PostRaceChoice::eMainMenu},
             {"QUIT HOVERNET", PostRaceChoice::eQuit},
         };
         for (std::size_t index = 0; index < sizeof(actions) / sizeof(actions[0]); ++index) {
@@ -5302,6 +5431,8 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
 
     ReplayLibrary library(ConfigDirPath() + "/replays");
     std::vector<ReplayLibrary::Entry> entries = library.List();
+    PersonalBests myBests;   // the player's own bests (on this device), shown beside the server's records
+    myBests.Load(ConfigDirPath() + "/personal_bests");
     if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) { std::printf("REPLAYSCREEN %zu replays\n", entries.size()); std::fflush(stdout); }
     std::string message;
     int confirmDelete = -1;
@@ -5500,12 +5631,17 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                     }
                     ImGui::Spacing();
                     if (!server.RecordsLoaded()) ImGui::TextDisabled("Loading the records...");
-                    else if (server.Records().boards.empty()) ImGui::TextDisabled("No finished races on this track yet. Be the first.");
+                    else if (server.Records().boards.empty()) ImGui::TextDisabled("No finished races on this track yet. Records come from races on the server that finish; races against the clock on your own device count toward your personal bests, not these. Be the first.");
                     int idCounter = 0;
                     for (const Protocol3::RecordBoard& board : server.Records().boards) {
                         char heading[48];
                         std::snprintf(heading, sizeof heading, "%d LAP%s", board.laps, board.laps == 1 ? "" : "S");
                         HoverNetSectionHeading(heading);
+                        if (const long long mine = myBests.RaceBest(Tracks().Get(recordsTrack)->mName, board.laps)) {
+                            char mineText[32];
+                            formatMs(mine, mineText, sizeof mineText);
+                            ImGui::TextColored(ImVec4(0.55f, 0.95f, 0.65f, 1.0f), "Your best on this device: %s", mineText);
+                        }
                         for (int kind = 0; kind < 2; ++kind) {
                             const std::vector<Protocol3::RecordEntry>& list = kind == 0 ? board.finishes : board.bestLaps;
                             if (list.empty()) continue;
@@ -6360,9 +6496,11 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 #endif
     // Test hook: a bounded run opens Watch a Replay (scripts/test-replay-library.sh); never set in normal play.
     static bool sPickedReplays = false;
+    static int sMenuCalls = 0;           // HOVERNET_TEST_MENU_AFTER=n: the first n times the menu is shown it behaves normally
+    ++sMenuCalls;
     bool pickReplaysForTest = false;
     if (const char* replaysMenu = std::getenv("HOVERNET_TEST_MENU")) {
-        if (!sPickedReplays && std::string(replaysMenu) == "replays" && (pFrameLimit >= 0 || std::getenv("HOVERNET_TEST_MENU_FORCE") != nullptr)) {
+        if (!sPickedReplays && sMenuCalls > (std::getenv("HOVERNET_TEST_MENU_AFTER") ? std::atoi(std::getenv("HOVERNET_TEST_MENU_AFTER")) : 0) && std::string(replaysMenu) == "replays" && (pFrameLimit >= 0 || std::getenv("HOVERNET_TEST_MENU_FORCE") != nullptr)) {
             choice = MenuChoice::eWatchReplay; sPickedReplays = true; pickReplaysForTest = true;
         }
     }
@@ -6848,6 +6986,8 @@ struct ReplayPlayback
     bool seekTestDone = false;
     bool markerTest = false;     // test mode: play to tick 8000, jump to the previous lap marker, play on, print the markers found
     bool markerTestDone = false;
+    std::string path;            // the file being shown (to watch it again)
+    bool ended = false;          // the replay has just reached its end: the end screen is offered at the next frame
     // Timeline markers: every lap crossing and finish, noted the moment the replay plays through it (the same lap counts the race
     // itself keeps, so nothing is computed twice). They stay after a seek back, and a seek forward finds the rest on the way.
     struct Marker { std::uint32_t tick; int player; int lap; bool finished; };
@@ -7602,6 +7742,7 @@ int RunClient(int argc, char** argv)
             return "The track '" + next.data.track + "' on this computer is not the one the replay was recorded on.";
         }
         next.watch = (watch < 0 || watch >= next.data.players) ? 0 : watch;
+        next.path = path;
         replay = next;
         fatal = true;
         if (!loadLocalRace(replay.data.track, replay.data.laps, replay.data.weapons)) {
@@ -7617,6 +7758,97 @@ int RunClient(int argc, char** argv)
         session.AddMessage("Replay: P pause, 1-5 speed, [ ] craft, C camera distance, Esc leaves");
         fatal = false;
         return std::string();
+    };
+#endif
+
+#ifdef HOVERNET_GAME2_PLAYER
+    // The main menu and what it leads to (a local race, the online lobby, Watch a Replay, settings, controls, how to play). Returns true when a race
+    // or replay is set up, false when the player quit (or loading failed: mainMenuFailed). Used at start-up and whenever a menu says "main menu".
+    bool mainMenuFailed = false;
+    auto showMainMenu = [&]() -> bool {
+        replay.active = false;
+    bool pickingMode = true;
+        while (pickingMode) {
+            pickingMode = false;
+            const MenuChoice choice = RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
+                                                  frameLimit);
+            if (g_QuitConfirmed) {
+                // Confirmed quit from the main menu itself -- skip straight to
+                // the race loop below, which starts with running = !g_QuitConfirmed
+                // and so exits immediately without ever rendering a frame.
+            }
+            else if (choice == MenuChoice::eOnlineLobby) {
+                if (!enterOnlineMultiplayer()) {
+                    std::printf("Lobby skipped or unavailable; returning to the main menu\n");
+                    pickingMode = !g_QuitConfirmed;
+                }
+            }
+            else if (choice == MenuChoice::eWatchReplay) {
+                const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, int slot, bool& fatal) { return startReplayFile(path, slot, fatal); });
+                pickingMode = !started && !g_QuitConfirmed;   // a replay is playing, or back to the main menu
+            }
+            else if (choice == MenuChoice::eSettings) {
+                // Always back to the main menu afterward (Save or Cancel alike)
+                // instead of falling through to Local Play -- there's nothing
+                // else for this choice to lead to, and the player shouldn't have
+                // to relaunch or stumble into a race just to get back out of it.
+                const SettingsResult settings = RunSettingsScreen(
+                    graphics, buffer, viewport, *menuFontHandle->GetSprite(),
+                    LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), LoadMute(), LoadFullscreen(), frameLimit);
+                if (settings.confirmed) {
+                    SaveUsername(settings.username);
+                    lobbyHost = settings.serverHost;
+                    lobbyPort = settings.serverPort;
+                    SaveServerUrl(lobbyHost, lobbyPort);
+                    SaveVolume(settings.volume);
+                    SaveMute(settings.muted);
+                    SaveFullscreen(settings.fullscreen);
+                    WindowSize savedSize;
+                    savedSize.width = settings.windowWidth;
+                    savedSize.height = settings.windowHeight;
+                    SaveWindowSize(savedSize);
+                    SaveUiScale(settings.uiScale);
+                    SaveLargeHudText(settings.largeHudText);
+                    SaveReducedMotion(settings.reducedMotion);
+                    SaveHighContrast(settings.highContrast);
+                }
+                pickingMode = !g_QuitConfirmed;
+            }
+#if defined(HOVERNET_AUTH)
+#endif
+            else if (choice == MenuChoice::eControls) {
+                RunControlsScreen(graphics, frameLimit);
+                pickingMode = !g_QuitConfirmed;
+            }
+            else if (choice == MenuChoice::eHowToPlay) {
+                if (RunOnboardingScreen(graphics, frameLimit)) SaveOnboardingComplete();
+                pickingMode = !g_QuitConfirmed;
+            }
+            else if (autoPlay) {
+                if (!loadLocalRace(initialTrackName, 1, true)) { mainMenuFailed = true; return false; }
+                session.SetSimulationTime(0);
+                startingPlayerPosition = mainCharacter->mPosition;
+            }
+            else {
+                const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
+                                                                *menuFontHandle->GetSprite(), frameLimit);
+                if (setup.confirmed) {
+                    if (!loadLocalRace(setup.trackName, setup.laps, setup.weapons)) {
+                        std::printf("Could not load '%s'; returning to the main menu\n",
+                                    setup.trackName.c_str());
+                        pickingMode = !g_QuitConfirmed;
+                    }
+                }
+                else {
+                    // Cancelled -- back to the main menu instead of falling through
+                    // to whatever was already loaded (interactive mode only; a
+                    // frame-limited run always confirms, see RunLocalRaceSetup),
+                    // unless that "cancel" was actually a confirmed quit.
+                    pickingMode = !g_QuitConfirmed;
+                }
+            }
+        }
+        return !g_QuitConfirmed;
     };
 #endif
 
@@ -7754,85 +7986,9 @@ int RunClient(int argc, char** argv)
 #if defined(HOVERNET_AUTH)
         if (auth.active) pickingMode = false;
 #endif
-        while (pickingMode) {
-            pickingMode = false;
-            const MenuChoice choice = RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                                                  frameLimit);
-            if (g_QuitConfirmed) {
-                // Confirmed quit from the main menu itself -- skip straight to
-                // the race loop below, which starts with running = !g_QuitConfirmed
-                // and so exits immediately without ever rendering a frame.
-            }
-            else if (choice == MenuChoice::eOnlineLobby) {
-                if (!enterOnlineMultiplayer()) {
-                    std::printf("Lobby skipped or unavailable; returning to the main menu\n");
-                    pickingMode = !g_QuitConfirmed;
-                }
-            }
-            else if (choice == MenuChoice::eWatchReplay) {
-                const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, int slot, bool& fatal) { return startReplayFile(path, slot, fatal); });
-                pickingMode = !started && !g_QuitConfirmed;   // a replay is playing, or back to the main menu
-            }
-            else if (choice == MenuChoice::eSettings) {
-                // Always back to the main menu afterward (Save or Cancel alike)
-                // instead of falling through to Local Play -- there's nothing
-                // else for this choice to lead to, and the player shouldn't have
-                // to relaunch or stumble into a race just to get back out of it.
-                const SettingsResult settings = RunSettingsScreen(
-                    graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                    LoadUsername(), lobbyHost, lobbyPort, LoadVolume(), LoadMute(), LoadFullscreen(), frameLimit);
-                if (settings.confirmed) {
-                    SaveUsername(settings.username);
-                    lobbyHost = settings.serverHost;
-                    lobbyPort = settings.serverPort;
-                    SaveServerUrl(lobbyHost, lobbyPort);
-                    SaveVolume(settings.volume);
-                    SaveMute(settings.muted);
-                    SaveFullscreen(settings.fullscreen);
-                    WindowSize savedSize;
-                    savedSize.width = settings.windowWidth;
-                    savedSize.height = settings.windowHeight;
-                    SaveWindowSize(savedSize);
-                    SaveUiScale(settings.uiScale);
-                    SaveLargeHudText(settings.largeHudText);
-                    SaveReducedMotion(settings.reducedMotion);
-                    SaveHighContrast(settings.highContrast);
-                }
-                pickingMode = !g_QuitConfirmed;
-            }
-#if defined(HOVERNET_AUTH)
-#endif
-            else if (choice == MenuChoice::eControls) {
-                RunControlsScreen(graphics, frameLimit);
-                pickingMode = !g_QuitConfirmed;
-            }
-            else if (choice == MenuChoice::eHowToPlay) {
-                if (RunOnboardingScreen(graphics, frameLimit)) SaveOnboardingComplete();
-                pickingMode = !g_QuitConfirmed;
-            }
-            else if (autoPlay) {
-                if (!loadLocalRace(initialTrackName, 1, true)) return 1;
-                session.SetSimulationTime(0);
-                startingPlayerPosition = mainCharacter->mPosition;
-            }
-            else {
-                const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
-                                                                *menuFontHandle->GetSprite(), frameLimit);
-                if (setup.confirmed) {
-                    if (!loadLocalRace(setup.trackName, setup.laps, setup.weapons)) {
-                        std::printf("Could not load '%s'; returning to the main menu\n",
-                                    setup.trackName.c_str());
-                        pickingMode = !g_QuitConfirmed;
-                    }
-                }
-                else {
-                    // Cancelled -- back to the main menu instead of falling through
-                    // to whatever was already loaded (interactive mode only; a
-                    // frame-limited run always confirms, see RunLocalRaceSetup),
-                    // unless that "cancel" was actually a confirmed quit.
-                    pickingMode = !g_QuitConfirmed;
-                }
-            }
+        if (pickingMode) {
+            showMainMenu();
+            if (mainMenuFailed) return 1;
         }
     }
 #endif
@@ -7864,6 +8020,7 @@ int RunClient(int argc, char** argv)
     bool cockpitView = false;
     bool missileSeen = false;
     bool finishAnnounced = false;
+    bool toMainMenu = false;     // set by a menu that says "main menu" (and by an online lobby that was left); acted on at the top of the next frame
     // Finishing does not take the race away: the player is told they can press Enter for the results and race options, and may drive
     // on as long as they like (some like to stay on the track). The times are kept from the moment of the finish.
     bool resultsPending = false;
@@ -8350,6 +8507,9 @@ int RunClient(int argc, char** argv)
                     else if (pauseChoice == PauseChoice::eWatchReplay) {
                         watchReplayMenu = true;
                     }
+                    else if (pauseChoice == PauseChoice::eMainMenu) {
+                        toMainMenu = true;
+                    }
                     else if (pauseChoice == PauseChoice::eOnlineLobby) {
                         // Same as "Leave Race" when already online -- reset and
                         // rejoin the lobby -- but always offered, so offline
@@ -8410,13 +8570,66 @@ int RunClient(int argc, char** argv)
             }
             continue;
         }
+        if (replay.active && replay.ended && !g_QuitConfirmed) {
+            // A replay has played to its end: say so, show who finished, and offer what to do next instead of leaving the player at a frozen picture.
+            replay.ended = false;
+            std::vector<std::string> finishers;
+            std::vector<ReplayPlayback::Marker> done;
+            for (const auto& m : replay.markers) if (m.finished) done.push_back(m);
+            std::sort(done.begin(), done.end(), [](const ReplayPlayback::Marker& a, const ReplayPlayback::Marker& b) { return a.tick < b.tick; });
+            for (std::size_t i = 0; i < done.size(); ++i) {
+                char line[64];
+                const long long ms = static_cast<long long>(done[i].tick) * 16;
+                std::snprintf(line, sizeof line, "%zu. Player %d   %lld:%02lld.%02lld", i + 1, done[i].player + 1, ms / 60000, (ms % 60000) / 1000, (ms % 1000) / 10);
+                finishers.push_back(line);
+            }
+            if (finishers.empty()) finishers.push_back("Nobody finished the race.");
+            const std::string againPath = replay.path;
+            const int againWatch = replay.watch;
+            const ReplayEndChoice endChoice = RunReplayEndScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(), replay.data.track, replay.data.players,
+                                                                 replay.data.laps, static_cast<long long>(replay.data.ticks) * 16, finishers, frameLimit);
+            if (g_QuitConfirmed || endChoice == ReplayEndChoice::eQuit) { running = false; break; }
+            if (endChoice == ReplayEndChoice::eMainMenu) { toMainMenu = true; continue; }
+            if (endChoice == ReplayEndChoice::eWatchAgain) {
+                bool fatal = false;
+                const std::string error = startReplayFile(againPath, againWatch, fatal);
+                if (!error.empty()) { std::fprintf(stderr, "%s\n", error.c_str()); if (fatal) { running = false; break; } toMainMenu = true; }
+                else { missileSeen = false; finishAnnounced = false; resultsPending = false; }
+                continue;
+            }
+            if (endChoice == ReplayEndChoice::eAnotherReplay) {
+                const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, int slot, bool& fatal) { return startReplayFile(path, slot, fatal); });
+                if (g_QuitConfirmed) { running = false; break; }
+                if (started) { missileSeen = false; finishAnnounced = false; resultsPending = false; }
+                else replay.ended = true;   // came back without choosing: the end screen again
+                continue;
+            }
+            // eStay: look around at the end (Left or Home rewinds)
+            session.AddMessage("Esc for the menu; Left or Home rewinds");
+        }
+        if (toMainMenu) {
+            // Back to the main menu from anywhere: whatever was running (a race, a replay, a server connection) is left, then the menu runs as at start-up.
+            toMainMenu = false;
+            replay.active = false;
+            missileSeen = false;
+            finishAnnounced = false; resultsPending = false;
+            resetRaceSession();
+            const bool raceReady = showMainMenu();
+            if (mainMenuFailed) return 1;
+            if (!raceReady || g_QuitConfirmed) { running = false; break; }
+            wasOnlineConnected = onlineClient.IsConnected();
+            continue;
+        }
         if (leaveForLobby) {
             replay.active = false;   // leaving a replay for a race
             missileSeen = false;
             finishAnnounced = false; resultsPending = false;
-            if (!resetRaceSession() || !enterOnlineMultiplayer()) {
-                running = false;
-                break;
+            if (!resetRaceSession()) { running = false; break; }
+            if (!enterOnlineMultiplayer()) {
+                // The lobby was left (or the server could not be reached): back to the main menu, not out of the game.
+                if (g_QuitConfirmed) { running = false; break; }
+                toMainMenu = true;
+                continue;
             }
             wasOnlineConnected = onlineClient.IsConnected();
             continue;
@@ -8689,6 +8902,7 @@ int RunClient(int argc, char** argv)
                 if (replay.tick >= replay.data.ticks && !replay.finished) {
                     replay.finished = true;
                     session.AddMessage("End of the replay");
+                    if (!replay.hashMode) replay.ended = true;
                     if (replay.hashMode) {
                         if (replay.markerTest) {
                             for (const auto& m : replay.markers) std::printf("marker tick %u player %d lap %d%s\n", m.tick, m.player, m.lap, m.finished ? " finish" : "");
@@ -8776,6 +8990,15 @@ int RunClient(int argc, char** argv)
                     SDL_Event key;
                     SDL_memset(&key, 0, sizeof(key));
                     key.type = SDL_KEYDOWN; key.key.state = SDL_PRESSED; key.key.keysym.sym = SDLK_RETURN; key.key.keysym.scancode = SDL_SCANCODE_RETURN;
+                    SDL_PushEvent(&key);
+                }
+            }
+            if (const char* pauseAt = std::getenv("HOVERNET_TEST_PAUSE_AT_FRAME")) {   // test hook (scripts/test-main-menu.sh): press Escape at this frame
+                static int sPauseFrames = 0;
+                if (++sPauseFrames == std::atoi(pauseAt)) {
+                    SDL_Event key;
+                    SDL_memset(&key, 0, sizeof(key));
+                    key.type = SDL_KEYDOWN; key.key.state = SDL_PRESSED; key.key.keysym.sym = SDLK_ESCAPE; key.key.keysym.scancode = SDL_SCANCODE_ESCAPE;
                     SDL_PushEvent(&key);
                 }
             }
@@ -8872,11 +9095,16 @@ int RunClient(int argc, char** argv)
                     running = false;
                     continue;
                 }
+                if (resultChoice == PostRaceChoice::eMainMenu) {
+                    toMainMenu = true;
+                    continue;
+                }
                 if (resultChoice == PostRaceChoice::eOnlineLobby) {
                     missileSeen = false;
                     finishAnnounced = false; resultsPending = false;
-                    if (!resetRaceSession() || !enterOnlineMultiplayer()) {
-                        running = false;
+                    if (!resetRaceSession()) running = false;
+                    else if (!enterOnlineMultiplayer()) {
+                        if (g_QuitConfirmed) running = false; else toMainMenu = true;   // the lobby was left: main menu, not out of the game
                     }
                     wasOnlineConnected = onlineClient.IsConnected();
                     continue;
