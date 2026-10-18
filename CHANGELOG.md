@@ -6,6 +6,12 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.15 - 2026-10-19
+
+### Fixed
+- **The server package could not be upgraded from the pipeline since 2.3.9, so the live server never got the replay saving.** 2.3.9 changed the packaged server configuration file; dpkg then asks what to do about a configuration file the operator has edited, and with no terminal it fails, leaving the new package unpacked but not configured and the old server running (the pipeline log: "end of file on stdin at conffile prompt"). The packaged configuration is again byte for byte what it always was (the replay folder is passed by the service file), and a test (`scripts/test-conffile-upgrade.sh`, also run in the pipeline's validate stage) upgrades over an edited configuration with no terminal and fails if a question appears. It reproduces the failure with the changed file.
+- The Server replays and Track records tabs say so when the server answers in a form this version of the game cannot read, instead of loading forever.
+
 ## 2.3.14 - 2026-10-18
 
 ### Added

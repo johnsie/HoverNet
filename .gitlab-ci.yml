@@ -52,6 +52,7 @@ lint:gitlab-ci:
     - test -f packaging/web/websocket_gateway.py
     - test -f packaging/web/hovernet-websocket-gateway.service
     - test -x packaging/web/hovernet-web-deploy
+    - GIT_DEPTH=0 git fetch --unshallow --quiet 2>/dev/null || true; scripts/test-conffile-upgrade.sh || [ $? -eq 77 ]   # the server package must upgrade over an edited configuration without a question
 
 build:raceserver:linux:
   stage: build

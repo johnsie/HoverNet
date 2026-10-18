@@ -788,6 +788,8 @@ if(BUILD_TESTING AND NOT WIN32)
         COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/check-runtime-dependencies.sh"
                 "${CMAKE_BINARY_DIR}" "${CMAKE_SOURCE_DIR}")
     set_tests_properties(HoverNetRuntimeDependencies PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME HoverNetConffileUpgrade COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-conffile-upgrade.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    set_tests_properties(HoverNetConffileUpgrade PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME HoverNetReproduciblePackages
         COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-reproducible-packages.sh"
                 "${CMAKE_BINARY_DIR}" "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/reproducible-packages-test")
