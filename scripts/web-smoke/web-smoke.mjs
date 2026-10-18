@@ -115,7 +115,7 @@ await click(416, 195);
 check(await waitFor(async () => (await inRace()) === 1, 10000), 'KEEP DRIVING on the results screen returns to the race');
 await sleep(1000);
 await key('Escape', 27); await sleep(2500);
-await click(597, 193); // New Local Race
+await click(597, 265); // New Local Race (RESTART RACE sits above it since 2.3.11)
 await sleep(2500); await shot('7-new-local-race');
 check((await inRace()) === 0, 'the setup screen opened from the pause menu has no race controls');
 check(exceptions.length === 0, `no uncaught page exceptions${exceptions.length ? ': ' + exceptions[0] : ''}`);
