@@ -1,3 +1,5 @@
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-10-18.
+// See repository history for authorship and detailed changes.
 // Observer.cpp
 //
 // Copyright (c) 1995-1998 - Richard Langlois and Grokksoft Inc.
@@ -33,7 +35,9 @@
 #define NB_PLAYER_PAGE 4
 #define MR_CHAT_EXPIRATION     20
 
-#ifdef _WIN32
+// The HoverNet client (CMake build, HOVERNET_STATIC) has no Win32 string table, so it uses the same literal texts on every platform;
+// only the legacy Game2.exe takes them from its resources.
+#if defined(_WIN32) && !defined(HOVERNET_STATIC)
 CString gRankTitle = Ascii2Simple( MR_LoadString( IDS_RANK_TITLE ) );
 CString gHitTitle  = Ascii2Simple( MR_LoadString( IDS_HIT_TITLE ) );
 

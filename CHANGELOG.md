@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **The Windows client was missing the race time, lap line and countdown on the HUD.** The texts came from a Windows string table the new client does not have; they now use the same texts as Linux and the browser.
+- **Linux and browser frames now match Windows exactly.** Their stand-in for the Windows `MulDiv` truncated instead of rounding, so about 5% of each 3D picture was a pixel off from Windows. The simulation is untouched (same rules version, same golden physics and replays); only the picture changes, by at most one pixel at texture edges.
+
 ### Added
 - **Replay timeline.** Watching a replay now shows a bar along the bottom with the time, the speed and a mark at every lap crossing and finish (yours brighter). Click the bar to jump there, or press **,** and **.** to jump to just before the previous or next lap. The marks appear as the replay plays through them. **Page Up** and **Page Down** move the chase camera closer or farther (replays and spectating).
 - **Race view setting (Settings, Race view).** Choose the shape of the picture while racing: Classic (4:3, as before and still the default), Widescreen (16:9), or Match my window (follows your window or screen shape, between 4:3 and 2.4:1). The renderer draws a wide picture just as fast (about 6 ms for 1920x1080 on a desktop CPU), so a wide window or monitor no longer has to be pillarboxed. Takes effect the next time you start HoverNet. Not shown on phones and tablets, which always use a picture shaped like their screen.

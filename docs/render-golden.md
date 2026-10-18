@@ -23,12 +23,22 @@ The simulation is identical on every platform and its time is frozen, so the pic
 `HOVERNET_RENDER_DUMP=<directory> HoverNetRenderGolden <track> <scene>` also writes the frame as a PGM (the palette indices as grey levels)
 so a changed hash can be looked at; `HOVERNET_RENDER_TRACE=1` prints stage markers.
 
-## Results (2026-10-17, one Linux x86-64 machine)
+## Results (2026-10-18)
 
-- Native (GCC, Release): 28 frames, identical on repeated runs.
-- WebAssembly under Node (Emscripten): the same 28 pairs of hashes. So the software rasteriser, the HUD and the sprites draw the same pixels in
+- Native (GCC, Release, Linux x86-64): 28 frames, identical on repeated runs.
+- WebAssembly under Node (Emscripten): the same 28 pairs of hashes. The software rasteriser, the HUD and the sprites draw the same pixels in
   the browser's build as in the desktop build.
-- Not yet run: Windows x64 and Win32 (the tool needs the headless object plug-in there; add it to the Windows CI job next), and a
+- **Windows x64 (MSVC 14.44, Release, built with CMake on the Windows runner from the same commit, run by hand): the same 28 pairs of
+  hashes.** This only held after two fixes that the first Windows run found (before them every frame differed):
+  1. The Linux and web builds' stand-in for the Win32 `MulDiv` truncated; the real one rounds to the nearest integer. The renderer's
+     projection uses it, so Linux and web drew some pixels one off from Windows (about 5% of the picture). The stand-in now rounds like Windows
+     (`NetTarget/Platform/MfcCompat.h`), so all three platforms agree, and the goldens were regenerated (the simulation does not use `MulDiv`;
+     the physics and replay goldens are unchanged, rules version unchanged).
+  2. The Windows build of the client took the HUD texts (the race time and lap line, the countdown, the lap times, the rank tables) from a Win32
+     string table that the CMake-built `HoverNet.exe` does not have, so on Windows those lines were **blank**. It now uses the same literal texts
+     as Linux and the browser; only the legacy `Game2.exe` still reads its resources. Seen in a headless capture of the real Windows client
+     (the countdown "Start in 02.57 sec. for 1 laps" was missing before, present after).
+- Not yet run: Win32 (32-bit), the Windows CI job (the tool is not built there yet: the comparison above was a manual run), and a
   comparison with a capture of the original 2.0 build (the committed hashes are of the current renderer, so they guard against change; they
   are not themselves proof of equality with 2.0 until a 2.0 capture is compared, which needs the 2.0 binary).
 

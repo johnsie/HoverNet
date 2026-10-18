@@ -12,6 +12,7 @@
 // With HOVERNET_RENDER_DUMP=<directory> the frame is also written there as a PGM (the indices as grey levels) for looking at.
 //
 // Scenes: grid640 (tick 0, 640x480), drive640 (tick 600), wide1280 (tick 600, 1280x720), cockpit640 (tick 600, cockpit view, 640x480).
+#include "../MainCharacter/StdAfx.h"   // first: on Windows it brings the MFC compatibility layer (CList, CMap) the headers below use
 #include "../Game2/ClientSession.h"
 #include "../Game2/Observer.h"
 #include "../MainCharacter/MainCharacter.h"
@@ -78,6 +79,11 @@ int main(int argc, char** argv)
     const bool trace = std::getenv("HOVERNET_RENDER_TRACE") != nullptr;   // stage markers on stderr, for finding where a platform stops
     auto stage = [&](const char* what) { if (trace) std::fprintf(stderr, "stage: %s\n", what); };
     MR_InitTrigoTables();
+    if (trace) {   // the trigonometry tables every platform must build identically (the rasteriser and the simulation use them)
+        std::uint64_t h = 1469598103934665603ULL;
+        for (int i = 0; i < MR_2PI; ++i) { h ^= static_cast<std::uint16_t>(MR_Sin[i]); h *= 1099511628211ULL; h ^= static_cast<std::uint16_t>(MR_Cos[i]); h *= 1099511628211ULL; }
+        std::fprintf(stderr, "trig tables %016llx\n", static_cast<unsigned long long>(h));
+    }
 #ifdef __EMSCRIPTEN__
     HoverNetInitializeWebFactory();
 #endif

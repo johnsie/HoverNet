@@ -104,9 +104,19 @@ inline std::int64_t Int64ShraMod32(std::int64_t value, int shift)
     return value >> shift;
 }
 
+// Win32 MulDiv: number * numerator / denominator in 64 bits, rounded to the nearest integer (halves away from zero); -1 for a zero
+// denominator or a result that does not fit. The renderer's projection uses it, so truncating here (as this did before) drew every
+// frame up to a pixel differently from the Windows game that the classic look is measured against.
 inline int MulDiv(int number, int numerator, int denominator)
 {
-    return denominator == 0 ? 0 : static_cast<int>((static_cast<std::int64_t>(number) * numerator) / denominator);
+    if (denominator == 0) return -1;
+    std::int64_t product = static_cast<std::int64_t>(number) * numerator;
+    std::int64_t divisor = denominator;
+    if (divisor < 0) { divisor = -divisor; product = -product; }
+    const std::int64_t half = divisor / 2;
+    const std::int64_t quotient = product >= 0 ? (product + half) / divisor : -((-product + half) / divisor);
+    if (quotient > 2147483647LL || quotient < -2147483648LL) return -1;
+    return static_cast<int>(quotient);
 }
 
 inline HMODULE LoadLibrary(const char* fileName)
