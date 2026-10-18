@@ -23,10 +23,10 @@ sizes, and `scripts/test-determinism.sh` (native vs WebAssembly).
 | 10 | Results screen after finishing | Partly | The smoke test opens the results screen with a test hook and clicks KEEP DRIVING (phone size, headless Chrome); a real finish in a browser has not been run. The personal-best lines ("new personal best", "your best finish here") are shared code; checked on Linux in a headless screenshot, not yet in a browser |
 | 11 | Online lobby: browse, host, join, chat | Verified on HoverNet 3.0 servers | `scripts/web-smoke/web-servers-screen.mjs` (headless Chrome, real `HoverNetAuthServer`, through a TLS proxy): connect, host, join, lobby and race chat (typed with real key presses), watch, and watch-before-start (the browser asks to watch a race that has not started, stays out, and is let in when it starts). Not verified: the old 2.x lobby, the production web server |
 | 12 | Online race, including mixed browser and native players | Verified on HoverNet 3.0 servers | The same test runs a two-player race between the browser and a native scripted player, and the browser follows every tick's state hash exactly. Not verified: a real internet connection, a native desktop client (not a scripted bot) against a browser |
-| 16 | Ghost of the best run (Settings toggle, drawn beside the craft) | Partly | Shared code; checked on Linux in a headless client test (save on a new best, shown next race, hidden by the setting) and the WebAssembly build compiles; **not run in a browser** (the browser smoke test does not finish a race) |
 | 13 | Errors recover to a menu with a message | Not verified | Server-down and lost-connection paths not exercised in a browser |
 | 14 | Track and asset loading, caching | Partly | First-load download and IndexedDB cache work in headless runs; slow-network and storage-full cases not tested |
 | 15 | Supported browsers | Not verified | Only Chrome (headless) has been run; Firefox, Edge and Safari/iOS not tested |
+| 16 | Ghost of the best run (Settings toggle, drawn beside the craft) | Partly | Shared code; checked on Linux in a headless client test (save on a new best, shown next race, hidden by the setting) and the WebAssembly build compiles; **not run in a browser** (the browser smoke test does not finish a race) |
 
 ## HoverNet 3.0 servers in the browser
 
