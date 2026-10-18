@@ -86,6 +86,7 @@ MR_Observer::MR_Observer()
    mSplitMode = eNotSplit;
 
    mCockpitView = FALSE;
+   mChaseScale = 100;
    mNetworkLatencyMs = -2;
    mLargeHudText = FALSE;
    mFeedbackCharacter = NULL;
@@ -548,7 +549,7 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
    }
    else
    {
-      int lDist = 3400;
+      int lDist = 3400*mChaseScale/100;
       lOrientation   = pViewingCharacter->mOrientation;   
       
       if( pTime < -3000 )
@@ -560,7 +561,7 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
       
       lCameraPos.mX  = pViewingCharacter->mPosition.mX -lDist*MR_Cos[ lOrientation ]/MR_TRIGO_FRACT;
       lCameraPos.mY  = pViewingCharacter->mPosition.mY -lDist*MR_Sin[ lOrientation ]/MR_TRIGO_FRACT;
-      lCameraPos.mZ  = pViewingCharacter->mPosition.mZ + 1700;
+      lCameraPos.mZ  = pViewingCharacter->mPosition.mZ + 1700*mChaseScale/100;
 
       if( mReuseCamera && mLastCameraPosValid )
       {
@@ -876,7 +877,7 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
 
    else
    {
-      int lDist = 3400;
+      int lDist = 3400*mChaseScale/100;
 
       lOrientation   = pViewingCharacter->mOrientation;   
 
@@ -890,7 +891,7 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
       
       lCameraPos.mX  = pViewingCharacter->mPosition.mX -lDist*MR_Cos[ lOrientation ]/MR_TRIGO_FRACT;
       lCameraPos.mY  = pViewingCharacter->mPosition.mY -lDist*MR_Sin[ lOrientation ]/MR_TRIGO_FRACT;
-      lCameraPos.mZ  = pViewingCharacter->mPosition.mZ + 1700;
+      lCameraPos.mZ  = pViewingCharacter->mPosition.mZ + 1700*mChaseScale/100;
 
       if( mReuseCamera && mLastCameraPosValid )
       {

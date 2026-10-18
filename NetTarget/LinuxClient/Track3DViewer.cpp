@@ -7238,7 +7238,7 @@ int RunClient(int argc, char** argv)
             replay.lapsSeen.assign(static_cast<std::size_t>(replay.data.players), 0);
             if (const char* speed = std::getenv("HOVERNET_TEST_REPLAY_SPEED")) replay.speedStep = std::max(0, std::min(4, std::atoi(speed)));   // test hook: start at this speed step
             replay.lastTicks = SDL_GetTicks();
-            session.AddMessage("Replay: P pauses, 1-5 sets the speed, , and . jump between laps, [ and ] switch craft, Esc leaves");
+            session.AddMessage("Replay: P pause, 1-5 speed, [ ] craft, PgUp/PgDn camera, Esc leaves");
         }
         else if (!authServer.empty()) {
 #if defined(HOVERNET_AUTH)
@@ -7488,6 +7488,9 @@ int RunClient(int argc, char** argv)
     std::string chatBuffer;
 #ifdef HOVERNET_GAME2_PLAYER
     // Watching a replay or a race as a spectator: Left and Right move the camera (and the HUD) to the previous or next craft.
+    static const int kChasePercents[] = {50, 75, 100, 150, 200, 300};
+    const int kChaseSteps = 6;
+    int chaseStep = std::getenv("HOVERNET_TEST_CHASE_STEP") ? std::max(0, std::min(kChaseSteps - 1, std::atoi(std::getenv("HOVERNET_TEST_CHASE_STEP")))) : 2;   // the env var is a screenshot-test hook
     auto cycleWatch = [&](int direction) {
         std::vector<MR_MainCharacter*>* crafts = nullptr;
         int* watch = nullptr;
@@ -7879,6 +7882,17 @@ int RunClient(int argc, char** argv)
 #endif
                      )) {
                 cycleWatch((event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_RIGHTBRACKET) ? 1 : -1);
+            }
+            else if (event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
+                     (event.key.keysym.sym == SDLK_PAGEUP || event.key.keysym.sym == SDLK_PAGEDOWN) &&
+                     (replay.active
+#if defined(HOVERNET_AUTH)
+                      || (auth.active && auth.spectator)
+#endif
+                     )) {
+                // Camera distance for a replay or a spectator (Page Up closer, Page Down farther); the race itself is unaffected.
+                chaseStep = std::max(0, std::min(kChaseSteps - 1, chaseStep + (event.key.keysym.sym == SDLK_PAGEDOWN ? 1 : -1)));
+                session.AddMessage(("Camera distance " + std::to_string(kChasePercents[chaseStep]) + "%").c_str());
             }
 #endif
             else if (resultsPending && ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN && event.key.repeat == 0) ||
@@ -8644,6 +8658,7 @@ int RunClient(int argc, char** argv)
                         HoverNetVrSubmitStereo(vrEyes.data(), vrEyes.data() + eyeBytes, kWidth, kHeight);
                     }
                     else {
+                        observer->SetChaseScale(kChasePercents[chaseStep]);
                         observer->RenderNormalDisplay(&buffer, &session, mainCharacter, session.GetSimulationTime(),
                                                       session.GetBackImage());
                     }
