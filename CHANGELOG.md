@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.7 - 2026-10-18
+
 ### Fixed
 - **The Windows client was missing the race time, lap line and countdown on the HUD.** The texts came from a Windows string table the new client does not have; they now use the same texts as Linux and the browser.
 - **Linux and browser frames now match Windows exactly.** Their stand-in for the Windows `MulDiv` truncated instead of rounding, so about 5% of each 3D picture was a pixel off from Windows. The simulation is untouched (same rules version, same golden physics and replays); only the picture changes, by at most one pixel at texture edges.
