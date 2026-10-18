@@ -24,6 +24,17 @@ them), built from the Tick messages the game already receives (`ReplayRecorder.h
 in which the connection broke and ticks were missed, is not saved, because it would not be the whole race. Races you play against the clock locally
 are not saved yet (the local game is not run on the fixed tick, see below).
 
+## Everyone's races: server replays and track records
+
+The server keeps the newest official replays (`--replay-keep`, default 200) and offers them in the lobby to every player, whether or not they were in the
+race. **Watch a Replay, Server replays** lists them (newest first, by track) and downloads the one you pick (in pieces, checked against the file's own
+number, then played); **Track records** shows, per track and lap count, the fastest races and the fastest laps with a **WATCH** button that plays the run
+and follows the craft that set it. Both are official: the server simulated them, and anyone can check a file with `HoverNetReplay verify`. They are
+anonymous (a run is "player 2" of a replay, never a name) until accounts exist. Protocol: [specs/protocol-3.0-draft.md](specs/protocol-3.0-draft.md),
+messages 40 to 45. Tests: `HoverNetReplayShare` (the server's store, the lobby messages, limits), `HoverNetOnlineLobby` (the client's side against a
+real server: list, records, a checked download, a replay that is gone) and `HoverNetSharedReplays` (the game downloads a race it was not in and plays it
+to the verified hash).
+
 ## Where replays come from
 
 - **The dedicated server** writes one for every race when started with `--replay-dir DIR`: the official record of the race,

@@ -127,6 +127,16 @@ public:
 
     const std::string& Directory() const { return mDir; }
 
+    void MakeDirectory() const
+    {
+#ifdef _WIN32
+        _mkdir(mDir.c_str());
+#else
+        mkdir(mDir.c_str(), 0755);
+#endif
+    }
+
+
     static bool IsReplayName(const std::string& name)
     {
         return name.size() > 4 && name.size() <= 120 && name.compare(name.size() - 4, 4, ".hnr") == 0 && name.find_first_of("/\\") == std::string::npos && name[0] != '.';
@@ -140,15 +150,6 @@ private:
         const std::string stamp = name.substr(underscore + 1, 15);
         for (std::size_t i = 0; i < stamp.size(); ++i) if (i == 8 ? stamp[i] != '-' : (stamp[i] < '0' || stamp[i] > '9')) return std::string();
         return stamp;
-    }
-
-    void MakeDirectory() const
-    {
-#ifdef _WIN32
-        _mkdir(mDir.c_str());
-#else
-        mkdir(mDir.c_str(), 0755);
-#endif
     }
 
     static bool Exists(const std::string& path)

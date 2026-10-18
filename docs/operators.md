@@ -37,7 +37,8 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 | `--limit-ticks N` | end each race after N ticks (16 ms each); free-play tracks default to 10 minutes |
 | `--start-delay-ms` | countdown before tick 0 |
 | `--spectator-delay-ms` | how far behind the drivers spectators see the race |
-| `--replay-dir DIR` | save a replay of every race |
+| `--replay-dir DIR` | save a replay of every race (with `--lobby` they are also offered to every player: the Server replays and Track records tabs of Watch a Replay) |
+| `--replay-keep N` | keep the newest N replays in `--replay-dir` (default 200; older ones and their results tables are removed as new ones are saved) |
 | `--moderation-dir DIR`, `--admin-port P` | audit log, moderators and the console ([online-services.md](online-services.md)) |
 | `--status-port P`, `--crash-dir DIR` | `/health`, `/metrics`; crash reports |
 | `--ws-origin ORIGINS`, `--ws-path P` | accept browsers over WebSocket from these comma-separated origins, at this path (default `/auth/`) |

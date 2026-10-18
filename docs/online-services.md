@@ -47,7 +47,7 @@ server user only.
 | Chat | not stored; the last 40 lines are held in memory so a report can include its context | 24 hours (purged hourly), then gone; kept longer only inside a report |
 | Reports | reporter, target, reason, chat context | resolved reports 30 days |
 | Audit log | moderation and security events | 180 days, purged hourly (the purge is itself logged) |
-| Replays | track, settings, per-slot controls and hashes: **no names, addresses or chat** | until the operator deletes them |
+| Replays | track, settings, per-slot controls and hashes: **no names, addresses or chat** | the newest `--replay-keep` (default 200) are kept and **offered to every player**; older ones are removed as new ones are saved |
 | Telemetry | counters only (connections, bytes, ticks, invalid messages); no content | in memory; printed per race |
 
 **Deletion.** A player can ask an operator to delete a report that names them or an audit entry that records their name; because the

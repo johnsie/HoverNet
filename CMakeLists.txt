@@ -403,6 +403,7 @@ else()
         NetTarget/LinuxClient/OnlineLobbyTest.cpp
         NetTarget/LinuxClient/OnlineLobby.cpp
         NetTarget/LinuxClient/Sha256.cpp
+        NetTarget/Authority/ReplayFormat.cpp
         NetTarget/LinuxClient/AuthConnection.cpp
         NetTarget/Authority/Protocol3.cpp
         NetTarget/Authority/Crypto.cpp
@@ -908,7 +909,7 @@ if(BUILD_TESTING AND NOT WIN32)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     if(UNIX)
         add_test(NAME HoverNetOnlineLobby
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-online-lobby.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetOnlineLobbyTest>
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-online-lobby.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetOnlineLobbyTest> $<TARGET_FILE:HoverNetReplay>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetOnlineScreenClicks
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-online-screen-clicks.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetGame2Player>
@@ -921,6 +922,9 @@ if(BUILD_TESTING AND NOT WIN32)
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetReplayLibraryScreen
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-replay-library.sh $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetSharedReplays
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-shared-replays.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetGhost
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-ghost.sh $<TARGET_FILE:HoverNetGame2Player>

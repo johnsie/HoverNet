@@ -1,5 +1,11 @@
 #include "OnlineLobby.h"
 
+#include <chrono>
+#include <cstdlib>
+
+#include "Sha256.h"
+#include "../Authority/ReplayFormat.h"
+
 using namespace Protocol3;
 
 std::string OnlineLobby::DescribeReject(const Reject& r)
@@ -12,6 +18,7 @@ std::string OnlineLobby::DescribeReject(const Reject& r)
     case kBadSettings: return "The server does not allow those race settings (track, players or laps).";
     case kTooManyRaces: return "The server is running as many races as it allows. Try again shortly.";
     case kBanned: return "You are not allowed on this server.";
+    case kNoSuchReplay: return "That replay is no longer on the server.";
     case kServerDraining: return "The server is restarting and not starting new races. Try again in a few minutes.";
     default: return r.message.empty() ? "The server refused the request." : r.message;
     }
@@ -66,6 +73,37 @@ void OnlineLobby::Pump()
             RaceList list;
             if (Decode(f.payload, list)) { mRaces = list.races; if (mState == State::eIdle || mState == State::eBrowsing) { mState = State::eBrowsing; mMessage.clear(); } }
         }
+        else if (f.type == kReplayList) {
+            ReplayList l;
+            if (Decode(f.payload, l)) { mReplays = l.replays; mReplaysLoaded = true; }
+        }
+        else if (f.type == kRecordList) {
+            RecordList l;
+            if (Decode(f.payload, l)) { mRecords = l; mRecordsLoaded = true; }
+        }
+        else if (f.type == kReplayChunk) {
+            ReplayChunk ch;
+            if (mFetchId == 0 || !Decode(f.payload, ch) || ch.id != mFetchId || ch.index != mFetchNext || (mFetchNext != 0 && ch.count != mFetchCount)) {
+                if (mFetchId != 0) { mFetchId = 0; mReplayBytes.clear(); mReplayNotice = "The replay did not arrive in one piece. Try again."; }
+                continue;
+            }
+            mFetchCount = ch.count;
+            mReplayBytes.insert(mReplayBytes.end(), ch.data.begin(), ch.data.end());
+            ++mFetchNext;
+            if (mFetchNext == mFetchCount) {
+                const std::uint64_t id = mFetchId;
+                mFetchId = 0;
+                ReplayFormat::Replay check;
+                std::string error;
+                const std::uint64_t got = std::strtoull(Sha256::HashBytes(mReplayBytes.data(), mReplayBytes.size()).substr(0, 16).c_str(), nullptr, 16);
+                if (got != id || !ReplayFormat::Decode(mReplayBytes, check, error)) { mReplayBytes.clear(); mReplayNotice = "The replay was damaged on the way. Try again."; }
+                else mReplayReady = true;
+            }
+        }
+        else if (f.type == kReject && mState == State::eBrowsing && [&] { Reject r; return Decode(f.payload, r) && r.reason == kNoSuchReplay; }()) {
+            mFetchId = 0; mReplayBytes.clear();
+            mReplayNotice = "That replay is no longer on the server (it keeps only the newest).";
+        }
         else if (f.type == kReject) {
             Reject r;
             Decode(f.payload, r);
@@ -102,6 +140,7 @@ void OnlineLobby::Pump()
         else if (f.type == kStart) { mGotStart = true; }
         else if (mGotAck) mBacklog.push_back(f);   // ticks that arrive while the race is being set up
     }
+    SendPendingFetch();
     if (mQueuedWatchId != 0 && mState == State::eBrowsing) {
         bool found = false, started = false;
         for (const auto& r : mRaces) if (r.id == mQueuedWatchId) { found = true; started = r.started; }
@@ -110,6 +149,45 @@ void OnlineLobby::Pump()
     }
     if (mGotAck && (mGotStart || mSpectating) && mState == State::eWaiting) { mState = State::eReady; mMessage = "Starting"; return; }
     if (!open) Fail(mState == State::eWaiting ? "The connection to the server was lost before the race started." : "The connection to the server was lost.");
+}
+
+void OnlineLobby::RefreshReplays(const std::string& track)
+{
+    if (mState != State::eBrowsing) return;
+    ListReplays ask;
+    ask.track = track;
+    ask.max = static_cast<std::uint8_t>(kMaxReplayList);
+    mReplaysLoaded = false;
+    Send(kListReplays, Encode(ask));
+}
+
+void OnlineLobby::RefreshRecords(const std::string& track)
+{
+    if (mState != State::eBrowsing || track.empty()) return;
+    ListRecords ask;
+    ask.track = track;
+    mRecordsLoaded = false;
+    Send(kListRecords, Encode(ask));
+}
+
+void OnlineLobby::FetchReplay(std::uint64_t id)
+{
+    if (mState != State::eBrowsing || mFetchId != 0) return;
+    mFetchId = id; mFetchNext = 0; mFetchCount = 0; mReplayBytes.clear(); mReplayReady = false; mReplayNotice.clear();
+    mFetchSent = false;   // sent from Pump() as soon as the server's pace allows
+    SendPendingFetch();
+}
+
+void OnlineLobby::SendPendingFetch()
+{
+    if (mFetchId == 0 || mFetchSent || mState != State::eBrowsing) return;
+    const long long now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (now - mLastFetchMs < 650) return;
+    mLastFetchMs = now;
+    mFetchSent = true;
+    GetReplay get;
+    get.id = mFetchId;
+    Send(kGetReplay, Encode(get));
 }
 
 void OnlineLobby::Refresh()

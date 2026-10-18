@@ -138,6 +138,29 @@ int main(int argc, char** argv)
         Check(heard, "a lobby message reaches the others, and the sender sees it too");
     }
 
+    // Shared replays and track records, when the server was started with a replay folder holding two ClassicH replays (HOVERNET_TEST_SHARED_REPLAYS=1,
+    // set by scripts/test-online-lobby.sh): list them, read the records, download one and have it checked, and be told about one that is gone.
+    if (std::getenv("HOVERNET_TEST_SHARED_REPLAYS") != nullptr) {
+        OnlineLobby viewer;
+        Check(viewer.Connect("127.0.0.1", port, "Viewer", noKey) && WaitFor(viewer, OnlineLobby::State::eBrowsing, 3000), "a viewer connects");
+        viewer.RefreshReplays();
+        for (int i = 0; i < 300 && !viewer.ReplaysLoaded(); ++i) { viewer.Pump(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+        Check(viewer.ReplaysLoaded() && viewer.Replays().size() == 2 && viewer.Replays()[0].track == "ClassicH", "the server lists its replays to someone who was not in the races");
+        viewer.RefreshRecords("ClassicH");
+        for (int i = 0; i < 300 && !viewer.RecordsLoaded(); ++i) { viewer.Pump(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+        Check(viewer.RecordsLoaded() && !viewer.Records().boards.empty() && !viewer.Records().boards[0].finishes.empty() && viewer.Records().boards[0].finishes[0].ms == 61000, "the track records come with the fastest finish");
+        if (viewer.Replays().size() == 2) {
+            viewer.FetchReplay(viewer.Replays()[0].id);
+            std::vector<std::uint8_t> file;
+            bool got = false;
+            for (int i = 0; i < 500 && !got; ++i) { viewer.Pump(); got = viewer.TakeReplay(file); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+            Check(got && !file.empty() && viewer.ReplayNotice().empty() && !viewer.Downloading(), "a replay downloads and passes its own check (the number is its SHA-256)");
+            viewer.FetchReplay(0x1234);
+            for (int i = 0; i < 300 && viewer.ReplayNotice().empty(); ++i) { viewer.Pump(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+            Check(viewer.ReplayNotice().find("no longer") != std::string::npos && viewer.GetState() == OnlineLobby::State::eBrowsing, "a replay that is gone is reported and the lobby stays usable");
+        }
+    }
+
     std::printf("%s\n", gFailures == 0 ? "online lobby: browse, private race, refusal message, join, time trial, spectate, lobby chat and users" : "FAILED");
     return gFailures == 0 ? 0 : 1;
 }

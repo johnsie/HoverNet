@@ -5246,10 +5246,47 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
 }
 
 
-// ---- Watch a replay: the races the player took part in or watched from the start (ReplayLibrary.h) ---------------------------------------
-// Returns true when a replay was started (the caller then drops into the race loop); false when the player went back. `start` plays the file
-// and returns an error text, which is shown here without leaving the screen.
-bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::function<std::string(const std::string&, bool&)>& start)
+// ---- Watch a replay: the player's own saved races, the server's replays (everyone's), and the track records ---------------------------------
+// "My races" are the files of ReplayLibrary.h on this device. "Server replays" and "Track records" ask the HoverNet server the player plays on
+// (the lobby's replay messages, OnlineLobby): the newest replays of every race it ran, whether or not the player was in it, and the fastest
+// finishes and laps per track and lap count, each with the replay it came from. Returns true when a replay was started (the caller then
+// drops into the race loop); false when the player went back. `start(path, slot, fatal)` plays a file following the craft of `slot` and
+// returns an error text, which is shown here without leaving the screen.
+#if defined(HOVERNET_AUTH)
+// Connects an OnlineLobby to the server the player uses (the official one unless another was chosen in the HoverNet servers screen).
+bool ConnectLobbyForReplays(OnlineLobby& lobby)
+{
+    AuthServerSettings settings = LoadAuthServerSettings();
+    std::string address = kOfficialAuthAddress, key = kOfficialAuthKey;
+#ifdef HOVERNET_WEB
+    {
+        char url[256];
+        url[0] = '\0';
+        hovernet_js_default_server_url(url, sizeof(url));
+        address = url[0] != '\0' ? std::string(url) : std::string("wss://localhost/auth/");
+        key.clear();
+        if (settings.custom && (settings.address.compare(0, 3, "ws:") == 0 || settings.address.compare(0, 4, "wss:") == 0)) address = settings.address;
+    }
+#else
+    if (settings.custom) { address = settings.address; key = settings.key; }
+#endif
+    if (const char* testServer = std::getenv("HOVERNET_TEST_AUTH_SERVER")) { address = testServer; key.clear(); }
+    std::string host;
+    int port = 0;
+    std::vector<std::uint8_t> serverKey;
+#ifdef HOVERNET_WEB
+    host = address;
+#else
+    if (!SplitServerAddress(address, host, port)) return false;
+    if (!key.empty() && (!Crypto::FromHex(key, serverKey) || serverKey.size() != 32)) return false;
+#endif
+    std::string name = LoadUsername();
+    if (name.empty() || !Protocol3::IsValidText(name, 32)) name = "Viewer";
+    return lobby.Connect(host, port, name, serverKey);
+}
+#endif
+
+bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::function<std::string(const std::string&, int, bool&)>& start)
 {
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
     if (ownsImGuiContext) {
@@ -5272,6 +5309,33 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
     bool focusFirst = true;
     bool running = true;
     int framesShown = 0;
+    // The server tabs share one connection, opened the first time one of them is shown.
+#if defined(HOVERNET_AUTH)
+    OnlineLobby server;
+    bool serverTried = false;
+    int serverTrack = 0;                 // index into the track filter (0 = all tracks, else official track serverTrack - 1)
+    int recordsTrack = 0;                // the track whose records are shown (official track index)
+    bool needReplays = true, needRecords = true;
+    std::uint64_t downloadSlotId = 0;    // the replay being fetched, and the craft to follow in it
+    int downloadSlot = 0;
+    const std::string cachePath = ConfigDirPath() + "/replays/shared_replay.hnr.cache";   // the last downloaded replay (".cache": not listed in My races)
+    const int officialTracks = Tracks().OfficialCount();
+    int wantTab = 0;
+    if (const char* tabEnv = std::getenv("HOVERNET_TEST_REPLAY_TAB")) wantTab = std::atoi(tabEnv);   // screenshot/test hook: open on this tab
+    if (const char* trackEnv = std::getenv("HOVERNET_TEST_RECORDS_TRACK")) { const int found = Tracks().Find(trackEnv); if (found >= 0 && found < officialTracks) recordsTrack = found; }   // screenshot/test hook
+#endif
+    auto formatMs = [](long long ms, char* out, std::size_t n) { std::snprintf(out, n, "%lld:%02lld.%02lld", ms / 60000, (ms % 60000) / 1000, (ms % 1000) / 10); };
+    auto formatDate = [](std::uint32_t unixSeconds, char* out, std::size_t n) {
+        const std::time_t t = static_cast<std::time_t>(unixSeconds);
+        std::tm parts{};
+#ifdef _WIN32
+        localtime_s(&parts, &t);
+#else
+        localtime_r(&t, &parts);
+#endif
+        std::strftime(out, n, "%Y-%m-%d %H:%M", &parts);
+    };
+
     while (running && !started && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
         SDL_Event event;
@@ -5282,9 +5346,36 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
             else if (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_B) running = false;
         }
         std::string startPath;   // set by a WATCH button (or the test hook) and acted on after the frame is drawn
+        int startSlot = 0;
         if (framesShown == 3 && std::getenv("HOVERNET_TEST_REPLAY_PICK") != nullptr) {
             for (const ReplayLibrary::Entry& e : entries) if (e.valid) { startPath = e.path; break; }
         }
+#if defined(HOVERNET_AUTH)
+        server.Pump();
+        if (server.GetState() == OnlineLobby::State::eBrowsing) {
+            if (needReplays) { server.RefreshReplays(serverTrack == 0 ? std::string() : Tracks().Get(serverTrack - 1)->mName); needReplays = false; }
+            if (needRecords && officialTracks > 0) { server.RefreshRecords(Tracks().Get(recordsTrack)->mName); needRecords = false; }
+        }
+        std::vector<std::uint8_t> downloaded;
+        if (downloadSlotId != 0 && server.TakeReplay(downloaded)) {
+            // The checked file goes to the cache path and is played from there.
+            library.MakeDirectory();
+            std::FILE* f = std::fopen(cachePath.c_str(), "wb");
+            const bool written = f != nullptr && std::fwrite(downloaded.data(), 1, downloaded.size(), f) == downloaded.size();
+            if (f != nullptr) std::fclose(f);
+            if (written) { startPath = cachePath; startSlot = downloadSlot; }
+            else message = "Could not save the replay on this device.";
+            downloadSlotId = 0;
+        }
+        else if (downloadSlotId != 0 && !server.Downloading()) {
+            message = server.ReplayNotice().empty() ? "The replay could not be downloaded." : server.ReplayNotice();
+            downloadSlotId = 0;
+        }
+        if (std::getenv("HOVERNET_TEST_REPLAY_SERVER_PICK") != nullptr && framesShown > 3 && downloadSlotId == 0 && startPath.empty() && server.ReplaysLoaded() && !server.Replays().empty()) {
+            static bool picked = false;   // test hook (scripts/test-shared-replays.sh): download and play the newest server replay
+            if (!picked) { picked = true; downloadSlotId = server.Replays()[0].id; downloadSlot = 0; server.FetchReplay(downloadSlotId); }
+        }
+#endif
 
         SDL_Renderer* renderer = graphics.GetRenderer();
         SDL_RenderSetLogicalSize(renderer, 0, 0);
@@ -5315,44 +5406,134 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
         const float centerWidth = std::min(760.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
         ImGui::BeginChild("ReplayPanel", ImVec2(centerWidth, -52.0f), true);
-        if (entries.empty()) {
-            ImGui::PushTextWrapPos(0.0f);
-            ImGui::TextUnformatted("No saved races yet.");
-            ImGui::TextDisabled("A race on a HoverNet server that you take part in, or watch from its first moment, is saved here when it ends (the newest %zu are kept). "
-                                "Nothing is sent anywhere: the files stay on this device.", ReplayLibrary::kKeep);
-            ImGui::PopTextWrapPos();
-        }
-        for (int index = 0; index < static_cast<int>(entries.size()); ++index) {
-            const ReplayLibrary::Entry& e = entries[static_cast<std::size_t>(index)];
-            ImGui::PushID(index);
-            if (e.valid) {
-                const long long seconds = e.durationMs() / 1000;
-                ImGui::Text("%s", e.track.c_str());
-                ImGui::TextDisabled("%s   %d player%s, %d lap%s, %lld:%02lld", e.when.c_str(), e.players, e.players == 1 ? "" : "s", e.laps, e.laps == 1 ? "" : "s",
-                                    seconds / 60, seconds % 60);
+        const ImVec4 warn(1.0f, 0.55f, 0.45f, 1.0f);
+        if (ImGui::BeginTabBar("ReplayTabs")) {
+            // ---- my races
+            if (ImGui::BeginTabItem("MY RACES")) {
+                if (entries.empty()) {
+                    ImGui::PushTextWrapPos(0.0f);
+                    ImGui::TextUnformatted("No saved races yet.");
+                    ImGui::TextDisabled("A race on a HoverNet server that you take part in, or watch from its first moment, is saved here when it ends (the newest %zu are kept). "
+                                        "Nothing is sent anywhere: the files stay on this device. The Server replays tab has everyone's races.", ReplayLibrary::kKeep);
+                    ImGui::PopTextWrapPos();
+                }
+                for (int index = 0; index < static_cast<int>(entries.size()); ++index) {
+                    const ReplayLibrary::Entry& e = entries[static_cast<std::size_t>(index)];
+                    ImGui::PushID(index);
+                    if (e.valid) {
+                        const long long seconds = e.durationMs() / 1000;
+                        ImGui::Text("%s", e.track.c_str());
+                        ImGui::TextDisabled("%s   %d player%s, %d lap%s, %lld:%02lld", e.when.c_str(), e.players, e.players == 1 ? "" : "s", e.laps, e.laps == 1 ? "" : "s", seconds / 60, seconds % 60);
+                    }
+                    else {
+                        ImGui::TextColored(warn, "Damaged file");
+                        ImGui::TextDisabled("%s", e.name.c_str());
+                    }
+                    const float buttonWidth = std::max(90.0f, (ImGui::GetContentRegionAvail().x - 14.0f) * 0.5f);
+                    if (e.valid) {
+                        if (focusFirst) { ImGui::SetKeyboardFocusHere(); focusFirst = false; }
+                        if (HoverNetButton("WATCH", ImVec2(buttonWidth, 34))) startPath = e.path;
+                        ImGui::SameLine();
+                    }
+                    if (HoverNetButton(confirmDelete == index ? "SURE? DELETE" : "DELETE", ImVec2(e.valid ? buttonWidth : -FLT_MIN, 34))) {
+                        if (confirmDelete == index) { library.Remove(e.name); entries = library.List(); confirmDelete = -1; ImGui::PopID(); break; }
+                        confirmDelete = index;
+                    }
+                    ImGui::PopID();
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+                }
+                ImGui::EndTabItem();
             }
-            else {
-                ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.45f, 1.0f), "Damaged file");
-                ImGui::TextDisabled("%s", e.name.c_str());
+#if defined(HOVERNET_AUTH)
+            // ---- the server's replays, and the track records
+            for (int tab = 1; tab <= 2; ++tab) {
+                ImGuiTabItemFlags flags = (wantTab == tab) ? ImGuiTabItemFlags_SetSelected : 0;
+                if (!ImGui::BeginTabItem(tab == 1 ? "SERVER REPLAYS" : "TRACK RECORDS", nullptr, flags)) continue;
+                if (wantTab == tab) wantTab = 0;
+                if (!serverTried) { serverTried = true; if (!ConnectLobbyForReplays(server)) message = "The server address is not usable. Check it in the HoverNet servers screen."; }
+                if (server.GetState() == OnlineLobby::State::eFailed) {
+                    ImGui::PushTextWrapPos(0.0f);
+                    ImGui::TextColored(warn, "%s", server.Message().empty() ? "Could not reach the server." : server.Message().c_str());
+                    ImGui::PopTextWrapPos();
+                    if (HoverNetButton("TRY AGAIN", ImVec2(-FLT_MIN, 38))) { serverTried = false; needReplays = needRecords = true; server.Close(); }
+                }
+                else if (server.GetState() != OnlineLobby::State::eBrowsing) {
+                    ImGui::TextDisabled("Connecting to the server...");
+                }
+                else if (tab == 1) {
+                    // Filter by track.
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    const char* current = serverTrack == 0 ? "All tracks" : Tracks().Get(serverTrack - 1)->mName.c_str();
+                    if (ImGui::BeginCombo("##ServerTrack", current)) {
+                        if (ImGui::Selectable("All tracks", serverTrack == 0)) { serverTrack = 0; needReplays = true; }
+                        for (int t = 0; t < officialTracks; ++t) if (ImGui::Selectable(Tracks().Get(t)->mName.c_str(), serverTrack == t + 1)) { serverTrack = t + 1; needReplays = true; }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::Spacing();
+                    if (!server.ReplaysLoaded()) ImGui::TextDisabled("Loading the list...");
+                    else if (server.Replays().empty()) ImGui::TextDisabled("The server has no replays%s yet.", serverTrack == 0 ? "" : " of this track");
+                    for (std::size_t i = 0; i < server.Replays().size(); ++i) {
+                        const Protocol3::ReplayInfo& r = server.Replays()[i];
+                        ImGui::PushID(static_cast<int>(i));
+                        char when[32], best[32];
+                        formatDate(r.savedAt, when, sizeof when);
+                        ImGui::Text("%s", r.track.c_str());
+                        const long long seconds = static_cast<long long>(r.ticks) * ReplayFormat::kFrameMs / 1000;
+                        if (r.winnerMs > 0) { formatMs(r.winnerMs, best, sizeof best); ImGui::TextDisabled("%s   %d player%s, %d lap%s, %lld:%02lld   winner %s", when, r.players, r.players == 1 ? "" : "s", r.laps, r.laps == 1 ? "" : "s", seconds / 60, seconds % 60, best); }
+                        else ImGui::TextDisabled("%s   %d player%s, %d lap%s, %lld:%02lld   no finisher", when, r.players, r.players == 1 ? "" : "s", r.laps, r.laps == 1 ? "" : "s", seconds / 60, seconds % 60);
+                        const bool busy = downloadSlotId != 0;
+                        char label[48];
+                        if (busy && downloadSlotId == r.id) std::snprintf(label, sizeof label, "DOWNLOADING %d%%", server.DownloadPercent());
+                        else std::snprintf(label, sizeof label, "WATCH");
+                        if (HoverNetButton(label, ImVec2(-FLT_MIN, 34)) && !busy) { downloadSlotId = r.id; downloadSlot = 0; message.clear(); server.FetchReplay(r.id); }
+                        ImGui::PopID();
+                        ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+                    }
+                }
+                else {
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    if (officialTracks > 0 && ImGui::BeginCombo("##RecordTrack", Tracks().Get(recordsTrack)->mName.c_str())) {
+                        for (int t = 0; t < officialTracks; ++t) if (ImGui::Selectable(Tracks().Get(t)->mName.c_str(), recordsTrack == t)) { recordsTrack = t; needRecords = true; }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::Spacing();
+                    if (!server.RecordsLoaded()) ImGui::TextDisabled("Loading the records...");
+                    else if (server.Records().boards.empty()) ImGui::TextDisabled("No finished races on this track yet. Be the first.");
+                    int idCounter = 0;
+                    for (const Protocol3::RecordBoard& board : server.Records().boards) {
+                        char heading[48];
+                        std::snprintf(heading, sizeof heading, "%d LAP%s", board.laps, board.laps == 1 ? "" : "S");
+                        HoverNetSectionHeading(heading);
+                        for (int kind = 0; kind < 2; ++kind) {
+                            const std::vector<Protocol3::RecordEntry>& list = kind == 0 ? board.finishes : board.bestLaps;
+                            if (list.empty()) continue;
+                            ImGui::TextDisabled("%s", kind == 0 ? "Fastest races" : "Fastest laps");
+                            for (std::size_t i = 0; i < list.size(); ++i) {
+                                const Protocol3::RecordEntry& e = list[i];
+                                ImGui::PushID(++idCounter);
+                                char time[32], when[32];
+                                formatMs(e.ms, time, sizeof time);
+                                formatDate(e.savedAt, when, sizeof when);
+                                ImGui::Text("%zu.  %s   player %d   %s", i + 1, time, e.slot + 1, when);
+                                ImGui::SameLine(ImGui::GetContentRegionMax().x - 120.0f);
+                                const bool busy = downloadSlotId != 0;
+                                if (HoverNetButton(busy && downloadSlotId == e.replay ? "..." : "WATCH", ImVec2(110, 0)) && !busy) { downloadSlotId = e.replay; downloadSlot = e.slot; message.clear(); server.FetchReplay(e.replay); }
+                                ImGui::PopID();
+                            }
+                            ImGui::Spacing();
+                        }
+                    }
+                }
+                ImGui::EndTabItem();
             }
-            const float buttonWidth = std::max(90.0f, (ImGui::GetContentRegionAvail().x - 14.0f) * 0.5f);
-            if (e.valid) {
-                if (focusFirst) { ImGui::SetKeyboardFocusHere(); focusFirst = false; }
-                if (HoverNetButton("WATCH", ImVec2(buttonWidth, 34))) startPath = e.path;
-                ImGui::SameLine();
-            }
-            if (HoverNetButton(confirmDelete == index ? "SURE? DELETE" : "DELETE", ImVec2(e.valid ? buttonWidth : -FLT_MIN, 34))) {
-                if (confirmDelete == index) { library.Remove(e.name); entries = library.List(); confirmDelete = -1; ImGui::PopID(); break; }
-                confirmDelete = index;
-            }
-            ImGui::PopID();
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
+#endif
+            ImGui::EndTabBar();
         }
         if (!message.empty()) {
             ImGui::PushTextWrapPos(0.0f);
-            ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.45f, 1.0f), "%s", message.c_str());
+            ImGui::TextColored(warn, "%s", message.c_str());
             ImGui::PopTextWrapPos();
         }
         ImGui::EndChild();
@@ -5371,13 +5552,16 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
 
         if (!startPath.empty()) {
             bool fatal = false;
-            message = start(startPath, fatal);
+            message = start(startPath, startSlot, fatal);
             if (message.empty()) started = true;
             else if (fatal) { g_QuitConfirmed = true; running = false; }
             confirmDelete = -1;
         }
     }
 
+#if defined(HOVERNET_AUTH)
+    if (!started) server.Close();
+#endif
     if (ownsImGuiContext) {
         ImGui_ImplSDLRenderer2_Shutdown();
         ImGui_ImplSDL2_Shutdown();
@@ -7525,7 +7709,7 @@ int RunClient(int argc, char** argv)
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--replays-screen")) {   // the screen on its own (screenshots); "Watch" reports instead of playing
-            RunReplayBrowser(graphics, frameLimit, [](const std::string&, bool& fatal) { fatal = false; return std::string("(screenshot mode: nothing is played)"); });
+            RunReplayBrowser(graphics, frameLimit, [](const std::string&, int, bool& fatal) { fatal = false; return std::string("(screenshot mode: nothing is played)"); });
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--pause-menu")) {
@@ -7586,7 +7770,7 @@ int RunClient(int argc, char** argv)
                 }
             }
             else if (choice == MenuChoice::eWatchReplay) {
-                const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, bool& fatal) { return startReplayFile(path, 0, fatal); });
+                const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, int slot, bool& fatal) { return startReplayFile(path, slot, fatal); });
                 pickingMode = !started && !g_QuitConfirmed;   // a replay is playing, or back to the main menu
             }
             else if (choice == MenuChoice::eSettings) {
@@ -8217,7 +8401,7 @@ int RunClient(int argc, char** argv)
         }
 #ifdef HOVERNET_GAME2_PLAYER
         if (watchReplayMenu) {
-            const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, bool& fatal) { return startReplayFile(path, 0, fatal); });
+            const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, int slot, bool& fatal) { return startReplayFile(path, slot, fatal); });
             if (g_QuitConfirmed) { running = false; break; }
             if (started) {
                 missileSeen = false;

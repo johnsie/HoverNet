@@ -66,11 +66,28 @@ public:
     // Where this lobby connected, so the race can reconnect to the same server with its resume token.
     void AddressOf(std::string& host, int& port, std::vector<std::uint8_t>& key) const { host = mHost; port = mPort; key = mKey; }
 
+    // Shared replays and track records (any time while browsing). Ask, call Pump() every frame, read the answer when Loaded() says it came.
+    void RefreshReplays(const std::string& track = std::string());             // the server's newest replays, optionally of one track
+    const std::vector<Protocol3::ReplayInfo>& Replays() const { return mReplays; }
+    bool ReplaysLoaded() const { return mReplaysLoaded; }
+    void RefreshRecords(const std::string& track);                              // the track records of one track
+    const Protocol3::RecordList& Records() const { return mRecords; }
+    bool RecordsLoaded() const { return mRecordsLoaded; }
+    // Downloads one replay (in pieces). Downloading() until it is complete; then TakeReplay() gives the checked file once. A refusal, a damaged
+    // or incomplete download is reported in ReplayNotice() and nothing is handed over.
+    void FetchReplay(std::uint64_t id);
+    bool Downloading() const { return mFetchId != 0; }
+    int DownloadPercent() const { return mFetchCount == 0 ? 0 : static_cast<int>(100 * mFetchNext / mFetchCount); }
+    bool TakeReplay(std::vector<std::uint8_t>& bytes) { if (!mReplayReady) return false; bytes.swap(mReplayBytes); mReplayReady = false; return true; }
+    const std::string& ReplayNotice() const { return mReplayNotice; }
+    void ClearReplayNotice() { mReplayNotice.clear(); }
+
     // Plain-language text for a server refusal.
     static std::string DescribeReject(const Protocol3::Reject& r);
 
 private:
     void Fail(const std::string& message);
+    void SendPendingFetch();
     bool Send(std::uint8_t type, const std::vector<std::uint8_t>& payload);
 
     AuthConnection mConn;
@@ -87,6 +104,15 @@ private:
     std::vector<Protocol3::RaceInfo> mRaces;
     Protocol3::HelloAck mAck;
     std::vector<AuthFrame> mBacklog;
+    std::vector<Protocol3::ReplayInfo> mReplays;
+    Protocol3::RecordList mRecords;
+    bool mReplaysLoaded = false, mRecordsLoaded = false, mReplayReady = false;
+    std::uint64_t mFetchId = 0;
+    long long mLastFetchMs = -100000;   // the server allows one download every half second; a quicker request waits (see FetchReplay)
+    bool mFetchSent = false;
+    std::uint16_t mFetchNext = 0, mFetchCount = 0;
+    std::vector<std::uint8_t> mReplayBytes;
+    std::string mReplayNotice;
     std::uint32_t mQueuedWatchId = 0;
     std::string mQueuedWatchCode;
     bool mGotAck = false, mGotStart = false, mSpectating = false;
