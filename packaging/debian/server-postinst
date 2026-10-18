@@ -12,9 +12,13 @@ case "$1" in
     install -d -o hovernet -g hovernet -m 0750 /var/lib/hovernet /var/lib/hovernet/replays /var/lib/hovernet/crashes /var/lib/hovernet/moderation
     systemctl daemon-reload
     systemctl enable hovernet-server
-    # An upgrade restarts a server that is running; stopping it drains (races under way finish, up to the unit's TimeoutStopSec). A
-    # fresh install is not started: the operator reviews /etc/hovernet/server.conf first.
-    systemctl try-restart hovernet-server || true
+    # An upgrade restarts a server that is running (a fresh install is not started: the operator reviews /etc/hovernet/server.conf first). The restart
+    # is queued, not waited for: stopping drains (races under way finish, up to the unit's TimeoutStopSec), and waiting for that inside the package
+    # script made the installation hang until the pipeline gave up, which left the package half installed and the OLD process running. The pipeline's
+    # verify:server job (scripts/verify-server-deploy.sh) waits for the new process and fails if it never appears.
+    if systemctl is-active --quiet hovernet-server; then
+      systemctl restart --no-block hovernet-server || true
+    fi
     ;;
 esac
 

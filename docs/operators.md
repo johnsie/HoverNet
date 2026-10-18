@@ -97,6 +97,10 @@ GitLab pipeline (`package:server:deb`) or from the GitHub release, then
     journalctl -u hovernet-server -n 20
 
 After that, every tagged version is installed by `deploy:server` and a running server is restarted through a drain.
+The restart is queued by the package (waiting for a drain inside the package script used to hang the installation), and the `verify:server` job
+that follows (`scripts/verify-server-deploy.sh`, unprivileged, waits up to 14 minutes) checks that the new build is what is running: the package is
+fully installed, the process is not a replaced old binary, and it was started with `--replay-dir`. If it fails, the pipeline is red and says why; a
+manual `sudo systemctl daemon-reload && sudo systemctl restart hovernet-server` is the fallback.
 
 ## Letting the web client in
 

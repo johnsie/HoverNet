@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.12 - 2026-10-18
+
+### Fixed
+- **Upgrading the server from the pipeline did not restart it.** The packaged server's install script waited for the restart (which drains races under way, up to 11 minutes) and the installation hung, leaving the package half installed and the OLD server running; on the live host that meant no replays were saved after the replay feature shipped. The package now queues the restart and finishes, and a new pipeline job, `verify:server`, waits for the new process and fails the pipeline if the old build is still running, if the package is not fully installed, or if the server runs without `--replay-dir`.
+
 ## 2.3.11 - 2026-10-18
 
 ### Added

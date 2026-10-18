@@ -305,6 +305,21 @@ deploy:server:
     - !reference [.no_schedule, rules]
     - if: '$CI_COMMIT_TAG'
 
+# The package restarts a running server by itself (queued, because a restart drains races under way). This job then waits for the new process and
+# FAILS the pipeline if the old build is still running or the package was left half installed, so a silent non-restart cannot go unnoticed again
+# (scripts/verify-server-deploy.sh). It runs unprivileged on the race-server host.
+verify:server:
+  stage: deploy
+  tags: ["$SERVER_RUNNER_TAG"]
+  needs:
+    - job: deploy:server
+  script:
+    - scripts/verify-server-deploy.sh 840
+  timeout: 20m
+  rules:
+    - !reference [.no_schedule, rules]
+    - if: '$CI_COMMIT_TAG'
+
 deploy:web:
   stage: deploy
   tags: ["$SERVER_RUNNER_TAG"]
