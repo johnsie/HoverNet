@@ -8,6 +8,8 @@
 #include "Sha256.h"
 #include "PersonalBests.h"
 #include "GhostRun.h"
+#include "ReplayLibrary.h"
+#include "ReplayRecorder.h"
 #include "../Authority/ReplayFormat.h"
 #include "../Model/StateHash.h"
 #include "../Model/StateSnapshot.h"
@@ -6624,6 +6626,8 @@ struct AuthOnline
     Crypto::Bytes serverKey;      // the pinned key of the server (32 bytes) for a secure session; empty = plain connection
     Authority::PredictingClient predictor;
     Protocol3::HelloAck ack;
+    ReplayRecorder recorder;      // the race as a replay, built from the Ticks the client follows (saved when the race ends)
+    bool replaySaved = false;
     std::vector<MR_MainCharacter*> craft;
     std::unique_ptr<RenderedWorld> world;
     bool interpolationOff = std::getenv("HOVERNET_TEST_NO_INTERPOLATION") != nullptr;   // test: the picture without the between-tick interpolation
@@ -7193,6 +7197,8 @@ int RunClient(int argc, char** argv)
         auth.freeDriving = false;
         auth.reconnectAttempts = 0;
         auth.chunks.clear();
+        auth.recorder.Begin(auth.ack);
+        auth.replaySaved = false;
         auth.needSnapshot = auth.spectator;   // the server sends the keyframe first; nothing is drawn or applied before it
         auth.lastSend = auth.lastPing = SDL_GetTicks();
         session.AddMessage(auth.spectator ? "Watching the race: Left and Right (or [ and ]) switch craft"
@@ -7573,8 +7579,8 @@ int RunClient(int argc, char** argv)
             if (f.type == kTick) {
                 Tick t;
                 if (auth.needSnapshot) continue;   // waiting for a snapshot: ticks before it are of no use
-                if (!Decode(f.payload, t) || !auth.predictor.OnTick(t)) { ++auth.tickFailures; auth.needSnapshot = true; }
-                else ++auth.verified;
+                if (!Decode(f.payload, t) || !auth.predictor.OnTick(t)) { ++auth.tickFailures; auth.needSnapshot = true; auth.recorder.Spoil(); }
+                else { ++auth.verified; auth.recorder.OnTick(t); }
             }
             else if (f.type == kSnapshotChunk) {
                 SnapshotChunk c;
@@ -7599,6 +7605,19 @@ int RunClient(int argc, char** argv)
             else if (f.type == kResult && !auth.resultReceived) {
                 auth.resultReceived = true;
                 session.AddMessage("The race is over. The server has the final result.");
+                if (!auth.replaySaved) {
+                    // A race followed from its first tick is a replay the player can watch again (Watch a Replay in the menu).
+                    auth.replaySaved = true;
+                    const std::vector<std::uint8_t> bytes = auth.recorder.Bytes();
+                    if (!bytes.empty()) {
+                        const std::string saved = ReplayLibrary(ConfigDirPath() + "/replays").Save(bytes, auth.ack.track, std::time(nullptr));
+                        if (!saved.empty()) {
+                            session.AddMessage("This race was saved: Watch a Replay in the menu");
+                            if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) { std::printf("REPLAYTEST saved %s %u ticks\n", saved.c_str(), auth.recorder.Ticks()); std::fflush(stdout); }
+                        }
+                    }
+                    else if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) { std::printf("REPLAYTEST not saved (the race was not followed from its first tick)\n"); std::fflush(stdout); }
+                }
             }
             else if (f.type == kChatMessage) {
                 ChatMessage m;

@@ -336,6 +336,16 @@ else()
     )
     target_link_libraries(HoverNetAuthorityTest PRIVATE HoverNetSim)
 
+    add_executable(HoverNetReplayLibraryTest NetTarget/LinuxClient/ReplayLibraryTest.cpp NetTarget/Authority/ReplayFormat.cpp)
+    add_test(NAME HoverNetReplayLibrary COMMAND HoverNetReplayLibraryTest)
+    add_executable(HoverNetReplayRecorderTest
+        NetTarget/LinuxClient/ReplayRecorderTest.cpp
+    )
+    target_link_libraries(HoverNetReplayRecorderTest PRIVATE HoverNetSim)
+    add_test(NAME HoverNetReplayRecorder COMMAND HoverNetReplayRecorderTest ClassicH 3 700)
+    add_test(NAME HoverNetReplayRecorderEight COMMAND HoverNetReplayRecorderTest Steeplechase 8 600)
+    set_tests_properties(HoverNetReplayRecorder HoverNetReplayRecorderEight PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
     add_executable(HoverNetWebSocketTest
         NetTarget/LinuxClient/WebSocketTest.cpp
         NetTarget/Authority/WebSocket.cpp
@@ -878,6 +888,9 @@ if(BUILD_TESTING AND NOT WIN32)
     set_tests_properties(HoverNetPrediction120 HoverNetPrediction250 PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetReplayViewer
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-replay-viewer.sh $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player> $<TARGET_FILE:HoverNetDriver>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetClientReplay
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-client-replay.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetGame2Player> $<TARGET_FILE:HoverNetReplay>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetAuthClient
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-authclient.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetGame2Player> 8 400
