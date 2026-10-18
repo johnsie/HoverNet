@@ -8,6 +8,7 @@
 #include "Sha256.h"
 #include "PersonalBests.h"
 #include <functional>
+#include <random>
 #include "../Authority/CraftNames.h"
 #include "GhostRun.h"
 #include "ReplayLibrary.h"
@@ -1689,6 +1690,36 @@ void SaveShowGhost(bool enabled)
     std::ofstream out(ShowGhostPath());
     out << (enabled ? 1 : 0) << '\n';
 }
+
+#if defined(HOVERNET_AUTH)
+// The device id of this game: 16 random bytes made the first time and kept in the settings folder (the browser keeps that folder in IndexedDB), sent to a
+// HoverNet server in every Hello. The monthly league uses it to tell that two players in a race are on different devices (a player racing themselves from two
+// tabs or two windows shares one). It is random, tells nothing about the player or the computer, and is never shown to anybody. HOVERNET_TEST_DEVICE_ID
+// (32 hex digits) replaces it in tests.
+void EnsureDeviceId()
+{
+    auto parse = [](const std::string& hex, std::uint64_t& high, std::uint64_t& low) {
+        if (hex.size() != 32) return false;
+        for (char c : hex) if (!std::isxdigit(static_cast<unsigned char>(c))) return false;
+        high = std::strtoull(hex.substr(0, 16).c_str(), nullptr, 16);
+        low = std::strtoull(hex.substr(16).c_str(), nullptr, 16);
+        return high != 0 || low != 0;
+    };
+    std::uint64_t high = 0, low = 0;
+    if (const char* forced = std::getenv("HOVERNET_TEST_DEVICE_ID")) { if (parse(forced, high, low)) { OnlineLobby::SetDeviceId(high, low); return; } }
+    const std::string path = ConfigDirPath() + "/device_id";
+    { std::ifstream in(path); std::string text; if (in >> text && parse(text, high, low)) { OnlineLobby::SetDeviceId(high, low); return; } }
+    std::random_device random;
+    high = (static_cast<std::uint64_t>(random()) << 32) ^ random() ^ static_cast<std::uint64_t>(std::time(nullptr));
+    low = (static_cast<std::uint64_t>(random()) << 32) ^ random() ^ static_cast<std::uint64_t>(SDL_GetPerformanceCounter());
+    if (high == 0 && low == 0) low = 1;
+    char text[40];
+    std::snprintf(text, sizeof text, "%016llx%016llx", static_cast<unsigned long long>(high), static_cast<unsigned long long>(low));
+    std::ofstream out(path);
+    out << text << '\n';
+    OnlineLobby::SetDeviceId(high, low);
+}
+#endif
 
 std::string ReducedMotionPath()
 {
@@ -3563,7 +3594,9 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
     if (pOfferReplays) options.push_back({"MAIN MENU", PauseChoice::eMainMenu});   // (not in the classic lobby, which has its own way out)
     options.push_back({"SETTINGS", PauseChoice::eSettings});
     options.push_back({"CONTROLS", PauseChoice::eControls});
+#ifndef __EMSCRIPTEN__   // a browser tab has nothing to quit to; the tab is closed instead
     options.push_back({"QUIT HOVERNET", PauseChoice::eQuit});
+#endif
     const int optionCount = static_cast<int>(options.size());
     PauseChoice choice = PauseChoice::eResume;
     bool focusFirstButton = true;
@@ -3789,7 +3822,9 @@ ReplayEndChoice RunReplayEndScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer
         actions.push_back({"LEADERBOARDS", ReplayEndChoice::eLeaderboards});
 #endif
         actions.push_back({"MAIN MENU", ReplayEndChoice::eMainMenu});
+#ifndef __EMSCRIPTEN__
         actions.push_back({"QUIT HOVERNET", ReplayEndChoice::eQuit});
+#endif
         for (std::size_t i = 0; i < actions.size(); ++i) {
             if (focusFirst) { ImGui::SetKeyboardFocusHere(); focusFirst = false; }
             if (HoverNetButton(actions[i].label, ImVec2(-FLT_MIN, i == 0 ? 54.0f : 44.0f))) { choice = actions[i].choice; running = false; }
@@ -3996,8 +4031,10 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         if (pCanRestart) actions.push_back({"RESTART RACE", PostRaceChoice::eRestartRace});   // the same track, laps and weapons again
         actions.insert(actions.end(), {{"NEW LOCAL RACE", PostRaceChoice::eNewLocalRace},
                                        {"ONLINE MULTIPLAYER", PostRaceChoice::eOnlineLobby},
-                                       {"MAIN MENU", PostRaceChoice::eMainMenu},
-                                       {"QUIT HOVERNET", PostRaceChoice::eQuit}});
+                                       {"MAIN MENU", PostRaceChoice::eMainMenu}});
+#ifndef __EMSCRIPTEN__
+        actions.push_back({"QUIT HOVERNET", PostRaceChoice::eQuit});
+#endif
         for (std::size_t index = 0; index < actions.size(); ++index) {
             if (HoverNetButton(actions[index].label, ImVec2(-FLT_MIN, index == 0 ? 54.0f : 44.0f))) {
                 choice = actions[index].choice;
@@ -5789,7 +5826,9 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
     const int officialTracks = Tracks().OfficialCount();
     int track = 0;                       // official track index
     int laps = 0;                        // 0: fastest laps; n: fastest races of n laps
-    bool need = true;
+    bool need = true, needWinners = true, needLeague = true;
+    std::string leagueMonth;             // the month shown in the league tab (empty: the current month)
+    int wantTab = -1;                    // test hook: open on this tab
     std::uint64_t downloadId = 0;
     int downloadSlot = 0;
     std::string downloadNote, message, startPath, startNote;
@@ -5798,6 +5837,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
     int framesShown = 0;
     if (const char* trackEnv = std::getenv("HOVERNET_TEST_RECORDS_TRACK")) { const int found = Tracks().Find(trackEnv); if (found >= 0 && found < officialTracks) track = found; }   // screenshot/test hook
     if (const char* lapsEnv = std::getenv("HOVERNET_TEST_RECORDS_LAPS")) laps = std::atoi(lapsEnv);
+    if (const char* tabEnv = std::getenv("HOVERNET_TEST_LEADERBOARD_TAB")) wantTab = std::atoi(tabEnv);
     auto formatMs = [](long long ms, char* out, std::size_t n) { std::snprintf(out, n, "%lld:%02lld.%02lld", ms / 60000, (ms % 60000) / 1000, (ms % 1000) / 10); };
     auto formatDate = [](std::uint32_t unixSeconds, char* out, std::size_t n) { std::snprintf(out, n, "%s", UkDateTime(unixSeconds).c_str()); };
     bool printedReport = false;
@@ -5813,7 +5853,11 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
         }
         if (!serverTried) { serverTried = true; if (!ConnectLobbyForReplays(server)) message = "The server address is not usable. Check it in the HoverNet servers screen."; }
         server.Pump();
-        if (server.GetState() == OnlineLobby::State::eBrowsing && need && officialTracks > 0) { server.RefreshRecords(Tracks().Get(track)->mName, laps); need = false; }
+        if (server.GetState() == OnlineLobby::State::eBrowsing) {
+            if (need && officialTracks > 0) { server.RefreshRecords(Tracks().Get(track)->mName, laps); need = false; }
+            if (needWinners) { server.RefreshWinners(); needWinners = false; }
+            if (needLeague) { server.RefreshLeague(leagueMonth); needLeague = false; }
+        }
         std::vector<std::uint8_t> downloaded;
         if (downloadId != 0 && server.TakeReplay(downloaded)) {
             cacheFolder.MakeDirectory();
@@ -5871,12 +5915,14 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             ImGui::PushTextWrapPos(0.0f);
             ImGui::TextColored(warn, "%s", server.Message().empty() ? "Could not reach the server." : server.Message().c_str());
             ImGui::PopTextWrapPos();
-            if (HoverNetButton("TRY AGAIN", ImVec2(-FLT_MIN, 38))) { serverTried = false; need = true; server.Close(); }
+            if (HoverNetButton("TRY AGAIN", ImVec2(-FLT_MIN, 38))) { serverTried = false; need = needWinners = needLeague = true; server.Close(); }
         }
         else if (server.GetState() != OnlineLobby::State::eBrowsing) {
             ImGui::TextDisabled("Connecting to the server...");
         }
-        else {
+        else if (ImGui::BeginTabBar("LeaderboardTabs")) {
+            // ---- the records, per craft
+            if (ImGui::BeginTabItem("RECORDS", nullptr, wantTab == 0 ? ImGuiTabItemFlags_SetSelected : 0)) {
             ImGui::TextDisabled("The best times of everyone who races on this server, for each craft.");
             ImGui::SetNextItemWidth(-FLT_MIN);
             if (officialTracks > 0 && ImGui::BeginCombo("##Track", Tracks().Get(track)->mName.c_str())) {
@@ -5929,6 +5975,92 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                     ImGui::Spacing();
                 }
             }
+                ImGui::EndTabItem();
+            }
+            // ---- the recent winners of races with two or more players
+            if (ImGui::BeginTabItem("RECENT WINNERS", nullptr, wantTab == 1 ? ImGuiTabItemFlags_SetSelected : 0)) {
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextDisabled("Who won the latest races. A race is listed only if two or more different players were in it.");
+                ImGui::PopTextWrapPos();
+                ImGui::Spacing();
+                if (server.ListsUnreadable() && !server.WinnersLoaded()) { ImGui::PushTextWrapPos(0.0f); ImGui::TextColored(warn, "The server answered in a form this version of the game cannot read: the game and the server are on different versions. Reload the page (or update the game)."); ImGui::PopTextWrapPos(); }
+                else if (!server.WinnersLoaded()) ImGui::TextDisabled("Loading the winners...");
+                else if (server.Winners().empty()) ImGui::TextDisabled("No races with two or more players have been won yet.");
+                for (std::size_t i = 0; i < server.Winners().size(); ++i) {
+                    const Protocol3::WinnerEntry& w = server.Winners()[i];
+                    ImGui::PushID(1000 + static_cast<int>(i));
+                    char time[32], when[48];
+                    formatMs(w.ms, time, sizeof time);
+                    formatDate(w.savedAt, when, sizeof when);
+                    ImGui::Text("%s", w.track.c_str());
+                    ImGui::TextDisabled("%s   %d lap%s, %d players", when, w.laps, w.laps == 1 ? "" : "s", w.players);
+                    ImGui::Text("Winner: %s%s%s%s   %s", w.name.empty() ? "player" : w.name.c_str(), w.craft < Authority::kCraftCount ? " (" : "", w.craft < Authority::kCraftCount ? Authority::CraftName(w.craft) : "", w.craft < Authority::kCraftCount ? ")" : "", time);
+                    const bool busy = downloadId != 0;
+                    if (HoverNetButton(busy && downloadId == w.replay ? "DOWNLOADING..." : "WATCH THE RACE", ImVec2(-FLT_MIN, 34)) && !busy) {
+                        downloadId = w.replay; downloadSlot = w.slot; downloadNote = "the winner"; message.clear(); server.FetchReplay(w.replay);
+                    }
+                    ImGui::PopID();
+                    ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+                }
+                ImGui::EndTabItem();
+            }
+            // ---- the monthly league
+            if (ImGui::BeginTabItem("MONTHLY LEAGUE", nullptr, wantTab == 2 ? ImGuiTabItemFlags_SetSelected : 0)) {
+                static const char* const monthNames[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+                auto monthLabel = [&](const std::string& key) -> std::string {   // "2026-10" -> "October 2026"
+                    const int m = key.size() == 7 ? std::atoi(key.substr(5, 2).c_str()) : 0;
+                    return m >= 1 && m <= 12 ? std::string(monthNames[m - 1]) + " " + key.substr(0, 4) : key;
+                };
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextDisabled("Win a race: 3 points. Second: 2. Third: 1. Only races where two or more players on different devices finished count. It starts again on the 1st of every month (UTC).");
+                ImGui::PopTextWrapPos();
+                ImGui::Spacing();
+                if (server.ListsUnreadable() && !server.LeagueLoaded()) { ImGui::PushTextWrapPos(0.0f); ImGui::TextColored(warn, "The server answered in a form this version of the game cannot read: the game and the server are on different versions. Reload the page (or update the game)."); ImGui::PopTextWrapPos(); }
+                else if (!server.LeagueLoaded()) ImGui::TextDisabled("Loading the league...");
+                else {
+                    const Protocol3::LeagueData& lg = server.League();
+                    std::vector<std::string> months;
+                    months.push_back(lg.currentMonth);
+                    for (const Protocol3::LeagueMonthWinner& w : lg.pastWinners) months.push_back(w.month);
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    if (ImGui::BeginCombo("##LeagueMonth", (monthLabel(lg.month) + (lg.month == lg.currentMonth ? "  (this month)" : "")).c_str())) {
+                        for (const std::string& m : months) if (ImGui::Selectable((monthLabel(m) + (m == lg.currentMonth ? "  (this month)" : "")).c_str(), m == lg.month)) { leagueMonth = m == lg.currentMonth ? std::string() : m; needLeague = true; }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::Spacing();
+                    HoverNetSectionHeading((monthLabel(lg.month) + (lg.month == lg.currentMonth ? " so far" : "")).c_str());
+                    if (lg.standings.empty()) ImGui::TextDisabled("Nobody has scored yet.");
+                    for (std::size_t i = 0; i < lg.standings.size(); ++i) {
+                        const Protocol3::LeagueRow& r = lg.standings[i];
+                        ImGui::Text("%zu.  %s   %d point%s", i + 1, r.name.c_str(), r.points, r.points == 1 ? "" : "s");
+                        ImGui::SameLine(ImGui::GetContentRegionMax().x - 190.0f);
+                        ImGui::TextDisabled("%d win%s, %d race%s", r.wins, r.wins == 1 ? "" : "s", r.races, r.races == 1 ? "" : "s");
+                    }
+                    ImGui::Spacing();
+                    HoverNetSectionHeading("Winners of earlier months");
+                    if (lg.pastWinners.empty()) ImGui::TextDisabled("No month has finished yet.");
+                    for (const Protocol3::LeagueMonthWinner& w : lg.pastWinners) {
+                        if (w.name.empty()) ImGui::Text("%s:  nobody scored", monthLabel(w.month).c_str());
+                        else ImGui::Text("%s:  %s  (%d points)", monthLabel(w.month).c_str(), w.name.c_str(), w.points);
+                    }
+                    ImGui::Spacing();
+                    char yearHeading[48];
+                    std::snprintf(yearHeading, sizeof yearHeading, "%d so far", lg.currentYear);
+                    HoverNetSectionHeading(yearHeading);
+                    if (lg.yearStandings.empty()) ImGui::TextDisabled("Nobody has scored yet this year.");
+                    for (std::size_t i = 0; i < lg.yearStandings.size() && i < 5; ++i) ImGui::Text("%zu.  %s   %d points", i + 1, lg.yearStandings[i].name.c_str(), lg.yearStandings[i].points);
+                    ImGui::Spacing();
+                    HoverNetSectionHeading("Winners of earlier years");
+                    if (lg.yearWinners.empty()) ImGui::TextDisabled("The winner of each year is announced here when the year ends.");
+                    for (const Protocol3::LeagueYearWinner& w : lg.yearWinners) {
+                        if (w.name.empty()) ImGui::Text("%d:  nobody scored", w.year);
+                        else ImGui::Text("%d:  %s  (%d points)", w.year, w.name.c_str(), w.points);
+                    }
+                }
+                ImGui::EndTabItem();
+            }
+            wantTab = -1;
+            ImGui::EndTabBar();
         }
         if (!message.empty()) { ImGui::PushTextWrapPos(0.0f); ImGui::TextColored(warn, "%s", message.c_str()); ImGui::PopTextWrapPos(); }
         ImGui::EndChild();
@@ -7698,6 +7830,9 @@ int RunClient(int argc, char** argv)
 
 #ifdef HOVERNET_GAME2_PLAYER
     MR_SpriteHandle* menuFontHandle = playerMode ? LoadUiFont() : nullptr;
+#if defined(HOVERNET_AUTH)
+    EnsureDeviceId();
+#endif
     std::string lobbyHost = kDefaultLobbyHost;
     unsigned lobbyPort = kDefaultLobbyPort;
     LoadServerUrl(lobbyHost, lobbyPort);  // a Settings change from a previous run, if any

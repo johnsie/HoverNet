@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Changed
+- The web client no longer shows **QUIT HOVERNET** (pause menu, race results, replay end screen): a browser tab has nothing to quit to. The native clients keep it.
+
 ## 2.3.17 - 2026-10-19
 
 ### Added
