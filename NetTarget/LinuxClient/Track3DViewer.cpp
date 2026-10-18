@@ -3696,7 +3696,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
 
 
 // What the player may do when a replay has played to its end.
-enum class ReplayEndChoice { eStay, eWatchAgain, eAnotherReplay, eMainMenu, eQuit };
+enum class ReplayEndChoice { eStay, eWatchAgain, eAnotherReplay, eLeaderboards, eMainMenu, eQuit };
 
 ReplayEndChoice RunReplayEndScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport, const MR_Sprite& font,
                                    const std::string& track, int players, int laps, long long durationMs, const std::vector<std::string>& finishers, int pFrameLimit)
@@ -3742,7 +3742,7 @@ ReplayEndChoice RunReplayEndScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer
                 const std::string pick = static_cast<std::size_t>(shown) <= words.size() ? words[static_cast<std::size_t>(shown) - 1] : std::string("quit");
                 std::printf("REPLAYEND shown %d: %s\n", shown, pick.c_str());
                 std::fflush(stdout);
-                choice = pick == "again" ? ReplayEndChoice::eWatchAgain : pick == "another" ? ReplayEndChoice::eAnotherReplay : pick == "main" ? ReplayEndChoice::eMainMenu : pick == "stay" ? ReplayEndChoice::eStay : ReplayEndChoice::eQuit;
+                choice = pick == "again" ? ReplayEndChoice::eWatchAgain : pick == "another" ? ReplayEndChoice::eAnotherReplay : pick == "leaderboards" ? ReplayEndChoice::eLeaderboards : pick == "main" ? ReplayEndChoice::eMainMenu : pick == "stay" ? ReplayEndChoice::eStay : ReplayEndChoice::eQuit;
                 running = false;
                 continue;
             }
@@ -3772,7 +3772,7 @@ ReplayEndChoice RunReplayEndScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer
         ImGui::EndGroup();
 
         const float panelWidth = std::min(430.0f, workSize.x * 0.48f);
-        const float panelHeight = std::min(420.0f, workSize.y - 72.0f);
+        const float panelHeight = std::min(470.0f, workSize.y - 72.0f);
         ImGui::SetCursorPos(ImVec2(workSize.x - panelWidth - 38.0f, 36.0f));
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.96f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
@@ -3781,13 +3781,16 @@ ReplayEndChoice RunReplayEndScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer
         HoverNetSectionHeading("WHAT NEXT?");
         ImGui::Spacing();
         struct Action { const char* label; ReplayEndChoice choice; };
-        const Action actions[] = {
+        std::vector<Action> actions = {
             {"WATCH AGAIN", ReplayEndChoice::eWatchAgain},
             {"WATCH ANOTHER REPLAY", ReplayEndChoice::eAnotherReplay},
-            {"MAIN MENU", ReplayEndChoice::eMainMenu},
-            {"QUIT HOVERNET", ReplayEndChoice::eQuit},
         };
-        for (std::size_t i = 0; i < sizeof(actions) / sizeof(actions[0]); ++i) {
+#if defined(HOVERNET_AUTH)
+        actions.push_back({"LEADERBOARDS", ReplayEndChoice::eLeaderboards});
+#endif
+        actions.push_back({"MAIN MENU", ReplayEndChoice::eMainMenu});
+        actions.push_back({"QUIT HOVERNET", ReplayEndChoice::eQuit});
+        for (std::size_t i = 0; i < actions.size(); ++i) {
             if (focusFirst) { ImGui::SetKeyboardFocusHere(); focusFirst = false; }
             if (HoverNetButton(actions[i].label, ImVec2(-FLT_MIN, i == 0 ? 54.0f : 44.0f))) { choice = actions[i].choice; running = false; }
             ImGui::Spacing();
@@ -8892,6 +8895,17 @@ int RunClient(int argc, char** argv)
                 if (g_QuitConfirmed) { running = false; break; }
                 if (started) { missileSeen = false; finishAnnounced = false; resultsPending = false; }
                 else replay.ended = true;   // came back without choosing: the end screen again
+                continue;
+            }
+            if (endChoice == ReplayEndChoice::eLeaderboards) {
+#if defined(HOVERNET_AUTH)
+                const bool started = RunLeaderboards(graphics, frameLimit, [&](const std::string& path, int slot, const std::string& note, bool& fatal) { return startReplayFile(path, slot, fatal, note); });
+                if (g_QuitConfirmed) { running = false; break; }
+                if (started) { missileSeen = false; finishAnnounced = false; resultsPending = false; }
+                else replay.ended = true;   // came back without choosing: the end screen again
+#else
+                replay.ended = true;
+#endif
                 continue;
             }
             // eStay: look around at the end (Left or Home rewinds)

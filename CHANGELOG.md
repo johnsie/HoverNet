@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.17 - 2026-10-19
+
+### Added
+- The end-of-replay screen has a **LEADERBOARDS** button (Watch again, Watch another replay, Leaderboards, Main menu, Quit); watching a record from there plays it and ends on the same screen.
+
 ## 2.3.16 - 2026-10-19
 
 ### Added

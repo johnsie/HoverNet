@@ -29,5 +29,10 @@ if [ -n "$want" ] && [ "$want" = "$got" ] && grep -q "REPLAYTEST following playe
 # Fastest races of 5 laps: Basic Dee 150000 first; Bi-Turbo Anna 154000.
 out=$(HOVERNET_TEST_RECORDS_LAPS=5 timeout -s KILL 30 env HOVERNET_TEST_AUTH_SERVER="127.0.0.1:$port" HOVERNET_TEST_MENU=leaderboards HOVERNET_TEST_MENU_FORCE=1 HOVERNET_TEST_REPLAY_LIBRARY=1 HOVERNET_TEST_RECORDS_TRACK="The River" "$client" --play --leaderboards-screen --frames 200 2>&1)
 if grep -q "LEADERBOARDS The River laps 5 boards 2 | Basic: Dee 150000 | Bi-Turbo: Anna 154000" <<< "$out"; then echo "ok   the fastest races of a lap count have their own per-craft boards"; else echo "FAIL: the fastest races per craft"; grep LEADERBOARDS <<< "$out"; fail=1; fi
+# From the end of a replay: its end screen offers LEADERBOARDS; choosing it opens the screen, and watching a record plays that run to its end.
+lib="$HOME/.config/hovernet/replays"; mkdir -p "$lib"
+"$tool" record ClassicH 300 "$lib/ClassicH_20261018-142355.hnr" --players=2 > /dev/null 2>&1
+out=$(HOVERNET_TEST_AUTH_SERVER="127.0.0.1:$port" HOVERNET_TEST_REPLAY_LIBRARY=1 HOVERNET_TEST_RECORDS_TRACK="The River" HOVERNET_TEST_LEADERBOARD_PICK=1 HOVERNET_TEST_REPLAY_SPEED=4 HOVERNET_TEST_REPLAY_END=leaderboards,quit timeout -s KILL 90 "$client" --play --replay "$lib/ClassicH_20261018-142355.hnr" --frames 100000 2>&1)
+if grep -q "REPLAYEND shown 1: leaderboards" <<< "$out" && grep -q "LEADERBOARDS The River" <<< "$out" && grep -q "REPLAYEND shown 2: quit" <<< "$out"; then echo "ok   the end of a replay offers the Leaderboards, and watching a record from there plays it to its end"; else echo "FAIL: leaderboards from the end of a replay"; grep -E "REPLAYEND|LEADERBOARDS" <<< "$out"; fail=1; fi
 [ $fail -eq 0 ] && echo "leaderboards: per craft, with names, and watchable"
 exit $fail
