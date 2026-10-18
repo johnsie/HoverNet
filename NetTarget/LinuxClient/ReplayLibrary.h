@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <string>
 #include <vector>
@@ -97,7 +98,7 @@ public:
             e.name = name;
             e.path = mDir + "/" + name;
             const std::string stamp = Stamp(name);
-            if (stamp.size() == 15) e.when = stamp.substr(0, 4) + "-" + stamp.substr(4, 2) + "-" + stamp.substr(6, 2) + " " + stamp.substr(9, 2) + ":" + stamp.substr(11, 2);
+            if (stamp.size() == 15) e.when = UkDateTime(stamp);
             std::vector<std::uint8_t> bytes;
             ReplayFormat::Replay r;
             std::string error;
@@ -154,6 +155,15 @@ public:
     }
 
 private:
+    // "20261018-142355" as people write it in the UK: "18 Oct 2026, 14:23".
+    static std::string UkDateTime(const std::string& stamp)
+    {
+        static const char* const months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+        const int month = std::atoi(stamp.substr(4, 2).c_str());
+        if (month < 1 || month > 12) return std::string();
+        return std::to_string(std::atoi(stamp.substr(6, 2).c_str())) + " " + months[month - 1] + " " + stamp.substr(0, 4) + ", " + stamp.substr(9, 2) + ":" + stamp.substr(11, 2);
+    }
+
     static std::string Stamp(const std::string& name)   // "YYYYMMDD-HHMMSS" from "<track>_<stamp>[-n].hnr", or empty
     {
         const std::size_t underscore = name.rfind('_');

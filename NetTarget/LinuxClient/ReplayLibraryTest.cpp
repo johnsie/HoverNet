@@ -58,7 +58,7 @@ int main()
     std::vector<ReplayLibrary::Entry> list = library.List();
     Check(list.size() == 3, "all three are listed");
     Check(list.size() == 3 && list[0].track == "The River" && list[0].players == 4 && list[0].laps == 3 && list[0].ticks == 1250 && list[0].valid, "the newest is first, with its details");
-    Check(list.size() == 3 && list[0].durationMs() == 20000 && list[0].when == "2026-10-18 14:24", "its length and time");
+    Check(list.size() == 3 && list[0].durationMs() == 20000 && list[0].when == "18 Oct 2026, 14:24", "its length and time");
     Check(list.size() == 3 && list[2].track == "ClassicH", "older ones follow");
     Check(list.size() == 3 && list[0].mySlot == 2 && list[1].mySlot == -1 && list[2].mySlot == -1, "the craft the player drove is remembered beside the replay (and is unknown when they only watched)");
 

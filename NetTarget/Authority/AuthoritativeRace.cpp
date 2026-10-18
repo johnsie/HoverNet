@@ -230,6 +230,12 @@ std::vector<std::uint8_t> AuthoritativeRace::Snapshot() const
     return MR_SaveLevelState( mSession->GetCurrentLevel(), mSession->GetSimulationTime(), lExternal, ReplayFormat::kSimulationRules );
 }
 
+int AuthoritativeRace::CraftModel( int player ) const
+{
+    const MR_MainCharacter* lCraft = Craft( player );
+    return lCraft == NULL ? -1 : lCraft->GetHoverModel();
+}
+
 const MR_MainCharacter* AuthoritativeRace::Craft( int player ) const
 {
     return ( player >= 0 && player < static_cast<int>( mCraft.size() ) ) ? mCraft[ player ] : NULL;

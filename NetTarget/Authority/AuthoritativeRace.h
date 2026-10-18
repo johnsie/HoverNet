@@ -93,6 +93,8 @@ public:
 
     // Reads a player's craft for display or tests only; the race itself is never changed through it.
     const MR_MainCharacter* Craft(int player) const;
+    // The craft model a player drove (0 to 4, CraftNames.h), -1 if there is no such player. It is picked during the countdown and cannot change once the race is running.
+    int CraftModel(int player) const;
 
     static constexpr std::uint16_t kValidControlBits = 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 2048;
 

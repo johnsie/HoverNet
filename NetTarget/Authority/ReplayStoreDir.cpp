@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #endif
 
+#include "CraftNames.h"
 #include "ReplayFormat.h"
 #include "../LinuxClient/Sha256.h"
 
@@ -24,15 +25,27 @@ constexpr std::int64_t kMaxReplayFile = 8 * 1024 * 1024;
 
 // The seventh column of a results line, the display name of that player (absent in tables written before names were recorded). Anything that is not valid
 // text for the protocol is dropped, so a hand-edited table cannot put control characters or oversized names into the lists.
-std::string NameField(const char* line)
+std::string TextField(const char* line, int index)   // the field after `index` tabs, without the end of line
 {
     int tabs = 0;
     const char* p = line;
-    for (; *p != '\0' && tabs < 6; ++p) if (*p == '\t') ++tabs;
-    if (tabs < 6) return std::string();
-    std::string name(p);
-    while (!name.empty() && (name.back() == '\n' || name.back() == '\r')) name.pop_back();
+    for (; *p != '\0' && tabs < index; ++p) if (*p == '\t') ++tabs;
+    if (tabs < index) return std::string();
+    const char* end = p;
+    while (*end != '\0' && *end != '\t' && *end != '\n' && *end != '\r') ++end;
+    return std::string(p, end);
+}
+std::string NameField(const char* line)
+{
+    const std::string name = TextField(line, 6);
     return Protocol3::IsValidText(name, 32) ? name : std::string();
+}
+int CraftField(const char* line)   // the eighth column: the craft model (0 to 4), -1 when absent or out of range (a table written before craft were recorded)
+{
+    const std::string text = TextField(line, 7);
+    if (text.empty() || text.size() > 2) return -1;
+    const int craft = std::atoi(text.c_str());
+    return (craft >= 0 && craft < Authority::kCraftCount && (craft != 0 || text == "0")) ? craft : -1;
 }
 
 std::vector<std::string> ReplayNames(const std::string& dir)
@@ -71,10 +84,11 @@ bool ReadFileBytes(const std::string& path, std::vector<std::uint8_t>& bytes)
 }
 
 // The fastest finish in the results table beside a replay (rank, player, laps, finished, finish_ms, best_lap_ms), 0 if nobody finished; `slot` is that player.
-std::int32_t WinnerMs(const std::string& replayPath, std::uint8_t& slot, std::string& name)
+std::int32_t WinnerMs(const std::string& replayPath, std::uint8_t& slot, std::string& name, std::uint8_t& craft)
 {
     slot = 255;
     name.clear();
+    craft = 255;
     const std::string path = replayPath.substr(0, replayPath.size() - 4) + ".results.tsv";
     std::FILE* f = std::fopen(path.c_str(), "r");
     if (f == nullptr) return 0;
@@ -84,7 +98,7 @@ std::int32_t WinnerMs(const std::string& replayPath, std::uint8_t& slot, std::st
         int rank, player, laps, finished;
         long long finishMs, bestLap;
         if (std::sscanf(line, "%d\t%d\t%d\t%d\t%lld\t%lld", &rank, &player, &laps, &finished, &finishMs, &bestLap) == 6 && finished == 1 && finishMs > 0 && player >= 0 && player < 8)
-            if (best == 0 || finishMs < best) { best = finishMs; slot = static_cast<std::uint8_t>(player); name = NameField(line); }
+            if (best == 0 || finishMs < best) { best = finishMs; slot = static_cast<std::uint8_t>(player); name = NameField(line); craft = CraftField(line) >= 0 ? static_cast<std::uint8_t>(CraftField(line)) : 255; }
     }
     std::fclose(f);
     return best > 0 && best < 2000000000LL ? static_cast<std::int32_t>(best) : 0;
@@ -103,7 +117,7 @@ void ReadRuns(const std::string& replayPath, std::vector<ReplayRun>& runs)
         long long finishMs, bestLap;
         if (std::sscanf(line, "%d\t%d\t%d\t%d\t%lld\t%lld", &rank, &player, &laps, &finished, &finishMs, &bestLap) != 6) continue;
         if (player < 0 || player > 7 || finishMs < 0 || finishMs > 2000000000LL || bestLap < 0 || bestLap > 2000000000LL) continue;
-        runs.push_back({static_cast<std::uint8_t>(player), static_cast<std::int32_t>(finishMs), static_cast<std::int32_t>(bestLap), finished == 1, NameField(line)});
+        runs.push_back({static_cast<std::uint8_t>(player), static_cast<std::int32_t>(finishMs), static_cast<std::int32_t>(bestLap), finished == 1, NameField(line), CraftField(line)});
     }
     std::fclose(f);
 }
@@ -134,8 +148,13 @@ void DirReplayStore::Refresh()
         item.info.ticks = r.ticks;
         item.info.savedAt = static_cast<std::uint32_t>(item.mtime);
         item.info.bytes = static_cast<std::uint32_t>(bytes.size());
-        item.info.winnerMs = WinnerMs(path, item.info.winnerSlot, item.info.winnerName);
+        item.info.winnerMs = WinnerMs(path, item.info.winnerSlot, item.info.winnerName, item.info.winnerCraft);
         ReadRuns(path, item.runs);
+        for (const ReplayRun& run : item.runs) {   // the table is in finishing order
+            Protocol3::ReplayFinisher f;
+            f.slot = run.slot; f.ms = run.finished ? run.finishMs : 0; f.craft = run.craft >= 0 ? static_cast<std::uint8_t>(run.craft) : 255; f.name = run.name;
+            item.info.finishers.push_back(f);
+        }
         mItems[name] = item;
     }
     for (auto it = mItems.begin(); it != mItems.end();) it = present.count(it->first) ? std::next(it) : mItems.erase(it);
@@ -175,32 +194,37 @@ bool DirReplayStore::Read(std::uint64_t id, std::vector<std::uint8_t>& bytes)
     return false;
 }
 
-std::vector<Protocol3::RecordBoard> DirReplayStore::Records(const std::string& track)
+Protocol3::RecordList DirReplayStore::Records(const std::string& track, int laps)
 {
     Refresh();
-    std::map<int, Protocol3::RecordBoard> boards;   // by lap count
+    Protocol3::RecordList out;
+    out.track = track;
+    out.laps = static_cast<std::uint8_t>(std::max(0, std::min(99, laps)));
+    std::set<int> lapCounts;
+    std::vector<std::vector<Protocol3::RecordEntry>> perCraft(static_cast<std::size_t>(Authority::kCraftCount));
     for (const Item* item : Sorted()) {
         if (item->info.track != track) continue;
-        Protocol3::RecordBoard& board = boards[item->info.laps];
-        board.laps = item->info.laps;
+        lapCounts.insert(item->info.laps);
         for (const ReplayRun& run : item->runs) {
+            if (run.craft < 0) continue;   // a table that does not say which craft: it cannot be placed on a craft's board
             Protocol3::RecordEntry e;
             e.replay = item->info.id; e.slot = run.slot; e.savedAt = item->info.savedAt; e.name = run.name;
-            if (run.finished && run.finishMs > 0) { e.ms = run.finishMs; board.finishes.push_back(e); }
-            if (run.bestLapMs > 0) { e.ms = run.bestLapMs; board.bestLaps.push_back(e); }
+            if (laps == 0) { if (run.bestLapMs <= 0) continue; e.ms = run.bestLapMs; }
+            else { if (item->info.laps != laps || !run.finished || run.finishMs <= 0) continue; e.ms = run.finishMs; }
+            perCraft[static_cast<std::size_t>(run.craft)].push_back(e);
         }
     }
+    for (int l : lapCounts) if (out.availableLaps.size() < static_cast<std::size_t>(Protocol3::kMaxRecordLaps)) out.availableLaps.push_back(static_cast<std::uint8_t>(l));
     auto faster = [](const Protocol3::RecordEntry& a, const Protocol3::RecordEntry& b) { return a.ms != b.ms ? a.ms < b.ms : a.savedAt < b.savedAt; };   // a tie goes to the older run
-    std::vector<Protocol3::RecordBoard> out;
-    for (auto& kv : boards) {
-        Protocol3::RecordBoard& b = kv.second;
-        if (b.finishes.empty() && b.bestLaps.empty()) continue;
-        std::stable_sort(b.finishes.begin(), b.finishes.end(), faster);
-        std::stable_sort(b.bestLaps.begin(), b.bestLaps.end(), faster);
-        if (b.finishes.size() > static_cast<std::size_t>(Protocol3::kMaxRecordsPerBoard)) b.finishes.resize(Protocol3::kMaxRecordsPerBoard);
-        if (b.bestLaps.size() > static_cast<std::size_t>(Protocol3::kMaxRecordsPerBoard)) b.bestLaps.resize(Protocol3::kMaxRecordsPerBoard);
-        out.push_back(b);
-        if (out.size() >= static_cast<std::size_t>(Protocol3::kMaxRecordBoards)) break;
+    for (int craft = 0; craft < Authority::kCraftCount; ++craft) {
+        std::vector<Protocol3::RecordEntry>& list = perCraft[static_cast<std::size_t>(craft)];
+        if (list.empty()) continue;
+        std::stable_sort(list.begin(), list.end(), faster);
+        if (list.size() > static_cast<std::size_t>(Protocol3::kMaxRecordsPerBoard)) list.resize(Protocol3::kMaxRecordsPerBoard);
+        Protocol3::RecordBoard board;
+        board.craft = static_cast<std::uint8_t>(craft);
+        board.entries = list;
+        out.boards.push_back(board);
     }
     return out;
 }

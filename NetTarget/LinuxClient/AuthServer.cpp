@@ -254,9 +254,9 @@ void WriteResults(const std::string& replayPath, const std::vector<Authority::Pl
     const std::string path = replayPath.substr(0, replayPath.size() - 4) + ".results.tsv";
     FILE* f = std::fopen(path.c_str(), "wb");
     if (f == nullptr) { std::fprintf(stderr, "cannot write the results to %s\n", path.c_str()); return; }
-    std::fprintf(f, "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\n");
+    std::fprintf(f, "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\n");
     for (const auto& r : results)
-        std::fprintf(f, "%d\t%d\t%d\t%d\t%lld\t%lld\t%s\n", r.rank, r.player, r.laps, r.finished ? 1 : 0, static_cast<long long>(r.finishTimeMs), static_cast<long long>(r.bestLapMs), host.SlotName(r.player).c_str());
+        std::fprintf(f, "%d\t%d\t%d\t%d\t%lld\t%lld\t%s\t%d\n", r.rank, r.player, r.laps, r.finished ? 1 : 0, static_cast<long long>(r.finishTimeMs), static_cast<long long>(r.bestLapMs), host.SlotName(r.player).c_str(), host.Race().CraftModel(r.player));
     std::fclose(f);
 }
 

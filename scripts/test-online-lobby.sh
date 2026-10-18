@@ -10,8 +10,8 @@ if [ -n "$tool" ]; then
   mkdir -p "$dir/replays"
   "$tool" record ClassicH 600 "$dir/replays/ClassicH-1-100.hnr" --players=2 > /dev/null 2>&1 || { echo "FAIL: could not record a replay"; exit 1; }
   "$tool" record ClassicH 700 "$dir/replays/ClassicH-2-200.hnr" --players=3 > /dev/null 2>&1 || { echo "FAIL: could not record a replay"; exit 1; }
-  printf 'rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\n1\t0\t1\t1\t61000\t61000\n2\t1\t1\t1\t70000\t70000\n' > "$dir/replays/ClassicH-1-100.results.tsv"
-  printf 'rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\n1\t2\t1\t1\t65000\t65000\n' > "$dir/replays/ClassicH-2-200.results.tsv"
+  printf 'rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\n1\t0\t1\t1\t61000\t61000\tAnna\t0\n2\t1\t1\t1\t70000\t70000\tBen\t2\n' > "$dir/replays/ClassicH-1-100.results.tsv"
+  printf 'rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\n1\t2\t1\t1\t65000\t65000\tCara\t1\n' > "$dir/replays/ClassicH-2-200.results.tsv"
   touch -d '2 minutes ago' "$dir/replays/ClassicH-1-100.hnr"
   replayargs=(--replay-dir "$dir/replays"); export HOVERNET_TEST_SHARED_REPLAYS=1
 fi

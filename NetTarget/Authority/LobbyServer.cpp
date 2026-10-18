@@ -280,17 +280,18 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
         RecordList list;
         list.track = m.track;
-        if (mReplays != nullptr) list.boards = mReplays->Records(m.track);
+        list.laps = m.laps;
+        if (mReplays != nullptr) list = mReplays->Records(m.track, m.laps);
+        list.track = m.track;
+        list.laps = m.laps;
         if (list.boards.size() > static_cast<std::size_t>(kMaxRecordBoards)) list.boards.resize(kMaxRecordBoards);
-        // A message must fit in one frame: take the last entry of the longest list until it does (every board keeps its best entries).
+        if (list.availableLaps.size() > static_cast<std::size_t>(kMaxRecordLaps)) list.availableLaps.resize(kMaxRecordLaps);
+        // A message must fit in one frame: take the last entry of the longest board until it does (every craft keeps its best entries).
         while (Encode(list).size() > kMaxListPayload) {
-            std::vector<RecordEntry>* longest = nullptr;
-            for (RecordBoard& b : list.boards) {
-                if (b.finishes.size() > 1 && (longest == nullptr || b.finishes.size() > longest->size())) longest = &b.finishes;
-                if (b.bestLaps.size() > 1 && (longest == nullptr || b.bestLaps.size() > longest->size())) longest = &b.bestLaps;
-            }
+            RecordBoard* longest = nullptr;
+            for (RecordBoard& b : list.boards) if (b.entries.size() > 1 && (longest == nullptr || b.entries.size() > longest->entries.size())) longest = &b;
             if (longest == nullptr) { if (!list.boards.empty()) { list.boards.pop_back(); continue; } break; }
-            longest->pop_back();
+            longest->entries.pop_back();
         }
         const std::vector<std::uint8_t> f = EncodeFrame(kRecordList, Encode(list));
         c.out.insert(c.out.end(), f.begin(), f.end());

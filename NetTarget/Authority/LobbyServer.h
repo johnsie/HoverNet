@@ -47,8 +47,9 @@ public:
     virtual std::vector<Protocol3::ReplayInfo> List(const std::string& track, int max) = 0;
     // The whole file of a replay, false when it is gone.
     virtual bool Read(std::uint64_t id, std::vector<std::uint8_t>& bytes) = 0;
-    // The track records of one track: a board per lap count with the fastest finishes and the fastest laps (best first).
-    virtual std::vector<Protocol3::RecordBoard> Records(const std::string& track) = 0;
+    // The track records of one track, a board per craft with the best five (best first): laps 0 the fastest single laps, laps n the fastest finishes of
+    // races of n laps. Also says which lap counts have records.
+    virtual Protocol3::RecordList Records(const std::string& track, int laps) = 0;
 };
 
 class LobbyServer

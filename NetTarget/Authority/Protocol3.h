@@ -128,18 +128,23 @@ struct SpectateRace { std::uint32_t id = 0; std::string code; };
 constexpr int kMaxReplayList = 30;
 constexpr std::size_t kReplayChunkBytes = 1000;
 struct ListReplays { std::string track; std::uint8_t max = 20; };                  // track empty = every track
-struct ReplayInfo { std::uint64_t id = 0; std::string track; std::uint8_t players = 0, laps = 0; std::uint32_t ticks = 0, savedAt = 0, bytes = 0; std::int32_t winnerMs = 0; std::uint8_t winnerSlot = 255; std::string winnerName; };   // winnerName: the display name the winner had in the race (empty when not recorded; what the player typed, not proof of who they are). savedAt: unix seconds; winnerMs: the fastest finish, 0 = nobody finished; winnerSlot: that player's slot (255 = nobody), the craft a viewer follows by default
+// One player of a recorded race, in the order they finished (those who did not finish come last, ms 0).
+struct ReplayFinisher { std::uint8_t slot = 0; std::int32_t ms = 0; std::uint8_t craft = 255; std::string name; };
+struct ReplayInfo { std::uint64_t id = 0; std::string track; std::uint8_t players = 0, laps = 0; std::uint32_t ticks = 0, savedAt = 0, bytes = 0; std::int32_t winnerMs = 0; std::uint8_t winnerSlot = 255; std::string winnerName; std::uint8_t winnerCraft = 255; std::vector<ReplayFinisher> finishers; };   // finishers: everyone in the race, in finishing order, with their display name and craft (empty when the server has no results table for it)   // winnerName: the display name the winner had in the race (empty when not recorded; what the player typed, not proof of who they are). savedAt: unix seconds; winnerMs: the fastest finish, 0 = nobody finished; winnerSlot: that player's slot (255 = nobody), the craft a viewer follows by default
 struct ReplayList { std::vector<ReplayInfo> replays; };
 struct GetReplay { std::uint64_t id = 0; };
 struct ReplayChunk { std::uint64_t id = 0; std::uint16_t index = 0, count = 0; std::vector<std::uint8_t> data; };
 // Track records: for each lap count raced on a track, the fastest finishes and the fastest laps among the replays the server keeps, each with the
 // replay it came from (so a player can watch the run). Anonymous: a run is a player slot of a replay, never a name.
-constexpr int kMaxRecordsPerBoard = 10;
-constexpr int kMaxRecordBoards = 10;
-struct ListRecords { std::string track; };
+constexpr int kMaxRecordsPerBoard = 5;    // the best five of each craft
+constexpr int kMaxRecordBoards = 8;       // one board per craft (CraftNames.h)
+constexpr int kMaxRecordLaps = 12;        // how many different lap counts are offered
+// laps 0: the fastest single laps (whatever the length of the race they were driven in); laps n: the fastest finishes of races of n laps. Each answer holds a
+// board per craft, best first, so a time in one craft never replaces a time in another.
+struct ListRecords { std::string track; std::uint8_t laps = 0; };
 struct RecordEntry { std::uint64_t replay = 0; std::uint8_t slot = 0; std::int32_t ms = 0; std::uint32_t savedAt = 0; std::string name; };
-struct RecordBoard { std::uint8_t laps = 0; std::vector<RecordEntry> finishes, bestLaps; };
-struct RecordList { std::string track; std::vector<RecordBoard> boards; };
+struct RecordBoard { std::uint8_t craft = 0; std::vector<RecordEntry> entries; };
+struct RecordList { std::string track; std::uint8_t laps = 0; std::vector<std::uint8_t> availableLaps; std::vector<RecordBoard> boards; };
 struct Chat { std::string text; };
 struct ChatMessage { std::string name; std::string text; bool fromServer = false; };
 struct Block { std::string name; };

@@ -346,10 +346,10 @@ Depends on Stage 1's determinism.
   player in the lobby, whether or not they took part: a "Server replays" list in Watch a Replay (newest first, by track), downloaded in pieces,
   checked against the file's own number and played by the normal replay viewer. Alongside it, **My races**: the player's own saved races on their
   device (done, see [replays.md](replays.md)). *Status: built and tested (server store with pruning, lobby messages, client tabs, a real-server test and an end-to-end game test); not yet run against the production server or in a browser.*
-- **Leaderboards and track records everyone can see.** From the same replays: for each track and lap count, the fastest finishes and the fastest
-  laps, each with a "watch this run" link to the replay it came from (official because the server simulated it, and verifiable by anyone with
-  `HoverNetReplay verify`). Shown in the game (desktop and browser) in Watch a Replay, "Track records". Anonymous until accounts exist (a run is a
-  player slot of a replay, never a name); named boards wait for Stage 6a accounts. *Status: built and tested like the shared replays; per-track records only (no all-time or per-account board, no filters by date).*
+- **Leaderboards and track records everyone can see.** From the same replays: for each track and craft, the best five fastest laps and fastest races, each
+  with the player's name and a "watch this run" link to the replay it came from (official because the server simulated it, and verifiable by anyone with
+  `HoverNetReplay verify`). Shown in the game (desktop and browser) in its own **Leaderboards** screen ([leaderboards.md](leaderboards.md)), per craft (a record
+  in one craft never replaces another's). Names are the display names players typed (unverified until Stage 6a accounts). *Status: built and tested like the shared replays; records last as long as their replays (no all-time board, no filters by date).*
 
 **Exit gate:** a race can be saved, shared, replayed, and independently verified from the
 stored data, on every supported platform.

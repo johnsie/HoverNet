@@ -78,9 +78,9 @@ int main()
     }
     // Files: three ClassicH replays (3 laps; 2 laps), one The River, a damaged one, one that is not a replay.
     const std::vector<std::uint8_t> a = MakeReplay("ClassicH", 3, 3, 500, 11), b = MakeReplay("ClassicH", 2, 3, 700, 22), c = MakeReplay("ClassicH", 2, 2, 300, 33), d = MakeReplay("The River", 4, 5, 400, 44);
-    WriteBytes(dir + "/ClassicH-1-100.hnr", a);  WriteFile(dir + "/ClassicH-1-100.results.tsv", "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\n1\t2\t3\t1\t95000\t30000\tAnna\n2\t0\t3\t1\t99000\t31000\tBen\n3\t1\t1\t0\t0\t40000\tCara\n");
-    WriteBytes(dir + "/ClassicH-2-200.hnr", b);  WriteFile(dir + "/ClassicH-2-200.results.tsv", "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\n1\t1\t3\t1\t93000\t29000\n2\t0\t3\t1\t97000\t33000\n");
-    WriteBytes(dir + "/ClassicH-3-300.hnr", c);  WriteFile(dir + "/ClassicH-3-300.results.tsv", "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\n1\t0\t2\t1\t61000\t30000\n");
+    WriteBytes(dir + "/ClassicH-1-100.hnr", a);  WriteFile(dir + "/ClassicH-1-100.results.tsv", "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\n1\t2\t3\t1\t95000\t30000\tAnna\t2\n2\t0\t3\t1\t99000\t31000\tBen\t0\n3\t1\t1\t0\t0\t40000\tCara\t0\n");
+    WriteBytes(dir + "/ClassicH-2-200.hnr", b);  WriteFile(dir + "/ClassicH-2-200.results.tsv", "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\n1\t1\t3\t1\t93000\t29000\t\t0\n2\t0\t3\t1\t97000\t33000\t\t2\n");
+    WriteBytes(dir + "/ClassicH-3-300.hnr", c);  WriteFile(dir + "/ClassicH-3-300.results.tsv", "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\n1\t0\t2\t1\t61000\t30000\tDee\t1\n");
     WriteBytes(dir + "/The_River-4-400.hnr", d);
     WriteFile(dir + "/Broken-5-500.hnr", "not a replay");
     WriteFile(dir + "/notes.txt", "x");
@@ -91,7 +91,8 @@ int main()
     Check(list.size() == 4, "four valid replays are listed (a damaged file and a text file are not)");
     Check(!list.empty() && list[0].track == "The River" && list[0].players == 4 && list[0].laps == 5 && list[0].ticks == 400 && list[0].bytes == d.size(), "the newest first, with its details from the file's own header");
     Check(list.size() == 4 && list[3].track == "ClassicH" && list[3].winnerMs == 95000 && list[3].winnerSlot == 2 && list[3].winnerName == "Anna", "the oldest last; the winner's time, slot and name come from the results table");
-    Check(list.size() == 4 && list[0].winnerSlot == 255, "a replay with no results table has no winner");
+    Check(list.size() == 4 && list[0].winnerSlot == 255 && list[0].finishers.empty(), "a replay with no results table has no winner and no finisher list");
+    Check(list.size() == 4 && list[3].finishers.size() == 3 && list[3].finishers[0].name == "Anna" && list[3].finishers[0].slot == 2 && list[3].finishers[0].craft == 2 && list[3].finishers[0].ms == 95000 && list[3].finishers[1].name == "Ben" && list[3].finishers[1].ms == 99000 && list[3].finishers[2].name == "Cara" && list[3].finishers[2].ms == 0, "everyone in the race is listed in finishing order with name, craft and time (0 for a player who did not finish)");
     Check(store.List("ClassicH", 20).size() == 3 && store.List("Nowhere", 20).empty(), "listing by track");
     Check(store.List("", 2).size() == 2, "a limit");
     const std::string hex = Sha256::HashBytes(a.data(), a.size()).substr(0, 16);
@@ -100,13 +101,20 @@ int main()
     Check(list.size() == 4 && store.Read(list[3].id, got) && got == a, "a replay is read by its number, byte for byte");
     Check(!store.Read(12345, got), "an unknown number is no replay");
 
-    // Records from the results tables.
-    std::vector<Protocol3::RecordBoard> boards = store.Records("ClassicH");
-    Check(boards.size() == 2 && boards[0].laps == 2 && boards[1].laps == 3, "a board per lap count, fewest laps first");
-    Check(boards.size() == 2 && boards[1].finishes.size() == 4 && boards[1].finishes[0].ms == 93000 && boards[1].finishes[0].slot == 1 && boards[1].finishes[1].ms == 95000 && boards[1].finishes[1].slot == 2 && boards[1].finishes[1].name == "Anna" && boards[1].finishes[0].name.empty(), "the fastest finishes of three laps, best first, with the slot");
-    Check(boards.size() == 2 && boards[1].finishes[0].replay == list[2].id, "each record names the replay it came from");
-    Check(boards.size() == 2 && boards[1].bestLaps.size() == 5 && boards[1].bestLaps[0].ms == 29000 && boards[1].bestLaps[1].ms == 30000, "the fastest laps (an unfinished run's best lap counts)");
-    Check(store.Records("The River").empty(), "a track with no results table has no records");
+    // Records from the results tables: a board per craft, the best five of each, so a time in one craft never replaces a time in another.
+    Protocol3::RecordList threeLaps = store.Records("ClassicH", 3);
+    Check(threeLaps.availableLaps == std::vector<std::uint8_t>({2, 3}), "the lap counts that have records are offered");
+    Check(threeLaps.boards.size() == 2 && threeLaps.boards[0].craft == 0 && threeLaps.boards[1].craft == 2, "a board per craft that has a result, in craft order (Basic, then Bi-Turbo)");
+    Check(threeLaps.boards.size() == 2 && threeLaps.boards[0].entries.size() == 2 && threeLaps.boards[0].entries[0].ms == 93000 && threeLaps.boards[0].entries[0].slot == 1 && threeLaps.boards[0].entries[1].ms == 99000 && threeLaps.boards[0].entries[1].name == "Ben", "the Basic board of three-lap races: best first, with the slot and the name");
+    Check(threeLaps.boards.size() == 2 && threeLaps.boards[1].entries.size() == 2 && threeLaps.boards[1].entries[0].ms == 95000 && threeLaps.boards[1].entries[0].name == "Anna", "the Bi-Turbo board is separate: its 95 s does not touch the Basic times");
+    Check(threeLaps.boards.size() == 2 && threeLaps.boards[0].entries[0].replay == list[2].id, "each record names the replay it came from");
+    Protocol3::RecordList bestLaps = store.Records("ClassicH", 0);
+    Check(bestLaps.boards.size() == 3 && bestLaps.boards[0].craft == 0 && bestLaps.boards[1].craft == 1 && bestLaps.boards[2].craft == 2, "the fastest laps have a board per craft too, whatever the length of the race");
+    Check(bestLaps.boards.size() == 3 && bestLaps.boards[0].entries.size() == 3 && bestLaps.boards[0].entries[0].ms == 29000 && bestLaps.boards[0].entries[1].ms == 31000 && bestLaps.boards[0].entries[2].ms == 40000, "an unfinished run's best lap counts for its craft");
+    Check(bestLaps.boards.size() == 3 && bestLaps.boards[1].entries.size() == 1 && bestLaps.boards[1].entries[0].ms == 30000 && bestLaps.boards[1].entries[0].name == "Dee", "a craft with one result has a board of one");
+    Check(store.Records("ClassicH", 2).boards.size() == 1 && store.Records("ClassicH", 2).boards[0].craft == 1, "races of another lap count have their own boards");
+    Check(store.Records("The River", 0).boards.empty(), "a track with no results table has no records");
+    Check(store.Records("ClassicH", 7).boards.empty(), "a lap count nobody raced has none");
 
     // The lobby messages.
     LobbyConfig config;
@@ -155,11 +163,11 @@ int main()
     Check(!lobby.IsClosed(client.conn), "and the connection stays open");
     client.Clear();
 
-    Protocol3::ListRecords records; records.track = "ClassicH";
+    Protocol3::ListRecords records; records.track = "ClassicH"; records.laps = 3;
     client.Send(Protocol3::kListRecords, Protocol3::Encode(records), now);
     client.Pump();
     Protocol3::RecordList board;
-    Check(client.frames.size() == 1 && client.frames[0].first == Protocol3::kRecordList && Protocol3::Decode(client.frames[0].second, board) && board.track == "ClassicH" && board.boards.size() == 2 && board.boards[1].finishes[0].ms == 93000, "the lobby answers the track records");
+    Check(client.frames.size() == 1 && client.frames[0].first == Protocol3::kRecordList && Protocol3::Decode(client.frames[0].second, board) && board.track == "ClassicH" && board.laps == 3 && board.boards.size() == 2 && board.boards[0].entries[0].ms == 93000 && board.availableLaps.size() == 2, "the lobby answers the track records, per craft");
     client.Clear();
 
     now += 100;   // faster than the download pace
@@ -195,8 +203,8 @@ int main()
         for (int laps = 1; laps <= 9; ++laps) {
             const std::string base = crowded + "/ClassicH-" + std::to_string(laps) + "-" + std::to_string(500 + laps);
             WriteBytes(base + ".hnr", MakeReplay("ClassicH", 8, laps, 300, 100 + laps));
-            std::string table = "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\n";
-            for (int p = 0; p < 8; ++p) table += std::to_string(p + 1) + "\t" + std::to_string(p) + "\t" + std::to_string(laps) + "\t1\t" + std::to_string(60000 + p * 1000 + laps) + "\t" + std::to_string(30000 + p * 500) + "\t" + std::string("AVeryLongDisplayNameOfThirtyTwoChars").substr(0, 32) + "\n";
+            std::string table = "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\n";
+            for (int p = 0; p < 8; ++p) table += std::to_string(p + 1) + "\t" + std::to_string(p) + "\t" + std::to_string(laps) + "\t1\t" + std::to_string(60000 + p * 1000 + laps) + "\t" + std::to_string(30000 + p * 500) + "\t" + std::string("AVeryLongDisplayNameOfThirtyTwoChars").substr(0, 32) + "\t" + std::to_string(p % 5) + "\n";
             WriteFile(base + ".results.tsv", table);
             made.push_back(base);
         }
@@ -206,17 +214,17 @@ int main()
         Client viewer(crowdedLobby, 5000);
         viewer.Send(Protocol3::kHello, Protocol3::Encode(hello), 5000);
         viewer.Pump(); viewer.Clear();
-        Protocol3::ListRecords ask2; ask2.track = "ClassicH";
+        Protocol3::ListRecords ask2; ask2.track = "ClassicH"; ask2.laps = 0;
         viewer.Send(Protocol3::kListRecords, Protocol3::Encode(ask2), 5000);
         viewer.Pump();
         Protocol3::RecordList got2;
         Check(viewer.frames.size() == 1 && viewer.frames[0].second.size() <= 1150 && Protocol3::Decode(viewer.frames[0].second, got2), "a records answer with many boards and long names fits one frame and decodes");
-        Check(!got2.boards.empty() && !got2.boards[0].finishes.empty() && got2.boards[0].finishes[0].ms == 60001 && got2.boards[0].finishes[0].name.size() == 32, "and keeps the best entries, with their names");
+        Check(got2.boards.size() == 5 && got2.boards[0].craft == 0 && !got2.boards[0].entries.empty() && got2.boards[0].entries[0].ms == 30000 && got2.boards[0].entries[0].name.size() == 32, "and keeps a board for every craft and its best entries, with their names");
         viewer.Clear();
         viewer.Send(Protocol3::kListReplays, Protocol3::Encode(Protocol3::ListReplays()), 5000);
         viewer.Pump();
         Protocol3::ReplayList crowdedList;
-        Check(viewer.frames.size() == 1 && viewer.frames[0].second.size() <= 1150 && Protocol3::Decode(viewer.frames[0].second, crowdedList) && !crowdedList.replays.empty() && crowdedList.replays[0].winnerName.size() == 32, "a replay list with long winner names fits one frame too");
+        Check(viewer.frames.size() == 1 && viewer.frames[0].second.size() <= 1150 && Protocol3::Decode(viewer.frames[0].second, crowdedList) && !crowdedList.replays.empty() && crowdedList.replays[0].winnerName.size() == 32 && crowdedList.replays[0].winnerCraft == 0, "a replay list with long winner names fits one frame too, with the winner's craft");
         for (const std::string& b : made) { std::remove((b + ".hnr").c_str()); std::remove((b + ".results.tsv").c_str()); }
 #ifdef _WIN32
         _rmdir(crowded.c_str());

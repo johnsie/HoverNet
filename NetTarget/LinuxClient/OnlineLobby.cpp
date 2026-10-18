@@ -1,5 +1,6 @@
 #include "OnlineLobby.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 
@@ -163,11 +164,12 @@ void OnlineLobby::RefreshReplays(const std::string& track)
     Send(kListReplays, Encode(ask));
 }
 
-void OnlineLobby::RefreshRecords(const std::string& track)
+void OnlineLobby::RefreshRecords(const std::string& track, int laps)
 {
     if (mState != State::eBrowsing || track.empty()) return;
     ListRecords ask;
     ask.track = track;
+    ask.laps = static_cast<std::uint8_t>(std::max(0, std::min(99, laps)));
     mRecordsLoaded = false;
     Send(kListRecords, Encode(ask));
 }

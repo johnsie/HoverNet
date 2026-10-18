@@ -6,6 +6,16 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.16 - 2026-10-19
+
+### Added
+- **Leaderboards.** A new main-menu screen with the community's best times: pick a track and see, for each craft (Basic, Hi-Tech, Bi-Turbo, Eon, Manta), the best five fastest laps or fastest races (by number of laps), each with the player's name, the time and the date, and a WATCH button that plays the run. Records are per craft, so a record in one craft never replaces one in another. It replaces the Track records tab of Watch a Replay. The server writes the craft (and the name) of each player into the results table at the end of a race; races saved before this have no craft and are not on a board. See [docs/leaderboards.md](docs/leaderboards.md).
+- **The server replay list shows everyone in the race, in the order they finished**, with their name, craft and time ("did not finish" last), and the question of which craft to follow names each player and marks the winner.
+- **Dates and times are written the UK way** everywhere in these screens ("18 Oct 2026, 21:11", in the device's own time zone), in My races, Server replays and the Leaderboards.
+
+### Changed
+- The records lists changed shape (per craft, best five), so **update the game together with the server**: a 2.3.15 game cannot read the records from a 2.3.16 server.
+
 ## 2.3.15 - 2026-10-19
 
 ### Fixed

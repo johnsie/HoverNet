@@ -70,7 +70,8 @@ public:
     void RefreshReplays(const std::string& track = std::string());             // the server's newest replays, optionally of one track
     const std::vector<Protocol3::ReplayInfo>& Replays() const { return mReplays; }
     bool ReplaysLoaded() const { return mReplaysLoaded; }
-    void RefreshRecords(const std::string& track);                              // the track records of one track
+    // The track records of one track: laps 0 the fastest single laps, laps n the fastest races of n laps; a board per craft, the best five of each.
+    void RefreshRecords(const std::string& track, int laps = 0);
     const Protocol3::RecordList& Records() const { return mRecords; }
     bool RecordsLoaded() const { return mRecordsLoaded; }
     // True when the server answered a replay or records request in a form this game cannot read (the game and the server are on different versions).

@@ -306,7 +306,9 @@ std::vector<std::uint8_t> Encode(const ReplayList& m)
     Out o;
     o.U8(static_cast<std::uint32_t>(m.replays.size()));
     for (const ReplayInfo& r : m.replays) {
-        o.U64(r.id); o.Str(r.track); o.U8(r.players); o.U8(r.laps); o.U32(r.ticks); o.U32(r.savedAt); o.U32(r.bytes); o.U32(static_cast<std::uint32_t>(r.winnerMs)); o.U8(r.winnerSlot); o.Str(r.winnerName);
+        o.U64(r.id); o.Str(r.track); o.U8(r.players); o.U8(r.laps); o.U32(r.ticks); o.U32(r.savedAt); o.U32(r.bytes); o.U32(static_cast<std::uint32_t>(r.winnerMs)); o.U8(r.winnerSlot); o.Str(r.winnerName); o.U8(r.winnerCraft);
+        o.U8(static_cast<std::uint32_t>(r.finishers.size()));
+        for (const ReplayFinisher& f : r.finishers) { o.U8(f.slot); o.U32(static_cast<std::uint32_t>(f.ms)); o.U8(f.craft); o.Str(f.name); }
     }
     return o.b;
 }
@@ -319,53 +321,68 @@ bool Decode(const std::vector<std::uint8_t>& p, ReplayList& m)
     for (std::uint32_t i = 0; i < count && in.ok; ++i) {
         ReplayInfo r;
         r.id = in.U64(); r.track = in.Str(64); r.players = static_cast<std::uint8_t>(in.U8()); r.laps = static_cast<std::uint8_t>(in.U8());
-        r.ticks = in.U32(); r.savedAt = in.U32(); r.bytes = in.U32(); r.winnerMs = static_cast<std::int32_t>(in.U32()); r.winnerSlot = static_cast<std::uint8_t>(in.U8()); r.winnerName = in.Str(32);
-        if (r.players < 1 || r.players > 8 || r.track.empty() || (r.winnerSlot >= 8 && r.winnerSlot != 255)) return false;
+        r.ticks = in.U32(); r.savedAt = in.U32(); r.bytes = in.U32(); r.winnerMs = static_cast<std::int32_t>(in.U32()); r.winnerSlot = static_cast<std::uint8_t>(in.U8()); r.winnerName = in.Str(32); r.winnerCraft = static_cast<std::uint8_t>(in.U8());
+        const std::uint32_t finisherCount = in.U8();
+        if (finisherCount > 8) return false;
+        for (std::uint32_t k = 0; k < finisherCount && in.ok; ++k) {
+            ReplayFinisher f;
+            f.slot = static_cast<std::uint8_t>(in.U8()); f.ms = static_cast<std::int32_t>(in.U32()); f.craft = static_cast<std::uint8_t>(in.U8()); f.name = in.Str(32);
+            if (f.slot >= 8 || f.ms < 0 || (f.craft >= 8 && f.craft != 255)) return false;
+            r.finishers.push_back(f);
+        }
+        if (r.players < 1 || r.players > 8 || r.track.empty() || (r.winnerSlot >= 8 && r.winnerSlot != 255) || (r.winnerCraft >= 8 && r.winnerCraft != 255)) return false;
         m.replays.push_back(r);
     }
     return in.Done();
 }
 
-std::vector<std::uint8_t> Encode(const ListRecords& m) { Out o; o.Str(m.track); return o.b; }
-bool Decode(const std::vector<std::uint8_t>& p, ListRecords& m) { In in(p); m.track = in.Str(64); return in.Done() && !m.track.empty(); }
+std::vector<std::uint8_t> Encode(const ListRecords& m) { Out o; o.Str(m.track); o.U8(m.laps); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, ListRecords& m)
+{
+    In in(p);
+    m.track = in.Str(64);
+    m.laps = static_cast<std::uint8_t>(in.U8());
+    return in.Done() && !m.track.empty() && m.laps <= 99;
+}
 
-static void PutEntries(Out& o, const std::vector<RecordEntry>& list)
-{
-    o.U8(static_cast<std::uint32_t>(list.size()));
-    for (const RecordEntry& e : list) { o.U64(e.replay); o.U8(e.slot); o.U32(static_cast<std::uint32_t>(e.ms)); o.U32(e.savedAt); o.Str(e.name); }
-}
-static bool GetEntries(In& in, std::vector<RecordEntry>& list)
-{
-    const std::uint32_t count = in.U8();
-    if (!in.ok || count > static_cast<std::uint32_t>(kMaxRecordsPerBoard)) return false;
-    list.clear();
-    for (std::uint32_t i = 0; i < count && in.ok; ++i) {
-        RecordEntry e;
-        e.replay = in.U64(); e.slot = static_cast<std::uint8_t>(in.U8()); e.ms = static_cast<std::int32_t>(in.U32()); e.savedAt = in.U32(); e.name = in.Str(32);
-        if (e.slot >= 8 || e.ms <= 0) return false;
-        list.push_back(e);
-    }
-    return in.ok;
-}
 std::vector<std::uint8_t> Encode(const RecordList& m)
 {
     Out o;
     o.Str(m.track);
+    o.U8(m.laps);
+    o.U8(static_cast<std::uint32_t>(m.availableLaps.size()));
+    for (std::uint8_t l : m.availableLaps) o.U8(l);
     o.U8(static_cast<std::uint32_t>(m.boards.size()));
-    for (const RecordBoard& b : m.boards) { o.U8(b.laps); PutEntries(o, b.finishes); PutEntries(o, b.bestLaps); }
+    for (const RecordBoard& b : m.boards) {
+        o.U8(b.craft);
+        o.U8(static_cast<std::uint32_t>(b.entries.size()));
+        for (const RecordEntry& e : b.entries) { o.U64(e.replay); o.U8(e.slot); o.U32(static_cast<std::uint32_t>(e.ms)); o.U32(e.savedAt); o.Str(e.name); }
+    }
     return o.b;
 }
 bool Decode(const std::vector<std::uint8_t>& p, RecordList& m)
 {
     In in(p);
     m.track = in.Str(64);
+    m.laps = static_cast<std::uint8_t>(in.U8());
+    const std::uint32_t lapCount = in.U8();
+    if (!in.ok || m.track.empty() || lapCount > static_cast<std::uint32_t>(kMaxRecordLaps) || m.laps > 99) return false;
+    m.availableLaps.clear();
+    for (std::uint32_t i = 0; i < lapCount && in.ok; ++i) m.availableLaps.push_back(static_cast<std::uint8_t>(in.U8()));
     const std::uint32_t count = in.U8();
-    if (!in.ok || count > static_cast<std::uint32_t>(kMaxRecordBoards) || m.track.empty()) return false;
+    if (!in.ok || count > static_cast<std::uint32_t>(kMaxRecordBoards)) return false;
     m.boards.clear();
     for (std::uint32_t i = 0; i < count && in.ok; ++i) {
         RecordBoard b;
-        b.laps = static_cast<std::uint8_t>(in.U8());
-        if (!GetEntries(in, b.finishes) || !GetEntries(in, b.bestLaps)) return false;
+        b.craft = static_cast<std::uint8_t>(in.U8());
+        const std::uint32_t entries = in.U8();
+        if (!in.ok || b.craft >= 8 || entries > static_cast<std::uint32_t>(kMaxRecordsPerBoard)) return false;
+        for (std::uint32_t k = 0; k < entries && in.ok; ++k) {
+            RecordEntry e;
+            e.replay = in.U64(); e.slot = static_cast<std::uint8_t>(in.U8()); e.ms = static_cast<std::int32_t>(in.U32()); e.savedAt = in.U32(); e.name = in.Str(32);
+            if (e.slot >= 8 || e.ms <= 0) return false;
+            b.entries.push_back(e);
+        }
         m.boards.push_back(b);
     }
     return in.Done();

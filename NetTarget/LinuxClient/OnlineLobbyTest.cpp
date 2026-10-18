@@ -146,9 +146,9 @@ int main(int argc, char** argv)
         viewer.RefreshReplays();
         for (int i = 0; i < 300 && !viewer.ReplaysLoaded(); ++i) { viewer.Pump(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
         Check(viewer.ReplaysLoaded() && viewer.Replays().size() == 2 && viewer.Replays()[0].track == "ClassicH", "the server lists its replays to someone who was not in the races");
-        viewer.RefreshRecords("ClassicH");
+        viewer.RefreshRecords("ClassicH", 0);
         for (int i = 0; i < 300 && !viewer.RecordsLoaded(); ++i) { viewer.Pump(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
-        Check(viewer.RecordsLoaded() && !viewer.Records().boards.empty() && !viewer.Records().boards[0].finishes.empty() && viewer.Records().boards[0].finishes[0].ms == 61000, "the track records come with the fastest finish");
+        Check(viewer.RecordsLoaded() && !viewer.Records().boards.empty() && !viewer.Records().boards[0].entries.empty() && viewer.Records().boards[0].craft == 0 && viewer.Records().boards[0].entries[0].ms == 61000 && viewer.Records().boards[0].entries[0].name == "Anna", "the track records come per craft, with the fastest lap and the name");
         if (viewer.Replays().size() == 2) {
             viewer.FetchReplay(viewer.Replays()[0].id);
             std::vector<std::uint8_t> file;

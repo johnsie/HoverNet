@@ -10,7 +10,7 @@ dir="$(mktemp -d)"; trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$dir"' EXIT
 mkdir -p "$dir/replays"
 "$tool" record ClassicH 600 "$dir/replays/ClassicH-1-100.hnr" --players=2 > /dev/null 2>&1 || { echo "FAIL: could not record a replay"; exit 1; }
 "$tool" record "The River" 900 "$dir/replays/The_River-2-200.hnr" --players=3 > /dev/null 2>&1 || { echo "FAIL: could not record a replay"; exit 1; }
-printf 'rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\n1\t1\t5\t1\t154000\t29000\tAnna\n2\t0\t5\t1\t160000\t30500\tBen\n' > "$dir/replays/The_River-2-200.results.tsv"   # player 2 (slot 1) won
+printf 'rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\n1\t1\t5\t1\t154000\t29000\tAnna\t2\n2\t0\t5\t1\t160000\t30500\tBen\t0\n' > "$dir/replays/The_River-2-200.results.tsv"   # player 2 (slot 1) won
 touch -d '2 minutes ago' "$dir/replays/ClassicH-1-100.hnr"
 want=$("$tool" verify "$dir/replays/The_River-2-200.hnr" 2>/dev/null | sed -n 's/.*final hash \([0-9a-f]*\).*/\1/p')
 "$server" --lobby --port 0 --replay-dir "$dir/replays" > "$dir/server.txt" 2>&1 &

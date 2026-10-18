@@ -31,16 +31,15 @@ your own for a race you drove (the game remembers your slot in a small `.hnr.slo
 server sends the winner's slot with the list), the record holder for a track record. The replay says "Following player N of M (why)" at the start and on
 every `[` / `]`, and the timeline shows "Player N".
 
-## Everyone's races: server replays and track records
+## Everyone's races: server replays
 
 The server keeps the newest official replays (`--replay-keep`, default 200) and offers them in the lobby to every player, whether or not they were in the
-race. **Watch a Replay, Server replays** lists them (newest first, by track) and downloads the one you pick (in pieces, checked against the file's own
-number, then played); **Track records** shows, per track and lap count, the fastest races and the fastest laps with a **WATCH** button that plays the run
-and follows the craft that set it. Both are official: the server simulated them, and anyone can check a file with `HoverNetReplay verify`. They are
-anonymous (a run is "player 2" of a replay, never a name) until accounts exist. Protocol: [specs/protocol-3.0-draft.md](specs/protocol-3.0-draft.md),
-messages 40 to 45. Tests: `HoverNetReplayShare` (the server's store, the lobby messages, limits), `HoverNetOnlineLobby` (the client's side against a
-real server: list, records, a checked download, a replay that is gone) and `HoverNetSharedReplays` (the game downloads a race it was not in and plays it
-to the verified hash).
+race. **Watch a Replay, Server replays** lists them (newest first, by track, with the winner's name and craft) and downloads the one you pick (in pieces,
+checked against the file's own number, then played). Both are official: the server simulated them, and anyone can check a file with `HoverNetReplay verify`.
+The times and craft of every race are also what the **Leaderboards** are built from (see [leaderboards.md](leaderboards.md)). Protocol:
+[specs/protocol-3.0-draft.md](specs/protocol-3.0-draft.md), messages 40 to 45. Tests: `HoverNetReplayShare` (the server's store, the lobby messages,
+limits), `HoverNetOnlineLobby` (the client's side against a real server), `HoverNetSharedReplays` (the game downloads a race it was not in and plays it to
+the verified hash) and `HoverNetLeaderboards`.
 
 ## Where replays come from
 
