@@ -5840,7 +5840,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
     if (const char* tabEnv = std::getenv("HOVERNET_TEST_LEADERBOARD_TAB")) wantTab = std::atoi(tabEnv);
     auto formatMs = [](long long ms, char* out, std::size_t n) { std::snprintf(out, n, "%lld:%02lld.%02lld", ms / 60000, (ms % 60000) / 1000, (ms % 1000) / 10); };
     auto formatDate = [](std::uint32_t unixSeconds, char* out, std::size_t n) { std::snprintf(out, n, "%s", UkDateTime(unixSeconds).c_str()); };
-    bool printedReport = false;
+    bool printedReport = false, printedWinners = false, printedLeague = false;
 
     while (running && !started && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
@@ -5882,6 +5882,26 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             if (std::getenv("HOVERNET_TEST_LEADERBOARD_PICK") != nullptr && !r.boards.empty() && !r.boards[0].entries.empty()) {   // test hook: watch the first record
                 downloadId = r.boards[0].entries[0].replay; downloadSlot = r.boards[0].entries[0].slot; downloadNote = laps == 0 ? "the fastest lap" : "the record holder"; server.FetchReplay(downloadId);
             }
+        }
+
+        if (server.WinnersLoaded() && !printedWinners && std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) {   // test hook: what the tabs received
+            printedWinners = true;
+            std::printf("WINNERS %zu", server.Winners().size());
+            for (const Protocol3::WinnerEntry& w : server.Winners()) std::printf(" | %s: %s %d of %d", w.track.c_str(), w.name.c_str(), w.ms, w.players);
+            std::printf("\n");
+            std::fflush(stdout);
+        }
+        if (server.LeagueLoaded() && !printedLeague && std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) {
+            printedLeague = true;
+            const Protocol3::LeagueData& lg = server.League();
+            std::printf("LEAGUE %s of %s", lg.month.c_str(), lg.currentMonth.c_str());
+            for (const Protocol3::LeagueRow& r : lg.standings) std::printf(" | %s %d", r.name.c_str(), r.points);
+            std::printf(" || months");
+            for (const Protocol3::LeagueMonthWinner& w : lg.pastWinners) std::printf(" | %s %s %d", w.month.c_str(), w.name.c_str(), w.points);
+            std::printf(" || years");
+            for (const Protocol3::LeagueYearWinner& w : lg.yearWinners) std::printf(" | %d %s %d", w.year, w.name.c_str(), w.points);
+            std::printf("\n");
+            std::fflush(stdout);
         }
 
         SDL_Renderer* renderer = graphics.GetRenderer();
@@ -6012,7 +6032,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                     return m >= 1 && m <= 12 ? std::string(monthNames[m - 1]) + " " + key.substr(0, 4) : key;
                 };
                 ImGui::PushTextWrapPos(0.0f);
-                ImGui::TextDisabled("Win a race: 3 points. Second: 2. Third: 1. Only races where two or more players on different devices finished count. It starts again on the 1st of every month (UTC).");
+                ImGui::TextDisabled("Win a race: 3 points. Only races where two or more players on different devices finished count. It starts again on the 1st of every month (UTC).");
                 ImGui::PopTextWrapPos();
                 ImGui::Spacing();
                 if (server.ListsUnreadable() && !server.LeagueLoaded()) { ImGui::PushTextWrapPos(0.0f); ImGui::TextColored(warn, "The server answered in a form this version of the game cannot read: the game and the server are on different versions. Reload the page (or update the game)."); ImGui::PopTextWrapPos(); }

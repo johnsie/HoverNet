@@ -19,6 +19,7 @@ constexpr std::uint16_t kDefaultMaxFrame = 1200;
 // Hello.capabilities bits: what this client understands beyond the first 3.0 messages. A server adds the matching optional fields to its
 // answers only to a client that set the bit, so a client built before the bit existed never sees a message longer than it expects.
 constexpr std::uint32_t kCapRaceId = 1;
+constexpr std::uint32_t kCapDeviceId = 16;    // the Hello ends with the client's device id (16 random bytes it made once and keeps): the monthly league counts a race only if its players are on different devices
 constexpr std::uint32_t kCapHostStart = 4;    // the host of a race starts it (StartRace) instead of it starting when the last seat fills; the server sends Roster while it waits
 constexpr std::uint32_t kCapLobbyChat = 2;   // the lobby carries chat (Chat / ChatMessage before a race is joined) and sends LobbyUsers   // HelloAck carries the number of the race (so a host can tell friends which private race to join)
 constexpr std::uint16_t kMinMaxFrame = 64;
@@ -52,6 +53,10 @@ enum Type : std::uint8_t
     kRoster = 35,          // server to client, only with kCapHostStart: who has joined the race that has not started (slot and name), and how many seats
     kListRecords = 44,     // client to server (lobby): the track records of one track; see ListRecords
     kRecordList = 45,      // server to client: the answer, see RecordList
+    kListWinners = 46,     // client to server (lobby): the recent winners of races with at least two players; see ListWinners
+    kWinnerList = 47,      // server to client: the answer, see WinnerList
+    kListLeague = 48,      // client to server (lobby): the monthly league; see ListLeague
+    kLeagueData = 49,      // server to client: the answer, see LeagueData
     kListReplays = 40,     // client to server (lobby): list the replays the server keeps (newest first, optionally one track); see ListReplays
     kReplayList = 41,      // server to client: the answer, see ReplayList
     kGetReplay = 42,       // client to server (lobby): send me one replay by id
@@ -98,7 +103,8 @@ private:
 };
 
 // ---- messages ----------------------------------------------------------------------------------------------
-struct Hello { std::uint16_t major = kMajor, minor = kMinor; std::uint32_t capabilities = 0; std::uint16_t maxFrame = kDefaultMaxFrame; std::string name; };
+struct Hello { std::uint16_t major = kMajor, minor = kMinor; std::uint32_t capabilities = 0; std::uint16_t maxFrame = kDefaultMaxFrame; std::string name;
+               bool hasDevice = false; std::uint64_t deviceHigh = 0, deviceLow = 0; };   // the device id is an optional trailing field (kCapDeviceId); never shown to other players
 struct HelloAck { std::uint16_t major = kMajor, minor = kMinor; std::uint32_t capabilities = 0; std::uint16_t maxFrame = kDefaultMaxFrame;
                   std::uint8_t player = 0, players = 0, tickMs = 16; std::uint32_t rules = 0; std::string track; std::string trackSha256; std::uint8_t laps = 0; bool weapons = true; std::uint64_t resumeToken = 0;
                   std::uint32_t raceId = 0; bool includeRaceId = false; };   // raceId: optional trailing field, sent only when the client set kCapRaceId
@@ -145,6 +151,30 @@ struct ListRecords { std::string track; std::uint8_t laps = 0; };
 struct RecordEntry { std::uint64_t replay = 0; std::uint8_t slot = 0; std::int32_t ms = 0; std::uint32_t savedAt = 0; std::string name; };
 struct RecordBoard { std::uint8_t craft = 0; std::vector<RecordEntry> entries; };
 struct RecordList { std::string track; std::uint8_t laps = 0; std::vector<std::uint8_t> availableLaps; std::vector<RecordBoard> boards; };
+// Recent winners: the newest races with at least two different players, each with its winner (the replay is the proof: watch it). Only races that passed the
+// league's checks are listed (two or more different devices, nobody racing themselves).
+constexpr int kMaxWinnerList = 20;
+struct WinnerEntry { std::uint64_t replay = 0; std::string track; std::uint8_t slot = 0, laps = 0, players = 0; std::uint32_t savedAt = 0; std::int32_t ms = 0; std::uint8_t craft = 255; std::string name; };
+struct ListWinners { std::uint8_t max = 15; };
+struct WinnerList { std::vector<WinnerEntry> winners; };
+// The monthly league: 3 points for winning a race (nothing for the others), in races that count (two or more different devices); it starts again on the 1st of
+// each month (UTC) and the winner of each finished month and each finished year is kept. Months are "YYYY-MM".
+constexpr int kMaxLeagueRows = 10;
+constexpr int kMaxLeagueMonths = 12;
+constexpr int kMaxLeagueYears = 5;
+struct ListLeague { std::string month; };   // empty: the current month
+struct LeagueRow { std::string name; std::uint16_t points = 0, wins = 0, races = 0; };
+struct LeagueMonthWinner { std::string month; std::string name; std::uint16_t points = 0; };   // name empty: nobody scored that month
+struct LeagueYearWinner { std::uint16_t year = 0; std::string name; std::uint16_t points = 0; };
+struct LeagueData
+{
+    std::string currentMonth, month;                 // the month now, and the month the standings are for
+    std::vector<LeagueRow> standings;                // that month, best first
+    std::vector<LeagueMonthWinner> pastWinners;      // finished months, newest first
+    std::uint16_t currentYear = 0;
+    std::vector<LeagueRow> yearStandings;            // this year so far, best first
+    std::vector<LeagueYearWinner> yearWinners;       // finished years, newest first
+};
 struct Chat { std::string text; };
 struct ChatMessage { std::string name; std::string text; bool fromServer = false; };
 struct Block { std::string name; };
@@ -169,6 +199,10 @@ std::vector<std::uint8_t> Encode(const ChatMessage&);
 std::vector<std::uint8_t> Encode(const Chat&);
 std::vector<std::uint8_t> Encode(const RaceList&);
 std::vector<std::uint8_t> Encode(const ListReplays&);
+std::vector<std::uint8_t> Encode(const ListWinners&);
+std::vector<std::uint8_t> Encode(const WinnerList&);
+std::vector<std::uint8_t> Encode(const ListLeague&);
+std::vector<std::uint8_t> Encode(const LeagueData&);
 std::vector<std::uint8_t> Encode(const ListRecords&);
 std::vector<std::uint8_t> Encode(const RecordList&);
 std::vector<std::uint8_t> Encode(const ReplayList&);
@@ -199,6 +233,10 @@ bool Decode(const std::vector<std::uint8_t>& payload, ChatMessage&);
 bool Decode(const std::vector<std::uint8_t>& payload, Chat&);
 bool Decode(const std::vector<std::uint8_t>& payload, RaceList&);
 bool Decode(const std::vector<std::uint8_t>& payload, ListReplays&);
+bool Decode(const std::vector<std::uint8_t>& payload, ListWinners&);
+bool Decode(const std::vector<std::uint8_t>& payload, WinnerList&);
+bool Decode(const std::vector<std::uint8_t>& payload, ListLeague&);
+bool Decode(const std::vector<std::uint8_t>& payload, LeagueData&);
 bool Decode(const std::vector<std::uint8_t>& payload, ListRecords&);
 bool Decode(const std::vector<std::uint8_t>& payload, RecordList&);
 bool Decode(const std::vector<std::uint8_t>& payload, ReplayList&);

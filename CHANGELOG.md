@@ -6,6 +6,12 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.18 - 2026-10-18
+
+### Added
+- **Leaderboards: Recent winners and Monthly league tabs.** Recent winners lists races won with two or more players (with Watch the race). The league gives 3 points to the winner of a race that counts (nothing for second and third, so two-player races are not the best way to farm points), resets on the 1st of each month (UTC), and shows the winner of every past month and of every finished year. Races count only when the players are on different devices with different names (a random per-installation device id; **IP addresses are not used**), and a pair of devices scores at most 3 duels a day. Racing yourself from two tabs or clients gives nothing and is not listed. A device id cannot prove identity (accounts will); see [leaderboards.md](docs/leaderboards.md).
+- Update the game and the server **together**: a game before this version cannot score, and an older server does not know the new tabs (the game says so). New server option `--league-file`; new results-table column `valid`.
+
 ### Changed
 - The web client no longer shows **QUIT HOVERNET** (pause menu, race results, replay end screen): a browser tab has nothing to quit to. The native clients keep it.
 

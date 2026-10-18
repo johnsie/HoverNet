@@ -31,6 +31,7 @@
 #include "../Authority/SecureChannel.h"
 #include "../Authority/WebSocket.h"
 #include "../Authority/LobbyServer.h"
+#include "../Authority/League.h"
 #include "../Authority/ReplayStoreDir.h"
 #include "../Authority/Moderation.h"
 #include "../Authority/RaceHost.h"
@@ -249,15 +250,35 @@ std::string Metric(const char* name, const char* help, const char* type, unsigne
 }
 
 // The result table beside each official replay (rank, player, laps, finish and best lap): what a leaderboard reads.
-void WriteResults(const std::string& replayPath, const std::vector<Authority::PlayerResult>& results, const Authority::RaceHost& host)
+void WriteResults(const std::string& replayPath, const std::vector<Authority::PlayerResult>& results, const Authority::RaceHost& host, bool leagueValid)
 {
     const std::string path = replayPath.substr(0, replayPath.size() - 4) + ".results.tsv";
     FILE* f = std::fopen(path.c_str(), "wb");
     if (f == nullptr) { std::fprintf(stderr, "cannot write the results to %s\n", path.c_str()); return; }
-    std::fprintf(f, "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\n");
-    for (const auto& r : results)
-        std::fprintf(f, "%d\t%d\t%d\t%d\t%lld\t%lld\t%s\t%d\n", r.rank, r.player, r.laps, r.finished ? 1 : 0, static_cast<long long>(r.finishTimeMs), static_cast<long long>(r.bestLapMs), host.SlotName(r.player).c_str(), host.Race().CraftModel(r.player));
+    // In finishing order. "valid": the race had two or more different devices and nobody racing themselves (the league's checks): only such races are
+    // listed as recent winners.
+    std::vector<Authority::PlayerResult> ordered = results;
+    std::stable_sort(ordered.begin(), ordered.end(), [](const Authority::PlayerResult& a, const Authority::PlayerResult& b) { return a.rank < b.rank; });
+    std::fprintf(f, "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\tvalid\n");
+    for (const auto& r : ordered)
+        std::fprintf(f, "%d\t%d\t%d\t%d\t%lld\t%lld\t%s\t%d\t%d\n", r.rank, r.player, r.laps, r.finished ? 1 : 0, static_cast<long long>(r.finishTimeMs), static_cast<long long>(r.bestLapMs), host.SlotName(r.player).c_str(), host.Race().CraftModel(r.player), leagueValid ? 1 : 0);
     std::fclose(f);
+}
+
+// What the monthly league makes of a finished race (Authority/League.h): who is on which device, who finished, the points. Said in the log of the server.
+Authority::LeagueDecision ScoreLeague(Authority::League& league, const Authority::RaceHost& host, const std::vector<Authority::PlayerResult>& results)
+{
+    std::vector<Authority::LeagueEntrant> entrants;
+    for (const auto& r : results) {
+        Authority::LeagueEntrant e;
+        e.name = host.SlotName(r.player);
+        e.hasDevice = host.SlotDeviceId(r.player, e.deviceHigh, e.deviceLow);
+        e.finished = r.finished; e.finishMs = static_cast<std::int32_t>(r.finishTimeMs); e.rank = r.rank;
+        entrants.push_back(e);
+    }
+    const Authority::LeagueDecision d = league.Record(static_cast<std::int64_t>(std::time(nullptr)), entrants);
+    std::printf("league: %s%s%s\n", d.scored ? "scored" : "not scored", d.reason.empty() ? "" : ": ", d.reason.c_str());
+    return d;
 }
 
 // One JSON object per line for operators' tooling (--event-log FILE): server start, races hosted and finished with their results,
@@ -389,6 +410,7 @@ int main(int argc, char** argv)
     std::string bind = "127.0.0.1";
     bool once = false;
     std::string replayDir;
+    std::string leaguePath;         // --league-file: the monthly league's log (default: league.tsv in the replay folder; none without one, then the league lives in memory)
     int replayKeep = 200;           // the newest replays kept in --replay-dir (and offered to players in the lobby)
     bool lobbyMode = false;
     std::string moderationDir;
@@ -416,6 +438,7 @@ int main(int argc, char** argv)
         else if (a == "--max-connections") maxConnections = std::atoi(value());
         else if (a == "--replay-dir") replayDir = value();
         else if (a == "--replay-keep") replayKeep = std::max(1, std::atoi(value()));
+        else if (a == "--league-file") leaguePath = value();
         else if (a == "--lobby") lobbyMode = true;
         else if (a == "--moderation-dir") moderationDir = value();
         else if (a == "--admin-port") adminPort = std::atoi(value());
@@ -433,6 +456,8 @@ int main(int argc, char** argv)
         else if (a == "--no-weapons") cfg.race.weapons = false;
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     }
+    if (leaguePath.empty() && !replayDir.empty()) leaguePath = replayDir + "/league.tsv";
+    Authority::League league(leaguePath);   // the monthly league (Authority/League.h)
     cfg.race.trackPath = SimHarness::TrackPath(cfg.race.trackName);
 
     MR_InitTrigoTables();
@@ -523,12 +548,14 @@ int main(int argc, char** argv)
         for (std::string name; std::getline(names, name, ',');) if (!name.empty()) lobbyConfig.tracks.push_back(name);
         lobbyConfig.maxConnections = maxConnections;
         LobbyServer lobby(lobbyConfig);
+        lobby.SetLeagueSource([&league](const std::string& month) { return league.Data(month, static_cast<std::int64_t>(std::time(nullptr))); });
         std::unique_ptr<DirReplayStore> replayStore;
         if (!replayDir.empty()) { replayStore.reset(new DirReplayStore(replayDir, static_cast<std::size_t>(replayKeep))); lobby.SetReplayStore(replayStore.get()); }
         lobby.SetRaceFinishedCallback([&](std::uint32_t id, const RaceHost& finished) {
             std::printf("race %u over after %u ticks, final hash %016llx\n", id, finished.Race().CurrentTick(), static_cast<unsigned long long>(finished.Race().StateHash()));
             for (const auto& r : finished.Race().Results()) std::printf("  player %d: rank %d, laps %d%s\n", r.player, r.rank, r.laps, r.finished ? ", finished" : "");
             LogEvent("race_finished", ResultFields(finished.Config().race.trackName, finished.Race().CurrentTick(), finished.Race().StateHash(), finished.Race().Results(), finished.Race().Events()));
+            const Authority::LeagueDecision leagueDecision = ScoreLeague(league, finished, finished.Race().Results());
             if (!replayDir.empty()) {
                 char name[160];
                 std::snprintf(name, sizeof(name), "/%s-%u-%lld.hnr", finished.Config().race.trackName.c_str(), id, static_cast<long long>(std::time(nullptr)));
@@ -538,7 +565,7 @@ int main(int argc, char** argv)
                 if (f != nullptr && std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size()) std::printf("replay saved to %s (%zu bytes)\n", path.c_str(), bytes.size());
                 else std::fprintf(stderr, "cannot write the replay to %s\n", path.c_str());
                 if (f != nullptr) std::fclose(f);
-                WriteResults(path, finished.Race().Results(), finished);
+                WriteResults(path, finished.Race().Results(), finished, leagueDecision.valid);
                 if (replayStore) { const int removed = replayStore->Prune(); if (removed > 0) std::printf("removed %d old replay%s (keeping %d)\n", removed, removed == 1 ? "" : "s", replayKeep); }
             }
             std::fflush(stdout);
@@ -612,6 +639,7 @@ int main(int argc, char** argv)
                             (unsigned long long)m.framesOut, (unsigned long long)m.bytesOut, (unsigned long long)m.invalidMessages, (unsigned long long)m.ticksSimulated,
                             (unsigned long long)m.inputsAccepted, (unsigned long long)m.inputsLate, (unsigned long long)m.inputsTooFar, (unsigned long long)m.snapshotsServed);
                 std::fflush(stdout);
+                const Authority::LeagueDecision leagueDecision = ScoreLeague(league, *host, results);
                 if (!replayDir.empty()) {
                     // The official record of the race: a replay anyone can verify and watch.
                     char name[128];
@@ -622,7 +650,7 @@ int main(int argc, char** argv)
                     if (f != nullptr && std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size()) std::printf("replay saved to %s (%zu bytes)\n", path.c_str(), bytes.size());
                     else std::fprintf(stderr, "cannot write the replay to %s\n", path.c_str());
                     if (f != nullptr) std::fclose(f);
-                    WriteResults(path, results, *host);
+                    WriteResults(path, results, *host, leagueDecision.valid);
                     std::fflush(stdout);
                 }
                 if (once || g_drainRequested != 0) break;

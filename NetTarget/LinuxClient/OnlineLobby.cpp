@@ -9,6 +9,14 @@
 
 using namespace Protocol3;
 
+namespace
+{
+bool gHasDevice = false;
+std::uint64_t gDeviceHigh = 0, gDeviceLow = 0;
+}
+
+void OnlineLobby::SetDeviceId(std::uint64_t high, std::uint64_t low) { gHasDevice = true; gDeviceHigh = high; gDeviceLow = low; }
+
 std::string OnlineLobby::DescribeReject(const Reject& r)
 {
     switch (r.reason) {
@@ -48,6 +56,7 @@ bool OnlineLobby::Connect(const std::string& host, int port, const std::string& 
     Hello hello;
     hello.name = name.substr(0, 32);
     hello.capabilities = kCapRaceId | kCapLobbyChat | kCapHostStart;   // this client shows the race number to a host, and the lobby's chat and users
+    if (gHasDevice) { hello.capabilities |= kCapDeviceId; hello.hasDevice = true; hello.deviceHigh = gDeviceHigh; hello.deviceLow = gDeviceLow; }
     mRaces.clear(); mBacklog.clear(); mUsers.clear(); mUsersTotal = 0; mChat.clear(); mRoster = Roster(); mIsHost = false;
     mGotAck = mGotStart = mSpectating = false;
     mQueuedWatchId = 0;
@@ -73,6 +82,16 @@ void OnlineLobby::Pump()
         if (f.type == kRaceList) {
             RaceList list;
             if (Decode(f.payload, list)) { mRaces = list.races; if (mState == State::eIdle || mState == State::eBrowsing) { mState = State::eBrowsing; mMessage.clear(); } }
+        }
+        else if (f.type == kWinnerList) {
+            WinnerList l;
+            if (Decode(f.payload, l)) { mWinners = l.winners; mWinnersLoaded = true; mListsUnreadable = false; }
+            else mListsUnreadable = true;
+        }
+        else if (f.type == kLeagueData) {
+            LeagueData l;
+            if (Decode(f.payload, l)) { mLeague = l; mLeagueLoaded = true; mListsUnreadable = false; }
+            else mListsUnreadable = true;
         }
         else if (f.type == kReplayList) {
             ReplayList l;
@@ -162,6 +181,24 @@ void OnlineLobby::RefreshReplays(const std::string& track)
     ask.max = static_cast<std::uint8_t>(kMaxReplayList);
     mReplaysLoaded = false;
     Send(kListReplays, Encode(ask));
+}
+
+void OnlineLobby::RefreshWinners()
+{
+    if (mState != State::eBrowsing) return;
+    ListWinners ask;
+    ask.max = static_cast<std::uint8_t>(kMaxWinnerList);
+    mWinnersLoaded = false;
+    Send(kListWinners, Encode(ask));
+}
+
+void OnlineLobby::RefreshLeague(const std::string& month)
+{
+    if (mState != State::eBrowsing) return;
+    ListLeague ask;
+    ask.month = month;
+    mLeagueLoaded = false;
+    Send(kListLeague, Encode(ask));
 }
 
 void OnlineLobby::RefreshRecords(const std::string& track, int laps)

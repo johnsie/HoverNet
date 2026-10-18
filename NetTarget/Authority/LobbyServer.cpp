@@ -25,6 +25,8 @@ struct LobbyServer::Conn
     bool helloDone = false;
     std::string name;
     std::uint32_t caps = 0;   // Hello.capabilities, passed on to the race the connection joins
+    bool hasDevice = false;   // the device id of the Hello, passed on the same way (the league)
+    std::uint64_t deviceHigh = 0, deviceLow = 0;
     std::int64_t connectedMs = 0;
     double chatTokens = 3;          // chat in the lobby: a burst, then one message a second
     std::int64_t lastChatMs = 0;
@@ -241,6 +243,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         c.helloDone = true;
         c.name = h.name;
         c.caps = h.capabilities;
+        c.hasDevice = h.hasDevice; c.deviceHigh = h.deviceHigh; c.deviceLow = h.deviceLow;
         c.parser.SetMaxFrame(std::min<std::uint16_t>(h.maxFrame, kDefaultMaxFrame));
         SendList(c);
         return;
@@ -272,6 +275,36 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         if (mReplays != nullptr) list.replays = mReplays->List(m.track, std::min<int>(m.max, kMaxReplayList));
         while (list.replays.size() > 1 && Encode(list).size() > kMaxListPayload) list.replays.pop_back();   // a message must fit in one frame: the oldest go first
         const std::vector<std::uint8_t> f = EncodeFrame(kReplayList, Encode(list));
+        c.out.insert(c.out.end(), f.begin(), f.end());
+        return;
+    }
+    if (type == kListWinners) {
+        ListWinners m;
+        if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
+        WinnerList list;
+        if (mReplays != nullptr) list = mReplays->Winners(std::min<int>(m.max, kMaxWinnerList));
+        while (list.winners.size() > 1 && Encode(list).size() > kMaxListPayload) list.winners.pop_back();   // the oldest go first
+        const std::vector<std::uint8_t> f = EncodeFrame(kWinnerList, Encode(list));
+        c.out.insert(c.out.end(), f.begin(), f.end());
+        return;
+    }
+    if (type == kListLeague) {
+        ListLeague m;
+        if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
+        LeagueData data;
+        if (mLeague) data = mLeague(m.month);
+        else { data.currentMonth = data.month = m.month.empty() ? "1970-01" : m.month; }
+        // A message must fit in one frame: shorten the longest list until it does (the standings of the month last).
+        while (Encode(data).size() > kMaxListPayload) {
+            if (data.pastWinners.size() > 3 && data.pastWinners.size() >= data.yearStandings.size()) data.pastWinners.pop_back();
+            else if (data.yearStandings.size() > 3) data.yearStandings.pop_back();
+            else if (data.standings.size() > 3) data.standings.pop_back();
+            else if (!data.pastWinners.empty()) data.pastWinners.pop_back();
+            else if (!data.yearStandings.empty()) data.yearStandings.pop_back();
+            else if (!data.standings.empty()) data.standings.pop_back();
+            else break;
+        }
+        const std::vector<std::uint8_t> f = EncodeFrame(kLeagueData, Encode(data));
         c.out.insert(c.out.end(), f.begin(), f.end());
         return;
     }
@@ -348,7 +381,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         e->host.reset(new RaceHost(e->cfg));
         std::string error;
         if (!e->host->Init(error)) { Close(c, kBadSettings, "that race could not be created"); return; }
-        Hello hello; hello.name = c.name; hello.capabilities = c.caps;
+        Hello hello; hello.name = c.name; hello.capabilities = c.caps; hello.hasDevice = c.hasDevice; hello.deviceHigh = c.deviceHigh; hello.deviceLow = c.deviceLow;
         Entry& ref = *e;
         mRaces[ref.id] = std::move(e);
         ++mRacesHosted;
@@ -363,7 +396,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         if (it == mRaces.end() || !CodeAccepted(c, *it->second, m.code)) { Close(c, kNoSuchRace, "no such race"); return; }
         RaceHost& h = *it->second->host;
         if (h.Started() || h.Full()) { Close(c, kServerFull, "that race is full or already running"); return; }
-        Hello hello; hello.name = c.name; hello.capabilities = c.caps;
+        Hello hello; hello.name = c.name; hello.capabilities = c.caps; hello.hasDevice = c.hasDevice; hello.deviceHigh = c.deviceHigh; hello.deviceLow = c.deviceLow;
         Attach(c, *it->second, EncodeFrame(kHello, Encode(hello)), nowMs);
         return;
     }
@@ -372,7 +405,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
         auto it = mRaces.find(m.id);
         if (it == mRaces.end() || !CodeAccepted(c, *it->second, m.code)) { Close(c, kNoSuchRace, "no such race"); return; }
-        Hello hello; hello.name = c.name; hello.capabilities = c.caps;
+        Hello hello; hello.name = c.name; hello.capabilities = c.caps; hello.hasDevice = c.hasDevice; hello.deviceHigh = c.deviceHigh; hello.deviceLow = c.deviceLow;
         Attach(c, *it->second, EncodeFrame(kSpectate, Encode(hello)), nowMs);
         return;
     }

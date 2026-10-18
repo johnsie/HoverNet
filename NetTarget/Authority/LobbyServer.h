@@ -50,6 +50,8 @@ public:
     // The track records of one track, a board per craft with the best five (best first): laps 0 the fastest single laps, laps n the fastest finishes of
     // races of n laps. Also says which lap counts have records.
     virtual Protocol3::RecordList Records(const std::string& track, int laps) = 0;
+    // The newest races with at least two different players (the league's checks passed), each with its winner, newest first.
+    virtual Protocol3::WinnerList Winners(int max) = 0;
 };
 
 class LobbyServer
@@ -67,6 +69,9 @@ public:
 
     // Offers shared replays (nullptr = none: the list is empty and every request is answered "no such replay").
     void SetReplayStore(ReplayStore* store) { mReplays = store; }
+    // Answers the monthly league (the month wanted, empty = the current one). Without one the league is empty.
+    void SetLeagueSource(std::function<Protocol3::LeagueData(const std::string&)> source) { mLeague = source; }
+    void SetClock(std::function<std::int64_t()> unixSeconds) { mClock = unixSeconds; }
 
     // Called once when a race ends (to save its replay, log it, ...).
     void SetRaceFinishedCallback(std::function<void(std::uint32_t, const RaceHost&)> callback) { mOnFinished = callback; }
@@ -109,6 +114,8 @@ private:
     std::string mLastUsers;          // the lobby's user list as last sent (a change is sent to those that asked for it)
     std::function<void(std::uint32_t, const RaceHost&)> mOnFinished;
     ReplayStore* mReplays = nullptr;
+    std::function<Protocol3::LeagueData(const std::string&)> mLeague;
+    std::function<std::int64_t()> mClock;
 };
 }
 

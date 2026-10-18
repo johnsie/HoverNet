@@ -1,4 +1,4 @@
-# Leaderboards: the community's best times, per craft
+# Leaderboards: the community's best times, per craft, recent winners and the monthly league
 
 **Leaderboards** (main menu) shows the best times of everyone who races on the HoverNet server you play on, not just the ones on your own device.
 
@@ -19,6 +19,41 @@ their tables, so a record is kept for as long as the replay it came from is, not
 were saved before the craft was recorded have no craft and are not on any board. A server must be started with `--replay-dir` to have any.
 
 Craft names are those of `Authority/CraftNames.h`, in the order the pick-your-craft screen cycles through them.
+
+## Recent winners and the monthly league (2.3.18)
+
+The Leaderboards screen has three tabs: **Records** (above), **Recent winners** and **Monthly league**.
+
+- **Recent winners** lists the newest races won, with the track, date, laps, number of players, the winner's name and craft and a *Watch the race* button
+  that plays it from the winner's seat. **A race is listed only if two or more players were in it and it passed the league's checks below.** Races with a
+  single player, and races one person made against themselves, never appear.
+- **Monthly league.** In a race that counts, the winner scores **3 points**; second and third score nothing (otherwise the easiest way to collect points would be to start many two-player races). The standings are per UTC calendar month and **start again
+  on the 1st**; the screen also shows the winner of every finished month, this year's standings so far, and the **winner of each finished year**
+  (announced when the year ends). The month selector shows the standings of an earlier month.
+
+**What counts (the cheat checks, `Authority/League.h`):**
+
+1. At least two players **finished** (someone who stays on the grid or leaves is not a competitor); a race of one scores nothing.
+2. Every player sent a **device id**: a random number each installation makes once and keeps (the browser build keeps it with its other settings). No two
+   players may share a device id, and no two may use the same display name. One person racing themselves from two browser tabs, two windows or two copies
+   on the same computer shares a device id, so that race is not valid and scores for nobody. **IP addresses are never used**, because players share them
+   (families, schools, mobile networks).
+3. A duel (exactly two devices) between the same two devices scores at most **3 times per UTC day**, so two accounts of one person cannot farm points from
+   each other.
+4. A game too old to send a device id (before 2.3.18) cannot score, and a race it is in is not valid. Game and server should be updated together.
+
+**What this cannot do:** the device id is chosen by the player's own game, so someone who edits it by hand can pretend to be another device, and a person
+with two different computers is two devices. Only accounts ([online-services.md](online-services.md), Stage 6a) can prove one person is one player. The
+rules make cheating take effort and cap what it gains per day; they do not make it impossible. The points belong to the device; the name shown is the one it
+used last.
+
+How it is built: the server appends every race that counts, and each score, to `league.tsv` (in the replay folder, or `--league-file`), which survives
+restarts; the standings are computed from it. The results table beside each replay has a `valid` column (1 when the race passed checks 1-2) that
+the recent-winners list reads. A server without `--replay-dir` keeps the league in memory only.
+
+Tests: `HoverNetLeague` (points, months, years, every cheat rule), `HoverNetLeagueChecks` (real races over TCP with scripted players on the same and on
+different devices), `HoverNetReplayShare` (the winners list and the lobby messages) and `HoverNetLeagueTabs` (the tabs against a real server with a seeded
+league).
 
 Tests: `HoverNetReplayShare` (boards per craft, the best five, lap counts, names, fitting one network frame), `HoverNetOnlineLobby` (the client against a real
 server) and `HoverNetLeaderboards` (the screen against a real server: a board per craft with names, and WATCH plays the record's run to the verified hash).

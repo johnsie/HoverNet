@@ -116,6 +116,56 @@ int main()
     Check(store.Records("The River", 0).boards.empty(), "a track with no results table has no records");
     Check(store.Records("ClassicH", 7).boards.empty(), "a lap count nobody raced has none");
 
+    // Recent winners: only races with two or more players that passed the league's checks (valid = 1), newest first, with the winner.
+    {
+        const std::string wdir = "hovernet-replay-winners.tmp";
+        MAKE_DIR(wdir.c_str());
+        WriteBytes(wdir + "/ClassicH-1-1.hnr", MakeReplay("ClassicH", 2, 1, 300, 201));
+        WriteFile(wdir + "/ClassicH-1-1.results.tsv", "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\tvalid\n1\t1\t1\t1\t90000\t90000\tAnna\t2\t1\n2\t0\t1\t1\t95000\t95000\tBen\t0\t1\n");
+        WriteBytes(wdir + "/ClassicH-2-2.hnr", MakeReplay("ClassicH", 2, 1, 310, 202));
+        WriteFile(wdir + "/ClassicH-2-2.results.tsv", "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\tvalid\n1\t0\t1\t1\t80000\t80000\tSelf\t0\t0\n2\t1\t1\t1\t85000\t85000\tSelf2\t0\t0\n");   // not valid: one person twice
+        WriteBytes(wdir + "/ClassicH-3-3.hnr", MakeReplay("ClassicH", 1, 1, 320, 203));
+        WriteFile(wdir + "/ClassicH-3-3.results.tsv", "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\tvalid\n1\t0\t1\t1\t70000\t70000\tAlone\t0\t1\n");   // one player
+        WriteBytes(wdir + "/The River-4-4.hnr", MakeReplay("The River", 3, 3, 330, 204));
+        WriteFile(wdir + "/The River-4-4.results.tsv", "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\tvalid\n1\t2\t3\t1\t200000\t60000\tCara\t1\t1\n2\t0\t3\t1\t210000\t62000\tDee\t0\t1\n3\t1\t1\t0\t0\t70000\tEli\t4\t1\n");
+        WriteBytes(wdir + "/ClassicH-5-5.hnr", MakeReplay("ClassicH", 2, 1, 340, 205));   // an older race: no results table at all
+        SetAge(wdir + "/ClassicH-1-1.hnr", 500); SetAge(wdir + "/ClassicH-2-2.hnr", 400); SetAge(wdir + "/ClassicH-3-3.hnr", 300); SetAge(wdir + "/The River-4-4.hnr", 100); SetAge(wdir + "/ClassicH-5-5.hnr", 50);
+        DirReplayStore winners(wdir, 50);
+        const Protocol3::WinnerList list2 = winners.Winners(15);
+        Check(list2.winners.size() == 2, "only races with two or more players that passed the league's checks are winners (not a race against oneself, not a race of one, not an old race with no table)");
+        Check(list2.winners.size() == 2 && list2.winners[0].track == "The River" && list2.winners[0].name == "Cara" && list2.winners[0].slot == 2 && list2.winners[0].craft == 1 && list2.winners[0].ms == 200000 && list2.winners[0].players == 3 && list2.winners[0].laps == 3, "the newest first, with the winner's name, slot, craft, time, laps and the number of players");
+        Check(list2.winners.size() == 2 && list2.winners[1].name == "Anna" && list2.winners[1].craft == 2, "and the earlier one");
+        LobbyConfig config2;
+        config2.tracks = {"ClassicH"};
+        LobbyServer lobby2(config2);
+        lobby2.SetReplayStore(&winners);
+        lobby2.SetLeagueSource([](const std::string& month) { Protocol3::LeagueData d; d.currentMonth = "2026-10"; d.month = month.empty() ? "2026-10" : month; Protocol3::LeagueRow r; r.name = "Anna"; r.points = 9; r.wins = 3; r.races = 4; d.standings.push_back(r); return d; });
+        Client viewer2(lobby2, 100);
+        Protocol3::Hello hello2; hello2.name = "viewer";
+        viewer2.Send(Protocol3::kHello, Protocol3::Encode(hello2), 100);
+        viewer2.Pump(); viewer2.Clear();
+        viewer2.Send(Protocol3::kListWinners, Protocol3::Encode(Protocol3::ListWinners()), 100);
+        viewer2.Pump();
+        Protocol3::WinnerList got3;
+        Check(viewer2.frames.size() == 1 && viewer2.frames[0].first == Protocol3::kWinnerList && Protocol3::Decode(viewer2.frames[0].second, got3) && got3.winners.size() == 2, "the lobby answers the recent winners");
+        viewer2.Clear();
+        Protocol3::ListLeague askLeague; askLeague.month = "2026-09";
+        viewer2.Send(Protocol3::kListLeague, Protocol3::Encode(askLeague), 100);
+        viewer2.Pump();
+        Protocol3::LeagueData league2;
+        Check(viewer2.frames.size() == 1 && viewer2.frames[0].first == Protocol3::kLeagueData && Protocol3::Decode(viewer2.frames[0].second, league2) && league2.month == "2026-09" && league2.standings.size() == 1 && league2.standings[0].points == 9, "the lobby answers the league for the month asked");
+        viewer2.Clear();
+        viewer2.Send(Protocol3::kListLeague, std::vector<std::uint8_t>{0x07, 'b', 'a', 'd', 'm', 'o', 'n', 't'}, 101);
+        viewer2.Pump();
+        Check(viewer2.frames.empty() && !lobby2.IsClosed(viewer2.conn), "a month that is not a month is refused without an answer, and without closing the connection");
+        for (const char* name : {"ClassicH-1-1.hnr", "ClassicH-1-1.results.tsv", "ClassicH-2-2.hnr", "ClassicH-2-2.results.tsv", "ClassicH-3-3.hnr", "ClassicH-3-3.results.tsv", "The River-4-4.hnr", "The River-4-4.results.tsv", "ClassicH-5-5.hnr"}) std::remove((wdir + "/" + name).c_str());
+#ifdef _WIN32
+        _rmdir(wdir.c_str());
+#else
+        rmdir(wdir.c_str());
+#endif
+    }
+
     // The lobby messages.
     LobbyConfig config;
     config.tracks = {"ClassicH"};

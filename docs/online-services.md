@@ -48,6 +48,7 @@ server user only.
 | Reports | reporter, target, reason, chat context | resolved reports 30 days |
 | Audit log | moderation and security events | 180 days, purged hourly (the purge is itself logged) |
 | Replays | track, settings, per-slot controls and hashes: **no names, addresses or chat** in the replay file itself | the newest `--replay-keep` (default 200) are kept and **offered to every player**; older ones are removed as new ones are saved |
+| League log (`league.tsv`, 2.3.18) | for each race that counted: the time, the players' **device ids** (a random number each installation makes; **no IP address**) and, per scoring player, the display name and points | kept so that months and years can be shown (the winners of past months and years); an operator can delete the file or lines at any time, which resets or removes that history |
 | Results tables (beside each replay) | rank, slot, laps, times and, since 2.3.14, **the display name each player typed** (so leaderboards and replay lists can show who raced). A display name is not verified: anyone can type any name until accounts exist | removed together with the replay it belongs to (the newest `--replay-keep`); an operator can delete a table, or a name from it, at any time |
 | Telemetry | counters only (connections, bytes, ticks, invalid messages); no content | in memory; printed per race |
 

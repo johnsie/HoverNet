@@ -85,6 +85,17 @@ public:
     const std::string& ReplayNotice() const { return mReplayNotice; }
     void ClearReplayNotice() { mReplayNotice.clear(); }
 
+    // Recent winners (races with at least two different players) and the monthly league.
+    void RefreshWinners();
+    const std::vector<Protocol3::WinnerEntry>& Winners() const { return mWinners; }
+    bool WinnersLoaded() const { return mWinnersLoaded; }
+    void RefreshLeague(const std::string& month = std::string());               // "YYYY-MM", empty = the current month
+    const Protocol3::LeagueData& League() const { return mLeague; }
+    bool LeagueLoaded() const { return mLeagueLoaded; }
+    // The device id of this game (16 random bytes it made once and keeps): sent in every Hello so the league can tell that two players in a race are on
+    // different devices. Set once at start-up; without it no race this game plays counts for the league. Never shown to anybody.
+    static void SetDeviceId(std::uint64_t high, std::uint64_t low);
+
     // Plain-language text for a server refusal.
     static std::string DescribeReject(const Protocol3::Reject& r);
 
@@ -109,6 +120,9 @@ private:
     std::vector<AuthFrame> mBacklog;
     std::vector<Protocol3::ReplayInfo> mReplays;
     Protocol3::RecordList mRecords;
+    std::vector<Protocol3::WinnerEntry> mWinners;
+    Protocol3::LeagueData mLeague;
+    bool mWinnersLoaded = false, mLeagueLoaded = false;
     bool mReplaysLoaded = false, mRecordsLoaded = false, mReplayReady = false, mListsUnreadable = false;
     std::uint64_t mFetchId = 0;
     long long mLastFetchMs = -100000;   // the server allows one download every half second; a quicker request waits (see FetchReplay)

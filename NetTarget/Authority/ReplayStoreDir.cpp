@@ -108,6 +108,7 @@ std::int32_t WinnerMs(const std::string& replayPath, std::uint8_t& slot, std::st
 void ReadRuns(const std::string& replayPath, std::vector<ReplayRun>& runs)
 {
     runs.clear();
+    std::vector<int> ranks;
     const std::string path = replayPath.substr(0, replayPath.size() - 4) + ".results.tsv";
     std::FILE* f = std::fopen(path.c_str(), "r");
     if (f == nullptr) return;
@@ -117,9 +118,17 @@ void ReadRuns(const std::string& replayPath, std::vector<ReplayRun>& runs)
         long long finishMs, bestLap;
         if (std::sscanf(line, "%d\t%d\t%d\t%d\t%lld\t%lld", &rank, &player, &laps, &finished, &finishMs, &bestLap) != 6) continue;
         if (player < 0 || player > 7 || finishMs < 0 || finishMs > 2000000000LL || bestLap < 0 || bestLap > 2000000000LL) continue;
-        runs.push_back({static_cast<std::uint8_t>(player), static_cast<std::int32_t>(finishMs), static_cast<std::int32_t>(bestLap), finished == 1, NameField(line), CraftField(line)});
+        runs.push_back({static_cast<std::uint8_t>(player), static_cast<std::int32_t>(finishMs), static_cast<std::int32_t>(bestLap), finished == 1, NameField(line), CraftField(line), TextField(line, 8) == "1"});
+        ranks.push_back(rank);
     }
     std::fclose(f);
+    // In finishing order whatever order the file lists the players in.
+    std::vector<std::size_t> order(runs.size());
+    for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&](std::size_t x, std::size_t y) { return ranks[x] < ranks[y]; });
+    std::vector<ReplayRun> sorted;
+    for (std::size_t i : order) sorted.push_back(runs[i]);
+    runs.swap(sorted);
 }
 }
 
@@ -225,6 +234,24 @@ Protocol3::RecordList DirReplayStore::Records(const std::string& track, int laps
         board.craft = static_cast<std::uint8_t>(craft);
         board.entries = list;
         out.boards.push_back(board);
+    }
+    return out;
+}
+
+Protocol3::WinnerList DirReplayStore::Winners(int max)
+{
+    Refresh();
+    Protocol3::WinnerList out;
+    for (const Item* item : Sorted()) {
+        if (static_cast<int>(out.winners.size()) >= max) break;
+        if (item->runs.size() < 2 || !item->runs[0].valid) continue;   // two or more players, and the checks of the league (different devices) passed
+        const ReplayRun* winner = nullptr;
+        for (const ReplayRun& run : item->runs) if (run.finished && run.finishMs > 0) { winner = &run; break; }   // the table is in finishing order
+        if (winner == nullptr) continue;
+        Protocol3::WinnerEntry w;
+        w.replay = item->info.id; w.track = item->info.track; w.slot = winner->slot; w.laps = item->info.laps; w.players = static_cast<std::uint8_t>(item->runs.size());
+        w.savedAt = item->info.savedAt; w.ms = winner->finishMs; w.craft = winner->craft >= 0 ? static_cast<std::uint8_t>(winner->craft) : 255; w.name = winner->name;
+        out.winners.push_back(w);
     }
     return out;
 }

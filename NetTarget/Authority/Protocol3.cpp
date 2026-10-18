@@ -101,6 +101,7 @@ std::vector<std::uint8_t> Encode(const Hello& m)
     Out o;
     for (int i = 0; i < 4; ++i) o.U8(kMagic[i]);
     o.U16(m.major); o.U16(m.minor); o.U32(m.capabilities); o.U16(m.maxFrame); o.Str(m.name);
+    if (m.hasDevice) { o.U64(m.deviceHigh); o.U64(m.deviceLow); }
     return o.b;
 }
 bool Decode(const std::vector<std::uint8_t>& p, Hello& m)
@@ -109,7 +110,9 @@ bool Decode(const std::vector<std::uint8_t>& p, Hello& m)
     for (int i = 0; i < 4; ++i) if (in.U8() != kMagic[i]) return false;
     m.major = static_cast<std::uint16_t>(in.U16()); m.minor = static_cast<std::uint16_t>(in.U16()); m.capabilities = in.U32();
     m.maxFrame = static_cast<std::uint16_t>(in.U16()); m.name = in.Str(32);
-    return in.Done() && !m.name.empty() && m.maxFrame >= kMinMaxFrame;
+    m.hasDevice = false;
+    if (in.ok && !in.AtEnd()) { m.deviceHigh = in.U64(); m.deviceLow = in.U64(); m.hasDevice = true; }
+    return in.Done() && !m.name.empty() && m.maxFrame >= kMinMaxFrame && (!m.hasDevice || (m.capabilities & kCapDeviceId) != 0);
 }
 
 std::vector<std::uint8_t> Encode(const HelloAck& m)
@@ -384,6 +387,101 @@ bool Decode(const std::vector<std::uint8_t>& p, RecordList& m)
             b.entries.push_back(e);
         }
         m.boards.push_back(b);
+    }
+    return in.Done();
+}
+
+std::vector<std::uint8_t> Encode(const ListWinners& m) { Out o; o.U8(m.max); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, ListWinners& m) { In in(p); m.max = static_cast<std::uint8_t>(in.U8()); return in.Done() && m.max >= 1 && m.max <= kMaxWinnerList; }
+
+std::vector<std::uint8_t> Encode(const WinnerList& m)
+{
+    Out o;
+    o.U8(static_cast<std::uint32_t>(m.winners.size()));
+    for (const WinnerEntry& w : m.winners) { o.U64(w.replay); o.Str(w.track); o.U8(w.slot); o.U8(w.laps); o.U8(w.players); o.U32(w.savedAt); o.U32(static_cast<std::uint32_t>(w.ms)); o.U8(w.craft); o.Str(w.name); }
+    return o.b;
+}
+bool Decode(const std::vector<std::uint8_t>& p, WinnerList& m)
+{
+    In in(p);
+    const std::uint32_t count = in.U8();
+    if (!in.ok || count > static_cast<std::uint32_t>(kMaxWinnerList)) return false;
+    m.winners.clear();
+    for (std::uint32_t i = 0; i < count && in.ok; ++i) {
+        WinnerEntry w;
+        w.replay = in.U64(); w.track = in.Str(64); w.slot = static_cast<std::uint8_t>(in.U8()); w.laps = static_cast<std::uint8_t>(in.U8()); w.players = static_cast<std::uint8_t>(in.U8());
+        w.savedAt = in.U32(); w.ms = static_cast<std::int32_t>(in.U32()); w.craft = static_cast<std::uint8_t>(in.U8()); w.name = in.Str(32);
+        if (w.track.empty() || w.slot >= 8 || w.players < 2 || w.players > 8 || w.ms <= 0 || (w.craft >= 8 && w.craft != 255)) return false;
+        m.winners.push_back(w);
+    }
+    return in.Done();
+}
+
+static bool ValidMonth(const std::string& s)   // "YYYY-MM"
+{
+    if (s.size() != 7 || s[4] != '-') return false;
+    for (int i : {0, 1, 2, 3, 5, 6}) if (s[static_cast<std::size_t>(i)] < '0' || s[static_cast<std::size_t>(i)] > '9') return false;
+    const int month = (s[5] - '0') * 10 + (s[6] - '0');
+    return month >= 1 && month <= 12;
+}
+
+std::vector<std::uint8_t> Encode(const ListLeague& m) { Out o; o.Str(m.month); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, ListLeague& m) { In in(p); m.month = in.Str(7); return in.Done() && (m.month.empty() || ValidMonth(m.month)); }
+
+static void PutRows(Out& o, const std::vector<LeagueRow>& rows)
+{
+    o.U8(static_cast<std::uint32_t>(rows.size()));
+    for (const LeagueRow& r : rows) { o.Str(r.name); o.U16(r.points); o.U16(r.wins); o.U16(r.races); }
+}
+static bool GetRows(In& in, std::vector<LeagueRow>& rows, std::uint32_t limit)
+{
+    const std::uint32_t count = in.U8();
+    if (!in.ok || count > limit) return false;
+    rows.clear();
+    for (std::uint32_t i = 0; i < count && in.ok; ++i) {
+        LeagueRow r;
+        r.name = in.Str(32); r.points = static_cast<std::uint16_t>(in.U16()); r.wins = static_cast<std::uint16_t>(in.U16()); r.races = static_cast<std::uint16_t>(in.U16());
+        rows.push_back(r);
+    }
+    return in.ok;
+}
+std::vector<std::uint8_t> Encode(const LeagueData& m)
+{
+    Out o;
+    o.Str(m.currentMonth); o.Str(m.month);
+    PutRows(o, m.standings);
+    o.U8(static_cast<std::uint32_t>(m.pastWinners.size()));
+    for (const LeagueMonthWinner& w : m.pastWinners) { o.Str(w.month); o.Str(w.name); o.U16(w.points); }
+    o.U16(m.currentYear);
+    PutRows(o, m.yearStandings);
+    o.U8(static_cast<std::uint32_t>(m.yearWinners.size()));
+    for (const LeagueYearWinner& w : m.yearWinners) { o.U16(w.year); o.Str(w.name); o.U16(w.points); }
+    return o.b;
+}
+bool Decode(const std::vector<std::uint8_t>& p, LeagueData& m)
+{
+    In in(p);
+    m.currentMonth = in.Str(7); m.month = in.Str(7);
+    if (!in.ok || !ValidMonth(m.currentMonth) || !ValidMonth(m.month)) return false;
+    if (!GetRows(in, m.standings, static_cast<std::uint32_t>(kMaxLeagueRows))) return false;
+    const std::uint32_t months = in.U8();
+    if (!in.ok || months > static_cast<std::uint32_t>(kMaxLeagueMonths)) return false;
+    m.pastWinners.clear();
+    for (std::uint32_t i = 0; i < months && in.ok; ++i) {
+        LeagueMonthWinner w;
+        w.month = in.Str(7); w.name = in.Str(32); w.points = static_cast<std::uint16_t>(in.U16());
+        if (!ValidMonth(w.month)) return false;
+        m.pastWinners.push_back(w);
+    }
+    m.currentYear = static_cast<std::uint16_t>(in.U16());
+    if (!GetRows(in, m.yearStandings, static_cast<std::uint32_t>(kMaxLeagueRows))) return false;
+    const std::uint32_t years = in.U8();
+    if (!in.ok || years > static_cast<std::uint32_t>(kMaxLeagueYears)) return false;
+    m.yearWinners.clear();
+    for (std::uint32_t i = 0; i < years && in.ok; ++i) {
+        LeagueYearWinner w;
+        w.year = static_cast<std::uint16_t>(in.U16()); w.name = in.Str(32); w.points = static_cast<std::uint16_t>(in.U16());
+        m.yearWinners.push_back(w);
     }
     return in.Done();
 }

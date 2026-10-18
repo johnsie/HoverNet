@@ -75,6 +75,13 @@ public:
     bool RaceFinished() const { return mRace.Finished(); }
     const AuthoritativeRace& Race() const { return mRace; }
     // The display name each player slot had when the race started (empty for a slot nobody held). Names are what players typed; nothing proves they are theirs.
+    // The device id the player of a slot sent in its Hello (false when it sent none: an older game). Used only by the league; never sent on to anybody.
+    bool SlotDeviceId(int slot, std::uint64_t& high, std::uint64_t& low) const
+    {
+        if (slot < 0 || slot >= static_cast<int>(mSlotDevices.size()) || !mSlotDevices[static_cast<std::size_t>(slot)].has) return false;
+        high = mSlotDevices[static_cast<std::size_t>(slot)].high; low = mSlotDevices[static_cast<std::size_t>(slot)].low;
+        return true;
+    }
     const std::string& SlotName(int slot) const { static const std::string none; return slot >= 0 && slot < static_cast<int>(mSlotNames.size()) ? mSlotNames[static_cast<std::size_t>(slot)] : none; }
     int ConnectedPlayers() const;
     int InvalidTotal() const { return mInvalidTotal; }
@@ -119,6 +126,8 @@ private:
     std::vector<std::pair<std::uint32_t, std::vector<std::uint8_t>>> mKeyframes;   // (tick, snapshot) every keyframeTicks
     std::vector<std::uint64_t> mTokens;   // reconnect token per player slot (0 = none yet)
     std::vector<std::string> mSlotNames;  // display name per player slot, taken when the race starts
+    struct SlotDevice { bool has = false; std::uint64_t high = 0, low = 0; };
+    std::vector<SlotDevice> mSlotDevices; // device id per player slot, taken when the race starts
     std::uint64_t mTokenState;
     std::uint64_t NextToken();
     void SendHelloAck(Connection& c);

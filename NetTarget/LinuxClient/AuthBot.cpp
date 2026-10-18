@@ -2,7 +2,7 @@
 // few ticks ahead every 16 ms while rebuilding the race from the server's Tick messages and checking the state hash of every
 // tick. Exits 0 only if every tick matched and the Result arrived.
 //
-//   HoverNetAuthBot --port 9610 [--host 127.0.0.1] [--name bot] [--track ClassicH] [--lead 12]
+//   HoverNetAuthBot --port 9610 [--host 127.0.0.1] [--name bot] [--track ClassicH] [--lead 12] [--device N]
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -40,6 +40,7 @@ int main(int argc, char** argv)
     bool spectate = false;               // watch instead of driving (single-race servers: --spectate; lobby: --spectate-race TRACK)
     std::string code;                    // lobby: the code of a private race, to host one or to join or watch one by id
     int raceId = 0;                      // lobby: join (or, with --spectate, watch) this race id directly; needed for private races
+    std::uint64_t deviceNumber = 0;       // --device N: say which device this bot is on (the league counts a race only if its players are on different devices)
     std::string hostTrack, joinTrack;   // lobby servers: host a race ('Track:players[:laps]') or join an open race on a track
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -59,6 +60,7 @@ int main(int argc, char** argv)
         else if (a == "--race-id") raceId = std::atoi(value());
         else if (a == "--host-race") hostTrack = value();
         else if (a == "--join-race") joinTrack = value();
+        else if (a == "--device") deviceNumber = std::strtoull(value(), nullptr, 10);
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     }
     MR_InitTrigoTables();
@@ -77,6 +79,7 @@ int main(int argc, char** argv)
     auto sendFrame = [&](std::uint8_t type, const std::vector<std::uint8_t>& payload) { return conn.Send(type, payload); };
     Protocol3::Hello hello;
     hello.name = name;
+    if (deviceNumber != 0) { hello.capabilities |= Protocol3::kCapDeviceId; hello.hasDevice = true; hello.deviceHigh = 0xB07; hello.deviceLow = deviceNumber; }
     // A spectator on a single-race server says Spectate instead of Hello; on a lobby server it says Hello and then picks a race.
     const bool lobbySpectator = spectate && (!joinTrack.empty() || raceId > 0);
     if (!sendFrame(spectate && !lobbySpectator ? Protocol3::kSpectate : Protocol3::kHello, Protocol3::Encode(hello))) return 1;

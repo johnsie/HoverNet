@@ -17,7 +17,7 @@
 namespace Authority
 {
 // One player's line of a race's results table.
-struct ReplayRun { std::uint8_t slot; std::int32_t finishMs; std::int32_t bestLapMs; bool finished; std::string name; int craft; };   // craft: 0 to 4, -1 when the table does not say
+struct ReplayRun { std::uint8_t slot; std::int32_t finishMs; std::int32_t bestLapMs; bool finished; std::string name; int craft; bool valid; };   // craft: 0 to 4, -1 when the table does not say
 
 class DirReplayStore : public ReplayStore
 {
@@ -27,6 +27,7 @@ public:
     std::vector<Protocol3::ReplayInfo> List(const std::string& track, int max) override;
     bool Read(std::uint64_t id, std::vector<std::uint8_t>& bytes) override;
     Protocol3::RecordList Records(const std::string& track, int laps) override;
+    Protocol3::WinnerList Winners(int max) override;
     // Removes the oldest replays (and their results tables) beyond `keep`. Returns how many were removed.
     int Prune();
     std::size_t Count();

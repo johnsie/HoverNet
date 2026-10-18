@@ -19,6 +19,8 @@ struct RaceHost::Connection
     bool spectator = false;
     std::uint32_t caps = 0;             // Hello.capabilities
     std::string name;
+    bool hasDevice = false;             // the device id of the Hello (kCapDeviceId), for the league: never sent to other players
+    std::uint64_t deviceHigh = 0, deviceLow = 0;
     std::set<std::string> blocked;
     double chatTokens = 3;
     std::int64_t lastChatMs = 0;
@@ -208,7 +210,12 @@ void RaceHost::StartNow(std::int64_t nowMs)
 {
     mStarted = true;
     mSlotNames.assign(static_cast<std::size_t>(mConfig.race.players), std::string());
-    for (const auto& o : mConnections) if (!o->closed && !o->spectator && o->player >= 0 && o->player < mConfig.race.players) mSlotNames[static_cast<std::size_t>(o->player)] = o->name;
+    mSlotDevices.assign(static_cast<std::size_t>(mConfig.race.players), SlotDevice());
+    for (const auto& o : mConnections) {
+        if (o->closed || o->spectator || o->player < 0 || o->player >= mConfig.race.players) continue;
+        mSlotNames[static_cast<std::size_t>(o->player)] = o->name;
+        mSlotDevices[static_cast<std::size_t>(o->player)] = SlotDevice{o->hasDevice, o->deviceHigh, o->deviceLow};
+    }
     mStartMs = nowMs + mConfig.startDelayMs;
     Protocol3::Start s;
     s.countdownMs = static_cast<std::uint32_t>(mConfig.startDelayMs);
@@ -266,6 +273,7 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
         c.helloDone = true;
         c.name = h.name;
         c.caps = h.capabilities;
+        c.hasDevice = h.hasDevice; c.deviceHigh = h.deviceHigh; c.deviceLow = h.deviceLow;
         if (ConnectedPlayers() == 0 && (h.capabilities & kCapHostStart) != 0) { mHostStarts = true; mHostConn = c.id; }
         std::vector<bool> used(static_cast<std::size_t>(mConfig.race.players), false);
         for (const auto& o : mConnections) if (!o->closed && o->player >= 0) used[static_cast<std::size_t>(o->player)] = true;

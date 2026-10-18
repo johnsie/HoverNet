@@ -351,6 +351,11 @@ Depends on Stage 1's determinism.
   `HoverNetReplay verify`). Shown in the game (desktop and browser) in its own **Leaderboards** screen ([leaderboards.md](leaderboards.md)), per craft (a record
   in one craft never replaces another's). Names are the display names players typed (unverified until Stage 6a accounts). *Status: built and tested like the shared replays; records last as long as their replays (no all-time board, no filters by date).*
 
+- **Recent winners and the monthly league.** Two more Leaderboards tabs: the latest races won with two or more players, and a league (3 points for the
+  winner of a race that counts, reset on the 1st of each month, winner of every past month and every finished year). Anti-cheat without IP addresses: a
+  per-installation device id, distinct devices and names per race, a daily cap on the same pair ([leaderboards.md](leaderboards.md)); real identity needs
+  Stage 6a accounts. *Status: built and tested natively against a real server; not yet run in a browser or against the production server.*
+
 **Exit gate:** a race can be saved, shared, replayed, and independently verified from the
 stored data, on every supported platform.
 

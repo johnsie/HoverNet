@@ -39,6 +39,7 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 | `--spectator-delay-ms` | how far behind the drivers spectators see the race |
 | `--replay-dir DIR` | save a replay of every race (with `--lobby` they are also offered to every player: the Server replays and Track records tabs of Watch a Replay) |
 | `--replay-keep N` | keep the newest N replays in `--replay-dir` (default 200; older ones and their results tables are removed as new ones are saved) |
+| `--league-file FILE` | the monthly league's log (default `league.tsv` in `--replay-dir`; without either the league is kept in memory). Append-only; it holds device ids (random numbers, not addresses) and display names, see below |
 | `--moderation-dir DIR`, `--admin-port P` | audit log, moderators and the console ([online-services.md](online-services.md)) |
 | `--status-port P`, `--crash-dir DIR` | `/health`, `/metrics`; crash reports |
 | `--ws-origin ORIGINS`, `--ws-path P` | accept browsers over WebSocket from these comma-separated origins, at this path (default `/auth/`) |
