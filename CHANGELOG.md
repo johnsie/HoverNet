@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.11 - 2026-10-18
+
 ### Added
 - **Restart race.** In a local (offline) race, the pause menu and the results screen now have **RESTART RACE**: the same track, laps and weapons again, from the grid. (Not offered in online races or replays.)
 
