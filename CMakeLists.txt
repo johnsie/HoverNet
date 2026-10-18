@@ -875,7 +875,7 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetPrediction250 COMMAND HoverNetPredictionTest "The Alley2" 8 125)
     set_tests_properties(HoverNetPrediction120 HoverNetPrediction250 PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetReplayViewer
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-replay-viewer.sh $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-replay-viewer.sh $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player> $<TARGET_FILE:HoverNetDriver>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetAuthClient
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-authclient.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetGame2Player> 8 400

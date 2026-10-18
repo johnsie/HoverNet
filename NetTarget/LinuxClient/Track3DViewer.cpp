@@ -6479,8 +6479,35 @@ struct ReplayPlayback
     std::map<std::uint32_t, std::vector<std::uint8_t>> snapshots;   // state every 250 ticks, taken as the replay plays (for seeking)
     bool seekTest = false;       // test mode: play to tick 1000, jump back to tick 400, play on to the end
     bool seekTestDone = false;
+    bool markerTest = false;     // test mode: play to tick 8000, jump to the previous lap marker, play on, print the markers found
+    bool markerTestDone = false;
+    // Timeline markers: every lap crossing and finish, noted the moment the replay plays through it (the same lap counts the race
+    // itself keeps, so nothing is computed twice). They stay after a seek back, and a seek forward finds the rest on the way.
+    struct Marker { std::uint32_t tick; int player; int lap; bool finished; };
+    std::vector<Marker> markers;
+    std::vector<int> lapsSeen;   // by player slot
+    bool mouseWasDown = false;
 };
 const double kReplaySpeeds[] = {0.25, 0.5, 1.0, 2.0, 4.0};
+
+// The palette index of the basic colour nearest to an RGB value (the replay timeline is drawn straight into the 8-bit frame).
+std::uint8_t NearestPaletteIndex(int r, int g, int b)
+{
+    static PALETTEENTRY* colors = MR_GetColors(0.75, 0.75, 0.05);
+    int best = 0, bestDistance = 1 << 30;
+    for (int i = 0; i < MR_BASIC_COLORS; ++i) {
+        const int dr = colors[i].peRed - r, dg = colors[i].peGreen - g, db = colors[i].peBlue - b;
+        const int d = dr * dr + dg * dg + db * db;
+        if (d < bestDistance) { bestDistance = d; best = i; }
+    }
+    return static_cast<std::uint8_t>(MR_RESERVED_COLORS_BEGINNING + best);
+}
+
+void FillFrameRect(MR_UInt8* frame, int width, int height, int x, int y, int w, int h, std::uint8_t color)
+{
+    for (int row = std::max(0, y); row < std::min(height, y + h); ++row)
+        for (int col = std::max(0, x); col < std::min(width, x + w); ++col) frame[row * width + col] = color;
+}
 
 std::string ParseStringArg(int argc, char** argv, const char* name)
 {
@@ -6671,7 +6698,8 @@ int RunClient(int argc, char** argv)
 #ifdef HOVERNET_GAME2_PLAYER
     ReplayPlayback replay;
     const std::string replayPath = ParseStringArg(argc, argv, "--replay");
-    replay.hashMode = HasArgument(argc, argv, "--replay-hash") || HasArgument(argc, argv, "--replay-seek-test");
+    replay.hashMode = HasArgument(argc, argv, "--replay-hash") || HasArgument(argc, argv, "--replay-seek-test") || HasArgument(argc, argv, "--replay-marker-test");
+    replay.markerTest = HasArgument(argc, argv, "--replay-marker-test");
     replay.seekTest = HasArgument(argc, argv, "--replay-seek-test");
     replay.watch = std::atoi(ParseStringArg(argc, argv, "--replay-player").c_str());
     const std::string authServer = ParseStringArg(argc, argv, "--auth-connect");     // host:port of an authoritative server
@@ -7207,8 +7235,10 @@ int RunClient(int argc, char** argv)
             if (!placeError.empty()) return FatalClientError(placeError);
             session.SetSimulationTime(0);
             replay.active = true;
+            replay.lapsSeen.assign(static_cast<std::size_t>(replay.data.players), 0);
+            if (const char* speed = std::getenv("HOVERNET_TEST_REPLAY_SPEED")) replay.speedStep = std::max(0, std::min(4, std::atoi(speed)));   // test hook: start at this speed step
             replay.lastTicks = SDL_GetTicks();
-            session.AddMessage("Replay: P pauses, 1-5 sets the speed, [ and ] switch craft, Esc leaves");
+            session.AddMessage("Replay: P pauses, 1-5 sets the speed, , and . jump between laps, [ and ] switch craft, Esc leaves");
         }
         else if (!authServer.empty()) {
 #if defined(HOVERNET_AUTH)
@@ -8128,6 +8158,42 @@ int RunClient(int argc, char** argv)
                 if (keyboard[SDL_SCANCODE_RIGHT]) seekTarget = std::min<int>(static_cast<int>(replay.data.ticks), static_cast<int>(replay.tick) + 312);
                 if (keyboard[SDL_SCANCODE_HOME]) seekTarget = 0;
                 if (replay.seekTest && !replay.seekTestDone && replay.tick >= 1000) { replay.seekTestDone = true; seekTarget = 400; }
+                // Lap markers: "," goes to a moment before the previous lap crossing, "." to before the next one (as far as the replay
+                // has played; the markers are found as it goes). Clicking the timeline bar seeks to that point.
+                {
+                    const int kLeadTicks = 125;   // two seconds before the crossing, so the viewer sees it arrive
+                    const bool previous = keyboard[SDL_SCANCODE_COMMA] != 0, next = keyboard[SDL_SCANCODE_PERIOD] != 0;
+                    const bool testJump = replay.markerTest && !replay.markerTestDone && replay.tick >= 8000;
+                    if (previous || next || testJump) {
+                        int target = -1;
+                        if (next) {
+                            for (const auto& m : replay.markers) {
+                                const int t = static_cast<int>(m.tick) - kLeadTicks;
+                                if (t > static_cast<int>(replay.tick) && (target < 0 || t < target)) target = t;
+                            }
+                        }
+                        else {
+                            for (const auto& m : replay.markers) {
+                                const int t = std::max(0, static_cast<int>(m.tick) - kLeadTicks);
+                                if (t < static_cast<int>(replay.tick) - 30 && t > target) target = t;
+                            }
+                        }
+                        if (testJump) { replay.markerTestDone = true; std::printf("marker jump from %u to %d with %zu markers\n", replay.tick, target, replay.markers.size()); }
+                        if (target >= 0) { seekTarget = target; if (!testJump) SDL_Delay(150); }
+                    }
+                    int mx = 0, my = 0;
+                    const bool down = (SDL_GetMouseState(&mx, &my) & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
+                    if (down && !replay.mouseWasDown && !replay.hashMode && graphics.GetRenderer() != nullptr) {
+                        float lx = 0, ly = 0;
+                        SDL_RenderWindowToLogical(graphics.GetRenderer(), mx, my, &lx, &ly);
+                        const int barX = 20, barW = kWidth - 40, barY = kHeight - 14;
+                        if (replay.data.ticks > 0 && lx >= barX && lx <= barX + barW && ly >= barY - 12 && ly <= barY + 14) {
+                            seekTarget = static_cast<int>(static_cast<std::int64_t>(replay.data.ticks) * (static_cast<int>(lx) - barX) / barW);
+                            seekTarget = std::max(0, std::min<int>(seekTarget, static_cast<int>(replay.data.ticks)));
+                        }
+                    }
+                    replay.mouseWasDown = down;
+                }
                 if (seekTarget >= 0) {
                     auto best = replay.snapshots.upper_bound(static_cast<std::uint32_t>(seekTarget));
                     if (best != replay.snapshots.begin()) {
@@ -8151,18 +8217,32 @@ int RunClient(int argc, char** argv)
                         std::vector<MR_FreeElement*> external(replay.craft.begin(), replay.craft.end());
                         replay.snapshots[replay.tick] = MR_SaveLevelState(session.Level(), session.GetSimulationTime(), external, ReplayFormat::kSimulationRules);
                     }
-                    const int untilBoundary = static_cast<int>(250 - replay.tick % 250);
-                    int n = std::min(ticks, untilBoundary);
-                    if (std::getenv("HOVERNET_REPLAY_TRACE") != nullptr) n = 1;   // debugging: one tick at a time, hash printed
+                    // One tick at a time (the result is the same as in larger steps, see HOVERNET_REPLAY_TRACE) so a lap crossing
+                    // is noted at its exact tick.
+                    const int n = 1;
                     session.StepTicks(n, ReplayTickHook, &replay);
                     replay.tick += static_cast<std::uint32_t>(n);
                     ticks -= n;
+                    for (int p = 0; p < replay.data.players; ++p) {
+                        const MR_MainCharacter* c = replay.craft[static_cast<std::size_t>(p)];
+                        int& seen = replay.lapsSeen[static_cast<std::size_t>(p)];
+                        if (c->GetLap() > seen) {
+                            seen = c->GetLap();
+                            const bool known = std::any_of(replay.markers.begin(), replay.markers.end(),
+                                [&](const ReplayPlayback::Marker& m) { return m.player == p && m.lap == seen; });
+                            if (!known) replay.markers.push_back({replay.tick, p, seen, c->HasFinish() != 0});
+                        }
+                        else if (c->GetLap() < seen) seen = c->GetLap();   // after a seek back
+                    }
                     if (std::getenv("HOVERNET_REPLAY_TRACE") != nullptr) std::printf("%u %016llx\n", replay.tick, static_cast<unsigned long long>(MR_HashLevelState(session.Level(), session.GetSimulationTime())));
                 }
                 if (replay.tick >= replay.data.ticks && !replay.finished) {
                     replay.finished = true;
                     session.AddMessage("End of the replay");
                     if (replay.hashMode) {
+                        if (replay.markerTest) {
+                            for (const auto& m : replay.markers) std::printf("marker tick %u player %d lap %d%s\n", m.tick, m.player, m.lap, m.finished ? " finish" : "");
+                        }
                         std::printf("replay hash %016llx ticks %u\n",
                                     static_cast<unsigned long long>(MR_HashLevelState(session.Level(), session.GetSimulationTime())), replay.tick);
                         std::fflush(stdout);
@@ -8572,6 +8652,27 @@ int RunClient(int argc, char** argv)
                     const std::string prompt = "Chat: " + chatBuffer + "_";
                     DrawUiText(*menuFontHandle->GetSprite(), 20, kHeight - 40, prompt.c_str(), &viewport,
                                MR_Sprite::eLeft, MR_Sprite::eTop, LoadLargeHudText() ? 1 : 2);
+                }
+                if (replay.active && !replay.hashMode && replay.data.ticks > 0) {
+                    // The timeline: progress, and a mark at every lap crossing found so far (the watched craft's are brighter, a finish is taller).
+                    static const std::uint8_t back = NearestPaletteIndex(40, 40, 40), fill = NearestPaletteIndex(70, 130, 220),
+                                              mine = NearestPaletteIndex(255, 220, 60), other = NearestPaletteIndex(170, 170, 170);
+                    MR_UInt8* frame = buffer.GetBuffer();
+                    const int barX = 20, barW = kWidth - 40, barY = kHeight - 14, barH = 8;
+                    FillFrameRect(frame, kWidth, kHeight, barX - 1, barY - 1, barW + 2, barH + 2, back);
+                    FillFrameRect(frame, kWidth, kHeight, barX, barY, static_cast<int>(static_cast<std::int64_t>(barW) * replay.tick / replay.data.ticks), barH, fill);
+                    for (const auto& m : replay.markers) {
+                        const int x = barX + static_cast<int>(static_cast<std::int64_t>(barW) * m.tick / replay.data.ticks);
+                        const int extra = m.finished ? 5 : 2;
+                        FillFrameRect(frame, kWidth, kHeight, x - 1, barY - extra, 2, barH + 2 * extra, m.player == replay.watch ? mine : other);
+                    }
+                    if (menuFontHandle != nullptr) {
+                        const int sec = static_cast<int>(replay.tick * 16 / 1000), total = static_cast<int>(static_cast<std::int64_t>(replay.data.ticks) * 16 / 1000);
+                        char label[96];
+                        std::snprintf(label, sizeof label, "%d:%02d / %d:%02d   x%g%s", sec / 60, sec % 60, total / 60, total % 60,
+                                      kReplaySpeeds[replay.speedStep], replay.paused ? "   paused" : "");
+                        DrawUiText(*menuFontHandle->GetSprite(), barX + barW, barY - 44, label, &viewport, MR_Sprite::eRight, MR_Sprite::eBottom, 1);
+                    }
                 }
                 observer->PlaySoundsSafe(session.GetCurrentLevel(), mainCharacter);
                 MR_SoundServer::ApplyContinuousPlay();

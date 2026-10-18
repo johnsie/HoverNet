@@ -7,6 +7,7 @@ and how to roll one back.
 ## Unreleased
 
 ### Added
+- **Replay timeline.** Watching a replay now shows a bar along the bottom with the time, the speed and a mark at every lap crossing and finish (yours brighter). Click the bar to jump there, or press **,** and **.** to jump to just before the previous or next lap. The marks appear as the replay plays through them.
 - **Race view setting (Settings, Race view).** Choose the shape of the picture while racing: Classic (4:3, as before and still the default), Widescreen (16:9), or Match my window (follows your window or screen shape, between 4:3 and 2.4:1). The renderer draws a wide picture just as fast (about 6 ms for 1920x1080 on a desktop CPU), so a wide window or monitor no longer has to be pillarboxed. Takes effect the next time you start HoverNet. Not shown on phones and tablets, which always use a picture shaped like their screen.
 
 ## 2.3.6 - 2026-10-18
