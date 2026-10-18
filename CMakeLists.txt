@@ -416,6 +416,8 @@ else()
 
     add_executable(HoverNetPersonalBestsTest NetTarget/LinuxClient/PersonalBestsTest.cpp)
     add_test(NAME HoverNetPersonalBests COMMAND HoverNetPersonalBestsTest)
+    add_executable(HoverNetSoftMixerTest NetTarget/LinuxClient/SoftMixerTest.cpp)
+    add_test(NAME HoverNetSoftMixer COMMAND HoverNetSoftMixerTest)
     add_executable(HoverNetGhostRunTest NetTarget/LinuxClient/GhostRunTest.cpp)
     add_test(NAME HoverNetGhostRun COMMAND HoverNetGhostRunTest)
 
@@ -931,6 +933,9 @@ if(BUILD_TESTING AND NOT WIN32)
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetMainMenu
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-main-menu.sh $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetRestartRace
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-restart-race.sh $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetGhost
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-ghost.sh $<TARGET_FILE:HoverNetGame2Player>

@@ -413,6 +413,9 @@ void MR_ContinuousSound::Restart( int pCopy )
 
          if( state != AL_PLAYING )
          {
+            // A continuous sound (the engine, the wind) loops; without this it played once and restarted from the top on the next frame, a click
+            // at the end of every pass.
+            alSourcei(mALSources[pCopy], AL_LOOPING, AL_TRUE);
             alSourcePlay(mALSources[pCopy]);
          }
       }

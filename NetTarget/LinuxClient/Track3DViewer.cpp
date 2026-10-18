@@ -2149,6 +2149,7 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
 enum class PauseChoice
 {
     eResume,
+    eRestartRace,
     eLeaveRace,
     eOnlineLobby,
     eWatchReplay,
@@ -2160,12 +2161,13 @@ enum class PauseChoice
 
 PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                          MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline,
-                         int pFrameLimit = -1, bool pOfferReplays = true);
+                         int pFrameLimit = -1, bool pOfferReplays = true, bool pCanRestart = false);
 
 enum class PostRaceChoice
 {
     eContinue,
     eNewLocalRace,
+    eRestartRace,
     eOnlineLobby,
     eMainMenu,
     eQuit,
@@ -2175,7 +2177,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                                  MR_3DViewPort& viewport, const MR_Sprite& font,
                                  MR_SimulationTime pFinishTime, MR_SimulationTime pBestLap,
                                  int pRank, int pPlayerCount, int pFrameLimit = -1,
-                                 const PersonalBests::Outcome* pBests = nullptr);
+                                 const PersonalBests::Outcome* pBests = nullptr, bool pCanRestart = false);
 
 #if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
 // The official HoverNet server players are sent to without typing anything. The key is the server's identity for an encrypted connection (64 hex
@@ -3522,7 +3524,7 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
 // already does when online (reset and rejoin the lobby).
 PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                          MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline,
-                         int pFrameLimit, bool pOfferReplays)
+                         int pFrameLimit, bool pOfferReplays, bool pCanRestart)
 {
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
     if (ownsImGuiContext) {
@@ -3549,9 +3551,12 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
     struct PauseOption { const char* label; PauseChoice choice; };
     std::vector<PauseOption> options = {
         {"RESUME RACE", PauseChoice::eResume},
-        {pIsOnline ? "LEAVE RACE" : "NEW LOCAL RACE", PauseChoice::eLeaveRace},
-        {"ONLINE MULTIPLAYER", PauseChoice::eOnlineLobby},
     };
+    if (pCanRestart) options.push_back({"RESTART RACE", PauseChoice::eRestartRace});   // a local race: the same track, laps and weapons again
+    options.push_back({pIsOnline ? "LEAVE RACE" : "NEW LOCAL RACE", PauseChoice::eLeaveRace});
+    options.insert(options.end(), {
+        {"ONLINE MULTIPLAYER", PauseChoice::eOnlineLobby},
+    });
     if (pOfferReplays) options.push_back({"WATCH A REPLAY", PauseChoice::eWatchReplay});
     const int primaryCount = static_cast<int>(options.size());   // the race options above the "GAME & ACCESSIBILITY" heading
     if (pOfferReplays) options.push_back({"MAIN MENU", PauseChoice::eMainMenu});   // (not in the classic lobby, which has its own way out)
@@ -3566,8 +3571,10 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
 
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
-        if (framesShown == 3 && pOfferReplays && std::getenv("HOVERNET_TEST_PAUSE_CHOICE") != nullptr && std::string(std::getenv("HOVERNET_TEST_PAUSE_CHOICE")) == "main") {
-            choice = PauseChoice::eMainMenu; running = false; break;   // test hook (scripts/test-main-menu.sh)
+        if (framesShown == 3 && pOfferReplays && std::getenv("HOVERNET_TEST_PAUSE_CHOICE") != nullptr) {   // test hook (scripts/test-main-menu.sh, test-restart-race.sh)
+            const std::string pick = std::getenv("HOVERNET_TEST_PAUSE_CHOICE");
+            if (pick == "main") { choice = PauseChoice::eMainMenu; running = false; break; }
+            if (pick == "restart" && pCanRestart) { choice = PauseChoice::eRestartRace; running = false; break; }
         }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -3817,7 +3824,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                                  MR_3DViewPort& viewport, const MR_Sprite& font,
                                  MR_SimulationTime pFinishTime, MR_SimulationTime pBestLap,
                                  int pRank, int pPlayerCount, int pFrameLimit,
-                                 const PersonalBests::Outcome* pBests)
+                                 const PersonalBests::Outcome* pBests, bool pCanRestart)
 {
     if (std::getenv("HOVERNET_TEST_FINISH") != nullptr) { std::printf("FINISHTEST results screen opened\n"); std::fflush(stdout); }
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
@@ -3843,8 +3850,10 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
-        if (framesShown == 2 && std::getenv("HOVERNET_TEST_RESULTS_CHOICE") != nullptr && std::string(std::getenv("HOVERNET_TEST_RESULTS_CHOICE")) == "main") {
-            choice = PostRaceChoice::eMainMenu; running = false; break;   // test hook (scripts/test-main-menu.sh)
+        if (framesShown == 2 && std::getenv("HOVERNET_TEST_RESULTS_CHOICE") != nullptr) {   // test hook (scripts/test-main-menu.sh, test-restart-race.sh)
+            const std::string pick = std::getenv("HOVERNET_TEST_RESULTS_CHOICE");
+            if (pick == "main") { choice = PostRaceChoice::eMainMenu; running = false; break; }
+            if (pick == "restart" && pCanRestart) { choice = PostRaceChoice::eRestartRace; running = false; break; }
         }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -3979,14 +3988,13 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             focusFirstButton = false;
         }
         struct PostRaceAction { const char* label; PostRaceChoice choice; };
-        const PostRaceAction actions[] = {
-            {"KEEP DRIVING", PostRaceChoice::eContinue},
-            {"NEW LOCAL RACE", PostRaceChoice::eNewLocalRace},
-            {"ONLINE MULTIPLAYER", PostRaceChoice::eOnlineLobby},
-            {"MAIN MENU", PostRaceChoice::eMainMenu},
-            {"QUIT HOVERNET", PostRaceChoice::eQuit},
-        };
-        for (std::size_t index = 0; index < sizeof(actions) / sizeof(actions[0]); ++index) {
+        std::vector<PostRaceAction> actions = {{"KEEP DRIVING", PostRaceChoice::eContinue}};
+        if (pCanRestart) actions.push_back({"RESTART RACE", PostRaceChoice::eRestartRace});   // the same track, laps and weapons again
+        actions.insert(actions.end(), {{"NEW LOCAL RACE", PostRaceChoice::eNewLocalRace},
+                                       {"ONLINE MULTIPLAYER", PostRaceChoice::eOnlineLobby},
+                                       {"MAIN MENU", PostRaceChoice::eMainMenu},
+                                       {"QUIT HOVERNET", PostRaceChoice::eQuit}});
+        for (std::size_t index = 0; index < actions.size(); ++index) {
             if (HoverNetButton(actions[index].label, ImVec2(-FLT_MIN, index == 0 ? 54.0f : 44.0f))) {
                 choice = actions[index].choice;
                 running = false;
@@ -7162,6 +7170,7 @@ struct AuthOnline
     Crypto::Bytes serverKey;      // the pinned key of the server (32 bytes) for a secure session; empty = plain connection
     Authority::PredictingClient predictor;
     Protocol3::HelloAck ack;
+    int rttMs = -1;               // the last measured round trip to the server (-1: not measured yet), shown on the HUD
     ReplayRecorder recorder;      // the race as a replay, built from the Ticks the client follows (saved when the race ends)
     bool replaySaved = false;
     std::vector<MR_MainCharacter*> craft;
@@ -7533,6 +7542,10 @@ int RunClient(int argc, char** argv)
         return true;
     };
 
+    // The settings of the local race being driven (kept so "restart race" can start the same race again). Not set for the races of a server or a replay,
+    // which load through the same function.
+    struct LocalRaceSettings { std::string track; int laps = 0; bool weapons = true; bool valid = false; } lastLocal;
+    bool rememberLocal = true;
     // Create the first gameplay session only after Local Play has selected it.
     auto loadLocalRace = [&](const std::string& newTrackName, int newLaps, bool newWeapons) -> bool {
 #if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
@@ -7556,6 +7569,8 @@ int RunClient(int argc, char** argv)
         level = session.GetCurrentLevel();
         mainCharacter = session.GetMainCharacter();
         currentTrackName = newTrackName;
+        if (rememberLocal) { lastLocal.track = newTrackName; lastLocal.laps = newLaps; lastLocal.weapons = newWeapons; lastLocal.valid = true; }
+        else lastLocal.valid = false;
         session.SetSimulationTime(-6000);
         room = mainCharacter->mRoom;
         camera = mainCharacter->mPosition;
@@ -7718,7 +7733,9 @@ int RunClient(int argc, char** argv)
         }
         if (auth.ack.rules != ReplayFormat::kSimulationRules) return "The server runs different game rules than this version of the game.";
         keepAuthForLoad = true;
+        rememberLocal = false;
         const bool loaded = loadLocalRace(auth.ack.track, auth.ack.laps, auth.ack.weapons);
+        rememberLocal = true;
         keepAuthForLoad = false;
         if (!loaded) return "Could not load the server's track.";
         if (auth.spectator && (auth.watch < 0 || auth.watch >= auth.ack.players)) auth.watch = 0;
@@ -7804,7 +7821,10 @@ int RunClient(int argc, char** argv)
         next.path = path;
         replay = next;
         fatal = true;
-        if (!loadLocalRace(replay.data.track, replay.data.laps, replay.data.weapons)) {
+        rememberLocal = false;
+        const bool replayLoaded = loadLocalRace(replay.data.track, replay.data.laps, replay.data.weapons);
+        rememberLocal = true;
+        if (!replayLoaded) {
             return "Could not load the replay's track.";
         }
         const std::string placeError = placeRaceCraft(replay.data.players, replay.data.laps, replay.data.weapons, replay.watch, replay.craft);
@@ -8080,6 +8100,7 @@ int RunClient(int argc, char** argv)
     bool cockpitView = false;
     bool missileSeen = false;
     bool finishAnnounced = false;
+    bool restartLocal = false;   // restart the local race with the same settings (pause menu, results screen)
     bool toMainMenu = false;     // set by a menu that says "main menu" (and by an online lobby that was left); acted on at the top of the next frame
     // Finishing does not take the race away: the player is told they can press Enter for the results and race options, and may drive
     // on as long as they like (some like to stay on the track). The times are kept from the moment of the finish.
@@ -8179,6 +8200,7 @@ int RunClient(int argc, char** argv)
                 Pong p;
                 if (Decode(f.payload, p)) {
                     const Uint32 rtt = SDL_GetTicks() - p.token;
+                    auth.rttMs = static_cast<int>(std::min<Uint32>(rtt, 9999));
                     auth.lead = std::min<std::uint32_t>(40, std::max<std::uint32_t>(3, rtt / 16 + 3));
                 }
             }
@@ -8551,8 +8573,13 @@ int RunClient(int argc, char** argv)
                 // "Leave Race"/"New Local Race" label and what it does differ.
                 if (playerMode && menuFontHandle != nullptr) {
                     const bool isOnline = onlineClient.IsConnected();
+                    const bool canRestart = lastLocal.valid && !isOnline && !raceWasOnline && !replay.active
+#if defined(HOVERNET_AUTH)
+                                            && !auth.active
+#endif
+                        ;
                     const PauseChoice pauseChoice = RunPauseMenu(
-                        graphics, buffer, viewport, *menuFontHandle->GetSprite(), isOnline, frameLimit);
+                        graphics, buffer, viewport, *menuFontHandle->GetSprite(), isOnline, frameLimit, true, canRestart);
                     if (pauseChoice == PauseChoice::eQuit) {
                         running = false;
                     }
@@ -8569,6 +8596,9 @@ int RunClient(int argc, char** argv)
                     }
                     else if (pauseChoice == PauseChoice::eMainMenu) {
                         toMainMenu = true;
+                    }
+                    else if (pauseChoice == PauseChoice::eRestartRace) {
+                        restartLocal = true;
                     }
                     else if (pauseChoice == PauseChoice::eOnlineLobby) {
                         // Same as "Leave Race" when already online -- reset and
@@ -8666,6 +8696,17 @@ int RunClient(int argc, char** argv)
             }
             // eStay: look around at the end (Left or Home rewinds)
             session.AddMessage("Esc for the menu; Left or Home rewinds");
+        }
+        if (restartLocal) {
+            // The same local race again: the same track, laps and weapons, from the grid.
+            restartLocal = false;
+            replay.active = false;
+            missileSeen = false;
+            finishAnnounced = false; resultsPending = false; resultsSeen = false;
+            if (!lastLocal.valid || !loadLocalRace(lastLocal.track, lastLocal.laps, lastLocal.weapons)) { toMainMenu = true; continue; }
+            if (std::getenv("HOVERNET_TEST_RESTART") != nullptr) { std::printf("RACETEST restarted %s laps %d weapons %d\n", lastLocal.track.c_str(), lastLocal.laps, lastLocal.weapons ? 1 : 0); std::fflush(stdout); }
+            wasOnlineConnected = onlineClient.IsConnected();
+            continue;
         }
         if (toMainMenu) {
             // Back to the main menu from anywhere: whatever was running (a race, a replay, a server connection) is left, then the menu runs as at start-up.
@@ -9150,13 +9191,22 @@ int RunClient(int argc, char** argv)
                     graphics, buffer, viewport, *menuFontHandle->GetSprite(),
                     finishTotalTime, finishBestLap,
                     session.GetRank(mainCharacter), session.GetNbPlayers(),
-                    frameLimit < 0 ? -1 : 2, &finishBests);
+                    frameLimit < 0 ? -1 : 2, &finishBests,
+                    lastLocal.valid && !raceWasOnline && !replay.active
+#if defined(HOVERNET_AUTH)
+                        && !auth.active
+#endif
+                    );
                 if (resultChoice == PostRaceChoice::eQuit) {
                     running = false;
                     continue;
                 }
                 if (resultChoice == PostRaceChoice::eMainMenu) {
                     toMainMenu = true;
+                    continue;
+                }
+                if (resultChoice == PostRaceChoice::eRestartRace) {
+                    restartLocal = true;
                     continue;
                 }
                 if (resultChoice == PostRaceChoice::eOnlineLobby) {
@@ -9376,6 +9426,15 @@ int RunClient(int argc, char** argv)
                     if (raceWasOnline) {
                         observer->SetNetworkLatency(onlineClient.IsConnected()
                             ? onlineClient.GetLastPingMs() : -3);
+                    }
+#if defined(HOVERNET_AUTH)
+                    else if (auth.active) {
+                        // A race on a HoverNet server (the lobby's races, including one you host alone) is an online race: the HUD says so, with the ping.
+                        observer->SetNetworkLatency(auth.resultReceived ? (auth.rttMs >= 0 ? auth.rttMs : -1) : (auth.conn.IsOpen() ? (auth.rttMs >= 0 ? auth.rttMs : -1) : -3));
+                    }
+#endif
+                    else if (replay.active) {
+                        observer->SetNetworkLatency(-4);   // "Replay"
                     }
                     else {
                         observer->SetNetworkLatency(-2);

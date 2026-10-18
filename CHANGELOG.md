@@ -6,6 +6,13 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **Restart race.** In a local (offline) race, the pause menu and the results screen now have **RESTART RACE**: the same track, laps and weapons again, from the grid. (Not offered in online races or replays.)
+
+### Fixed
+- **A race on a HoverNet server said "Local" on the HUD.** Races from the HoverNet servers lobby, including one you host alone with **Start Race**, were always online on the server (and recorded as server replays), but the HUD wrote "Local". It now says "Online" with your ping, and "Replay" while watching a replay.
+- **The motor sound crackled like a vinyl record (seen in the browser), and engine sounds kept playing after leaving a replay.** The game's software mixer converted each sound with SDL's audio stream, which pads the end of a sound with silence, so every pass of the motor loop had a dropout at the loop point; it stepped through samples without interpolating them; it changed volume and pitch in one jump per frame (a click every frame); and it cut voices off instead of fading them. The mixer now converts each sound itself without padding, loops seamlessly, interpolates, glides volume and pitch over about 10 ms, fades voices in and out, and limits loud mixes softly instead of clipping them. Engines also fade out by themselves when the game stops asking for them (a menu, the end of a race or a replay). The browser's audio buffer is larger so a slow frame does not leave a gap. The old Windows-only OpenAL path now loops engine sounds too (it restarted them from the top each frame). Tested offline (`HoverNetSoftMixer`: no clicks at loop points, volume or pitch changes, starts and stops); not heard on a speaker, so tell me if the browser still crackles.
+
 ## 2.3.10 - 2026-10-18
 
 ### Added

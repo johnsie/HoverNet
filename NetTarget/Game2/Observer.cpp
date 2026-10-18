@@ -1846,6 +1846,8 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
          snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Online (measuring)" );
       else if( mNetworkLatencyMs == -3 )
          snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Connection lost" );
+      else if( mNetworkLatencyMs == -4 )
+         snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Replay" );
       else
          snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Local" );
 
