@@ -203,6 +203,14 @@ differences from 2.0 are documented design decisions.
 - Mixed SDL2/browser tests cover lobby, host/join, race start, gameplay, reconnect,
   malformed traffic, slow clients, protocol mismatch and race completion.
 
+- **Server updates players do not notice (zero-downtime restarts).** Today an update drains: races under way finish, nothing new can start, and the
+  server then restarts (players in the lobby are dropped and reconnect). The aim is an update that keeps the lobby and the races: the old process
+  saves each race's state (the simulation snapshot and input history the replay and resync code already produce), the lobby's races and resume tokens,
+  and the new process restores them and carries on from the same tick, with clients reconnecting through their resume tokens (and the WebSocket gateway
+  holding browser connections open across the swap). *Status: not built; discussed 2026-10-18.* Needs: a versioned server-state file, restoring a race
+  from a snapshot, the gateway reconnecting upstream by itself, and a test that restarts a server under a running eight-player race and requires every
+  client's state hash to stay exact.
+
 **Exit gate:** eight-player races stay stable and fair at the Stage 0 latency and loss
 targets over a multi-day soak, no client can alter a result, and a game-state tampering
 suite fails to change any official outcome. Mixed SDL2/browser races must pass the same gate.
