@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.8 - 2026-10-18
+
+### Fixed
+- **The "A newer version of HoverNet is available" bar no longer comes back after you tap it.** In 2.3.7 the page compared its build id with a pattern that the packaged (minified) page does not match, so it always thought it was out of date. It now reads the id with an HTML parser, and the test runs the real packaged page, not only a hand-written one.
+
 ## 2.3.7 - 2026-10-18
 
 ### Fixed

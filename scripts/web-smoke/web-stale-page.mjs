@@ -1,6 +1,8 @@
 // Headless-browser test of the web client's "outdated cached page" guard (the hn-fresh script in packaging/web/shell.html).
 //
-//   node web-stale-page.mjs
+//   node web-stale-page.mjs [<web-dir>]
+//
+// With a web directory it also runs the real packaged index.html (minified by the build) through the same upgrade, with its placeholder filled in.
 //
 // The script is cut out of the real shell and put in a tiny page. A test server plays a phone that is holding an old copy: the first
 // page it serves has build id OLD, every later answer has NEW. The page must (1) load OLD, notice NEW when it asks the server, (2) reload once
@@ -16,8 +18,13 @@ if (!chromeBin) { console.log('SKIP: no Chrome/Chromium installed'); process.exi
 const shell = fs.readFileSync(new URL('../../packaging/web/shell.html', import.meta.url), 'utf8');
 const guard = (/<script id="hn-fresh">[\s\S]*?<\/script>/.exec(shell) || [])[0];
 if (!guard) { console.error('cannot find the hn-fresh script in packaging/web/shell.html'); process.exit(2); }
-const page = (id) => `<!doctype html><html><head><meta name="hn-build" content="${id}">${guard}</head><body><p id="id">${id}</p></body></html>`;
+// The packaged page is minified (the emscripten HTML minifier reorders the attributes and drops the quotes): serve that form too.
+let minified = false;
+const page = (id) => `<!doctype html><html><head>${minified ? `<meta content=${id} name=hn-build>` : `<meta name="hn-build" content="${id}">`}${guard}</head><body><p id="id">${id}</p></body></html>`;
 
+const realFile = process.argv[2] ? `${process.argv[2]}/index.html` : '';
+const realHtml = realFile && fs.existsSync(realFile) ? fs.readFileSync(realFile, 'utf8') : '';
+let useReal = false;
 let mode = 'upgrade';   // upgrade: the first page is OLD, later ones NEW. stuck: every navigation is OLD, fetches say NEW. dev: placeholder
 let served = 0;
 const log = [];
@@ -30,7 +37,7 @@ const server = http.createServer((req, res) => {
   else id = (navigation && log.filter((l) => l.nav).length === 0) ? 'OLD' : 'NEW';
   log.push({ url: req.url, nav: navigation, id });
   res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
-  res.end(page(id));
+  res.end(useReal ? realHtml.split('__HN_BUILD__').join(id) : page(id));
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -70,6 +77,29 @@ await sleep(3500);
 const stuckNavs = log.filter((l) => l.nav).length;
 check(stuckNavs <= 2, `a page that cannot be refreshed does not loop (${stuckNavs} loads)`);
 check(await evalJs("!!document.getElementById('hn-update')") === true, 'it shows the update bar instead');
+
+// 2b. the same upgrade with the packaged page's minified tag: the id must still be read correctly (the first version of this guard compared against
+// the pattern inside its own script and showed the update bar forever)
+minified = true; mode = 'upgrade'; log.length = 0;
+await send('Runtime.evaluate', { expression: "try{sessionStorage.clear()}catch(e){}" });
+await send('Page.navigate', { url: `${base}/minified` });
+await sleep(3000);
+check(await evalJs("document.getElementById('id').textContent") === 'NEW', 'a minified page that is out of date reloads and ends on the current build');
+check(await evalJs("!!document.getElementById('hn-update')") === false, 'and shows no update bar once it is current');
+await sleep(2000);
+check(log.filter((l) => l.nav).length <= 2, 'and does not keep reloading');
+minified = false;
+
+// 2c. the real packaged page
+if (realHtml) {
+  useReal = true; mode = 'upgrade'; log.length = 0;
+  await send('Runtime.evaluate', { expression: "try{sessionStorage.clear()}catch(e){}" });
+  await send('Page.navigate', { url: `${base}/real` });
+  await sleep(4000);
+  check(await evalJs('window.HN_BUILD') === 'NEW', 'the real packaged page that is out of date reloads and ends on the current build');
+  check(await evalJs("!!document.getElementById('hn-update')") === false, 'and shows no update bar');
+  useReal = false;
+}
 
 // 3. a development build (placeholder id) is left alone
 mode = 'dev'; log.length = 0;

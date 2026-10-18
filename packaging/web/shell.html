@@ -23,7 +23,12 @@
       function latest() {
         return fetch(location.pathname, { cache: 'no-store', credentials: 'same-origin' })
           .then(function (r) { return r.ok ? r.text() : ''; })
-          .then(function (t) { var m = /<meta name="hn-build" content="([^"]+)"/.exec(t); return m ? m[1] : ''; })
+          // Read the id with a real HTML parser: the packaged page is minified (attributes reordered, quotes removed), so no pattern for the text
+          // of the tag can be relied on.
+          .then(function (t) {
+            var m = new DOMParser().parseFromString(t, 'text/html').querySelector('meta[name="hn-build"]');
+            return m ? (m.getAttribute('content') || '') : '';
+          })
           .catch(function () { return ''; });
       }
       function fresh(id) { return location.pathname + '?v=' + encodeURIComponent(id) + '&t=' + Date.now(); }
