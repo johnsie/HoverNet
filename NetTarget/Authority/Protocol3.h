@@ -128,7 +128,7 @@ struct SpectateRace { std::uint32_t id = 0; std::string code; };
 constexpr int kMaxReplayList = 30;
 constexpr std::size_t kReplayChunkBytes = 1000;
 struct ListReplays { std::string track; std::uint8_t max = 20; };                  // track empty = every track
-struct ReplayInfo { std::uint64_t id = 0; std::string track; std::uint8_t players = 0, laps = 0; std::uint32_t ticks = 0, savedAt = 0, bytes = 0; std::int32_t winnerMs = 0; std::uint8_t winnerSlot = 255; };   // savedAt: unix seconds; winnerMs: the fastest finish, 0 = nobody finished; winnerSlot: that player's slot (255 = nobody), the craft a viewer follows by default
+struct ReplayInfo { std::uint64_t id = 0; std::string track; std::uint8_t players = 0, laps = 0; std::uint32_t ticks = 0, savedAt = 0, bytes = 0; std::int32_t winnerMs = 0; std::uint8_t winnerSlot = 255; std::string winnerName; };   // winnerName: the display name the winner had in the race (empty when not recorded; what the player typed, not proof of who they are). savedAt: unix seconds; winnerMs: the fastest finish, 0 = nobody finished; winnerSlot: that player's slot (255 = nobody), the craft a viewer follows by default
 struct ReplayList { std::vector<ReplayInfo> replays; };
 struct GetReplay { std::uint64_t id = 0; };
 struct ReplayChunk { std::uint64_t id = 0; std::uint16_t index = 0, count = 0; std::vector<std::uint8_t> data; };
@@ -137,7 +137,7 @@ struct ReplayChunk { std::uint64_t id = 0; std::uint16_t index = 0, count = 0; s
 constexpr int kMaxRecordsPerBoard = 10;
 constexpr int kMaxRecordBoards = 10;
 struct ListRecords { std::string track; };
-struct RecordEntry { std::uint64_t replay = 0; std::uint8_t slot = 0; std::int32_t ms = 0; std::uint32_t savedAt = 0; };
+struct RecordEntry { std::uint64_t replay = 0; std::uint8_t slot = 0; std::int32_t ms = 0; std::uint32_t savedAt = 0; std::string name; };
 struct RecordBoard { std::uint8_t laps = 0; std::vector<RecordEntry> finishes, bestLaps; };
 struct RecordList { std::string track; std::vector<RecordBoard> boards; };
 struct Chat { std::string text; };

@@ -306,7 +306,7 @@ std::vector<std::uint8_t> Encode(const ReplayList& m)
     Out o;
     o.U8(static_cast<std::uint32_t>(m.replays.size()));
     for (const ReplayInfo& r : m.replays) {
-        o.U64(r.id); o.Str(r.track); o.U8(r.players); o.U8(r.laps); o.U32(r.ticks); o.U32(r.savedAt); o.U32(r.bytes); o.U32(static_cast<std::uint32_t>(r.winnerMs)); o.U8(r.winnerSlot);
+        o.U64(r.id); o.Str(r.track); o.U8(r.players); o.U8(r.laps); o.U32(r.ticks); o.U32(r.savedAt); o.U32(r.bytes); o.U32(static_cast<std::uint32_t>(r.winnerMs)); o.U8(r.winnerSlot); o.Str(r.winnerName);
     }
     return o.b;
 }
@@ -319,7 +319,7 @@ bool Decode(const std::vector<std::uint8_t>& p, ReplayList& m)
     for (std::uint32_t i = 0; i < count && in.ok; ++i) {
         ReplayInfo r;
         r.id = in.U64(); r.track = in.Str(64); r.players = static_cast<std::uint8_t>(in.U8()); r.laps = static_cast<std::uint8_t>(in.U8());
-        r.ticks = in.U32(); r.savedAt = in.U32(); r.bytes = in.U32(); r.winnerMs = static_cast<std::int32_t>(in.U32()); r.winnerSlot = static_cast<std::uint8_t>(in.U8());
+        r.ticks = in.U32(); r.savedAt = in.U32(); r.bytes = in.U32(); r.winnerMs = static_cast<std::int32_t>(in.U32()); r.winnerSlot = static_cast<std::uint8_t>(in.U8()); r.winnerName = in.Str(32);
         if (r.players < 1 || r.players > 8 || r.track.empty() || (r.winnerSlot >= 8 && r.winnerSlot != 255)) return false;
         m.replays.push_back(r);
     }
@@ -332,7 +332,7 @@ bool Decode(const std::vector<std::uint8_t>& p, ListRecords& m) { In in(p); m.tr
 static void PutEntries(Out& o, const std::vector<RecordEntry>& list)
 {
     o.U8(static_cast<std::uint32_t>(list.size()));
-    for (const RecordEntry& e : list) { o.U64(e.replay); o.U8(e.slot); o.U32(static_cast<std::uint32_t>(e.ms)); o.U32(e.savedAt); }
+    for (const RecordEntry& e : list) { o.U64(e.replay); o.U8(e.slot); o.U32(static_cast<std::uint32_t>(e.ms)); o.U32(e.savedAt); o.Str(e.name); }
 }
 static bool GetEntries(In& in, std::vector<RecordEntry>& list)
 {
@@ -341,7 +341,7 @@ static bool GetEntries(In& in, std::vector<RecordEntry>& list)
     list.clear();
     for (std::uint32_t i = 0; i < count && in.ok; ++i) {
         RecordEntry e;
-        e.replay = in.U64(); e.slot = static_cast<std::uint8_t>(in.U8()); e.ms = static_cast<std::int32_t>(in.U32()); e.savedAt = in.U32();
+        e.replay = in.U64(); e.slot = static_cast<std::uint8_t>(in.U8()); e.ms = static_cast<std::int32_t>(in.U32()); e.savedAt = in.U32(); e.name = in.Str(32);
         if (e.slot >= 8 || e.ms <= 0) return false;
         list.push_back(e);
     }

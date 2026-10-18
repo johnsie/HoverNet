@@ -74,6 +74,8 @@ public:
     bool Full() const { return ConnectedPlayers() >= mConfig.race.players; }
     bool RaceFinished() const { return mRace.Finished(); }
     const AuthoritativeRace& Race() const { return mRace; }
+    // The display name each player slot had when the race started (empty for a slot nobody held). Names are what players typed; nothing proves they are theirs.
+    const std::string& SlotName(int slot) const { static const std::string none; return slot >= 0 && slot < static_cast<int>(mSlotNames.size()) ? mSlotNames[static_cast<std::size_t>(slot)] : none; }
     int ConnectedPlayers() const;
     int InvalidTotal() const { return mInvalidTotal; }
 
@@ -116,6 +118,7 @@ private:
     std::vector<std::vector<std::uint8_t>> mTickFrames;                 // every Tick frame sent, by tick (for spectators)
     std::vector<std::pair<std::uint32_t, std::vector<std::uint8_t>>> mKeyframes;   // (tick, snapshot) every keyframeTicks
     std::vector<std::uint64_t> mTokens;   // reconnect token per player slot (0 = none yet)
+    std::vector<std::string> mSlotNames;  // display name per player slot, taken when the race starts
     std::uint64_t mTokenState;
     std::uint64_t NextToken();
     void SendHelloAck(Connection& c);

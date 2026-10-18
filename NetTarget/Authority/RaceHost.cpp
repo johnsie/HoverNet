@@ -207,6 +207,8 @@ void RaceHost::BeginRaceIfFull(std::int64_t nowMs)
 void RaceHost::StartNow(std::int64_t nowMs)
 {
     mStarted = true;
+    mSlotNames.assign(static_cast<std::size_t>(mConfig.race.players), std::string());
+    for (const auto& o : mConnections) if (!o->closed && !o->spectator && o->player >= 0 && o->player < mConfig.race.players) mSlotNames[static_cast<std::size_t>(o->player)] = o->name;
     mStartMs = nowMs + mConfig.startDelayMs;
     Protocol3::Start s;
     s.countdownMs = static_cast<std::uint32_t>(mConfig.startDelayMs);

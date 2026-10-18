@@ -47,7 +47,8 @@ server user only.
 | Chat | not stored; the last 40 lines are held in memory so a report can include its context | 24 hours (purged hourly), then gone; kept longer only inside a report |
 | Reports | reporter, target, reason, chat context | resolved reports 30 days |
 | Audit log | moderation and security events | 180 days, purged hourly (the purge is itself logged) |
-| Replays | track, settings, per-slot controls and hashes: **no names, addresses or chat** | the newest `--replay-keep` (default 200) are kept and **offered to every player**; older ones are removed as new ones are saved |
+| Replays | track, settings, per-slot controls and hashes: **no names, addresses or chat** in the replay file itself | the newest `--replay-keep` (default 200) are kept and **offered to every player**; older ones are removed as new ones are saved |
+| Results tables (beside each replay) | rank, slot, laps, times and, since 2.3.14, **the display name each player typed** (so leaderboards and replay lists can show who raced). A display name is not verified: anyone can type any name until accounts exist | removed together with the replay it belongs to (the newest `--replay-keep`); an operator can delete a table, or a name from it, at any time |
 | Telemetry | counters only (connections, bytes, ticks, invalid messages); no content | in memory; printed per race |
 
 **Deletion.** A player can ask an operator to delete a report that names them or an audit entry that records their name; because the

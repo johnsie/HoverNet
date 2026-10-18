@@ -6,6 +6,15 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.14 - 2026-10-18
+
+### Added
+- **Replays and records show the players' names.** Track records and the server replay list now say who set a time ("Anna 2:34.00"), and the question of which craft to follow names the winner. The server records the display name each player had when the race started in the results table beside the replay (the replay file itself still holds no names). Names are what players typed: nothing proves a name belongs to the person using it until accounts exist. Races saved before this show "player 2" as before.
+- Records and replay lists are trimmed to fit one network frame; with many lap counts the old list could have outgrown it.
+
+### Changed
+- The server's replay and records lists carry names, so **update the game together with the server** (a 2.3.13 game cannot read the lists from a 2.3.14 server).
+
 ## 2.3.13 - 2026-10-18
 
 ### Fixed

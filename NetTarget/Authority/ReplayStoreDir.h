@@ -17,7 +17,7 @@
 namespace Authority
 {
 // One player's line of a race's results table.
-struct ReplayRun { std::uint8_t slot; std::int32_t finishMs; std::int32_t bestLapMs; bool finished; };
+struct ReplayRun { std::uint8_t slot; std::int32_t finishMs; std::int32_t bestLapMs; bool finished; std::string name; };
 
 class DirReplayStore : public ReplayStore
 {

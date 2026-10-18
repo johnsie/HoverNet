@@ -35,6 +35,8 @@ else
   got=$("$client" --replay "$mine" --replay-hash --frames 100000 2>/dev/null | sed -n 's/^replay hash \([0-9a-f]*\) ticks.*/\1/p')
   [ -n "$want" ] && [ "$want" = "$got" ] && echo "ok   the client's replay is byte for byte the server's, and the game plays it back to $got" || { echo "FAIL: the saved replay does not play back (tool $want, game ${got:-none})"; fail=1; }
 fi
+table=$(ls "$dir/official/"*.results.tsv 2>/dev/null | head -1)
+if [ -n "$table" ] && [ "$(awk -F'\t' 'NR>1 && $7 != "" {n++} END {print n+0}' "$table")" = "$players" ]; then echo "ok   the server's results table names every player (the display names they typed)"; else echo "FAIL: the results table should name every player"; cat "$table" 2>/dev/null; fail=1; fi
 race "dropped connection" "--auth-drop 150"
 # After a reconnect the server may or may not resend what was missed. Either the client saved nothing (a gap spoils the recording), or what it
 # saved is exactly the server's replay: it must never save a replay that is not the real race.

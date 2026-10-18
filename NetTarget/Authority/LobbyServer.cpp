@@ -226,6 +226,11 @@ void LobbyServer::Receive(int connection, const std::uint8_t* data, std::size_t 
     if (c->raceId != 0 && c->parser.Failed()) Disconnect(connection);
 }
 
+namespace
+{
+constexpr std::size_t kMaxListPayload = 1100;   // frames are at most 1200 bytes (kDefaultMaxFrame), with a header
+}
+
 void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint8_t>& payload, std::int64_t nowMs)
 {
     using namespace Protocol3;
@@ -265,6 +270,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
         ReplayList list;
         if (mReplays != nullptr) list.replays = mReplays->List(m.track, std::min<int>(m.max, kMaxReplayList));
+        while (list.replays.size() > 1 && Encode(list).size() > kMaxListPayload) list.replays.pop_back();   // a message must fit in one frame: the oldest go first
         const std::vector<std::uint8_t> f = EncodeFrame(kReplayList, Encode(list));
         c.out.insert(c.out.end(), f.begin(), f.end());
         return;
@@ -276,6 +282,16 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         list.track = m.track;
         if (mReplays != nullptr) list.boards = mReplays->Records(m.track);
         if (list.boards.size() > static_cast<std::size_t>(kMaxRecordBoards)) list.boards.resize(kMaxRecordBoards);
+        // A message must fit in one frame: take the last entry of the longest list until it does (every board keeps its best entries).
+        while (Encode(list).size() > kMaxListPayload) {
+            std::vector<RecordEntry>* longest = nullptr;
+            for (RecordBoard& b : list.boards) {
+                if (b.finishes.size() > 1 && (longest == nullptr || b.finishes.size() > longest->size())) longest = &b.finishes;
+                if (b.bestLaps.size() > 1 && (longest == nullptr || b.bestLaps.size() > longest->size())) longest = &b.bestLaps;
+            }
+            if (longest == nullptr) { if (!list.boards.empty()) { list.boards.pop_back(); continue; } break; }
+            longest->pop_back();
+        }
         const std::vector<std::uint8_t> f = EncodeFrame(kRecordList, Encode(list));
         c.out.insert(c.out.end(), f.begin(), f.end());
         return;

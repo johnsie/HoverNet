@@ -22,6 +22,19 @@ namespace
 {
 constexpr std::int64_t kMaxReplayFile = 8 * 1024 * 1024;
 
+// The seventh column of a results line, the display name of that player (absent in tables written before names were recorded). Anything that is not valid
+// text for the protocol is dropped, so a hand-edited table cannot put control characters or oversized names into the lists.
+std::string NameField(const char* line)
+{
+    int tabs = 0;
+    const char* p = line;
+    for (; *p != '\0' && tabs < 6; ++p) if (*p == '\t') ++tabs;
+    if (tabs < 6) return std::string();
+    std::string name(p);
+    while (!name.empty() && (name.back() == '\n' || name.back() == '\r')) name.pop_back();
+    return Protocol3::IsValidText(name, 32) ? name : std::string();
+}
+
 std::vector<std::string> ReplayNames(const std::string& dir)
 {
     std::vector<std::string> names;
@@ -58,9 +71,10 @@ bool ReadFileBytes(const std::string& path, std::vector<std::uint8_t>& bytes)
 }
 
 // The fastest finish in the results table beside a replay (rank, player, laps, finished, finish_ms, best_lap_ms), 0 if nobody finished; `slot` is that player.
-std::int32_t WinnerMs(const std::string& replayPath, std::uint8_t& slot)
+std::int32_t WinnerMs(const std::string& replayPath, std::uint8_t& slot, std::string& name)
 {
     slot = 255;
+    name.clear();
     const std::string path = replayPath.substr(0, replayPath.size() - 4) + ".results.tsv";
     std::FILE* f = std::fopen(path.c_str(), "r");
     if (f == nullptr) return 0;
@@ -70,7 +84,7 @@ std::int32_t WinnerMs(const std::string& replayPath, std::uint8_t& slot)
         int rank, player, laps, finished;
         long long finishMs, bestLap;
         if (std::sscanf(line, "%d\t%d\t%d\t%d\t%lld\t%lld", &rank, &player, &laps, &finished, &finishMs, &bestLap) == 6 && finished == 1 && finishMs > 0 && player >= 0 && player < 8)
-            if (best == 0 || finishMs < best) { best = finishMs; slot = static_cast<std::uint8_t>(player); }
+            if (best == 0 || finishMs < best) { best = finishMs; slot = static_cast<std::uint8_t>(player); name = NameField(line); }
     }
     std::fclose(f);
     return best > 0 && best < 2000000000LL ? static_cast<std::int32_t>(best) : 0;
@@ -89,7 +103,7 @@ void ReadRuns(const std::string& replayPath, std::vector<ReplayRun>& runs)
         long long finishMs, bestLap;
         if (std::sscanf(line, "%d\t%d\t%d\t%d\t%lld\t%lld", &rank, &player, &laps, &finished, &finishMs, &bestLap) != 6) continue;
         if (player < 0 || player > 7 || finishMs < 0 || finishMs > 2000000000LL || bestLap < 0 || bestLap > 2000000000LL) continue;
-        runs.push_back({static_cast<std::uint8_t>(player), static_cast<std::int32_t>(finishMs), static_cast<std::int32_t>(bestLap), finished == 1});
+        runs.push_back({static_cast<std::uint8_t>(player), static_cast<std::int32_t>(finishMs), static_cast<std::int32_t>(bestLap), finished == 1, NameField(line)});
     }
     std::fclose(f);
 }
@@ -120,7 +134,7 @@ void DirReplayStore::Refresh()
         item.info.ticks = r.ticks;
         item.info.savedAt = static_cast<std::uint32_t>(item.mtime);
         item.info.bytes = static_cast<std::uint32_t>(bytes.size());
-        item.info.winnerMs = WinnerMs(path, item.info.winnerSlot);
+        item.info.winnerMs = WinnerMs(path, item.info.winnerSlot, item.info.winnerName);
         ReadRuns(path, item.runs);
         mItems[name] = item;
     }
@@ -171,7 +185,7 @@ std::vector<Protocol3::RecordBoard> DirReplayStore::Records(const std::string& t
         board.laps = item->info.laps;
         for (const ReplayRun& run : item->runs) {
             Protocol3::RecordEntry e;
-            e.replay = item->info.id; e.slot = run.slot; e.savedAt = item->info.savedAt;
+            e.replay = item->info.id; e.slot = run.slot; e.savedAt = item->info.savedAt; e.name = run.name;
             if (run.finished && run.finishMs > 0) { e.ms = run.finishMs; board.finishes.push_back(e); }
             if (run.bestLapMs > 0) { e.ms = run.bestLapMs; board.bestLaps.push_back(e); }
         }

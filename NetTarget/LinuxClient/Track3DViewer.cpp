@@ -5445,7 +5445,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
     std::string message;
     int confirmDelete = -1;
     // Which craft to follow: asked before a replay with more than one player starts (the file holds slots, not names).
-    struct CraftChoice { bool active = false, opened = false, server = false; std::string path, title; std::uint64_t id = 0; int players = 0, mySlot = -1, winnerSlot = -1; long long winnerMs = 0; } craftChoice;
+    struct CraftChoice { bool active = false, opened = false, server = false; std::string path, title; std::uint64_t id = 0; int players = 0, mySlot = -1, winnerSlot = -1; long long winnerMs = 0; std::string winnerName; } craftChoice;
     bool started = false;
     bool focusFirst = true;
     bool running = true;
@@ -5523,7 +5523,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
             if (!picked) {
                 picked = true;
                 const Protocol3::ReplayInfo& r = server.Replays()[0];
-                if (std::getenv("HOVERNET_TEST_REPLAY_PICK_CRAFT") != nullptr && r.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.server = true; craftChoice.id = r.id; craftChoice.title = r.track; craftChoice.players = r.players; craftChoice.winnerSlot = r.winnerSlot < 8 ? r.winnerSlot : -1; craftChoice.winnerMs = r.winnerMs; }
+                if (std::getenv("HOVERNET_TEST_REPLAY_PICK_CRAFT") != nullptr && r.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.server = true; craftChoice.id = r.id; craftChoice.title = r.track; craftChoice.players = r.players; craftChoice.winnerSlot = r.winnerSlot < 8 ? r.winnerSlot : -1; craftChoice.winnerMs = r.winnerMs; craftChoice.winnerName = r.winnerName; }
                 else { downloadSlotId = r.id; downloadSlot = 0; downloadNote.clear(); server.FetchReplay(downloadSlotId); }
             }
         }
@@ -5636,7 +5636,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                         formatDate(r.savedAt, when, sizeof when);
                         ImGui::Text("%s", r.track.c_str());
                         const long long seconds = static_cast<long long>(r.ticks) * ReplayFormat::kFrameMs / 1000;
-                        if (r.winnerMs > 0) { formatMs(r.winnerMs, best, sizeof best); ImGui::TextDisabled("%s   %d player%s, %d lap%s, %lld:%02lld   winner %s", when, r.players, r.players == 1 ? "" : "s", r.laps, r.laps == 1 ? "" : "s", seconds / 60, seconds % 60, best); }
+                        if (r.winnerMs > 0) { formatMs(r.winnerMs, best, sizeof best); ImGui::TextDisabled("%s   %d player%s, %d lap%s, %lld:%02lld   winner %s%s%s", when, r.players, r.players == 1 ? "" : "s", r.laps, r.laps == 1 ? "" : "s", seconds / 60, seconds % 60, r.winnerName.c_str(), r.winnerName.empty() ? "" : " ", best); }
                         else ImGui::TextDisabled("%s   %d player%s, %d lap%s, %lld:%02lld   no finisher", when, r.players, r.players == 1 ? "" : "s", r.laps, r.laps == 1 ? "" : "s", seconds / 60, seconds % 60);
                         const bool busy = downloadSlotId != 0;
                         char label[48];
@@ -5644,7 +5644,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                         else std::snprintf(label, sizeof label, "WATCH");
                         if (HoverNetButton(label, ImVec2(-FLT_MIN, 34)) && !busy) {
                             message.clear();
-                            if (r.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.server = true; craftChoice.id = r.id; craftChoice.title = r.track; craftChoice.players = r.players; craftChoice.winnerSlot = r.winnerSlot < 8 ? r.winnerSlot : -1; craftChoice.winnerMs = r.winnerMs; }
+                            if (r.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.server = true; craftChoice.id = r.id; craftChoice.title = r.track; craftChoice.players = r.players; craftChoice.winnerSlot = r.winnerSlot < 8 ? r.winnerSlot : -1; craftChoice.winnerMs = r.winnerMs; craftChoice.winnerName = r.winnerName; }
                             else { downloadSlotId = r.id; downloadSlot = 0; downloadNote.clear(); server.FetchReplay(r.id); }
                         }
                         ImGui::PopID();
@@ -5680,7 +5680,8 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                                 char time[32], when[32];
                                 formatMs(e.ms, time, sizeof time);
                                 formatDate(e.savedAt, when, sizeof when);
-                                ImGui::Text("%zu.  %s   player %d   %s", i + 1, time, e.slot + 1, when);
+                                if (e.name.empty()) ImGui::Text("%zu.  %s   player %d   %s", i + 1, time, e.slot + 1, when);
+                                else ImGui::Text("%zu.  %s   %s   %s", i + 1, time, e.name.c_str(), when);
                                 ImGui::SameLine(ImGui::GetContentRegionMax().x - 120.0f);
                                 const bool busy = downloadSlotId != 0;
                                 if (HoverNetButton(busy && downloadSlotId == e.replay ? "..." : "WATCH", ImVec2(110, 0)) && !busy) { downloadSlotId = e.replay; downloadSlot = e.slot; downloadNote = kind == 0 ? "the record holder" : "the fastest lap"; message.clear(); server.FetchReplay(e.replay); }
@@ -5712,7 +5713,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                     if (slot == craftChoice.mySlot) suffix += "  (you)";
                     if (slot == craftChoice.winnerSlot) {
                         char t[32]; formatMs(craftChoice.winnerMs, t, sizeof t);
-                        suffix += std::string("  (winner, ") + t + ")";
+                        suffix += std::string("  (winner") + (craftChoice.winnerName.empty() ? std::string() : " " + craftChoice.winnerName) + ", " + t + ")";
                     }
                     std::snprintf(label, sizeof label, "PLAYER %d%s##craft%d", slot + 1, suffix.c_str(), slot);
                     if (slot == defaultSlot && ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
@@ -5723,7 +5724,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                 if (chosen >= 0) {
                     std::string note;
                     if (chosen == craftChoice.mySlot) note = "you";
-                    else if (chosen == craftChoice.winnerSlot) note = "the winner";
+                    else if (chosen == craftChoice.winnerSlot) note = craftChoice.winnerName.empty() ? std::string("the winner") : "the winner, " + craftChoice.winnerName;
                     if (craftChoice.server) { downloadSlotId = craftChoice.id; downloadSlot = chosen; downloadNote = note; server.FetchReplay(craftChoice.id); }
                     else { startPath = craftChoice.path; startSlot = chosen; startNote = note; }
                     craftChoice.active = false;
