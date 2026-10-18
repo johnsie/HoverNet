@@ -14,7 +14,7 @@ scenes=(grid640 drive640 wide1280 cockpit640)
 out="$(mktemp)"
 for track in "${tracks[@]}"; do
   for scene in "${scenes[@]}"; do
-    line="$($cmd "$track" "$scene" 2>/dev/null | grep -E "^$track $scene " | tail -1)"
+    line="$($cmd "$track" "$scene" 2>/dev/null | tr -d '\r' | grep -E "^$track $scene " | tail -1)"
     [ -n "$line" ] || line="$track $scene FAILED"
     echo "$line" >> "$out"
   done

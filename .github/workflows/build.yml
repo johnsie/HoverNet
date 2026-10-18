@@ -201,7 +201,7 @@ jobs:
         run: |
           # The same golden hashes, replay and snapshot bytes as Linux and WebAssembly (docs/determinism.md): any
           # difference between platforms fails here.
-          cmake --build build/windows-shared --target HoverNetDeterminismRun HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetLobbyTest HoverNetModerationTest HoverNetTrackPack HoverNetCryptoTest HoverNetModTool HoverNetNetProxy HoverNetAuthServer HoverNetAuthBot --config Release --parallel 2
+          cmake --build build/windows-shared --target HoverNetDeterminismRun HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetLobbyTest HoverNetModerationTest HoverNetTrackPack HoverNetCryptoTest HoverNetModTool HoverNetNetProxy HoverNetAuthServer HoverNetAuthBot HoverNetRenderGolden --config Release --parallel 2
           bin=build/windows-shared/Release
           bad=0; msgs=""
           t() { local o; if o=$("$@" 2>&1); then echo "$o" | tail -n 3; else bad=1; msgs="$msgs | FAILED $* :: $(echo "$o" | tail -n 12 | tr '\n\r' '  ' | cut -c1-900)"; echo "FAILED: $*"; echo "$o" | tail -n 30; fi; }
@@ -225,6 +225,7 @@ jobs:
           t env AUTH_SPECTATE=1 scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 3 700
           t env HOVERNET_REPLAY_TOOL="$bin/HoverNetReplay.exe" scripts/test-authserver.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 8 500
           t scripts/test-replay-viewer.sh "$bin/HoverNetReplay.exe" "$bin/HoverNet.exe"
+          t scripts/test-render-golden.sh "$bin/HoverNetRenderGolden.exe"   # the classic renderer's 28 reference frames, the same hashes as Linux and WebAssembly
           t scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 8 400
           t env AUTH_DROP=150 scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 4 500
           if [ $bad -ne 0 ]; then echo "::error title=windows-suites::$msgs"; exit 1; fi

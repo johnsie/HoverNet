@@ -38,7 +38,9 @@ so a changed hash can be looked at; `HOVERNET_RENDER_TRACE=1` prints stage marke
      string table that the CMake-built `HoverNet.exe` does not have, so on Windows those lines were **blank**. It now uses the same literal texts
      as Linux and the browser; only the legacy `Game2.exe` still reads its resources. Seen in a headless capture of the real Windows client
      (the countdown "Start in 02.57 sec. for 1 laps" was missing before, present after).
-- Not yet run: Win32 (32-bit), the Windows CI job (the tool is not built there yet: the comparison above was a manual run), and a
+- The GitHub Actions Windows job now builds the tool and runs `scripts/test-render-golden.sh` with the others (the script passes under Git Bash on
+  the Windows runner; the Actions run itself has not been seen yet).
+- Not yet run: Win32 (32-bit), and a
   comparison with a capture of the original 2.0 build (the committed hashes are of the current renderer, so they guard against change; they
   are not themselves proof of equality with 2.0 until a 2.0 capture is compared, which needs the 2.0 binary).
 
