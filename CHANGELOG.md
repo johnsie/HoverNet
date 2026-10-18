@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.13 - 2026-10-18
+
+### Fixed
+- **A race that everybody had left kept running on the server, so restarting the server could wait ten minutes.** If the players of a started race closed their tabs, the race ran on to its time limit with nobody in it, and a restart (which lets races under way finish first) waited for it. A started race with no player and no spectator for two minutes (long enough for a dropped connection to resume) is now removed. Tested in the lobby test.
+
 ## 2.3.12 - 2026-10-18
 
 ### Fixed

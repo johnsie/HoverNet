@@ -26,6 +26,8 @@ struct LobbyConfig
     std::string trackDirectory = "NetTarget/Tracks";
     int maxRaces = 16;
     int maxConnections = 256;
+    int abandonedRaceMs = 120000;               // a race that has started and has nobody in it (no player, no spectator) for this long is removed: players who left
+                                                // cannot finish it, and it would otherwise run to the time limit and hold up a restart (drain) of the server
     int finishedRaceLingerMs = 15000;           // a finished race stays this long (for late Result and reconnect), then is removed
     int helloTimeoutMs = 5000;
     int maxInvalidPerWindow = 10;

@@ -11,6 +11,7 @@ struct LobbyServer::Entry
     std::unique_ptr<RaceHost> host;
     HostConfig cfg;
     std::int64_t finishedAt = -1;
+    std::int64_t emptySince = -1;   // since when a started race has had nobody in it (-1: somebody is, or it has not started)
     int badAttempts = 0;            // wrong codes tried on this race; after 30 it refuses everyone
     std::string code;               // non-empty: a private race, unlisted, joined or watched only with this code
 };
@@ -431,7 +432,13 @@ void LobbyServer::Advance(std::int64_t nowMs)
         const bool empty = e.host->ConnectedPlayers() == 0 && !e.host->Started();
         bool emptyOfLiveConns = true;
         for (const auto& c : mConns) if (c->raceId == e.id && !c->closed && !e.host->IsClosed(c->hostConn)) emptyOfLiveConns = false;
-        if ((e.finishedAt >= 0 && nowMs - e.finishedAt > mConfig.finishedRaceLingerMs) || (empty && emptyOfLiveConns && !e.host->Started() && nowMs > 0 && e.host->GetMetrics().connectionsAccepted > 0)) {
+        // A started race that everybody has left cannot be finished by anyone: after a grace period (for a dropped connection to resume) it goes.
+        if (e.host->Started() && !e.host->RaceFinished() && e.host->ConnectedPlayers() == 0 && emptyOfLiveConns) {
+            if (e.emptySince < 0) e.emptySince = nowMs;
+        }
+        else e.emptySince = -1;
+        const bool abandoned = e.emptySince >= 0 && nowMs - e.emptySince > mConfig.abandonedRaceMs;
+        if (abandoned || (e.finishedAt >= 0 && nowMs - e.finishedAt > mConfig.finishedRaceLingerMs) || (empty && emptyOfLiveConns && !e.host->Started() && nowMs > 0 && e.host->GetMetrics().connectionsAccepted > 0)) {
             for (auto& c : mConns) {
                 if (c->raceId != e.id) continue;
                 // What the race still had to say to this connection (a Reject, a last frame) is kept until it is read.

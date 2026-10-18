@@ -501,6 +501,27 @@ int main()
         Check(host.started && a.started && !host.gotRoster, "a race hosted without asking still starts when full (and gets no roster)");
     }
 
+    // ---- a race everybody has left does not run on forever (it would hold up a restart of the server) ---------------
+    {
+        LobbyConfig config = MakeConfig();
+        config.abandonedRaceMs = 30000;
+        LobbyServer lobby(config);
+        std::int64_t now = 1000;
+        Client solo;
+        solo.Open(lobby, now);
+        solo.Hello("solo", now); solo.Pump();
+        solo.Send(Protocol3::kHostRace, Protocol3::Encode(Host("ClassicH", 1)), now);
+        for (int i = 0; i < 6; ++i) { lobby.Advance(now += 100); solo.Pump(); }
+        Check(solo.started && lobby.RaceCount() == 1 && lobby.RunningRaces() == 1, "a one-player race starts at once");
+        for (int i = 0; i < 20; ++i) { lobby.Advance(now += 100); solo.Pump(); }
+        Check(lobby.RaceCount() == 1, "while its player is there it runs");
+        lobby.Disconnect(solo.conn);
+        for (int i = 0; i < 15; ++i) lobby.Advance(now += 1000);   // 15 s: inside the grace period, the player could still resume
+        Check(lobby.RaceCount() == 1, "a race whose player has just dropped is kept for a while (the player may resume)");
+        for (int i = 0; i < 25; ++i) lobby.Advance(now += 1000);   // 40 s in all, past the 30 s limit of this test
+        Check(lobby.RaceCount() == 0 && lobby.RunningRaces() == 0, "a started race nobody has been in for the limit is removed, so a drain for a restart is not held up by it");
+    }
+
     // ---- random bytes ----------------------------------------------------------------------------------------------
     {
         LobbyServer lobby(MakeConfig());
