@@ -8,6 +8,56 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#080c14">
   <title>HoverNet</title>
+  <meta name="hn-build" content="__HN_BUILD__">
+  <script id="hn-fresh">
+    // Phones (iPhones in particular) sometimes keep an old copy of this page, in the HTTP cache, a restored tab or a home-screen app, and
+    // then run an outdated client. The build id above is filled in when a build is packaged. At load the page asks the server for its own
+    // current copy (never from a cache); if the id differs it reloads once through a fresh address (?v=<id>), which no old copy can
+    // answer. After that, if the id still differs, or the page is brought back later (a restored tab, the app resumed), it only offers an
+    // "update" bar, because reloading by itself could end a race. A build that was not packaged (the placeholder is still there) does nothing.
+    (function () {
+      var meta = document.querySelector('meta[name="hn-build"]');
+      var mine = meta ? meta.getAttribute('content') : '';
+      if (!mine || mine.indexOf('__HN_') === 0) return;
+      window.HN_BUILD = mine;
+      function latest() {
+        return fetch(location.pathname, { cache: 'no-store', credentials: 'same-origin' })
+          .then(function (r) { return r.ok ? r.text() : ''; })
+          .then(function (t) { var m = /<meta name="hn-build" content="([^"]+)"/.exec(t); return m ? m[1] : ''; })
+          .catch(function () { return ''; });
+      }
+      function fresh(id) { return location.pathname + '?v=' + encodeURIComponent(id) + '&t=' + Date.now(); }
+      function offer(id) {
+        if (document.getElementById('hn-update')) return;
+        var bar = document.createElement('div');
+        bar.id = 'hn-update';
+        bar.setAttribute('role', 'button');
+        bar.textContent = 'A newer version of HoverNet is available. Tap here to update.';
+        bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;padding:10px 16px;background:#2a5db0;color:#fff;font:600 14px system-ui,sans-serif;text-align:center;cursor:pointer';
+        bar.addEventListener('click', function () { location.replace(fresh(id)); });
+        document.body.appendChild(bar);
+      }
+      function check(mayReload) {
+        latest().then(function (id) {
+          if (!id || id === mine) return;
+          var tried = '';
+          try { tried = sessionStorage.getItem('hn-reloaded-for') || ''; } catch (e) {}
+          if (mayReload && tried !== id) {
+            try { sessionStorage.setItem('hn-reloaded-for', id); } catch (e) {}
+            location.replace(fresh(id));
+          } else if (document.body) offer(id);
+          else document.addEventListener('DOMContentLoaded', function () { offer(id); });
+        });
+      }
+      check(true);
+      var hiddenAt = 0;
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) hiddenAt = Date.now();
+        else if (hiddenAt && Date.now() - hiddenAt > 60000) check(false);
+      });
+      window.addEventListener('pageshow', function (e) { if (e.persisted) check(false); });
+    })();
+  </script>
   <style>
     :root { --vh: 100vh; --vt: 0px; --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px); }
     @supports (height: 100dvh) { :root { --vh: 100dvh; } }
@@ -174,6 +224,8 @@
     function mb(n) { return (n / 1048576).toFixed(1); }
     var Module = {
       canvas: document.getElementById('canvas'),
+      // Game data is fetched under the build's own address, so an old cached copy of it can never be mixed with a new page.
+      locateFile: function (path) { return window.HN_BUILD ? path + '?v=' + encodeURIComponent(window.HN_BUILD) : path; },
       print: function(text) { console.log(text); logLine(text); },
       printErr: function(text) { console.error(text); logLine(text); },
       // Emscripten reports "Downloading data... (loaded/total)", then

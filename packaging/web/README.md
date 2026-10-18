@@ -155,3 +155,12 @@ show it and never run any of the VR code.
   keyboard, so enter your name before putting the headset on.
 - `HOVERNET_TEST_VR=<dir>` (native) writes each eye's frame as a PPM, for checking the stereo camera
   without a headset.
+
+## Outdated cached pages (phones)
+
+`shell.html` carries a build id (`<meta name="hn-build">`, the placeholder `__HN_BUILD__` filled in by the CI web job, and by
+`deploy-local-build.sh`, with the tag or commit). The `hn-fresh` script asks the server for the page's current copy with `cache: 'no-store'`;
+a different id makes the page reload once through `?v=<id>`, and the wasm and data files are requested with the same `?v=`. A page that
+comes back later (restored tab, resumed home-screen app) only shows an update bar. A build whose placeholder was not filled in does
+nothing, so local builds are unaffected. `scripts/web-smoke/web-stale-page.mjs` tests the script against a server that plays an old copy
+(run by `scripts/test-web-client.sh`). The server side is unchanged: HTML, js, wasm and data are already sent with `no-cache`.

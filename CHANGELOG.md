@@ -9,6 +9,7 @@ and how to roll one back.
 ## 2.3.7 - 2026-10-18
 
 ### Fixed
+- **A phone can no longer keep running an outdated web client.** Each web build now carries its own build id. When the page opens it asks the server for its current copy (never from a cache) and, if it is out of date, reloads once through a fresh address; the game data is fetched under the same id. If the page is brought back later (a restored tab, the app resumed from the home screen) and is out of date, a blue bar offers to update instead of reloading by itself, so a race is never interrupted. Tested in headless Chrome with a server that plays an old cached copy. Not tried on a real iPhone.
 - **The Windows client was missing the race time, lap line and countdown on the HUD.** The texts came from a Windows string table the new client does not have; they now use the same texts as Linux and the browser.
 - **Linux and browser frames now match Windows exactly.** Their stand-in for the Windows `MulDiv` truncated instead of rounding, so about 5% of each 3D picture was a pixel off from Windows. The simulation is untouched (same rules version, same golden physics and replays); only the picture changes, by at most one pixel at texture edges.
 

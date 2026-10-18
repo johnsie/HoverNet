@@ -161,6 +161,7 @@ build:game:web:
         node "$WEB_BUILD_DIR/HoverNetPredictionTest.js" ClassicH 8 60
         mkdir -p dist/web
         cp "$WEB_BUILD_DIR/HoverNet.html" dist/web/index.html
+        sed -i "s/__HN_BUILD__/${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}/" dist/web/index.html   # the page checks it against the server (packaging/web/shell.html)
         cp "$WEB_BUILD_DIR/HoverNet.js" "$WEB_BUILD_DIR/HoverNet.wasm" "$WEB_BUILD_DIR/HoverNet.data" dist/web/
       ) 8>"${WEB_BUILD_DIR}.lock"
     - tar -czf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web index.html HoverNet.js HoverNet.wasm HoverNet.data
