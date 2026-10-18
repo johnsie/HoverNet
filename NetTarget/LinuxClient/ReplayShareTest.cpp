@@ -166,6 +166,55 @@ int main()
 #endif
     }
 
+    // Records broken: a result that beats the best time of its board (track, craft, lap or race length) so far; the first result on a board breaks nothing.
+    {
+        const std::string bdir = "hovernet-replay-breaks.tmp";
+        MAKE_DIR(bdir.c_str());
+        const std::string H = "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\tname\tcraft\tvalid\n";
+        WriteBytes(bdir + "/ClassicH-1-1.hnr", MakeReplay("ClassicH", 2, 1, 300, 211));
+        WriteFile(bdir + "/ClassicH-1-1.results.tsv", H + "1\t0\t1\t1\t90000\t90000\tAnna\t0\t1\n2\t1\t1\t1\t95000\t95000\tBen\t2\t1\n");   // sets the records
+        WriteBytes(bdir + "/ClassicH-2-2.hnr", MakeReplay("ClassicH", 2, 1, 310, 212));
+        WriteFile(bdir + "/ClassicH-2-2.results.tsv", H + "1\t1\t1\t1\t85000\t85000\tCara\t0\t1\n2\t0\t1\t1\t90000\t90000\tAnna\t0\t1\n");   // Cara breaks Anna's Basic lap and race; Anna ties her own time (no break)
+        WriteBytes(bdir + "/ClassicH-3-3.hnr", MakeReplay("ClassicH", 2, 1, 320, 213));
+        WriteFile(bdir + "/ClassicH-3-3.results.tsv", H + "1\t0\t1\t1\t99000\t80000\tAnna\t0\t1\n");   // a slower race but a faster lap: breaks the lap record only
+        WriteBytes(bdir + "/ClassicH-4-4.hnr", MakeReplay("ClassicH", 2, 3, 330, 214));
+        WriteFile(bdir + "/ClassicH-4-4.results.tsv", H + "1\t0\t3\t1\t70000\t60000\tDee\t0\t1\n");   // another lap count: its own race board (a first), but the lap board is shared and is broken
+        WriteBytes(bdir + "/ClassicH-5-5.hnr", MakeReplay("ClassicH", 2, 1, 340, 215));
+        WriteFile(bdir + "/ClassicH-5-5.results.tsv", "rank\tplayer\tlaps\tfinished\tfinish_ms\tbest_lap_ms\nr\n");   // a table without craft: nothing to place
+        SetAge(bdir + "/ClassicH-1-1.hnr", 500); SetAge(bdir + "/ClassicH-2-2.hnr", 400); SetAge(bdir + "/ClassicH-3-3.hnr", 300); SetAge(bdir + "/ClassicH-4-4.hnr", 200); SetAge(bdir + "/ClassicH-5-5.hnr", 100);
+        DirReplayStore breaks(bdir, 50);
+        const Protocol3::RecordBreakList list3 = breaks.RecordBreaks(15);
+        // Newest first: Dee's lap (60 s beat Anna's 80 s), Anna's lap (80 s beat Cara's 85 s), then Cara's lap and race (85 s beat Anna's 90 s).
+        Check(list3.breaks.size() == 4, "only results that beat the best of their board are records broken (not the first on a board, not a tie, not a table without a craft)");
+        Check(list3.breaks.size() == 4 && list3.breaks[0].name == "Dee" && list3.breaks[0].lap && list3.breaks[0].ms == 60000 && list3.breaks[0].previousMs == 80000 && list3.breaks[0].previousName == "Anna", "the newest break first, with the time and the holder it beat");
+        Check(list3.breaks.size() == 4 && list3.breaks[1].name == "Anna" && list3.breaks[1].lap && list3.breaks[1].ms == 80000 && list3.breaks[1].previousMs == 85000 && list3.breaks[1].previousName == "Cara", "a faster lap in a slower race breaks the lap record only");
+        Check(list3.breaks.size() == 4 && list3.breaks[2].name == "Cara" && list3.breaks[2].lap && list3.breaks[2].previousName == "Anna" && list3.breaks[3].name == "Cara" && !list3.breaks[3].lap && list3.breaks[3].raceLaps == 1 && list3.breaks[3].ms == 85000 && list3.breaks[3].previousMs == 90000, "one result can break both the lap and the race record");
+        Check(list3.breaks.size() == 4 && list3.breaks[3].craft == 0 && list3.breaks[3].track == "ClassicH", "a break says the craft and the track");
+        const Protocol3::RecordBreakList one = breaks.RecordBreaks(1);
+        Check(one.breaks.size() == 1 && one.breaks[0].name == "Dee", "the list is cut to the number asked for, newest kept");
+        Protocol3::RecordBreakList round;
+        Check(Protocol3::Decode(Protocol3::Encode(list3), round) && round.breaks.size() == list3.breaks.size() && round.breaks[0].previousName == "Anna", "the message round-trips");
+        LobbyConfig config3;
+        config3.tracks = {"ClassicH"};
+        LobbyServer lobby3(config3);
+        lobby3.SetReplayStore(&breaks);
+        Client viewer3(lobby3, 100);
+        Protocol3::Hello hello3; hello3.name = "viewer";
+        viewer3.Send(Protocol3::kHello, Protocol3::Encode(hello3), 100);
+        viewer3.Pump(); viewer3.Clear();
+        viewer3.Send(Protocol3::kListRecordBreaks, Protocol3::Encode(Protocol3::ListRecordBreaks()), 100);
+        viewer3.Pump();
+        Protocol3::RecordBreakList got4;
+        Check(viewer3.frames.size() == 1 && viewer3.frames[0].first == Protocol3::kRecordBreakList && Protocol3::Decode(viewer3.frames[0].second, got4) && got4.breaks.size() == 4, "the lobby answers the records broken");
+        for (const char* name : {"ClassicH-1-1.hnr", "ClassicH-1-1.results.tsv", "ClassicH-2-2.hnr", "ClassicH-2-2.results.tsv", "ClassicH-3-3.hnr", "ClassicH-3-3.results.tsv", "ClassicH-4-4.hnr", "ClassicH-4-4.results.tsv", "ClassicH-5-5.hnr", "ClassicH-5-5.results.tsv"})
+            std::remove((bdir + "/" + name).c_str());
+#ifdef _WIN32
+        _rmdir(bdir.c_str());
+#else
+        rmdir(bdir.c_str());
+#endif
+    }
+
     // The lobby messages.
     LobbyConfig config;
     config.tracks = {"ClassicH"};

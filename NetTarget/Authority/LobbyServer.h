@@ -52,6 +52,8 @@ public:
     virtual Protocol3::RecordList Records(const std::string& track, int laps) = 0;
     // The newest races with at least two different players (the league's checks passed), each with its winner, newest first.
     virtual Protocol3::WinnerList Winners(int max) = 0;
+    // The newest results that beat the best time of their board (track, craft, lap or race length), newest first, with what they beat.
+    virtual Protocol3::RecordBreakList RecordBreaks(int max) = 0;
 };
 
 class LobbyServer

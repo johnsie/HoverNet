@@ -88,6 +88,11 @@ void OnlineLobby::Pump()
             if (Decode(f.payload, l)) { mWinners = l.winners; mWinnersLoaded = true; mListsUnreadable = false; }
             else mListsUnreadable = true;
         }
+        else if (f.type == kRecordBreakList) {
+            RecordBreakList l;
+            if (Decode(f.payload, l)) { mBreaks = l.breaks; mBreaksLoaded = true; mListsUnreadable = false; }
+            else mListsUnreadable = true;
+        }
         else if (f.type == kLeagueData) {
             LeagueData l;
             if (Decode(f.payload, l)) { mLeague = l; mLeagueLoaded = true; mListsUnreadable = false; }
@@ -190,6 +195,15 @@ void OnlineLobby::RefreshWinners()
     ask.max = static_cast<std::uint8_t>(kMaxWinnerList);
     mWinnersLoaded = false;
     Send(kListWinners, Encode(ask));
+}
+
+void OnlineLobby::RefreshRecordBreaks()
+{
+    if (mState != State::eBrowsing) return;
+    ListRecordBreaks ask;
+    ask.max = static_cast<std::uint8_t>(kMaxRecordBreakList);
+    mBreaksLoaded = false;
+    Send(kListRecordBreaks, Encode(ask));
 }
 
 void OnlineLobby::RefreshLeague(const std::string& month)

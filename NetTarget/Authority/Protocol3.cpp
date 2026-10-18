@@ -391,6 +391,37 @@ bool Decode(const std::vector<std::uint8_t>& p, RecordList& m)
     return in.Done();
 }
 
+std::vector<std::uint8_t> Encode(const ListRecordBreaks& m) { Out o; o.U8(m.max); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, ListRecordBreaks& m) { In in(p); m.max = static_cast<std::uint8_t>(in.U8()); return in.Done() && m.max >= 1 && m.max <= kMaxRecordBreakList; }
+
+std::vector<std::uint8_t> Encode(const RecordBreakList& m)
+{
+    Out o;
+    o.U8(static_cast<std::uint32_t>(m.breaks.size()));
+    for (const RecordBreakEntry& b : m.breaks) {
+        o.U64(b.replay); o.Str(b.track); o.U8(b.slot); o.U8(b.raceLaps); o.U8(b.craft); o.U8(b.lap ? 1 : 0); o.U32(b.savedAt);
+        o.U32(static_cast<std::uint32_t>(b.ms)); o.U32(static_cast<std::uint32_t>(b.previousMs)); o.Str(b.name); o.Str(b.previousName);
+    }
+    return o.b;
+}
+bool Decode(const std::vector<std::uint8_t>& p, RecordBreakList& m)
+{
+    In in(p);
+    const std::uint32_t count = in.U8();
+    if (!in.ok || count > static_cast<std::uint32_t>(kMaxRecordBreakList)) return false;
+    m.breaks.clear();
+    for (std::uint32_t i = 0; i < count && in.ok; ++i) {
+        RecordBreakEntry b;
+        b.replay = in.U64(); b.track = in.Str(64); b.slot = static_cast<std::uint8_t>(in.U8()); b.raceLaps = static_cast<std::uint8_t>(in.U8()); b.craft = static_cast<std::uint8_t>(in.U8());
+        const std::uint32_t lap = in.U8();
+        b.savedAt = in.U32(); b.ms = static_cast<std::int32_t>(in.U32()); b.previousMs = static_cast<std::int32_t>(in.U32()); b.name = in.Str(32); b.previousName = in.Str(32);
+        if (b.track.empty() || b.slot >= 8 || lap > 1 || b.craft >= 8 || b.ms <= 0 || b.previousMs <= 0 || b.ms > b.previousMs) return false;
+        b.lap = lap == 1;
+        m.breaks.push_back(b);
+    }
+    return in.Done();
+}
+
 std::vector<std::uint8_t> Encode(const ListWinners& m) { Out o; o.U8(m.max); return o.b; }
 bool Decode(const std::vector<std::uint8_t>& p, ListWinners& m) { In in(p); m.max = static_cast<std::uint8_t>(in.U8()); return in.Done() && m.max >= 1 && m.max <= kMaxWinnerList; }
 

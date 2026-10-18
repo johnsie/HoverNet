@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The RECENT WINNERS and MONTHLY LEAGUE tabs of the Leaderboards screen of the real client against a real server with a seeded league log and results tables:
+# The RECENT WINNERS, MONTHLY LEAGUE and RECORDS BROKEN tabs of the Leaderboards screen of the real client against a real server with a seeded league log and results tables:
 # only races of two or more players that passed the league's checks are winners, the league shows this month's standings, the winner of each earlier month and
-# the winner of each earlier year. Test hooks: HOVERNET_TEST_LEADERBOARD_TAB (1 = recent winners, 2 = league), HOVERNET_TEST_REPLAY_LIBRARY prints what the tabs received.
+# the winner of each earlier year. Test hooks: HOVERNET_TEST_LEADERBOARD_TAB (1 = recent winners, 2 = league, 3 = records broken), HOVERNET_TEST_REPLAY_LIBRARY prints what the tabs received.
 #   scripts/test-league-tabs.sh build/HoverNetAuthServer build/HoverNetReplay build/HoverNetGame2Player
 set -uo pipefail
 server="${1:?usage: $0 <server> <replay tool> <client>}"; tool="${2:?}"; client="${3:?}"
@@ -34,5 +34,7 @@ out=$(shot 1)
 if grep -q "^WINNERS 1 | ClassicH: Anna 61000 of 2$" <<< "$out"; then echo "ok   recent winners lists the race of two players and not the race one person made against themselves"; else echo "FAIL: recent winners"; grep WINNERS <<< "$out"; fail=1; fi
 out=$(shot 2)
 if grep -q "^LEAGUE $thismonth of $thismonth | Anna 6 | Cara 0 | Ben 0 || months | $prevmonth Cara 3 | $prevyear-06 Ben 3 || years | $prevyear Ben 3$" <<< "$out" || grep -q "^LEAGUE $thismonth of $thismonth | Anna 6 | Ben 0 | Cara 0 || months | $prevmonth Cara 3 | $prevyear-06 Ben 3 || years | $prevyear Ben 3$" <<< "$out"; then echo "ok   the league shows this month's standings, the winner of the month before and of last year"; else echo "FAIL: the league"; grep LEAGUE <<< "$out"; fail=1; fi
-[ $fail -eq 0 ] && echo "league tabs: recent winners and monthly league"
+out=$(shot 3)
+if grep -q "^BREAKS 2 | ClassicH Basic lap: Self 50000 beat Anna 61000 | ClassicH Basic race: Self 50000 beat Anna 61000$" <<< "$out"; then echo "ok   records broken lists the newest results that beat a record, with the time and the holder they beat (the first result on a board breaks nothing)"; else echo "FAIL: records broken"; grep BREAKS <<< "$out"; fail=1; fi
+[ $fail -eq 0 ] && echo "league tabs: recent winners, monthly league and records broken"
 exit $fail

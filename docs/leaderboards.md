@@ -20,9 +20,18 @@ were saved before the craft was recorded have no craft and are not on any board.
 
 Craft names are those of `Authority/CraftNames.h`, in the order the pick-your-craft screen cycles through them.
 
+## Records broken
+
+The first tab, **Records broken** (the screen opens on it), lists the newest results that beat the best time on their board, newest first: the track, the date, whether it was the fastest lap
+or the fastest race of that many laps, the craft, who set it, the time and the holder and time it beat, with a **WATCH** button for the replay. A board is a
+track, a craft and a lap or race length, as on the All records tab. The first result on a board *sets* a record and is not listed; a tie does not break one (the older run keeps
+it); one race can break both the lap and the race record. It is replayed from the results tables of the replays the server keeps, oldest first, so it only knows
+the history that is still kept: after old replays are removed, the oldest kept result on a board counts as the first. Like the All records tab it includes every race,
+not only those that count for the league. Test: `HoverNetReplayShare` (the rules and the lobby message) and `HoverNetLeagueTabs` (the tab against a real server).
+
 ## Recent winners and the monthly league (2.3.18)
 
-The Leaderboards screen has three tabs: **Records** (above), **Recent winners** and **Monthly league**.
+The Leaderboards screen has four tabs: **Records broken**, **All records** (the per-craft boards above), **Recent winners** and **Monthly league**.
 
 - **Recent winners** lists the newest races won, with the track, date, laps, number of players, the winner's name and craft and a *Watch the race* button
   that plays it from the winner's seat. **A race is listed only if two or more players were in it and it passed the league's checks below.** Races with a

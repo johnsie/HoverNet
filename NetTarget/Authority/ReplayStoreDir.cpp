@@ -256,6 +256,40 @@ Protocol3::WinnerList DirReplayStore::Winners(int max)
     return out;
 }
 
+Protocol3::RecordBreakList DirReplayStore::RecordBreaks(int max)
+{
+    Refresh();
+    // Oldest to newest, keeping the best time seen so far on each board (track, craft, lap or race length). A result that beats it breaks the record; the
+    // first result on a board only sets one. A tie does not break it (the older run keeps it, as on the boards).
+    struct Best { std::int32_t ms; std::string name; };
+    std::map<std::string, Best> best;
+    Protocol3::RecordBreakList out;
+    std::vector<const Item*> items = Sorted();
+    for (auto it = items.rbegin(); it != items.rend(); ++it) {
+        const Item* item = *it;
+        for (const ReplayRun& run : item->runs) {
+            if (run.craft < 0) continue;
+            for (int lap = 0; lap < 2; ++lap) {
+                std::int32_t ms;
+                if (lap == 1) { if (run.bestLapMs <= 0) continue; ms = run.bestLapMs; }
+                else { if (!run.finished || run.finishMs <= 0) continue; ms = run.finishMs; }
+                const std::string key = item->info.track + "\t" + std::to_string(run.craft) + "\t" + std::to_string(lap) + "\t" + std::to_string(lap == 1 ? 0 : item->info.laps);
+                auto found = best.find(key);
+                if (found == best.end()) { best[key] = {ms, run.name}; continue; }
+                if (ms >= found->second.ms) continue;
+                Protocol3::RecordBreakEntry b;
+                b.replay = item->info.id; b.track = item->info.track; b.slot = run.slot; b.raceLaps = item->info.laps; b.craft = static_cast<std::uint8_t>(run.craft); b.lap = lap == 1;
+                b.savedAt = item->info.savedAt; b.ms = ms; b.previousMs = found->second.ms; b.name = run.name; b.previousName = found->second.name;
+                out.breaks.push_back(b);
+                found->second = {ms, run.name};
+            }
+        }
+    }
+    std::reverse(out.breaks.begin(), out.breaks.end());   // newest first
+    if (static_cast<int>(out.breaks.size()) > max) out.breaks.resize(static_cast<std::size_t>(std::max(0, max)));
+    return out;
+}
+
 int DirReplayStore::Prune()
 {
     Refresh();

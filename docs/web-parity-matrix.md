@@ -30,6 +30,7 @@ sizes, and `scripts/test-determinism.sh` (native vs WebAssembly).
 | 17 | Watch a Replay (saved races of a 3.0 server, play, delete) | Partly | Shared code; the native client is tested end to end (the saved file equals the server's replay, the menu plays it to the verified hash); the browser build compiles and its main and pause menus fit at phone size in the smoke test; the browser's saving and playing a replay is **not run** |
 | 18 | Server replays and Leaderboards (everyone's races and times per craft, download and watch) | Partly | Shared code over the lobby's WebSocket-capable connection; the native client is tested against a real server (list, records, a checked download, played to the verified hash); the browser build compiles; **not run in a browser** |
 | 19 | Recent winners and Monthly league tabs (device id for the league's cheat checks) | Partly | Shared code; native tested against a real server (winners list, league, seeded history, cheat rules); the browser keeps its device id in the same settings store; the wasm build is **not yet built or run in a browser** for this |
+| 20 | Records broken tab on Leaderboards | Partly | Shared code (Leaderboards screen, lobby client); native tested against a real server (rules, lobby message, the tab); the wasm build is **not yet built or run in a browser** for this |
 
 ## HoverNet 3.0 servers in the browser
 

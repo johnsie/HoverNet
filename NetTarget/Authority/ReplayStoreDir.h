@@ -28,6 +28,7 @@ public:
     bool Read(std::uint64_t id, std::vector<std::uint8_t>& bytes) override;
     Protocol3::RecordList Records(const std::string& track, int laps) override;
     Protocol3::WinnerList Winners(int max) override;
+    Protocol3::RecordBreakList RecordBreaks(int max) override;
     // Removes the oldest replays (and their results tables) beyond `keep`. Returns how many were removed.
     int Prune();
     std::size_t Count();

@@ -57,6 +57,8 @@ enum Type : std::uint8_t
     kWinnerList = 47,      // server to client: the answer, see WinnerList
     kListLeague = 48,      // client to server (lobby): the monthly league; see ListLeague
     kLeagueData = 49,      // server to client: the answer, see LeagueData
+    kListRecordBreaks = 50,   // client to server (lobby): the newest track records that were broken; see ListRecordBreaks
+    kRecordBreakList = 51,    // server to client: the answer, see RecordBreakList
     kListReplays = 40,     // client to server (lobby): list the replays the server keeps (newest first, optionally one track); see ListReplays
     kReplayList = 41,      // server to client: the answer, see ReplayList
     kGetReplay = 42,       // client to server (lobby): send me one replay by id
@@ -157,6 +159,12 @@ constexpr int kMaxWinnerList = 20;
 struct WinnerEntry { std::uint64_t replay = 0; std::string track; std::uint8_t slot = 0, laps = 0, players = 0; std::uint32_t savedAt = 0; std::int32_t ms = 0; std::uint8_t craft = 255; std::string name; };
 struct ListWinners { std::uint8_t max = 15; };
 struct WinnerList { std::vector<WinnerEntry> winners; };
+// Recent records broken: the newest results that beat the best time on their board (track, craft, and fastest lap or fastest race of that many laps) as the
+// server's saved races show it, newest first, with the time and holder they beat. The first result on a board sets a record, it breaks none. A replay is the proof.
+constexpr int kMaxRecordBreakList = 20;
+struct RecordBreakEntry { std::uint64_t replay = 0; std::string track; std::uint8_t slot = 0, raceLaps = 0, craft = 255; bool lap = false; std::uint32_t savedAt = 0; std::int32_t ms = 0, previousMs = 0; std::string name, previousName; };   // lap: a single lap, otherwise the finish of a race of raceLaps laps
+struct ListRecordBreaks { std::uint8_t max = 15; };
+struct RecordBreakList { std::vector<RecordBreakEntry> breaks; };
 // The monthly league: 3 points for winning a race (nothing for the others), in races that count (two or more different devices); it starts again on the 1st of
 // each month (UTC) and the winner of each finished month and each finished year is kept. Months are "YYYY-MM".
 constexpr int kMaxLeagueRows = 10;
@@ -199,6 +207,8 @@ std::vector<std::uint8_t> Encode(const ChatMessage&);
 std::vector<std::uint8_t> Encode(const Chat&);
 std::vector<std::uint8_t> Encode(const RaceList&);
 std::vector<std::uint8_t> Encode(const ListReplays&);
+std::vector<std::uint8_t> Encode(const ListRecordBreaks&);
+std::vector<std::uint8_t> Encode(const RecordBreakList&);
 std::vector<std::uint8_t> Encode(const ListWinners&);
 std::vector<std::uint8_t> Encode(const WinnerList&);
 std::vector<std::uint8_t> Encode(const ListLeague&);
@@ -233,6 +243,8 @@ bool Decode(const std::vector<std::uint8_t>& payload, ChatMessage&);
 bool Decode(const std::vector<std::uint8_t>& payload, Chat&);
 bool Decode(const std::vector<std::uint8_t>& payload, RaceList&);
 bool Decode(const std::vector<std::uint8_t>& payload, ListReplays&);
+bool Decode(const std::vector<std::uint8_t>& payload, ListRecordBreaks&);
+bool Decode(const std::vector<std::uint8_t>& payload, RecordBreakList&);
 bool Decode(const std::vector<std::uint8_t>& payload, ListWinners&);
 bool Decode(const std::vector<std::uint8_t>& payload, WinnerList&);
 bool Decode(const std::vector<std::uint8_t>& payload, ListLeague&);

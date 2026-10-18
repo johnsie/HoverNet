@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.19 - 2026-10-18
+
+### Added
+- **Leaderboards: Records broken tab**, now the first tab; the former *Records* tab is called **All records**. Lists the newest results that beat a record (a craft's best lap, or best race time of a given lap count, on a track), with the time, the holder they beat and a Watch button. The first result on a board sets a record and is not listed; a tie does not break one. It is worked out from the replays the server keeps, like the Records tab. Update the game and the server together: an older server does not know the tab (the game says so).
+
 ## 2.3.18 - 2026-10-18
 
 ### Added

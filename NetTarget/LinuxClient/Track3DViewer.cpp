@@ -5826,7 +5826,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
     const int officialTracks = Tracks().OfficialCount();
     int track = 0;                       // official track index
     int laps = 0;                        // 0: fastest laps; n: fastest races of n laps
-    bool need = true, needWinners = true, needLeague = true;
+    bool need = true, needWinners = true, needLeague = true, needBreaks = true;
     std::string leagueMonth;             // the month shown in the league tab (empty: the current month)
     int wantTab = -1;                    // test hook: open on this tab
     std::uint64_t downloadId = 0;
@@ -5840,7 +5840,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
     if (const char* tabEnv = std::getenv("HOVERNET_TEST_LEADERBOARD_TAB")) wantTab = std::atoi(tabEnv);
     auto formatMs = [](long long ms, char* out, std::size_t n) { std::snprintf(out, n, "%lld:%02lld.%02lld", ms / 60000, (ms % 60000) / 1000, (ms % 1000) / 10); };
     auto formatDate = [](std::uint32_t unixSeconds, char* out, std::size_t n) { std::snprintf(out, n, "%s", UkDateTime(unixSeconds).c_str()); };
-    bool printedReport = false, printedWinners = false, printedLeague = false;
+    bool printedReport = false, printedWinners = false, printedLeague = false, printedBreaks = false;
 
     while (running && !started && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
@@ -5857,6 +5857,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             if (need && officialTracks > 0) { server.RefreshRecords(Tracks().Get(track)->mName, laps); need = false; }
             if (needWinners) { server.RefreshWinners(); needWinners = false; }
             if (needLeague) { server.RefreshLeague(leagueMonth); needLeague = false; }
+            if (needBreaks) { server.RefreshRecordBreaks(); needBreaks = false; }
         }
         std::vector<std::uint8_t> downloaded;
         if (downloadId != 0 && server.TakeReplay(downloaded)) {
@@ -5888,6 +5889,13 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             printedWinners = true;
             std::printf("WINNERS %zu", server.Winners().size());
             for (const Protocol3::WinnerEntry& w : server.Winners()) std::printf(" | %s: %s %d of %d", w.track.c_str(), w.name.c_str(), w.ms, w.players);
+            std::printf("\n");
+            std::fflush(stdout);
+        }
+        if (server.RecordBreaksLoaded() && !printedBreaks && std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) {
+            printedBreaks = true;
+            std::printf("BREAKS %zu", server.RecordBreaks().size());
+            for (const Protocol3::RecordBreakEntry& b : server.RecordBreaks()) std::printf(" | %s %s %s: %s %d beat %s %d", b.track.c_str(), Authority::CraftName(b.craft), b.lap ? "lap" : "race", b.name.c_str(), b.ms, b.previousName.c_str(), b.previousMs);
             std::printf("\n");
             std::fflush(stdout);
         }
@@ -5941,8 +5949,39 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             ImGui::TextDisabled("Connecting to the server...");
         }
         else if (ImGui::BeginTabBar("LeaderboardTabs")) {
-            // ---- the records, per craft
-            if (ImGui::BeginTabItem("RECORDS", nullptr, wantTab == 0 ? ImGuiTabItemFlags_SetSelected : 0)) {
+            // ---- the newest records that were broken (the first tab)
+            if (ImGui::BeginTabItem("RECORDS BROKEN", nullptr, wantTab == 3 ? ImGuiTabItemFlags_SetSelected : 0)) {
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextDisabled("The latest times that beat a record: the best lap or the best race time of a craft on a track. The first time on a board sets a record and is not listed.");
+                ImGui::PopTextWrapPos();
+                ImGui::Spacing();
+                if (server.ListsUnreadable() && !server.RecordBreaksLoaded()) { ImGui::PushTextWrapPos(0.0f); ImGui::TextColored(warn, "The server answered in a form this version of the game cannot read: the game and the server are on different versions. Reload the page (or update the game)."); ImGui::PopTextWrapPos(); }
+                else if (!server.RecordBreaksLoaded()) ImGui::TextDisabled("Loading the records...");
+                else if (server.RecordBreaks().empty()) ImGui::TextDisabled("No record has been broken yet.");
+                for (std::size_t i = 0; i < server.RecordBreaks().size(); ++i) {
+                    const Protocol3::RecordBreakEntry& b = server.RecordBreaks()[i];
+                    ImGui::PushID(2000 + static_cast<int>(i));
+                    char time[32], before[32], when[48];
+                    formatMs(b.ms, time, sizeof time);
+                    formatMs(b.previousMs, before, sizeof before);
+                    formatDate(b.savedAt, when, sizeof when);
+                    ImGui::Text("%s", b.track.c_str());
+                    if (b.lap) ImGui::TextDisabled("%s   Fastest lap, %s", when, Authority::CraftName(b.craft));
+                    else ImGui::TextDisabled("%s   Fastest race, %d lap%s, %s", when, b.raceLaps, b.raceLaps == 1 ? "" : "s", Authority::CraftName(b.craft));
+                    ImGui::PushTextWrapPos(0.0f);
+                    ImGui::Text("%s  %s   beat   %s  %s", b.name.empty() ? "player" : b.name.c_str(), time, b.previousName.empty() ? "player" : b.previousName.c_str(), before);
+                    ImGui::PopTextWrapPos();
+                    const bool busy = downloadId != 0;
+                    if (HoverNetButton(busy && downloadId == b.replay ? "DOWNLOADING..." : "WATCH", ImVec2(-FLT_MIN, 34)) && !busy) {
+                        downloadId = b.replay; downloadSlot = b.slot; downloadNote = b.lap ? "the fastest lap" : "the record holder"; message.clear(); server.FetchReplay(b.replay);
+                    }
+                    ImGui::PopID();
+                    ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+                }
+                ImGui::EndTabItem();
+            }
+            // ---- all the records, per craft
+            if (ImGui::BeginTabItem("ALL RECORDS", nullptr, wantTab == 0 ? ImGuiTabItemFlags_SetSelected : 0)) {
             ImGui::TextDisabled("The best times of everyone who races on this server, for each craft.");
             ImGui::SetNextItemWidth(-FLT_MIN);
             if (officialTracks > 0 && ImGui::BeginCombo("##Track", Tracks().Get(track)->mName.c_str())) {

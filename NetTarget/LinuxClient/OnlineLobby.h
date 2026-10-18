@@ -86,6 +86,9 @@ public:
     void ClearReplayNotice() { mReplayNotice.clear(); }
 
     // Recent winners (races with at least two different players) and the monthly league.
+    void RefreshRecordBreaks();
+    const std::vector<Protocol3::RecordBreakEntry>& RecordBreaks() const { return mBreaks; }
+    bool RecordBreaksLoaded() const { return mBreaksLoaded; }
     void RefreshWinners();
     const std::vector<Protocol3::WinnerEntry>& Winners() const { return mWinners; }
     bool WinnersLoaded() const { return mWinnersLoaded; }
@@ -122,7 +125,8 @@ private:
     Protocol3::RecordList mRecords;
     std::vector<Protocol3::WinnerEntry> mWinners;
     Protocol3::LeagueData mLeague;
-    bool mWinnersLoaded = false, mLeagueLoaded = false;
+    std::vector<Protocol3::RecordBreakEntry> mBreaks;
+    bool mWinnersLoaded = false, mLeagueLoaded = false, mBreaksLoaded = false;
     bool mReplaysLoaded = false, mRecordsLoaded = false, mReplayReady = false, mListsUnreadable = false;
     std::uint64_t mFetchId = 0;
     long long mLastFetchMs = -100000;   // the server allows one download every half second; a quicker request waits (see FetchReplay)

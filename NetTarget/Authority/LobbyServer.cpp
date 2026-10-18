@@ -288,6 +288,16 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         c.out.insert(c.out.end(), f.begin(), f.end());
         return;
     }
+    if (type == kListRecordBreaks) {
+        ListRecordBreaks m;
+        if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
+        RecordBreakList list;
+        if (mReplays != nullptr) list = mReplays->RecordBreaks(std::min<int>(m.max, kMaxRecordBreakList));
+        while (list.breaks.size() > 1 && Encode(list).size() > kMaxListPayload) list.breaks.pop_back();   // the oldest go first
+        const std::vector<std::uint8_t> f = EncodeFrame(kRecordBreakList, Encode(list));
+        c.out.insert(c.out.end(), f.begin(), f.end());
+        return;
+    }
     if (type == kListLeague) {
         ListLeague m;
         if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
