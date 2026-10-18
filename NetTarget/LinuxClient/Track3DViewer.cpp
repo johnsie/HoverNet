@@ -7,6 +7,7 @@
 #include "TrackDownloader.h"
 #include "Sha256.h"
 #include "PersonalBests.h"
+#include <functional>
 #include "GhostRun.h"
 #include "ReplayLibrary.h"
 #include "ReplayRecorder.h"
@@ -2150,6 +2151,7 @@ enum class PauseChoice
     eResume,
     eLeaveRace,
     eOnlineLobby,
+    eWatchReplay,
     eSettings,
     eControls,
     eQuit,
@@ -2157,7 +2159,7 @@ enum class PauseChoice
 
 PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                          MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline,
-                         int pFrameLimit = -1);
+                         int pFrameLimit = -1, bool pOfferReplays = true);
 
 enum class PostRaceChoice
 {
@@ -2562,7 +2564,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 // pause menu Escape brings up everywhere else in the client,
                 // so there's a way back out of an accidental press, and a way
                 // to reach Settings without leaving first.
-                const PauseChoice pauseChoice = RunPauseMenu(graphics, buffer, viewport, font, false, pFrameLimit);
+                const PauseChoice pauseChoice = RunPauseMenu(graphics, buffer, viewport, font, false, pFrameLimit, false);
                 if (pauseChoice == PauseChoice::eQuit) {
                     g_QuitConfirmed = true;
                     running = false;
@@ -3518,7 +3520,7 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
 // already does when online (reset and rejoin the lobby).
 PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                          MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline,
-                         int pFrameLimit)
+                         int pFrameLimit, bool pOfferReplays)
 {
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
     if (ownsImGuiContext) {
@@ -3543,16 +3545,17 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
 #endif
 
     struct PauseOption { const char* label; PauseChoice choice; };
-    const PauseOption options[] = {
+    std::vector<PauseOption> options = {
         {"RESUME RACE", PauseChoice::eResume},
         {pIsOnline ? "LEAVE RACE" : "NEW LOCAL RACE", PauseChoice::eLeaveRace},
         {"ONLINE MULTIPLAYER", PauseChoice::eOnlineLobby},
-        {"SETTINGS", PauseChoice::eSettings},
-        {"CONTROLS", PauseChoice::eControls},
-        {"QUIT HOVERNET", PauseChoice::eQuit},
     };
-    constexpr int optionCount = sizeof(options) / sizeof(options[0]);
-    const int primaryCount = 3;   // the race options above the "GAME & ACCESSIBILITY" heading
+    if (pOfferReplays) options.push_back({"WATCH A REPLAY", PauseChoice::eWatchReplay});
+    const int primaryCount = static_cast<int>(options.size());   // the race options above the "GAME & ACCESSIBILITY" heading
+    options.push_back({"SETTINGS", PauseChoice::eSettings});
+    options.push_back({"CONTROLS", PauseChoice::eControls});
+    options.push_back({"QUIT HOVERNET", PauseChoice::eQuit});
+    const int optionCount = static_cast<int>(options.size());
     PauseChoice choice = PauseChoice::eResume;
     bool focusFirstButton = true;
     bool running = true;
@@ -5242,6 +5245,147 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
     }
 }
 
+
+// ---- Watch a replay: the races the player took part in or watched from the start (ReplayLibrary.h) ---------------------------------------
+// Returns true when a replay was started (the caller then drops into the race loop); false when the player went back. `start` plays the file
+// and returns an error text, which is shown here without leaving the screen.
+bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::function<std::string(const std::string&, bool&)>& start)
+{
+    const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
+    if (ownsImGuiContext) {
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+        LoadHoverNetMenuFonts(io);
+        ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
+        ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+        ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+    }
+
+    ReplayLibrary library(ConfigDirPath() + "/replays");
+    std::vector<ReplayLibrary::Entry> entries = library.List();
+    if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) { std::printf("REPLAYSCREEN %zu replays\n", entries.size()); std::fflush(stdout); }
+    std::string message;
+    int confirmDelete = -1;
+    bool started = false;
+    bool focusFirst = true;
+    bool running = true;
+    int framesShown = 0;
+    while (running && !started && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_QUIT) { g_QuitConfirmed = true; running = false; }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) running = false;
+            else if (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_B) running = false;
+        }
+        std::string startPath;   // set by a WATCH button (or the test hook) and acted on after the frame is drawn
+        if (framesShown == 3 && std::getenv("HOVERNET_TEST_REPLAY_PICK") != nullptr) {
+            for (const ReplayLibrary::Entry& e : entries) if (e.valid) { startPath = e.path; break; }
+        }
+
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_RenderSetLogicalSize(renderer, 0, 0);
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::Begin("HoverNet Replays", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+        DrawHoverNetScreenBackdrop(mainViewport);
+        const bool phoneHeader = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneHeader ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
+        ImGui::BeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
+        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+        ImGui::SetWindowFontScale(phoneHeader ? 1.1f : 1.35f);
+        ImGui::TextUnformatted("WATCH A REPLAY");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+
+        const float centerWidth = std::min(760.0f, ImGui::GetContentRegionAvail().x);
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
+        ImGui::BeginChild("ReplayPanel", ImVec2(centerWidth, -52.0f), true);
+        if (entries.empty()) {
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextUnformatted("No saved races yet.");
+            ImGui::TextDisabled("A race on a HoverNet server that you take part in, or watch from its first moment, is saved here when it ends (the newest %zu are kept). "
+                                "Nothing is sent anywhere: the files stay on this device.", ReplayLibrary::kKeep);
+            ImGui::PopTextWrapPos();
+        }
+        for (int index = 0; index < static_cast<int>(entries.size()); ++index) {
+            const ReplayLibrary::Entry& e = entries[static_cast<std::size_t>(index)];
+            ImGui::PushID(index);
+            if (e.valid) {
+                const long long seconds = e.durationMs() / 1000;
+                ImGui::Text("%s", e.track.c_str());
+                ImGui::TextDisabled("%s   %d player%s, %d lap%s, %lld:%02lld", e.when.c_str(), e.players, e.players == 1 ? "" : "s", e.laps, e.laps == 1 ? "" : "s",
+                                    seconds / 60, seconds % 60);
+            }
+            else {
+                ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.45f, 1.0f), "Damaged file");
+                ImGui::TextDisabled("%s", e.name.c_str());
+            }
+            const float buttonWidth = std::max(90.0f, (ImGui::GetContentRegionAvail().x - 14.0f) * 0.5f);
+            if (e.valid) {
+                if (focusFirst) { ImGui::SetKeyboardFocusHere(); focusFirst = false; }
+                if (HoverNetButton("WATCH", ImVec2(buttonWidth, 34))) startPath = e.path;
+                ImGui::SameLine();
+            }
+            if (HoverNetButton(confirmDelete == index ? "SURE? DELETE" : "DELETE", ImVec2(e.valid ? buttonWidth : -FLT_MIN, 34))) {
+                if (confirmDelete == index) { library.Remove(e.name); entries = library.List(); confirmDelete = -1; ImGui::PopID(); break; }
+                confirmDelete = index;
+            }
+            ImGui::PopID();
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+        }
+        if (!message.empty()) {
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.45f, 1.0f), "%s", message.c_str());
+            ImGui::PopTextWrapPos();
+        }
+        ImGui::EndChild();
+        ImGui::Spacing();
+        if (HoverNetButton("Back", ImVec2(-FLT_MIN, 40))) running = false;
+        ImGui::End();
+
+        ImGui::Render();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        CaptureFrameIfRequested(renderer, framesShown, pFrameLimit);
+        SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
+        HoverNetFrameDelay();
+
+        if (!startPath.empty()) {
+            bool fatal = false;
+            message = start(startPath, fatal);
+            if (message.empty()) started = true;
+            else if (fatal) { g_QuitConfirmed = true; running = false; }
+            confirmDelete = -1;
+        }
+    }
+
+    if (ownsImGuiContext) {
+        ImGui_ImplSDLRenderer2_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+    }
+    return started;
+}
+
 #if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
 // ---- Play on a HoverNet server (protocol 3.0): choose a server, then host, join or watch a race ---------------------------------------
 // The lobby logic is OnlineLobby (tested against a real server by HoverNetOnlineLobbyTest); this is only its screen. The browser build
@@ -5985,6 +6129,7 @@ enum class MenuChoice
 {
     eLocalPlay,
     eOnlineLobby,
+    eWatchReplay,
     eSettings,
     eControls,
     eHowToPlay,
@@ -6017,7 +6162,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         }
     }
 
-    const char* options[] = {"Local Play", "Online Lobby", "Settings", "Controls", "How to Play"};
+    const char* options[] = {"Local Play", "Online Lobby", "Watch a Replay", "Settings", "Controls", "How to Play"};
     constexpr int optionCount = sizeof(options) / sizeof(options[0]);
     MenuChoice choice = MenuChoice::eLocalPlay;
 #if defined(HOVERNET_AUTH)
@@ -6029,8 +6174,16 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 #else
     const bool pickAuthServerForTest = false;
 #endif
+    // Test hook: a bounded run opens Watch a Replay (scripts/test-replay-library.sh); never set in normal play.
+    static bool sPickedReplays = false;
+    bool pickReplaysForTest = false;
+    if (const char* replaysMenu = std::getenv("HOVERNET_TEST_MENU")) {
+        if (!sPickedReplays && std::string(replaysMenu) == "replays" && (pFrameLimit >= 0 || std::getenv("HOVERNET_TEST_MENU_FORCE") != nullptr)) {
+            choice = MenuChoice::eWatchReplay; sPickedReplays = true; pickReplaysForTest = true;
+        }
+    }
     bool focusFirstButton = true;
-    bool running = !pickAuthServerForTest;
+    bool running = !pickAuthServerForTest && !pickReplaysForTest;
     int framesShown = 0;
     const bool reducedMotion = LoadReducedMotion();
     // --frames bounds gameplay, not time spent idling at a menu with no human
@@ -7245,34 +7398,52 @@ int RunClient(int argc, char** argv)
         return joinOnlineRace();
     };
 
+#ifdef HOVERNET_GAME2_PLAYER
+    // Plays a replay file in the normal game window (from the command line or from the Watch a Replay screen): checks the file, the rules and the track
+    // first, then loads the track and puts the craft on the grid. An error before the track is loaded changes nothing (the caller shows it and
+    // carries on); after that, fatal is set and the race in the session is no longer usable.
+    auto startReplayFile = [&](const std::string& path, int watch, bool& fatal) -> std::string {
+        fatal = false;
+        ReplayPlayback next;
+        next.hashMode = replay.hashMode; next.seekTest = replay.seekTest; next.markerTest = replay.markerTest;   // test modes set on the command line
+        std::vector<std::uint8_t> bytes;
+        std::string error;
+        if (!ReadWholeFile(path, bytes)) return "Could not read the replay file " + path;
+        if (!ReplayFormat::Decode(bytes, next.data, error)) return "This is not a valid replay: " + error;
+        if (next.data.rules != ReplayFormat::kSimulationRules) {
+            return "This replay was recorded with a different version of the game rules and cannot be shown.";
+        }
+        const std::string trackPath = Tracks().PathFor(next.data.track);
+        if (trackPath.empty() || Sha256::HashFile(trackPath) != next.data.trackSha256) {
+            return "The track '" + next.data.track + "' on this computer is not the one the replay was recorded on.";
+        }
+        next.watch = (watch < 0 || watch >= next.data.players) ? 0 : watch;
+        replay = next;
+        fatal = true;
+        if (!loadLocalRace(replay.data.track, replay.data.laps, replay.data.weapons)) {
+            return "Could not load the replay's track.";
+        }
+        const std::string placeError = placeRaceCraft(replay.data.players, replay.data.laps, replay.data.weapons, replay.watch, replay.craft);
+        if (!placeError.empty()) return placeError;
+        session.SetSimulationTime(0);
+        replay.active = true;
+        replay.lapsSeen.assign(static_cast<std::size_t>(replay.data.players), 0);
+        if (const char* speed = std::getenv("HOVERNET_TEST_REPLAY_SPEED")) replay.speedStep = std::max(0, std::min(4, std::atoi(speed)));   // test hook: start at this speed step
+        replay.lastTicks = SDL_GetTicks();
+        session.AddMessage("Replay: P pause, 1-5 speed, [ ] craft, C camera distance, Esc leaves");
+        fatal = false;
+        return std::string();
+    };
+#endif
+
     if (playerMode && menuFontHandle == nullptr) {
         return FatalClientError("Could not load the menu font from ObjFac1.dat.");
     }
     if (playerMode) {
         if (!replayPath.empty()) {
-            std::vector<std::uint8_t> bytes;
-            std::string error;
-            if (!ReadWholeFile(replayPath, bytes)) return FatalClientError("Could not read the replay file " + replayPath);
-            if (!ReplayFormat::Decode(bytes, replay.data, error)) return FatalClientError("This is not a valid replay: " + error);
-            if (replay.data.rules != ReplayFormat::kSimulationRules) {
-                return FatalClientError("This replay was recorded with a different version of the game rules and cannot be shown.");
-            }
-            const std::string trackPath = Tracks().PathFor(replay.data.track);
-            if (trackPath.empty() || Sha256::HashFile(trackPath) != replay.data.trackSha256) {
-                return FatalClientError("The track '" + replay.data.track + "' on this computer is not the one the replay was recorded on.");
-            }
-            if (replay.watch < 0 || replay.watch >= replay.data.players) replay.watch = 0;
-            if (!loadLocalRace(replay.data.track, replay.data.laps, replay.data.weapons)) {
-                return FatalClientError("Could not load the replay's track.");
-            }
-            const std::string placeError = placeRaceCraft(replay.data.players, replay.data.laps, replay.data.weapons, replay.watch, replay.craft);
-            if (!placeError.empty()) return FatalClientError(placeError);
-            session.SetSimulationTime(0);
-            replay.active = true;
-            replay.lapsSeen.assign(static_cast<std::size_t>(replay.data.players), 0);
-            if (const char* speed = std::getenv("HOVERNET_TEST_REPLAY_SPEED")) replay.speedStep = std::max(0, std::min(4, std::atoi(speed)));   // test hook: start at this speed step
-            replay.lastTicks = SDL_GetTicks();
-            session.AddMessage("Replay: P pause, 1-5 speed, [ ] craft, C camera distance, Esc leaves");
+            bool fatalSetup = false;
+            const std::string replayError = startReplayFile(replayPath, replay.watch, fatalSetup);
+            if (!replayError.empty()) return FatalClientError(replayError);
         }
         else if (!authServer.empty()) {
 #if defined(HOVERNET_AUTH)
@@ -7353,6 +7524,10 @@ int RunClient(int argc, char** argv)
             RunControlsScreen(graphics, frameLimit);
             g_QuitConfirmed = true;
         }
+        else if (HasArgument(argc, argv, "--replays-screen")) {   // the screen on its own (screenshots); "Watch" reports instead of playing
+            RunReplayBrowser(graphics, frameLimit, [](const std::string&, bool& fatal) { fatal = false; return std::string("(screenshot mode: nothing is played)"); });
+            g_QuitConfirmed = true;
+        }
         else if (HasArgument(argc, argv, "--pause-menu")) {
             RunPauseMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(), false, frameLimit);
             g_QuitConfirmed = true;
@@ -7409,6 +7584,10 @@ int RunClient(int argc, char** argv)
                     std::printf("Lobby skipped or unavailable; returning to the main menu\n");
                     pickingMode = !g_QuitConfirmed;
                 }
+            }
+            else if (choice == MenuChoice::eWatchReplay) {
+                const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, bool& fatal) { return startReplayFile(path, 0, fatal); });
+                pickingMode = !started && !g_QuitConfirmed;   // a replay is playing, or back to the main menu
             }
             else if (choice == MenuChoice::eSettings) {
                 // Always back to the main menu afterward (Save or Cancel alike)
@@ -7872,6 +8051,7 @@ int RunClient(int argc, char** argv)
         const MR_3DCoordinate previousCamera = camera;
         bool leaveForLobby = false;
         bool startNewLocalRace = false;
+        bool watchReplayMenu = false;
 #ifdef HOVERNET_GAME2_PLAYER
         if (canChat() && !SDL_IsTextInputActive()) SDL_StartTextInput();   // menus opened from the race stop it
 #endif
@@ -7983,6 +8163,9 @@ int RunClient(int argc, char** argv)
                             startNewLocalRace = true;
                         }
                     }
+                    else if (pauseChoice == PauseChoice::eWatchReplay) {
+                        watchReplayMenu = true;
+                    }
                     else if (pauseChoice == PauseChoice::eOnlineLobby) {
                         // Same as "Leave Race" when already online -- reset and
                         // rejoin the lobby -- but always offered, so offline
@@ -8033,7 +8216,18 @@ int RunClient(int argc, char** argv)
             break;
         }
 #ifdef HOVERNET_GAME2_PLAYER
+        if (watchReplayMenu) {
+            const bool started = RunReplayBrowser(graphics, frameLimit, [&](const std::string& path, bool& fatal) { return startReplayFile(path, 0, fatal); });
+            if (g_QuitConfirmed) { running = false; break; }
+            if (started) {
+                missileSeen = false;
+                finishAnnounced = false; resultsPending = false;
+                wasOnlineConnected = onlineClient.IsConnected();
+            }
+            continue;
+        }
         if (leaveForLobby) {
+            replay.active = false;   // leaving a replay for a race
             missileSeen = false;
             finishAnnounced = false; resultsPending = false;
             if (!resetRaceSession() || !enterOnlineMultiplayer()) {
@@ -8044,6 +8238,7 @@ int RunClient(int argc, char** argv)
             continue;
         }
         if (startNewLocalRace) {
+            replay.active = false;
             const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
                                                             *menuFontHandle->GetSprite(), frameLimit);
             if (setup.confirmed) {

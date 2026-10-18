@@ -31,6 +31,7 @@
 #include "../Authority/SecureChannel.h"
 #include "../Authority/WebSocket.h"
 #include "../Authority/LobbyServer.h"
+#include "../Authority/ReplayStoreDir.h"
 #include "../Authority/Moderation.h"
 #include "../Authority/RaceHost.h"
 #include "../ObjFac1/SimElements.h"
@@ -388,6 +389,7 @@ int main(int argc, char** argv)
     std::string bind = "127.0.0.1";
     bool once = false;
     std::string replayDir;
+    int replayKeep = 200;           // the newest replays kept in --replay-dir (and offered to players in the lobby)
     bool lobbyMode = false;
     std::string moderationDir;
     int adminPort = -1;
@@ -413,6 +415,7 @@ int main(int argc, char** argv)
         else if (a == "--start-delay-ms") cfg.startDelayMs = std::atoi(value());
         else if (a == "--max-connections") maxConnections = std::atoi(value());
         else if (a == "--replay-dir") replayDir = value();
+        else if (a == "--replay-keep") replayKeep = std::max(1, std::atoi(value()));
         else if (a == "--lobby") lobbyMode = true;
         else if (a == "--moderation-dir") moderationDir = value();
         else if (a == "--admin-port") adminPort = std::atoi(value());
@@ -520,6 +523,8 @@ int main(int argc, char** argv)
         for (std::string name; std::getline(names, name, ',');) if (!name.empty()) lobbyConfig.tracks.push_back(name);
         lobbyConfig.maxConnections = maxConnections;
         LobbyServer lobby(lobbyConfig);
+        std::unique_ptr<DirReplayStore> replayStore;
+        if (!replayDir.empty()) { replayStore.reset(new DirReplayStore(replayDir, static_cast<std::size_t>(replayKeep))); lobby.SetReplayStore(replayStore.get()); }
         lobby.SetRaceFinishedCallback([&](std::uint32_t id, const RaceHost& finished) {
             std::printf("race %u over after %u ticks, final hash %016llx\n", id, finished.Race().CurrentTick(), static_cast<unsigned long long>(finished.Race().StateHash()));
             for (const auto& r : finished.Race().Results()) std::printf("  player %d: rank %d, laps %d%s\n", r.player, r.rank, r.laps, r.finished ? ", finished" : "");
@@ -534,6 +539,7 @@ int main(int argc, char** argv)
                 else std::fprintf(stderr, "cannot write the replay to %s\n", path.c_str());
                 if (f != nullptr) std::fclose(f);
                 WriteResults(path, finished.Race().Results());
+                if (replayStore) { const int removed = replayStore->Prune(); if (removed > 0) std::printf("removed %d old replay%s (keeping %d)\n", removed, removed == 1 ? "" : "s", replayKeep); }
             }
             std::fflush(stdout);
         });

@@ -50,6 +50,12 @@ enum Type : std::uint8_t
     kBlock = 32,           // client to server: stop showing me this name
     kReport = 33,          // client to server: report a name to the moderators
     kRoster = 35,          // server to client, only with kCapHostStart: who has joined the race that has not started (slot and name), and how many seats
+    kListRecords = 44,     // client to server (lobby): the track records of one track; see ListRecords
+    kRecordList = 45,      // server to client: the answer, see RecordList
+    kListReplays = 40,     // client to server (lobby): list the replays the server keeps (newest first, optionally one track); see ListReplays
+    kReplayList = 41,      // server to client: the answer, see ReplayList
+    kGetReplay = 42,       // client to server (lobby): send me one replay by id
+    kReplayChunk = 43,     // server to client: a piece of the replay file, in order; the last has index + 1 == count
     kLobbyUsers = 34,      // server to client, only to a client that set kCapLobbyChat: who is in the lobby (not yet in a race)
 };
 
@@ -64,7 +70,8 @@ enum RejectReason : std::uint8_t
     kBadSettings = 7,
     kTooManyRaces = 8,
     kBanned = 9,
-    kServerDraining = 10,   // the server is shutting down for a restart: races under way finish, no new race starts
+    kServerDraining = 10,
+    kNoSuchReplay = 11,     // the replay is gone (the server keeps only the newest ones); the connection stays open   // the server is shutting down for a restart: races under way finish, no new race starts
 };
 
 // ---- framing -----------------------------------------------------------------------------------------------
@@ -115,6 +122,24 @@ constexpr int kMaxLobbyUserNames = 30;
 struct HostRace { std::string track; std::uint8_t players = 2, laps = 3; bool weapons = true; std::string code; };
 struct JoinRace { std::uint32_t id = 0; std::string code; };
 struct SpectateRace { std::uint32_t id = 0; std::string code; };
+// Shared replays: the server keeps the newest official replays of the races it ran and offers them to every player in the lobby (the file is
+// the same one `HoverNetReplay verify` checks). A replay is named by `id`, the first 8 bytes of the SHA-256 of the file (the number
+// `HoverNetReplay id` prints), so the client can check what it received. Replays carry player slots, never names or addresses.
+constexpr int kMaxReplayList = 30;
+constexpr std::size_t kReplayChunkBytes = 1000;
+struct ListReplays { std::string track; std::uint8_t max = 20; };                  // track empty = every track
+struct ReplayInfo { std::uint64_t id = 0; std::string track; std::uint8_t players = 0, laps = 0; std::uint32_t ticks = 0, savedAt = 0, bytes = 0; std::int32_t winnerMs = 0; };   // savedAt: unix seconds; winnerMs: the fastest finish, 0 = nobody finished
+struct ReplayList { std::vector<ReplayInfo> replays; };
+struct GetReplay { std::uint64_t id = 0; };
+struct ReplayChunk { std::uint64_t id = 0; std::uint16_t index = 0, count = 0; std::vector<std::uint8_t> data; };
+// Track records: for each lap count raced on a track, the fastest finishes and the fastest laps among the replays the server keeps, each with the
+// replay it came from (so a player can watch the run). Anonymous: a run is a player slot of a replay, never a name.
+constexpr int kMaxRecordsPerBoard = 10;
+constexpr int kMaxRecordBoards = 10;
+struct ListRecords { std::string track; };
+struct RecordEntry { std::uint64_t replay = 0; std::uint8_t slot = 0; std::int32_t ms = 0; std::uint32_t savedAt = 0; };
+struct RecordBoard { std::uint8_t laps = 0; std::vector<RecordEntry> finishes, bestLaps; };
+struct RecordList { std::string track; std::vector<RecordBoard> boards; };
 struct Chat { std::string text; };
 struct ChatMessage { std::string name; std::string text; bool fromServer = false; };
 struct Block { std::string name; };
@@ -138,6 +163,12 @@ std::vector<std::uint8_t> Encode(const Block&);
 std::vector<std::uint8_t> Encode(const ChatMessage&);
 std::vector<std::uint8_t> Encode(const Chat&);
 std::vector<std::uint8_t> Encode(const RaceList&);
+std::vector<std::uint8_t> Encode(const ListReplays&);
+std::vector<std::uint8_t> Encode(const ListRecords&);
+std::vector<std::uint8_t> Encode(const RecordList&);
+std::vector<std::uint8_t> Encode(const ReplayList&);
+std::vector<std::uint8_t> Encode(const GetReplay&);
+std::vector<std::uint8_t> Encode(const ReplayChunk&);
 std::vector<std::uint8_t> Encode(const LobbyUsers&);
 std::vector<std::uint8_t> Encode(const Roster&);
 std::vector<std::uint8_t> Encode(const HostRace&);
@@ -162,6 +193,12 @@ bool Decode(const std::vector<std::uint8_t>& payload, Block&);
 bool Decode(const std::vector<std::uint8_t>& payload, ChatMessage&);
 bool Decode(const std::vector<std::uint8_t>& payload, Chat&);
 bool Decode(const std::vector<std::uint8_t>& payload, RaceList&);
+bool Decode(const std::vector<std::uint8_t>& payload, ListReplays&);
+bool Decode(const std::vector<std::uint8_t>& payload, ListRecords&);
+bool Decode(const std::vector<std::uint8_t>& payload, RecordList&);
+bool Decode(const std::vector<std::uint8_t>& payload, ReplayList&);
+bool Decode(const std::vector<std::uint8_t>& payload, GetReplay&);
+bool Decode(const std::vector<std::uint8_t>& payload, ReplayChunk&);
 bool Decode(const std::vector<std::uint8_t>& payload, LobbyUsers&);
 bool Decode(const std::vector<std::uint8_t>& payload, Roster&);
 bool Decode(const std::vector<std::uint8_t>& payload, HostRace&);

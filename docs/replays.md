@@ -14,6 +14,16 @@ race happened; a state hash every 250 ticks lets anything detect a replay that n
 **Esc** opens the pause menu. The game refuses a replay recorded under different game rules, or on a different version of the
 track, and says so; it never plays something that would not reproduce.
 
+## Watching your own races (Watch a Replay)
+
+A race on a HoverNet server that you take part in, or watch from its very first moment, is saved on your device when it ends. **Watch a Replay**
+(main menu, pause menu; desktop and browser) lists the newest 20 (track, date, players, laps, length), plays the one you choose, and deletes the
+ones you no longer want. The file is the **same bytes as the server's official replay** of that race (`scripts/test-client-replay.sh` compares
+them), built from the Tick messages the game already receives (`ReplayRecorder.h`); the folder is `replays` in the settings folder
+(`~/.config/hovernet/replays`, `%APPDATA%\HoverNet\replays`, IndexedDB in the browser). Nothing is sent anywhere. A race you joined late, or one
+in which the connection broke and ticks were missed, is not saved, because it would not be the whole race. Races you play against the clock locally
+are not saved yet (the local game is not run on the fixed tick, see below).
+
 ## Where replays come from
 
 - **The dedicated server** writes one for every race when started with `--replay-dir DIR`: the official record of the race,
@@ -48,5 +58,5 @@ so a replay made on one platform is the same race on the other.
 
 ## Not yet
 
-A replay browser in the menus, saving a replay of a race you played yourself (the local game is not run on the fixed 16 ms tick
-yet, see [ADR 0001](adr/0001-simulation-core.md) step 6), switching the watched player during playback, and a free camera.
+Saving a replay of a local race you played yourself (the local game is not run on the fixed 16 ms tick
+yet, see [ADR 0001](adr/0001-simulation-core.md) step 6), choosing which player to follow when the replay starts (`[` and `]` switch during playback), sharing a replay with someone else (the files are plain `.hnr` files you can copy; `HoverNetReplay id` prints a file's identifier), switching the watched player during playback, and a free camera.

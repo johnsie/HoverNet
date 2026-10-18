@@ -292,6 +292,104 @@ bool Decode(const std::vector<std::uint8_t>& p, RaceList& m)
     return in.Done();
 }
 
+std::vector<std::uint8_t> Encode(const ListReplays& m) { Out o; o.U8(m.max); o.Str(m.track); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, ListReplays& m)
+{
+    In in(p);
+    m.max = static_cast<std::uint8_t>(in.U8());
+    m.track = in.Str(64);
+    return in.Done() && m.max >= 1 && m.max <= kMaxReplayList;
+}
+
+std::vector<std::uint8_t> Encode(const ReplayList& m)
+{
+    Out o;
+    o.U8(static_cast<std::uint32_t>(m.replays.size()));
+    for (const ReplayInfo& r : m.replays) {
+        o.U64(r.id); o.Str(r.track); o.U8(r.players); o.U8(r.laps); o.U32(r.ticks); o.U32(r.savedAt); o.U32(r.bytes); o.U32(static_cast<std::uint32_t>(r.winnerMs));
+    }
+    return o.b;
+}
+bool Decode(const std::vector<std::uint8_t>& p, ReplayList& m)
+{
+    In in(p);
+    const std::uint32_t count = in.U8();
+    if (!in.ok || count > static_cast<std::uint32_t>(kMaxReplayList)) return false;
+    m.replays.clear();
+    for (std::uint32_t i = 0; i < count && in.ok; ++i) {
+        ReplayInfo r;
+        r.id = in.U64(); r.track = in.Str(64); r.players = static_cast<std::uint8_t>(in.U8()); r.laps = static_cast<std::uint8_t>(in.U8());
+        r.ticks = in.U32(); r.savedAt = in.U32(); r.bytes = in.U32(); r.winnerMs = static_cast<std::int32_t>(in.U32());
+        if (r.players < 1 || r.players > 8 || r.track.empty()) return false;
+        m.replays.push_back(r);
+    }
+    return in.Done();
+}
+
+std::vector<std::uint8_t> Encode(const ListRecords& m) { Out o; o.Str(m.track); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, ListRecords& m) { In in(p); m.track = in.Str(64); return in.Done() && !m.track.empty(); }
+
+static void PutEntries(Out& o, const std::vector<RecordEntry>& list)
+{
+    o.U8(static_cast<std::uint32_t>(list.size()));
+    for (const RecordEntry& e : list) { o.U64(e.replay); o.U8(e.slot); o.U32(static_cast<std::uint32_t>(e.ms)); o.U32(e.savedAt); }
+}
+static bool GetEntries(In& in, std::vector<RecordEntry>& list)
+{
+    const std::uint32_t count = in.U8();
+    if (!in.ok || count > static_cast<std::uint32_t>(kMaxRecordsPerBoard)) return false;
+    list.clear();
+    for (std::uint32_t i = 0; i < count && in.ok; ++i) {
+        RecordEntry e;
+        e.replay = in.U64(); e.slot = static_cast<std::uint8_t>(in.U8()); e.ms = static_cast<std::int32_t>(in.U32()); e.savedAt = in.U32();
+        if (e.slot >= 8 || e.ms <= 0) return false;
+        list.push_back(e);
+    }
+    return in.ok;
+}
+std::vector<std::uint8_t> Encode(const RecordList& m)
+{
+    Out o;
+    o.Str(m.track);
+    o.U8(static_cast<std::uint32_t>(m.boards.size()));
+    for (const RecordBoard& b : m.boards) { o.U8(b.laps); PutEntries(o, b.finishes); PutEntries(o, b.bestLaps); }
+    return o.b;
+}
+bool Decode(const std::vector<std::uint8_t>& p, RecordList& m)
+{
+    In in(p);
+    m.track = in.Str(64);
+    const std::uint32_t count = in.U8();
+    if (!in.ok || count > static_cast<std::uint32_t>(kMaxRecordBoards) || m.track.empty()) return false;
+    m.boards.clear();
+    for (std::uint32_t i = 0; i < count && in.ok; ++i) {
+        RecordBoard b;
+        b.laps = static_cast<std::uint8_t>(in.U8());
+        if (!GetEntries(in, b.finishes) || !GetEntries(in, b.bestLaps)) return false;
+        m.boards.push_back(b);
+    }
+    return in.Done();
+}
+
+std::vector<std::uint8_t> Encode(const GetReplay& m) { Out o; o.U64(m.id); return o.b; }
+bool Decode(const std::vector<std::uint8_t>& p, GetReplay& m) { In in(p); m.id = in.U64(); return in.Done(); }
+
+std::vector<std::uint8_t> Encode(const ReplayChunk& m)
+{
+    Out o;
+    o.U64(m.id); o.U16(m.index); o.U16(m.count);
+    o.b.insert(o.b.end(), m.data.begin(), m.data.end());
+    return o.b;
+}
+bool Decode(const std::vector<std::uint8_t>& p, ReplayChunk& m)
+{
+    In in(p);
+    m.id = in.U64(); m.index = static_cast<std::uint16_t>(in.U16()); m.count = static_cast<std::uint16_t>(in.U16());
+    if (!in.ok || m.count == 0 || m.index >= m.count || p.size() < 12 || p.size() - 12 > kReplayChunkBytes) return false;
+    m.data.assign(p.begin() + 12, p.end());
+    return true;
+}
+
 std::vector<std::uint8_t> Encode(const HostRace& m) { Out o; o.Str(m.track); o.U8(m.players); o.U8(m.laps); o.U8(m.weapons ? 1 : 0); if (!m.code.empty()) o.Str(m.code); return o.b; }
 bool Decode(const std::vector<std::uint8_t>& p, HostRace& m)
 {

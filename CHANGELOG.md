@@ -7,6 +7,7 @@ and how to roll one back.
 ## Unreleased
 
 ### Added
+- **Watch a Replay.** Races on a HoverNet server that you take part in, or watch from the start, are now saved on your device when they end (the newest 20), and **Watch a Replay** in the main menu and the pause menu lists them, plays the one you pick, and deletes old ones. The saved file is exactly the server's official replay of the race, and a race in which you missed any ticks is not saved. Nothing is sent anywhere. See [docs/replays.md](docs/replays.md).
 - **Ghost of your best run.** When you set a new best finish on a track, the game keeps the path you drove and draws it beside your craft in your next race on that track and lap count, so you race your own best time (**Settings, Show my best run as a ghost**; on by default). It is only drawn: it cannot touch the race or the results, and it never leaves your device. See [docs/ghosts.md](docs/ghosts.md).
 
 ## 2.3.7 - 2026-10-18

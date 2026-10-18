@@ -177,6 +177,7 @@ add_library(HoverNetSim STATIC
     NetTarget/ObjFac1/DoubleSpeedSource.cpp
     NetTarget/ObjFac1/FinishLine.cpp
     NetTarget/Authority/ReplayFormat.cpp
+    NetTarget/Authority/ReplayStoreDir.cpp
     NetTarget/Authority/TrackPackage.cpp
     NetTarget/Authority/Hmac.cpp
     NetTarget/Authority/Moderation.cpp
@@ -338,6 +339,9 @@ else()
 
     add_executable(HoverNetReplayLibraryTest NetTarget/LinuxClient/ReplayLibraryTest.cpp NetTarget/Authority/ReplayFormat.cpp)
     add_test(NAME HoverNetReplayLibrary COMMAND HoverNetReplayLibraryTest)
+    add_executable(HoverNetReplayShareTest NetTarget/LinuxClient/ReplayShareTest.cpp)
+    target_link_libraries(HoverNetReplayShareTest PRIVATE HoverNetSim)
+    add_test(NAME HoverNetReplayShare COMMAND HoverNetReplayShareTest)
     add_executable(HoverNetReplayRecorderTest
         NetTarget/LinuxClient/ReplayRecorderTest.cpp
     )
@@ -914,6 +918,9 @@ if(BUILD_TESTING AND NOT WIN32)
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetPersonalBestsFlow
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-personal-bests.sh $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetReplayLibraryScreen
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-replay-library.sh $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetGhost
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-ghost.sh $<TARGET_FILE:HoverNetGame2Player>

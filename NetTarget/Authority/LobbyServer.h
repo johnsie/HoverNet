@@ -31,6 +31,22 @@ struct LobbyConfig
     int maxInvalidPerWindow = 10;
     int invalidWindowMs = 10000;
     int maxLobbyCommandsPerWindow = 40;         // list/host/join requests per window per connection
+    std::size_t maxReplayBytesPerConnection = 24 * 1024 * 1024;   // a connection that has been sent this much replay data is closed (nobody needs more in one visit)
+    std::size_t maxReplayServeBytes = 4 * 1024 * 1024;           // a replay file larger than this is never sent
+};
+
+// Where the server keeps the replays it offers to every player (the lobby asks it; it knows nothing of files). Implemented by the server
+// process over its replay folder (ReplayStoreDir.h) and by tests.
+class ReplayStore
+{
+public:
+    virtual ~ReplayStore() {}
+    // The newest replays first, at most `max`, only `track` when it is not empty.
+    virtual std::vector<Protocol3::ReplayInfo> List(const std::string& track, int max) = 0;
+    // The whole file of a replay, false when it is gone.
+    virtual bool Read(std::uint64_t id, std::vector<std::uint8_t>& bytes) = 0;
+    // The track records of one track: a board per lap count with the fastest finishes and the fastest laps (best first).
+    virtual std::vector<Protocol3::RecordBoard> Records(const std::string& track) = 0;
 };
 
 class LobbyServer
@@ -45,6 +61,9 @@ public:
     std::vector<std::uint8_t> TakeOutput(int connection);
     bool IsClosed(int connection) const;
     void Advance(std::int64_t nowMs);
+
+    // Offers shared replays (nullptr = none: the list is empty and every request is answered "no such replay").
+    void SetReplayStore(ReplayStore* store) { mReplays = store; }
 
     // Called once when a race ends (to save its replay, log it, ...).
     void SetRaceFinishedCallback(std::function<void(std::uint32_t, const RaceHost&)> callback) { mOnFinished = callback; }
@@ -86,6 +105,7 @@ private:
     bool mDraining = false;
     std::string mLastUsers;          // the lobby's user list as last sent (a change is sent to those that asked for it)
     std::function<void(std::uint32_t, const RaceHost&)> mOnFinished;
+    ReplayStore* mReplays = nullptr;
 };
 }
 

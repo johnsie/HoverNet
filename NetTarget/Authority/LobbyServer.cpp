@@ -28,6 +28,8 @@ struct LobbyServer::Conn
     double chatTokens = 3;          // chat in the lobby: a burst, then one message a second
     std::int64_t lastChatMs = 0;
     std::vector<std::int64_t> invalidTimes, commandTimes;
+    std::uint64_t replayBytesSent = 0;   // shared replays sent on this connection
+    std::int64_t lastReplayRequestMs = -100000;
     std::uint32_t raceId = 0;       // 0 until attached
     int hostConn = 0;
 };
@@ -257,6 +259,51 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
     c.commandTimes.erase(std::remove_if(c.commandTimes.begin(), c.commandTimes.end(), [&](std::int64_t t) { return nowMs - t > mConfig.invalidWindowMs; }), c.commandTimes.end());
     if (static_cast<int>(c.commandTimes.size()) > mConfig.maxLobbyCommandsPerWindow) { Close(c, kRateLimited, "too many lobby requests"); return; }
 
+    if (type == kListReplays) {
+        ListReplays m;
+        if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
+        ReplayList list;
+        if (mReplays != nullptr) list.replays = mReplays->List(m.track, std::min<int>(m.max, kMaxReplayList));
+        const std::vector<std::uint8_t> f = EncodeFrame(kReplayList, Encode(list));
+        c.out.insert(c.out.end(), f.begin(), f.end());
+        return;
+    }
+    if (type == kListRecords) {
+        ListRecords m;
+        if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
+        RecordList list;
+        list.track = m.track;
+        if (mReplays != nullptr) list.boards = mReplays->Records(m.track);
+        if (list.boards.size() > static_cast<std::size_t>(kMaxRecordBoards)) list.boards.resize(kMaxRecordBoards);
+        const std::vector<std::uint8_t> f = EncodeFrame(kRecordList, Encode(list));
+        c.out.insert(c.out.end(), f.begin(), f.end());
+        return;
+    }
+    if (type == kGetReplay) {
+        GetReplay m;
+        if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
+        if (nowMs - c.lastReplayRequestMs < 500) { Close(c, kRateLimited, "too many replay requests"); return; }
+        c.lastReplayRequestMs = nowMs;
+        std::vector<std::uint8_t> bytes;
+        if (mReplays == nullptr || !mReplays->Read(m.id, bytes) || bytes.empty() || bytes.size() > mConfig.maxReplayServeBytes) {
+            Reject r; r.reason = kNoSuchReplay; r.message = "that replay is no longer available";
+            const std::vector<std::uint8_t> f = EncodeFrame(kReject, Encode(r));
+            c.out.insert(c.out.end(), f.begin(), f.end());
+            return;
+        }
+        c.replayBytesSent += bytes.size();
+        if (c.replayBytesSent > mConfig.maxReplayBytesPerConnection) { Close(c, kRateLimited, "replay download limit reached"); return; }
+        const std::size_t count = (bytes.size() + kReplayChunkBytes - 1) / kReplayChunkBytes;
+        for (std::size_t i = 0; i < count; ++i) {
+            ReplayChunk chunk;
+            chunk.id = m.id; chunk.index = static_cast<std::uint16_t>(i); chunk.count = static_cast<std::uint16_t>(count);
+            const std::size_t from = i * kReplayChunkBytes, to = std::min(bytes.size(), from + kReplayChunkBytes);
+            chunk.data.assign(bytes.begin() + static_cast<std::ptrdiff_t>(from), bytes.begin() + static_cast<std::ptrdiff_t>(to));
+            const std::vector<std::uint8_t> f = EncodeFrame(kReplayChunk, Encode(chunk));
+            c.out.insert(c.out.end(), f.begin(), f.end());
+        }
+        return;
+    }
     if (type == kListRaces) {
         if (!payload.empty()) { Invalid(c, nowMs); return; }
         SendList(c);
