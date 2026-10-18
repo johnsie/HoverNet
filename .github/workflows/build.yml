@@ -226,6 +226,8 @@ jobs:
           t env HOVERNET_REPLAY_TOOL="$bin/HoverNetReplay.exe" scripts/test-authserver.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" 8 500
           t scripts/test-replay-viewer.sh "$bin/HoverNetReplay.exe" "$bin/HoverNet.exe"
           t scripts/test-render-golden.sh "$bin/HoverNetRenderGolden.exe"   # the classic renderer's 28 reference frames, the same hashes as Linux and WebAssembly
+          t scripts/test-client-replay.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" "$bin/HoverNetReplay.exe"   # the client saves the race it followed as the server's replay
+          t scripts/test-shared-replays.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetReplay.exe" "$bin/HoverNet.exe"   # and plays a race it was not in, downloaded from the server
           t scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 8 400
           t env AUTH_DROP=150 scripts/test-authclient.sh "$bin/HoverNetAuthServer.exe" "$bin/HoverNetAuthBot.exe" "$bin/HoverNet.exe" 4 500
           if [ $bad -ne 0 ]; then echo "::error title=windows-suites::$msgs"; exit 1; fi

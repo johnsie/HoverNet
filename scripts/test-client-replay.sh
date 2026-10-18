@@ -9,9 +9,11 @@ players="${5:-3}"; ticks="${6:-500}"; track=ClassicH
 export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
 dir="$(mktemp -d)"; trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$dir"' EXIT
 export HOME="$dir/home"; mkdir -p "$HOME"; unset XDG_CONFIG_HOME
+export APPDATA="$dir/appdata"; mkdir -p "$APPDATA"   # where the Windows client keeps its settings (HOME on Linux)
+folder() { if [ -d "$APPDATA/HoverNet" ]; then echo "$APPDATA/HoverNet/replays"; else echo "$HOME/.config/hovernet/replays"; fi; }
 fail=0
 race() { # label, extra client options
-  rm -rf "$dir/official" "$HOME/.config/hovernet/replays"; mkdir -p "$dir/official"
+  rm -rf "$dir/official" "$(folder)"; mkdir -p "$dir/official"
   "$server" --track "$track" --players "$players" --port 0 --once --limit-ticks "$ticks" --start-delay-ms 1500 --replay-dir "$dir/official" > "$dir/server.txt" 2>&1 &
   local spid=$!
   for _ in $(seq 1 100); do grep -q "listening on" "$dir/server.txt" 2>/dev/null && break; sleep 0.1; done
@@ -24,7 +26,7 @@ race() { # label, extra client options
   wait "$spid" || true
 }
 race "full race" ""
-mine=$(ls "$HOME/.config/hovernet/replays/"*.hnr 2>/dev/null | head -1); theirs=$(ls "$dir/official/"*.hnr 2>/dev/null | head -1)
+mine=$(ls "$(folder)/"*.hnr 2>/dev/null | head -1); theirs=$(ls "$dir/official/"*.hnr 2>/dev/null | head -1)
 if [ -z "$mine" ]; then echo "FAIL: the client saved no replay"; grep REPLAYTEST "$dir/client.txt"; fail=1
 elif [ -z "$theirs" ]; then echo "FAIL: the server wrote no replay"; fail=1
 elif ! cmp -s "$mine" "$theirs"; then echo "FAIL: the client's replay differs from the server's"; ls -l "$mine" "$theirs"; fail=1
@@ -36,7 +38,7 @@ fi
 race "dropped connection" "--auth-drop 150"
 # After a reconnect the server may or may not resend what was missed. Either the client saved nothing (a gap spoils the recording), or what it
 # saved is exactly the server's replay: it must never save a replay that is not the real race.
-mine=$(ls "$HOME/.config/hovernet/replays/"*.hnr 2>/dev/null | head -1); theirs=$(ls "$dir/official/"*.hnr 2>/dev/null | head -1)
+mine=$(ls "$(folder)/"*.hnr 2>/dev/null | head -1); theirs=$(ls "$dir/official/"*.hnr 2>/dev/null | head -1)
 if [ -z "$mine" ]; then echo "ok   a client that missed ticks saved no replay"
 elif [ -n "$theirs" ] && cmp -s "$mine" "$theirs"; then echo "ok   a client that reconnected saved a replay identical to the server's"
 else echo "FAIL: a client that lost its connection saved a replay that is not the server's"; fail=1; fi

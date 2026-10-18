@@ -6,11 +6,6 @@ and how to roll one back.
 
 ## Unreleased
 
-### Added
-- **Everyone's replays and track records.** The server now keeps the newest official replays of its races (200 by default) and shares them with every player: **Watch a Replay, Server replays** lists them and plays any, including races you were not in, and **Track records** shows the fastest races and fastest laps for each track and lap count, with a button to watch the run that set each one. They are anonymous ("player 2"), checked when downloaded, and verifiable by anyone with the replay tool. Server owners: `--replay-keep N`. See [docs/replays.md](docs/replays.md).
-- **Watch a Replay.** Races on a HoverNet server that you take part in, or watch from the start, are now saved on your device when they end (the newest 20), and **Watch a Replay** in the main menu and the pause menu lists them, plays the one you pick, and deletes old ones. The saved file is exactly the server's official replay of the race, and a race in which you missed any ticks is not saved. Nothing is sent anywhere. See [docs/replays.md](docs/replays.md).
-- **Ghost of your best run.** When you set a new best finish on a track, the game keeps the path you drove and draws it beside your craft in your next race on that track and lap count, so you race your own best time (**Settings, Show my best run as a ghost**; on by default). It is only drawn: it cannot touch the race or the results, and it never leaves your device. See [docs/ghosts.md](docs/ghosts.md).
-
 ## 2.3.7 - 2026-10-18
 
 ### Fixed
@@ -19,6 +14,9 @@ and how to roll one back.
 - **Linux and browser frames now match Windows exactly.** Their stand-in for the Windows `MulDiv` truncated instead of rounding, so about 5% of each 3D picture was a pixel off from Windows. The simulation is untouched (same rules version, same golden physics and replays); only the picture changes, by at most one pixel at texture edges.
 
 ### Added
+- **Everyone's replays and track records.** The server now keeps the newest official replays of its races (200 by default) and shares them with every player: **Watch a Replay, Server replays** lists them and plays any, including races you were not in, and **Track records** shows the fastest races and fastest laps for each track and lap count, with a button to watch the run that set each one. They are anonymous ("player 2"), checked when downloaded, and verifiable by anyone with the replay tool. Server owners: `--replay-keep N`. See [docs/replays.md](docs/replays.md).
+- **Watch a Replay.** Races on a HoverNet server that you take part in, or watch from the start, are now saved on your device when they end (the newest 20), and **Watch a Replay** in the main menu and the pause menu lists them, plays the one you pick, and deletes old ones. The saved file is exactly the server's official replay of the race, and a race in which you missed any ticks is not saved. Nothing is sent anywhere. See [docs/replays.md](docs/replays.md).
+- **Ghost of your best run.** When you set a new best finish on a track, the game keeps the path you drove and draws it beside your craft in your next race on that track and lap count, so you race your own best time (**Settings, Show my best run as a ghost**; on by default). It is only drawn: it cannot touch the race or the results, and it never leaves your device. See [docs/ghosts.md](docs/ghosts.md).
 - **Replay timeline.** Watching a replay now shows a bar along the bottom with the time, the speed and a mark at every lap crossing and finish (yours brighter). Click the bar to jump there, or press **,** and **.** to jump to just before the previous or next lap. The marks appear as the replay plays through them. **C** steps the chase camera through closer and farther distances (replays and spectating).
 - **Race view setting (Settings, Race view).** Choose the shape of the picture while racing: Classic (4:3, as before and still the default), Widescreen (16:9), or Match my window (follows your window or screen shape, between 4:3 and 2.4:1). The renderer draws a wide picture just as fast (about 6 ms for 1920x1080 on a desktop CPU), so a wide window or monitor no longer has to be pillarboxed. Takes effect the next time you start HoverNet. Not shown on phones and tablets, which always use a picture shaped like their screen.
 

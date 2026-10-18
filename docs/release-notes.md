@@ -8,6 +8,7 @@
 - **Personal bests and the Race view** (2.3.6, 2.3.7). The game remembers your best finish per track and your best lap, on your own machine only. **Settings, Race view** lets you race in a classic 4:3 picture, widescreen, or one that matches your window (takes effect on the next start).
 - **Replays** (2.3.7) show a timeline bar with lap and finish marks (click it, or press **,** and **.** to jump between laps) and **C** steps the camera distance, also when spectating.
 - **Web client keeps itself up to date** (2.3.7): a phone holding an old cached copy now reloads the current one when the page opens, or offers an update bar if it comes back later.
+- **Everyone's replays, track records and your ghost** (2.3.7): **Watch a Replay** (main menu, pause menu) has **My races** (races you were in, saved on your device), **Server replays** (the server's newest races, including ones you were not in) and **Track records** (fastest races and laps per track, with a button to watch each). Your best run on a track is drawn as a **ghost** beside you next time (Settings turns it off). Server owners: `--replay-keep`.
 - **Windows fix** (2.3.7): the race time, lap line and countdown were missing from the Windows HUD. The picture on Linux and in the browser now matches Windows to the pixel.
 
 ### Also in 2.2
