@@ -5627,7 +5627,8 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                         ImGui::EndCombo();
                     }
                     ImGui::Spacing();
-                    if (!server.ReplaysLoaded()) ImGui::TextDisabled("Loading the list...");
+                    if (server.ListsUnreadable() && !server.ReplaysLoaded()) { ImGui::PushTextWrapPos(0.0f); ImGui::TextColored(warn, "The server answered in a form this version of the game cannot read: the game and the server are on different versions. Reload the page (or update the game), or try again after the server has been updated."); ImGui::PopTextWrapPos(); }
+                    else if (!server.ReplaysLoaded()) ImGui::TextDisabled("Loading the list...");
                     else if (server.Replays().empty()) ImGui::TextDisabled("The server has no replays%s yet.", serverTrack == 0 ? "" : " of this track");
                     for (std::size_t i = 0; i < server.Replays().size(); ++i) {
                         const Protocol3::ReplayInfo& r = server.Replays()[i];
@@ -5658,7 +5659,8 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                         ImGui::EndCombo();
                     }
                     ImGui::Spacing();
-                    if (!server.RecordsLoaded()) ImGui::TextDisabled("Loading the records...");
+                    if (server.ListsUnreadable() && !server.RecordsLoaded()) { ImGui::PushTextWrapPos(0.0f); ImGui::TextColored(warn, "The server answered in a form this version of the game cannot read: the game and the server are on different versions. Reload the page (or update the game), or try again after the server has been updated."); ImGui::PopTextWrapPos(); }
+                    else if (!server.RecordsLoaded()) ImGui::TextDisabled("Loading the records...");
                     else if (server.Records().boards.empty()) ImGui::TextDisabled("No finished races on this track yet. Records come from races on the server that finish; races against the clock on your own device count toward your personal bests, not these. Be the first.");
                     int idCounter = 0;
                     for (const Protocol3::RecordBoard& board : server.Records().boards) {

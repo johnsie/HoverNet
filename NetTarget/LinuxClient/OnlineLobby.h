@@ -73,6 +73,8 @@ public:
     void RefreshRecords(const std::string& track);                              // the track records of one track
     const Protocol3::RecordList& Records() const { return mRecords; }
     bool RecordsLoaded() const { return mRecordsLoaded; }
+    // True when the server answered a replay or records request in a form this game cannot read (the game and the server are on different versions).
+    bool ListsUnreadable() const { return mListsUnreadable; }
     // Downloads one replay (in pieces). Downloading() until it is complete; then TakeReplay() gives the checked file once. A refusal, a damaged
     // or incomplete download is reported in ReplayNotice() and nothing is handed over.
     void FetchReplay(std::uint64_t id);
@@ -106,7 +108,7 @@ private:
     std::vector<AuthFrame> mBacklog;
     std::vector<Protocol3::ReplayInfo> mReplays;
     Protocol3::RecordList mRecords;
-    bool mReplaysLoaded = false, mRecordsLoaded = false, mReplayReady = false;
+    bool mReplaysLoaded = false, mRecordsLoaded = false, mReplayReady = false, mListsUnreadable = false;
     std::uint64_t mFetchId = 0;
     long long mLastFetchMs = -100000;   // the server allows one download every half second; a quicker request waits (see FetchReplay)
     bool mFetchSent = false;

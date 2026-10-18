@@ -75,11 +75,13 @@ void OnlineLobby::Pump()
         }
         else if (f.type == kReplayList) {
             ReplayList l;
-            if (Decode(f.payload, l)) { mReplays = l.replays; mReplaysLoaded = true; }
+            if (Decode(f.payload, l)) { mReplays = l.replays; mReplaysLoaded = true; mListsUnreadable = false; }
+            else mListsUnreadable = true;
         }
         else if (f.type == kRecordList) {
             RecordList l;
-            if (Decode(f.payload, l)) { mRecords = l; mRecordsLoaded = true; }
+            if (Decode(f.payload, l)) { mRecords = l; mRecordsLoaded = true; mListsUnreadable = false; }
+            else mListsUnreadable = true;
         }
         else if (f.type == kReplayChunk) {
             ReplayChunk ch;
