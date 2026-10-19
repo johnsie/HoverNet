@@ -2,6 +2,7 @@
 #include "LobbyServer.h"
 
 #include <algorithm>
+#include <sys/types.h>
 #include <sys/stat.h>
 
 namespace Authority
@@ -18,8 +19,13 @@ bool SafeCommunityName(const std::string& name)
 
 bool FileExists(const std::string& path)
 {
+#ifdef _WIN32
+    struct _stat st;
+    return _stat(path.c_str(), &st) == 0 && (st.st_mode & _S_IFREG) != 0;
+#else
     struct stat st;
     return stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
+#endif
 }
 }
 
