@@ -279,7 +279,14 @@ std::string DefaultTrackDownloadBaseUrl()
         while (!lBase.empty() && lBase.back() == '/') lBase.pop_back();
         return lBase;
     }
+#ifdef __EMSCRIPTEN__
+    // A browser cannot fetch from GitHub's release downloads: they redirect to another host and neither answer carries the CORS header the browser
+    // needs, so the request is blocked and the download "does nothing". The web host serves the tracks itself, from the page's own origin
+    // (scripts/sync-web-community-tracks.sh fills the folder; packaging/web/hovernet.outiva.com.conf serves it).
+    return "/community-tracks";
+#else
     return "https://github.com/johnsie/HoverNet/releases/download";
+#endif
 }
 
 bool MakeDirectories(const std::string& pPath)

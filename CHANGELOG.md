@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **The web client's community-track download did nothing.** A browser cannot fetch GitHub's release downloads (they redirect to another host and send no CORS header, so the browser blocks the request), so the web client now downloads the tracks from the web host itself (`/community-tracks/`). **Operators of a web host** need to run `scripts/sync-web-community-tracks.sh` (about 151 MB) and update the Apache configuration (`packaging/web/hovernet.outiva.com.conf`) before the download works; see [community-tracks.md](docs/community-tracks.md). The native game still downloads from GitHub.
+
 ## 2.3.20 - 2026-10-18
 
 ### Fixed
