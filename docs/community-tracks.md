@@ -33,7 +33,7 @@ needs installing: they are downloaded on demand.
 **In the browser** the tracks come from the web host itself (`/community-tracks/<shard>/<asset>.trk.gz`, the same files), not from GitHub: a browser
 cannot fetch GitHub's release downloads (they redirect to another host and send no CORS header, so the request is blocked and the download appears to do
 nothing). The operator fills the folder with `scripts/sync-web-community-tracks.sh` (about 151 MB; run it again when the manifest gains tracks) and the Apache
-configuration in `packaging/web/hovernet.outiva.com.conf` serves it.
+snippet `packaging/web/community-tracks.conf` serves it (`scripts/deploy-web-community-tracks.sh HOST` does both from your own machine).
 
 Downloads use the system's `curl` (or `wget`; `curl.exe` on Windows 10+), run
 without a shell. Each track is a gzip file named after its hash,
