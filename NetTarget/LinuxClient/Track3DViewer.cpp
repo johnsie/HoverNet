@@ -8861,6 +8861,7 @@ int RunClient(int argc, char** argv)
         static double sOtherX = 0, sOtherY = 0;
         static Uint32 sLastFrame = 0;
         static std::uint32_t sLastDisplay = 0;
+        static double sLastClock = 0;   // the picture's continuous clock (ticks): the craft are drawn between ticks by it, so this, not the whole tick, is what the eye follows
         static double sLastX = 0, sLastY = 0;
         static bool sHave = false;
         if (std::getenv("HOVERNET_TEST_JITTER") != nullptr && !auth.needSnapshot && !auth.resultReceived && !auth.spectator && auth.shownTick > ReplayFormat::kCountdownTicks + 150) {   // only the race itself, once the craft is up to speed: it sits still in the countdown and accelerates from rest after it, and both are real changes of speed that the smoothness measure must not count
@@ -8870,7 +8871,9 @@ int RunClient(int argc, char** argv)
             static int sWarmup = 0;
             if (sHave && now > sLastFrame && ++sWarmup > 30) {
                 const double expected = (now - sLastFrame) / 16.0;
-                sRatios.push_back((static_cast<double>(displayTick) - sLastDisplay) / expected);
+                // Pace: how far the picture's clock advanced against the real time elapsed. The whole tick is no use for this at a low frame rate (a software
+                // renderer, 26 ms a frame): frames then show 1 or 2 new ticks, a pace of 0.62 or 1.23 whatever the motion looks like.
+                sRatios.push_back((auth.displayTick - sLastClock) / expected);
                 sJumps.push_back(std::sqrt((x - sLastX) * (x - sLastX) + (y - sLastY) * (y - sLastY)));
                 sDts.push_back(static_cast<double>(now - sLastFrame));
                 sVel.push_back(sJumps.back() / static_cast<double>(now - sLastFrame));
@@ -8883,7 +8886,7 @@ int RunClient(int argc, char** argv)
                 sSteps.push_back(static_cast<double>(displayTick) - sLastDisplay);
             }
             if (auth.ack.players > 1) { const MR_MainCharacter* other = auth.craft[static_cast<std::size_t>((auth.ack.player + 1) % auth.ack.players)]; sOtherX = other->mPosition.mX; sOtherY = other->mPosition.mY; }
-            sHave = true; sLastFrame = now; sLastDisplay = displayTick; sLastX = x; sLastY = y;
+            sHave = true; sLastFrame = now; sLastDisplay = displayTick; sLastClock = auth.displayTick; sLastX = x; sLastY = y;
         }
         if (auth.resultReceived && std::getenv("HOVERNET_TEST_JITTER") != nullptr && !sRatios.empty()) {
             std::vector<double> r = sRatios, j = sJumps;
