@@ -204,7 +204,22 @@ jobs:
           cmake --build build/windows-shared --target HoverNetDeterminismRun HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetLobbyTest HoverNetModerationTest HoverNetTrackPack HoverNetCryptoTest HoverNetModTool HoverNetNetProxy HoverNetAuthServer HoverNetAuthBot HoverNetRenderGolden --config Release --parallel 2
           bin=build/windows-shared/Release
           bad=0; msgs=""
-          t() { local o; if o=$("$@" 2>&1); then echo "$o" | tail -n 3; else bad=1; msgs="$msgs | FAILED $* :: $(echo "$o" | tail -n 12 | tr '\n\r' '  ' | cut -c1-900)"; echo "FAILED: $*"; echo "$o" | tail -n 30; fi; }
+          # Each test has ten minutes, its output goes to a file (a hung test leaves background servers and bots holding a pipe, which would hold this step
+          # up too) and the servers, bots and proxies it leaves behind are killed. A test that times out is tried once more; one that hangs twice is reported by name.
+          kill_leftovers() { taskkill //F //IM HoverNetAuthServer.exe //IM HoverNetAuthBot.exe //IM HoverNetNetProxy.exe //IM HoverNet.exe >/dev/null 2>&1 || true; }
+          t() {
+            local f rc attempt
+            f=$(mktemp)
+            for attempt in 1 2; do
+              echo ">> $*"
+              timeout -k 10 600 "$@" > "$f" 2>&1; rc=$?
+              kill_leftovers
+              [ $rc -ne 124 ] && break
+              echo "TIMED OUT after 600 s (attempt $attempt): $*"; tail -n 8 "$f"
+            done
+            if [ $rc -eq 0 ]; then tail -n 3 "$f"
+            else bad=1; msgs="$msgs | FAILED (exit $rc) $* :: $(tail -n 12 "$f" | tr '\n\r' '  ' | cut -c1-900)"; echo "FAILED: $*"; tail -n 30 "$f"; fi
+          }
           t scripts/test-determinism.sh "$bin/HoverNetDeterminismRun.exe"
           t scripts/test-physics.sh "$bin/HoverNetDeterminismRun.exe"
           t scripts/test-replay.sh "$bin/HoverNetReplay.exe"
