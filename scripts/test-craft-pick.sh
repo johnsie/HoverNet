@@ -12,7 +12,7 @@ export HOME="$dir/home"; mkdir -p "$HOME"
 fail=0
 race() {   # $1 = presses, $2 = replay folder; prints the craft number the server recorded
   mkdir -p "$2"
-  "$server" --track ClassicH --players 1 --port 0 --once --limit-ticks 800 --start-delay-ms 500 --replay-dir "$2" > "$dir/server$1.txt" 2>&1 &
+  "$server" --track ClassicH --players 1 --port 0 --once --limit-ticks 900 --start-delay-ms 1500 --replay-dir "$2" > "$dir/server$1.txt" 2>&1 &
   local pid=$!
   for _ in $(seq 1 100); do grep -q "listening on" "$dir/server$1.txt" 2>/dev/null && break; sleep 0.1; done
   local port; port=$(sed -n 's/.*listening on [0-9.]*:\([0-9]*\),.*/\1/p' "$dir/server$1.txt" | head -1)

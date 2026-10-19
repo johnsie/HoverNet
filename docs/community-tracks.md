@@ -17,6 +17,17 @@ instead of a lap counter and the laps setting is greyed out.
 Community tracks are not bundled (the library is about 700 MB), but nothing
 needs installing: they are downloaded on demand.
 
+## Online races on community tracks
+
+In the HoverNet lobby (all clients: Linux, Windows and the browser) a player can host a race on any community track, and join or watch one.
+- **Hosting:** pick the track in *Host a race*; if it is not on your computer the button says **Download & Create**: the track is downloaded (checked against
+  the manifest's SHA-256) and the race is created.
+- **Joining or watching:** a listed race on a track you do not have says **Download & Join**; a private race, whose track is only known once you are in it,
+  downloads the track when the race is about to start.
+- **The server must have the track.** It hosts a community track only if the file is in its community folder (`--community-dir`, see
+  [operators.md](operators.md)); otherwise it refuses with "that race cannot be hosted here". The game checks the track's hash against the server's before
+  racing, so both sides play the same file. Operators fill the folder with `scripts/sync-server-community-tracks.sh`.
+
 ## Getting tracks
 
 - **On demand (default).** Pick an uninstalled track (tagged *download*) and the

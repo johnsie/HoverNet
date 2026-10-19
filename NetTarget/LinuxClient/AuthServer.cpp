@@ -1,7 +1,7 @@
 // HoverNetAuthServer -- a dedicated server for authoritative races over TCP (protocol 3.0 framing, no encryption yet).
 //
 //   HoverNetAuthServer --track ClassicH --players 8 [--laps 3] [--port 9610] [--bind 127.0.0.1] [--once]
-//                      [--limit-ticks N] [--start-delay-ms 1000] [--max-connections 64] [--replay-dir DIR]
+//                      [--community-dir DIR] [--limit-ticks N] [--start-delay-ms 1000] [--max-connections 64] [--replay-dir DIR]
 //   HoverNetAuthServer --lobby [--tracks "ClassicH,The River"] [--port 9610]     many races: players host and join through the lobby
 //
 // It hosts one race at a time (RaceHost) and starts a fresh one when the race ends. It binds to the loopback address unless
@@ -424,6 +424,7 @@ int main(int argc, char** argv)
     std::string identityFile;
     bool requireEncryption = false;
     std::string trackList;
+    std::string communityDir;       // --community-dir: community tracks players may host, as "<name>.trk" files (empty: the official tracks only)
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto value = [&]() -> const char* { return i + 1 < argc ? argv[++i] : ""; };
@@ -453,6 +454,7 @@ int main(int argc, char** argv)
         else if (a == "--require-encryption") requireEncryption = true;
         else if (a == "--spectator-delay-ms") cfg.spectatorDelayMs = std::atoi(value());
         else if (a == "--tracks") trackList = value();
+        else if (a == "--community-dir") communityDir = value();
         else if (a == "--no-weapons") cfg.race.weapons = false;
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     }
@@ -547,6 +549,7 @@ int main(int argc, char** argv)
         std::stringstream names(trackList.empty() ? "ClassicH,Metro Spiral,Steeplechase,Switchback,The Alley2,The River,Tidal Causeway" : trackList);
         for (std::string name; std::getline(names, name, ',');) if (!name.empty()) lobbyConfig.tracks.push_back(name);
         lobbyConfig.maxConnections = maxConnections;
+        lobbyConfig.communityDirectory = communityDir;
         LobbyServer lobby(lobbyConfig);
         lobby.SetLeagueSource([&league](const std::string& month) { return league.Data(month, static_cast<std::int64_t>(std::time(nullptr))); });
         std::unique_ptr<DirReplayStore> replayStore;

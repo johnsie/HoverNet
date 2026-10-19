@@ -6226,6 +6226,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
     std::string hostedCode;              // the code of the private race this player is hosting (empty: a public race)
     std::string problem;                 // a mistake in what the player typed, shown under the button that found it
     bool ready = false, running = true;
+    bool trackDownloadFailed = false;   // the download at the start of a race did not finish: do not try again, start and say what is missing
     int framesShown = 0;
     // Test hook: with HOVERNET_TEST_AUTH_SERVER=host:port the screen hosts a one-player race by itself once connected; never set in normal play.
     int testStep = testServer != nullptr ? 2 : 0;
@@ -6236,6 +6237,12 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
     ImVec2 connectCenter(-1, -1), hostOpenCenter(-1, -1), createCenter(-1, -1), startRaceCenter(-1, -1);
     std::vector<TrackPreview> previews(static_cast<std::size_t>(Tracks().Count()));
     bool hostPopupOpen = false, requestHostPopup = false, privatePopupOpen = false, requestPrivatePopup = false;
+    // A race on a community track the player does not have yet: the track is downloaded first (a few hundred kilobytes, checked against the manifest), then
+    // the thing the player asked for is done. The same download runs again at the moment a race is about to start if the track is still missing (a private
+    // race, whose track is only known once it is joined).
+    DownloadUi trackDownload;
+    enum class AfterDownload { eNone, eHost, eJoin, eWatch } afterDownload = AfterDownload::eNone;
+    std::uint32_t afterDownloadRace = 0;
     int lobbyTab = 0;                   // small screens: 0 games, 1 chat, 2 users
     char chatInput[128];
     chatInput[0] = '\0';
@@ -6255,6 +6262,19 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             e.button.x = static_cast<Sint32>(at.x); e.button.y = static_cast<Sint32>(at.y);
         }
         SDL_PushEvent(&e);
+    };
+    // Join or watch a listed race. If its track is a community track this computer does not have, download it first and then do it.
+    auto trackToFetch = [&](const std::string& trackName) -> const TrackEntry* {
+        const TrackEntry* entry = Tracks().Get(Tracks().Find(trackName));
+        return (entry != nullptr && !entry->mInstalled && entry->mHasDownload && !trackDownload.Active()) ? entry : nullptr;
+    };
+    auto joinListedRace = [&](const Protocol3::RaceInfo& race) {
+        if (const TrackEntry* fetch = trackToFetch(race.track)) { afterDownload = AfterDownload::eJoin; afterDownloadRace = race.id; trackDownload.Begin({*fetch}, 0); }
+        else lobby.Join(race.id, "");
+    };
+    auto watchListedRace = [&](const Protocol3::RaceInfo& race) {
+        if (const TrackEntry* fetch = trackToFetch(race.track)) { afterDownload = AfterDownload::eWatch; afterDownloadRace = race.id; trackDownload.Begin({*fetch}, 0); }
+        else lobby.WatchWhenStarted(race.id, "");
     };
 
     auto connect = [&](bool custom) {
@@ -6308,7 +6328,15 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             }
         }
         lobby.Pump();
-        if (lobby.GetState() == OnlineLobby::State::eReady) { ready = true; break; }
+        if (lobby.GetState() == OnlineLobby::State::eReady) {
+            // The race is about to start: its track must be on this computer. A community track that is not is downloaded now (the server's first ticks wait in
+            // the backlog); if that fails the race still starts and says what is missing.
+            const TrackEntry* readyTrack = Tracks().Get(Tracks().Find(lobby.Ack().track));
+            if (readyTrack != nullptr && !readyTrack->mInstalled && readyTrack->mHasDownload && !trackDownloadFailed) {
+                if (!trackDownload.Active()) trackDownload.Begin({*readyTrack}, 0);
+            }
+            else if (!trackDownload.Active()) { ready = true; break; }
+        }
         if (lobby.GetState() == OnlineLobby::State::eBrowsing && !chatFocusedOnce) { chatFocusedOnce = true; focusChat = true; }   // ready to type
         if (std::getenv("HOVERNET_TEST_AUTH_STARTCLICK") != nullptr && lobby.GetState() == OnlineLobby::State::eWaiting && lobby.IsHost()) {
             // Test hook (scripts/test-start-race.sh): wait for a second player, show that the race does not start by itself, then press
@@ -6582,7 +6610,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                             selectedRace = i;
                             selectedRaceId = r.id;
                             const Protocol3::RaceInfo& chosen = races[static_cast<std::size_t>(i)];
-                            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !chosen.started && chosen.joined < chosen.players) lobby.Join(chosen.id, "");
+                            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !chosen.started && chosen.joined < chosen.players) joinListedRace(chosen);
                         }
                     }
                     ImGui::EndListBox();
@@ -6698,7 +6726,9 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             }
             else {
                 ImGui::BeginDisabled(!canJoin);
-                if (HoverNetButton("Join Game", ImVec2(-FLT_MIN, 40))) lobby.Join(selectedInfo->id, "");
+                const TrackEntry* joinTrack = selectedInfo != nullptr ? Tracks().Get(Tracks().Find(selectedInfo->track)) : nullptr;
+                const bool joinNeedsDownload = joinTrack != nullptr && !joinTrack->mInstalled && joinTrack->mHasDownload;
+                if (HoverNetButton(joinNeedsDownload ? "Download & Join" : "Join Game", ImVec2(-FLT_MIN, 40))) joinListedRace(*selectedInfo);
                 ImGui::EndDisabled();
                 // A race that has not started can be chosen too: the client waits in the list and starts watching when the race starts.
                 const bool waitingToWatch = lobby.QueuedWatchId() != 0;
@@ -6706,7 +6736,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 if (waitingToWatch) {
                     if (HoverNetQuietButton("Waiting for the race to start (click to cancel)", ImVec2(-FLT_MIN, 0))) lobby.CancelQueuedWatch();
                 }
-                else if (HoverNetQuietButton("Watch Race", ImVec2(-FLT_MIN, 0))) lobby.WatchWhenStarted(selectedInfo->id, "");
+                else if (HoverNetQuietButton("Watch Race", ImVec2(-FLT_MIN, 0))) watchListedRace(*selectedInfo);
                 ImGui::EndDisabled();
                 ImGui::Spacing();
                 if (HoverNetButton("HOST A RACE", ImVec2(-FLT_MIN, 44.0f))) requestHostPopup = true;
@@ -6792,8 +6822,12 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             ImGui::SameLine();
             ImGui::TextDisabled("  Difficulty: %s", guide.mDifficulty.c_str());
             ImGui::TextWrapped("%s", guide.mDescription.c_str());
-            const bool trackOk = hostTrack != nullptr && hostTrack->mOfficial;
-            if (!trackOk) AccentNote("Servers host the official tracks unless their owner added others: pick one of the first seven.");
+            const bool trackOk = hostTrack != nullptr;
+            const bool hostNeedsDownload = hostTrack != nullptr && !hostTrack->mInstalled && hostTrack->mHasDownload;
+            if (hostTrack != nullptr && !hostTrack->mOfficial) {
+                if (hostNeedsDownload) AccentNote("Not on this computer yet - it downloads (" + FormatMegabytes(hostTrack->mDownloadBytes) + ") when you create the race.");
+                AccentNote("A server hosts a community track only if its owner has installed it; if this one has not, it says so.");
+            }
             ImGui::Spacing();
             ImGui::PushTextWrapPos(0.0f);
             ImGui::TextDisabled("Up to 8 players can join. You start the race when you are ready, with whoever is there (alone, it is a time trial).");
@@ -6827,19 +6861,28 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 DrawTrackPreview(previewFor(prefs.mTrackIndex));
                 ImGui::EndChild();
             }
-            ImGui::BeginDisabled(!codeOk || !trackOk);
-            if (HoverNetButton(hostCode[0] != '\0' ? "Create Private Race" : "Create Race", ImVec2(190, 36))) {
+            auto createRace = [&]() {
                 lobby.Host(hostTrack->mName, players, laps, weapons, hostCode);
                 hostedCode = hostCode;
                 prefs.mLaps = laps;
                 prefs.mWeapons = weapons;
                 hostPopupOpen = false;
                 ImGui::CloseCurrentPopup();
+            };
+            ImGui::BeginDisabled(!codeOk || !trackOk || trackDownload.Active());
+            if (HoverNetButton(hostNeedsDownload ? "Download & Create" : (hostCode[0] != '\0' ? "Create Private Race" : "Create Race"), ImVec2(190, 36))) {
+                if (hostNeedsDownload) { afterDownload = AfterDownload::eHost; trackDownload.Begin({*hostTrack}, 1); }
+                else createRace();
             }
             createCenter = centreOfLastItem();
             ImGui::EndDisabled();
             ImGui::SameLine();
-            if (HoverNetButton("Cancel", ImVec2(120, 36))) { hostPopupOpen = false; ImGui::CloseCurrentPopup(); }
+            if (HoverNetButton("Cancel", ImVec2(120, 36)) && !trackDownload.Active()) { hostPopupOpen = false; ImGui::CloseCurrentPopup(); }
+            {
+                const DownloadUi::State downloadState = trackDownload.Draw(1);
+                if (downloadState == DownloadUi::State::eDone && afterDownload == AfterDownload::eHost) { afterDownload = AfterDownload::eNone; createRace(); }
+                else if (downloadState == DownloadUi::State::eFailed) afterDownload = AfterDownload::eNone;
+            }
             ImGui::EndPopup();
         }
         ImGui::SetNextWindowSize(ImVec2(std::min(560.0f, popupViewport->WorkSize.x - 40.0f), 0.0f), ImGuiCond_Appearing);
@@ -6866,6 +6909,20 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             ImGui::SameLine();
             if (HoverNetQuietButton("Cancel", ImVec2(120, 36))) { privatePopupOpen = false; ImGui::CloseCurrentPopup(); }
             ImGui::EndPopup();
+        }
+
+        {   // the track download of a listed race, or of the race that is about to start (scope 0)
+            const DownloadUi::State downloadState = trackDownload.Draw(0);
+            if (downloadState == DownloadUi::State::eDone) {
+                const AfterDownload what = afterDownload;
+                afterDownload = AfterDownload::eNone;
+                if (what == AfterDownload::eJoin) lobby.Join(afterDownloadRace, "");
+                else if (what == AfterDownload::eWatch) lobby.WatchWhenStarted(afterDownloadRace, "");
+            }
+            else if (downloadState == DownloadUi::State::eFailed) {
+                if (afterDownload == AfterDownload::eNone) trackDownloadFailed = true;   // the one at the start of a race: start anyway, it says what is missing
+                afterDownload = AfterDownload::eNone;
+            }
         }
 
         ImGui::End();
@@ -8683,8 +8740,12 @@ int RunClient(int argc, char** argv)
                                                     : static_cast<std::uint16_t>(controlState & 0xFFFF);
                 if (auth.scripted && target < ReplayFormat::kCountdownTicks + 16) input = 0;   // the scripted driver sits out the countdown: its steering would pick another craft
                 if (const char* pick = std::getenv("HOVERNET_TEST_PICK_CRAFT")) {   // test hook (scripts/test-craft-pick.sh): N presses of the right steering key in the countdown (each held 6 ticks)
+                    // Relative to the first tick this client sends for (a slow machine loads the race late, so fixed ticks could be gone already): the first press
+                    // starts 20 ticks after it, each press is held 6 ticks and released 6.
+                    static std::uint32_t sFirstTarget = target;
                     const int presses = std::atoi(pick);
-                    if (target >= 10 && target < 10 + 12 * static_cast<std::uint32_t>(presses) && (target - 10) % 12 < 6) input = MR_MainCharacter::eRight;   // each press held 6 ticks, released 6
+                    const std::uint32_t at = target - sFirstTarget;
+                    if (target >= sFirstTarget + 20 && at < 20 + 12 * static_cast<std::uint32_t>(presses) && (at - 20) % 12 < 6) input = MR_MainCharacter::eRight;
                 }
                 auth.predictor.SetLocalInput(target, input);
                 Protocol3::Input in;
@@ -8802,7 +8863,7 @@ int RunClient(int argc, char** argv)
         static std::uint32_t sLastDisplay = 0;
         static double sLastX = 0, sLastY = 0;
         static bool sHave = false;
-        if (std::getenv("HOVERNET_TEST_JITTER") != nullptr && !auth.needSnapshot && !auth.resultReceived && !auth.spectator && auth.shownTick != 0) {
+        if (std::getenv("HOVERNET_TEST_JITTER") != nullptr && !auth.needSnapshot && !auth.resultReceived && !auth.spectator && auth.shownTick > ReplayFormat::kCountdownTicks + 150) {   // only the race itself, once the craft is up to speed: it sits still in the countdown and accelerates from rest after it, and both are real changes of speed that the smoothness measure must not count
             const std::uint32_t displayTick = auth.shownTick;
             const MR_MainCharacter* me = auth.craft[static_cast<std::size_t>(auth.ack.player)];
             const double x = me->mPosition.mX, y = me->mPosition.mY;

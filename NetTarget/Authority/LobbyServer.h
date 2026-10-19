@@ -24,6 +24,9 @@ struct LobbyConfig
     HostConfig raceTemplate;                    // rate limits, countdown, ... for every race (the race itself is replaced)
     std::vector<std::string> tracks;            // tracks players may host, by name
     std::string trackDirectory = "NetTarget/Tracks";
+    // The community tracks this server can host: a folder of "<track name>.trk" files, as the game keeps them (scripts/sync-server-community-tracks.sh fills it
+    // from the community manifest, checking every file). A player may host any track found there, besides the listed (official) ones. Empty: official only.
+    std::string communityDirectory;
     int maxRaces = 16;
     int maxConnections = 256;
     int abandonedRaceMs = 120000;               // a race that has started and has nobody in it (no player, no spectator) for this long is removed: players who left

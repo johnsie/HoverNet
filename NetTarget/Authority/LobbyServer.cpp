@@ -2,9 +2,27 @@
 #include "LobbyServer.h"
 
 #include <algorithm>
+#include <sys/stat.h>
 
 namespace Authority
 {
+namespace
+{
+// A community track name is used as a file name: no path separators, no ".." and nothing a file system treats specially, at most what a message can carry.
+bool SafeCommunityName(const std::string& name)
+{
+    if (name.empty() || name.size() > 63 || name == "." || name == "..") return false;
+    for (unsigned char c : name) if (c < 32 || c == 127 || c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') return false;
+    return name.find("..") == std::string::npos;
+}
+
+bool FileExists(const std::string& path)
+{
+    struct stat st;
+    return stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
+}
+}
+
 struct LobbyServer::Entry
 {
     std::uint32_t id = 0;
@@ -374,14 +392,17 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         HostRace m;
         if (!Decode(payload, m)) { Invalid(c, nowMs); return; }
         if (mDraining) { Close(c, kServerDraining, "the server is restarting; try again in a minute"); return; }
-        const bool allowed = std::find(mConfig.tracks.begin(), mConfig.tracks.end(), m.track) != mConfig.tracks.end();
+        const bool official = std::find(mConfig.tracks.begin(), mConfig.tracks.end(), m.track) != mConfig.tracks.end();
+        const std::string communityPath = mConfig.communityDirectory.empty() || !SafeCommunityName(m.track) ? std::string() : mConfig.communityDirectory + "/" + m.track + ".trk";
+        const bool community = !official && !communityPath.empty() && FileExists(communityPath);   // a community track this server has
+        const bool allowed = official || community;
         if (!allowed || m.players < 1 || m.players > 8 || m.laps < 1 || m.laps > 10) { Close(c, kBadSettings, "that race cannot be hosted here"); return; }
         if (static_cast<int>(mRaces.size()) >= mConfig.maxRaces) { Close(c, kTooManyRaces, "the server is hosting as many races as it can"); return; }
         std::unique_ptr<Entry> e(new Entry);
         e->id = mNextRace++;
         e->cfg = mConfig.raceTemplate;
         e->cfg.race.trackName = m.track;
-        e->cfg.race.trackPath = mConfig.trackDirectory + "/" + m.track + ".trk";
+        e->cfg.race.trackPath = community ? communityPath : mConfig.trackDirectory + "/" + m.track + ".trk";
         e->cfg.race.players = m.players;
         e->cfg.race.laps = m.laps;
         e->cfg.race.weapons = m.weapons;

@@ -7,6 +7,12 @@
 // the abuse cases are refused: unknown tracks, bad settings, unknown or full or running races, request floods, silent
 // connections, too many races.
 #include <cstdio>
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -14,6 +20,7 @@
 #include "SimHarness.h"
 #include "../Authority/LobbyServer.h"
 #include "../Authority/Protocol3.h"
+#include "Sha256.h"
 #include "../ObjFac1/SimElements.h"
 
 using namespace Authority;
@@ -39,6 +46,7 @@ struct Client
     unsigned ticks = 0;
     std::uint32_t ackRaceId = 0;
     int ackPlayers = 0, acks = 0;
+    Protocol3::HelloAck lastAck;
     Protocol3::Roster roster;
     bool gotRoster = false;
     Protocol3::LobbyUsers users;
@@ -68,7 +76,7 @@ struct Client
         while (parser.Next(type, payload)) {
             using namespace Protocol3;
             if (type == kRaceList) gotList = Decode(payload, list);
-            else if (type == kHelloAck) { HelloAck a; if (Decode(payload, a)) { player = a.player; token = a.resumeToken; ackRaceId = a.raceId; ackBytes = payload.size(); ackPlayers = a.players; ++acks; } }
+            else if (type == kHelloAck) { HelloAck a; if (Decode(payload, a)) { lastAck = a; player = a.player; token = a.resumeToken; ackRaceId = a.raceId; ackBytes = payload.size(); ackPlayers = a.players; ++acks; } }
             else if (type == kRoster) gotRoster = Decode(payload, roster);
             else if (type == kLobbyUsers) gotUsers = Decode(payload, users);
             else if (type == kChatMessage) { ChatMessage m; if (Decode(payload, m)) chats.push_back((m.fromServer ? std::string("(server) ") : std::string()) + m.name + ": " + m.text); }
@@ -253,6 +261,61 @@ int main()
             x.Pump();
             const std::string what = std::string("hosting ") + k.what + " is refused";
             Check(x.rejected && x.rejectReason == Protocol3::kBadSettings && lobby.RaceCount() == 0, what.c_str());
+        }
+        // Community tracks: hosted from the community folder when the server has the file, refused when it has not, whatever name is asked for.
+        {
+            const std::string dir = "hovernet-lobby-community.tmp";
+#ifdef _WIN32
+            _mkdir(dir.c_str());
+#else
+            mkdir(dir.c_str(), 0755);
+#endif
+            {   // "Test Community.trk" is a copy of a bundled track; "Not A Track.trk" is there but is not hosted by a request for another name
+                std::FILE* in = std::fopen("NetTarget/Tracks/ClassicH.trk", "rb");
+                std::FILE* out = std::fopen((dir + "/Test Community [1-1].trk").c_str(), "wb");
+                std::vector<char> bytes(1 << 16);
+                std::size_t got;
+                while (in != nullptr && out != nullptr && (got = std::fread(bytes.data(), 1, bytes.size(), in)) > 0) std::fwrite(bytes.data(), 1, got, out);
+                if (in != nullptr) std::fclose(in);
+                if (out != nullptr) std::fclose(out);
+            }
+            LobbyConfig communityConfig = MakeConfig();
+            communityConfig.communityDirectory = dir;
+            {
+                LobbyServer community(communityConfig);
+                Client x;
+                x.Open(community, now);
+                x.Hello("x", now); x.Pump();
+                x.Send(Protocol3::kHostRace, Protocol3::Encode(Host("Test Community [1-1]", 2)), now);
+                x.Pump();
+                Check(!x.rejected && community.RaceCount() == 1 && x.acks == 1, "a community track the server has is hosted");
+                Check(x.lastAck.track == "Test Community [1-1]" && x.lastAck.trackSha256 == Sha256::HashFile(dir + "/Test Community [1-1].trk"), "the race is on that file (the client checks its hash)");
+                const char* refused[] = {"Another Community Track", "../ClassicH", "..", "a/b", "Test Community [1-1]/../x"};
+                for (const char* name : refused) {
+                    Client y;
+                    y.Open(community, now);
+                    y.Hello("y", now); y.Pump();
+                    y.Send(Protocol3::kHostRace, Protocol3::Encode(Host(name, 2)), now);
+                    y.Pump();
+                    const std::string what = std::string("a community track the server does not have or an unsafe name ('") + name + "') is refused";
+                    Check(y.rejected && y.rejectReason == Protocol3::kBadSettings && community.RaceCount() == 1, what.c_str());
+                }
+            }
+            {   // without a community folder the same request is refused
+                LobbyServer plain(MakeConfig());
+                Client x;
+                x.Open(plain, now);
+                x.Hello("x", now); x.Pump();
+                x.Send(Protocol3::kHostRace, Protocol3::Encode(Host("Test Community [1-1]", 2)), now);
+                x.Pump();
+                Check(x.rejected && x.rejectReason == Protocol3::kBadSettings && plain.RaceCount() == 0, "without a community folder only the listed tracks are hosted");
+            }
+            std::remove((dir + "/Test Community [1-1].trk").c_str());
+#ifdef _WIN32
+            _rmdir(dir.c_str());
+#else
+            rmdir(dir.c_str());
+#endif
         }
         LobbyConfig cfg = MakeConfig();
         cfg.maxRaces = 2;

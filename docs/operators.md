@@ -37,6 +37,7 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 | `--limit-ticks N` | end each race after N ticks (16 ms each); free-play tracks default to 10 minutes |
 | `--start-delay-ms` | time clients get to load the race before its first tick (default 1000); the 6 s countdown (craft pick) is simulated after it |
 | `--spectator-delay-ms` | how far behind the drivers spectators see the race |
+| `--community-dir DIR` | a folder of community tracks (`<track name>.trk`) that players may host besides the official ones; without it, or with an empty folder, only the official tracks. The packaged service reads `/var/lib/hovernet/community-tracks`; `scripts/sync-server-community-tracks.sh` fills it from the community manifest, checking every file's size and SHA-256 (about 700 MB when complete) |
 | `--replay-dir DIR` | save a replay of every race (with `--lobby` they are also offered to every player: the Server replays and Track records tabs of Watch a Replay) |
 | `--replay-keep N` | keep the newest N replays in `--replay-dir` (default 200; older ones and their results tables are removed as new ones are saved) |
 | `--league-file FILE` | the monthly league's log (default `league.tsv` in `--replay-dir`; without either the league is kept in memory). Append-only; it holds device ids (random numbers, not addresses) and display names, see below |

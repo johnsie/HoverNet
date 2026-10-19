@@ -14,7 +14,7 @@ if [ $rc -ne 0 ]; then
     while IFS=: read -r _ name; do
       [ -n "$name" ] || continue
       # The lines of that test's output that say what failed (the first few), from the ctest log.
-      why="$(awk -v t="$name" '$0 ~ "^[0-9]+/[0-9]+ Test *#[0-9]+: " t " " {on=1; next} on && /^[0-9]+\/[0-9]+ Test / {on=0} on && (/FAIL|DIVERGED|expected|STOP|MISMATCH|Assertion|Segmentation|ERROR|Error/ || /^[-+][A-Za-z0-9]/) {print}' "$log" 2>/dev/null | head -6 | tr '\n' '|' | cut -c1-600)"
+      why="$(awk -v t="$name" '/^[0-9]+\/[0-9]+ Testing: / {on = ($0 ~ (": " t "$")); next} on && (/FAIL|DIVERGED|expected|STOP|MISMATCH|Assertion|Segmentation|ERROR|Error|JITTERTEST/ || /^[-+][A-Za-z0-9]/) {print}' "$log" 2>/dev/null | head -8 | tr '\n' '|' | cut -c1-700)"
       echo "::error title=Test failed: $name::$name | ${why:-see the log}"
     done < "$failed"
   fi
