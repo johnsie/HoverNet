@@ -65,7 +65,7 @@ jobs:
         run: cmake --build build/linux --parallel 2
 
       - name: Run tests
-        run: ctest --test-dir build/linux --output-on-failure
+        run: scripts/ci-ctest.sh build/linux
 
       - name: Set package version
         shell: bash
@@ -135,7 +135,7 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        run: ctest --test-dir build/sanitize --output-on-failure
+        run: scripts/ci-ctest.sh build/sanitize
 
   windows:
     name: Windows game and setup EXE
