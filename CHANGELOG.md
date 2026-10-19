@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.23 - 2026-10-19
+
 ### Fixed
 - **Records broken now lists the first time on a board too** ("set the first record"). Your Bi-Turbo time on The Alley2 did not appear because it was the first Bi-Turbo time there: nobody could pick another craft online before 2.3.20, so almost every board of a craft other than the Basic is empty, and a first time is a record. A time that beats the previous holder still says who and by how much. Update the game and the server together: an older game cannot read the new list (it says so).
 
