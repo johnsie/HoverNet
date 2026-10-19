@@ -5824,7 +5824,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
     OnlineLobby server;
     bool serverTried = false;
     const int officialTracks = Tracks().OfficialCount();
-    int track = 0;                       // official track index
+    int track = 0;                       // the track whose records are shown: an index into the catalog (the official tracks first, then the community's)
     int laps = 0;                        // 0: fastest laps; n: fastest races of n laps
     bool need = true, needWinners = true, needLeague = true, needBreaks = true;
     std::string leagueMonth;             // the month shown in the league tab (empty: the current month)
@@ -5835,7 +5835,20 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
     int startSlot = 0;
     bool started = false, running = true;
     int framesShown = 0;
-    if (const char* trackEnv = std::getenv("HOVERNET_TEST_RECORDS_TRACK")) { const int found = Tracks().Find(trackEnv); if (found >= 0 && found < officialTracks) track = found; }   // screenshot/test hook
+    // Watching a time on a community track this computer does not have: the track is downloaded first (a few hundred kilobytes, checked against the
+    // manifest), then the replay is fetched and played.
+    DownloadUi trackDownload;
+    struct PendingWatch { std::uint64_t id = 0; int slot = 0; std::string note; } pendingWatch;
+    auto watchReplay = [&](std::uint64_t replayId, int slot, const std::string& note, const std::string& trackName) {
+        downloadId = replayId; downloadSlot = slot; downloadNote = note; message.clear();
+        const TrackEntry* entry = Tracks().Get(Tracks().Find(trackName));
+        if (entry != nullptr && !entry->mInstalled && entry->mHasDownload && !trackDownload.Active()) {
+            pendingWatch.id = replayId; pendingWatch.slot = slot; pendingWatch.note = note;
+            trackDownload.Begin({*entry}, 0);
+        }
+        else server.FetchReplay(replayId);
+    };
+    if (const char* trackEnv = std::getenv("HOVERNET_TEST_RECORDS_TRACK")) { const int found = Tracks().Find(trackEnv); if (found >= 0) track = found; }   // screenshot/test hook
     if (const char* lapsEnv = std::getenv("HOVERNET_TEST_RECORDS_LAPS")) laps = std::atoi(lapsEnv);
     if (const char* tabEnv = std::getenv("HOVERNET_TEST_LEADERBOARD_TAB")) wantTab = std::atoi(tabEnv);
     auto formatMs = [](long long ms, char* out, std::size_t n) { std::snprintf(out, n, "%lld:%02lld.%02lld", ms / 60000, (ms % 60000) / 1000, (ms % 1000) / 10); };
@@ -5869,7 +5882,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             else message = "Could not save the replay on this device.";
             downloadId = 0;
         }
-        else if (downloadId != 0 && !server.Downloading()) {
+        else if (downloadId != 0 && !trackDownload.Active() && !server.Downloading()) {   // (while the track downloads, the replay has not been asked for yet)
             message = server.ReplayNotice().empty() ? "The replay could not be downloaded." : server.ReplayNotice();
             downloadId = 0;
         }
@@ -5881,7 +5894,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             std::printf("\n");
             std::fflush(stdout);
             if (std::getenv("HOVERNET_TEST_LEADERBOARD_PICK") != nullptr && !r.boards.empty() && !r.boards[0].entries.empty()) {   // test hook: watch the first record
-                downloadId = r.boards[0].entries[0].replay; downloadSlot = r.boards[0].entries[0].slot; downloadNote = laps == 0 ? "the fastest lap" : "the record holder"; server.FetchReplay(downloadId);
+                watchReplay(r.boards[0].entries[0].replay, r.boards[0].entries[0].slot, laps == 0 ? "the fastest lap" : "the record holder", r.track);
             }
         }
 
@@ -5895,7 +5908,10 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
         if (server.RecordBreaksLoaded() && !printedBreaks && std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) {
             printedBreaks = true;
             std::printf("BREAKS %zu", server.RecordBreaks().size());
-            for (const Protocol3::RecordBreakEntry& b : server.RecordBreaks()) std::printf(" | %s %s %s: %s %d beat %s %d", b.track.c_str(), Authority::CraftName(b.craft), b.lap ? "lap" : "race", b.name.c_str(), b.ms, b.previousName.c_str(), b.previousMs);
+            for (const Protocol3::RecordBreakEntry& b : server.RecordBreaks()) {
+                std::printf(" | %s %s %s: %s %d", b.track.c_str(), Authority::CraftName(b.craft), b.lap ? "lap" : "race", b.name.c_str(), b.ms);
+                if (b.previousMs == 0) std::printf(" set the first record"); else std::printf(" beat %s %d", b.previousName.c_str(), b.previousMs);
+            }
             std::printf("\n");
             std::fflush(stdout);
         }
@@ -5952,7 +5968,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             // ---- the newest records that were broken (the first tab)
             if (ImGui::BeginTabItem("RECORDS BROKEN", nullptr, wantTab == 3 ? ImGuiTabItemFlags_SetSelected : 0)) {
                 ImGui::PushTextWrapPos(0.0f);
-                ImGui::TextDisabled("The latest times that beat a record: the best lap or the best race time of a craft on a track. The first time on a board sets a record and is not listed.");
+                ImGui::TextDisabled("The latest records: a time that beat the best lap or the best race time of a craft on a track, or the first time on one (it sets the record).");
                 ImGui::PopTextWrapPos();
                 ImGui::Spacing();
                 if (server.ListsUnreadable() && !server.RecordBreaksLoaded()) { ImGui::PushTextWrapPos(0.0f); ImGui::TextColored(warn, "The server answered in a form this version of the game cannot read: the game and the server are on different versions. Reload the page (or update the game)."); ImGui::PopTextWrapPos(); }
@@ -5969,11 +5985,12 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                     if (b.lap) ImGui::TextDisabled("%s   Fastest lap, %s", when, Authority::CraftName(b.craft));
                     else ImGui::TextDisabled("%s   Fastest race, %d lap%s, %s", when, b.raceLaps, b.raceLaps == 1 ? "" : "s", Authority::CraftName(b.craft));
                     ImGui::PushTextWrapPos(0.0f);
-                    ImGui::Text("%s  %s   beat   %s  %s", b.name.empty() ? "player" : b.name.c_str(), time, b.previousName.empty() ? "player" : b.previousName.c_str(), before);
+                    if (b.previousMs == 0) ImGui::Text("%s  %s   set the first record", b.name.empty() ? "player" : b.name.c_str(), time);
+                    else ImGui::Text("%s  %s   beat   %s  %s", b.name.empty() ? "player" : b.name.c_str(), time, b.previousName.empty() ? "player" : b.previousName.c_str(), before);
                     ImGui::PopTextWrapPos();
                     const bool busy = downloadId != 0;
                     if (HoverNetButton(busy && downloadId == b.replay ? "DOWNLOADING..." : "WATCH", ImVec2(-FLT_MIN, 34)) && !busy) {
-                        downloadId = b.replay; downloadSlot = b.slot; downloadNote = b.lap ? "the fastest lap" : "the record holder"; message.clear(); server.FetchReplay(b.replay);
+                        watchReplay(b.replay, b.slot, b.lap ? "the fastest lap" : "the record holder", b.track);
                     }
                     ImGui::PopID();
                     ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
@@ -5984,10 +6001,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             if (ImGui::BeginTabItem("ALL RECORDS", nullptr, wantTab == 0 ? ImGuiTabItemFlags_SetSelected : 0)) {
             ImGui::TextDisabled("The best times of everyone who races on this server, for each craft.");
             ImGui::SetNextItemWidth(-FLT_MIN);
-            if (officialTracks > 0 && ImGui::BeginCombo("##Track", Tracks().Get(track)->mName.c_str())) {
-                for (int t = 0; t < officialTracks; ++t) if (ImGui::Selectable(Tracks().Get(t)->mName.c_str(), track == t)) { track = t; need = true; }
-                ImGui::EndCombo();
-            }
+            if (Tracks().Count() > 0 && TrackSelector("##Track", 3, track)) { need = true; laps = 0; }   // any track: the official ones first, then the community's, with a search box
             char current[48];
             if (laps == 0) std::snprintf(current, sizeof current, "Fastest laps");
             else std::snprintf(current, sizeof current, "Fastest races: %d lap%s", laps, laps == 1 ? "" : "s");
@@ -6027,7 +6041,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                         ImGui::SameLine(ImGui::GetContentRegionMax().x - 120.0f);
                         const bool busy = downloadId != 0;
                         if (HoverNetButton(busy && downloadId == e.replay ? "..." : "WATCH", ImVec2(110, 0)) && !busy) {
-                            downloadId = e.replay; downloadSlot = e.slot; downloadNote = laps == 0 ? "the fastest lap" : "the record holder"; message.clear(); server.FetchReplay(e.replay);
+                            watchReplay(e.replay, e.slot, laps == 0 ? "the fastest lap" : "the record holder", Tracks().Get(track)->mName);
                         }
                         ImGui::PopID();
                     }
@@ -6056,7 +6070,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                     ImGui::Text("Winner: %s%s%s%s   %s", w.name.empty() ? "player" : w.name.c_str(), w.craft < Authority::kCraftCount ? " (" : "", w.craft < Authority::kCraftCount ? Authority::CraftName(w.craft) : "", w.craft < Authority::kCraftCount ? ")" : "", time);
                     const bool busy = downloadId != 0;
                     if (HoverNetButton(busy && downloadId == w.replay ? "DOWNLOADING..." : "WATCH THE RACE", ImVec2(-FLT_MIN, 34)) && !busy) {
-                        downloadId = w.replay; downloadSlot = w.slot; downloadNote = "the winner"; message.clear(); server.FetchReplay(w.replay);
+                        watchReplay(w.replay, w.slot, "the winner", w.track);
                     }
                     ImGui::PopID();
                     ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
@@ -6125,6 +6139,11 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
         ImGui::EndChild();
         ImGui::Spacing();
         if (HoverNetButton("Back", ImVec2(-FLT_MIN, 40))) running = false;
+        {   // the track of a replay being watched is downloaded first when it is a community track this computer does not have
+            const DownloadUi::State trackState = trackDownload.Draw(0);
+            if (trackState == DownloadUi::State::eDone && pendingWatch.id != 0) { const std::uint64_t id = pendingWatch.id; pendingWatch.id = 0; downloadId = id; downloadSlot = pendingWatch.slot; downloadNote = pendingWatch.note; server.FetchReplay(id); }
+            else if (trackState == DownloadUi::State::eFailed) { pendingWatch.id = 0; downloadId = 0; }
+        }
         ImGui::End();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);

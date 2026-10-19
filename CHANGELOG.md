@@ -6,6 +6,12 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **Records broken now lists the first time on a board too** ("set the first record"). Your Bi-Turbo time on The Alley2 did not appear because it was the first Bi-Turbo time there: nobody could pick another craft online before 2.3.20, so almost every board of a craft other than the Basic is empty, and a first time is a record. A time that beats the previous holder still says who and by how much. Update the game and the server together: an older game cannot read the new list (it says so).
+
+### Added
+- **All records and Records broken include the community tracks.** All records has the same searchable track picker as the race screens (the official tracks first, then the community library) and shows a community track's boards per craft; Watch on a time on a community track downloads the track first if you do not have it.
+
 ## 2.3.22 - 2026-10-19
 
 ### Added

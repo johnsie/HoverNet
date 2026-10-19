@@ -260,7 +260,8 @@ Protocol3::RecordBreakList DirReplayStore::RecordBreaks(int max)
 {
     Refresh();
     // Oldest to newest, keeping the best time seen so far on each board (track, craft, lap or race length). A result that beats it breaks the record; the
-    // first result on a board only sets one. A tie does not break it (the older run keeps it, as on the boards).
+    // first result on a board sets one (listed too, with previousMs 0: most boards of the craft other than the Basic were empty when the craft pick began to
+    // work online, and a first time is a record the player wants to see). A tie does not break it (the older run keeps it, as on the boards).
     struct Best { std::int32_t ms; std::string name; };
     std::map<std::string, Best> best;
     Protocol3::RecordBreakList out;
@@ -275,13 +276,13 @@ Protocol3::RecordBreakList DirReplayStore::RecordBreaks(int max)
                 else { if (!run.finished || run.finishMs <= 0) continue; ms = run.finishMs; }
                 const std::string key = item->info.track + "\t" + std::to_string(run.craft) + "\t" + std::to_string(lap) + "\t" + std::to_string(lap == 1 ? 0 : item->info.laps);
                 auto found = best.find(key);
-                if (found == best.end()) { best[key] = {ms, run.name}; continue; }
-                if (ms >= found->second.ms) continue;
+                if (found != best.end() && ms >= found->second.ms) continue;
                 Protocol3::RecordBreakEntry b;
                 b.replay = item->info.id; b.track = item->info.track; b.slot = run.slot; b.raceLaps = item->info.laps; b.craft = static_cast<std::uint8_t>(run.craft); b.lap = lap == 1;
-                b.savedAt = item->info.savedAt; b.ms = ms; b.previousMs = found->second.ms; b.name = run.name; b.previousName = found->second.name;
+                b.savedAt = item->info.savedAt; b.ms = ms; b.name = run.name;
+                if (found != best.end()) { b.previousMs = found->second.ms; b.previousName = found->second.name; }   // else the first time on this board: it sets the record (previousMs 0)
                 out.breaks.push_back(b);
-                found->second = {ms, run.name};
+                best[key] = {ms, run.name};
             }
         }
     }

@@ -160,7 +160,8 @@ struct WinnerEntry { std::uint64_t replay = 0; std::string track; std::uint8_t s
 struct ListWinners { std::uint8_t max = 15; };
 struct WinnerList { std::vector<WinnerEntry> winners; };
 // Recent records broken: the newest results that beat the best time on their board (track, craft, and fastest lap or fastest race of that many laps) as the
-// server's saved races show it, newest first, with the time and holder they beat. The first result on a board sets a record, it breaks none. A replay is the proof.
+// server's saved races show it, newest first, with the time and holder they beat. The first result on a board sets a record: it is listed with previousMs 0 and
+// no previous name. A replay is the proof.
 constexpr int kMaxRecordBreakList = 20;
 struct RecordBreakEntry { std::uint64_t replay = 0; std::string track; std::uint8_t slot = 0, raceLaps = 0, craft = 255; bool lap = false; std::uint32_t savedAt = 0; std::int32_t ms = 0, previousMs = 0; std::string name, previousName; };   // lap: a single lap, otherwise the finish of a race of raceLaps laps
 struct ListRecordBreaks { std::uint8_t max = 15; };

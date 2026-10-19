@@ -415,7 +415,7 @@ bool Decode(const std::vector<std::uint8_t>& p, RecordBreakList& m)
         b.replay = in.U64(); b.track = in.Str(64); b.slot = static_cast<std::uint8_t>(in.U8()); b.raceLaps = static_cast<std::uint8_t>(in.U8()); b.craft = static_cast<std::uint8_t>(in.U8());
         const std::uint32_t lap = in.U8();
         b.savedAt = in.U32(); b.ms = static_cast<std::int32_t>(in.U32()); b.previousMs = static_cast<std::int32_t>(in.U32()); b.name = in.Str(32); b.previousName = in.Str(32);
-        if (b.track.empty() || b.slot >= 8 || lap > 1 || b.craft >= 8 || b.ms <= 0 || b.previousMs <= 0 || b.ms > b.previousMs) return false;
+        if (b.track.empty() || b.slot >= 8 || lap > 1 || b.craft >= 8 || b.ms <= 0 || b.previousMs < 0 || (b.previousMs > 0 && b.ms > b.previousMs)) return false;
         b.lap = lap == 1;
         m.breaks.push_back(b);
     }

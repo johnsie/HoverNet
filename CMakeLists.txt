@@ -946,6 +946,9 @@ if(BUILD_TESTING AND NOT WIN32)
         add_test(NAME HoverNetLeaderboards
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-leaderboards.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetLeaderboardsCommunity
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-leaderboards-community.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetLeagueChecks
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-league-checks.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

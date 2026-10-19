@@ -22,11 +22,11 @@ Craft names are those of `Authority/CraftNames.h`, in the order the pick-your-cr
 
 ## Records broken
 
-The first tab, **Records broken** (the screen opens on it), lists the newest results that beat the best time on their board, newest first: the track, the date, whether it was the fastest lap
+The first tab, **Records broken** (the screen opens on it), lists the newest results that beat the best time on their board (or are the first on it), newest first: the track, the date, whether it was the fastest lap
 or the fastest race of that many laps, the craft, who set it, the time and the holder and time it beat, with a **WATCH** button for the replay. A board is a
-track, a craft and a lap or race length, as on the All records tab. The first result on a board *sets* a record and is not listed; a tie does not break one (the older run keeps
+track, a craft and a lap or race length, as on the All records tab. The first result on a board *sets* a record and is listed too ("set the first record": most boards of the craft other than the Basic were empty when the craft pick began to work online, and a first time is a record); a tie does not break one (the older run keeps
 it); one race can break both the lap and the race record. It is replayed from the results tables of the replays the server keeps, oldest first, so it only knows
-the history that is still kept: after old replays are removed, the oldest kept result on a board counts as the first. Like the All records tab it includes every race,
+the history that is still kept: after old replays are removed, the oldest kept result on a board counts as the first. Community tracks are included: All records picks any track of the library (with a search box), and WATCH on a time on a community track downloads the track first if this computer does not have it. Like the All records tab it includes every race,
 not only those that count for the league. Test: `HoverNetReplayShare` (the rules and the lobby message) and `HoverNetLeagueTabs` (the tab against a real server).
 
 ## Recent winners and the monthly league (2.3.18)
