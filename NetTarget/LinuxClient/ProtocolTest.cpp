@@ -313,7 +313,7 @@ void TestRace(const std::string& track, int players)
         // The snapshot was taken at a known tick; the spectator now follows the Tick stream from there.
         spectator.session->SetSimulationTime(static_cast<MR_SimulationTime>(t));
         std::fprintf(stderr, "  snapshot of %zu bytes in %zu chunks taken at tick %u (requested at %u)\n", bytes.size(), chunks.size(), chunks.empty() ? 0 : chunks[0].tick, snapshotTick);
-        Check(!chunks.empty() && spectator.session->GetSimulationTime() == static_cast<MR_SimulationTime>(chunks[0].tick) * 16, "snapshot time matches its tick");
+        Check(!chunks.empty() && spectator.session->GetSimulationTime() == static_cast<MR_SimulationTime>(chunks[0].tick) * 16 + static_cast<MR_SimulationTime>(ReplayFormat::StartTimeMs(ReplayFormat::kSimulationRules)), "snapshot time matches its tick");
     }
 }
 

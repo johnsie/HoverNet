@@ -13,8 +13,9 @@ namespace Authority
 RaceWorld::RaceWorld() : mTick( 0 ) {}
 RaceWorld::~RaceWorld() {}
 
-bool RaceWorld::Build( const std::string& trackPath, const std::string& trackName, int players, int laps, bool weapons, std::string& error )
+bool RaceWorld::Build( const std::string& trackPath, const std::string& trackName, int players, int laps, bool weapons, std::string& error, std::int64_t startTimeMs )
 {
+    mStartMs = startTimeMs;
     MR_RecordFile* lTrack = new MR_RecordFile;
     if( !lTrack->OpenForRead( trackPath.c_str() ) ) { delete lTrack; error = "cannot open the track"; return false; }
     mSession.reset( new MR_GameSession( FALSE ) );
@@ -34,7 +35,7 @@ bool RaceWorld::Build( const std::string& trackPath, const std::string& trackNam
         if( lLevel->InsertElement( lCraft, lRoom, FALSE ) == NULL ) { error = "cannot place a craft"; return false; }
         mCraft.push_back( lCraft );
     }
-    mSession->SetSimulationTime( 0 );
+    mSession->SetSimulationTime( static_cast<MR_SimulationTime>( mStartMs ) );
     mTick = 0;
     return true;
 }
@@ -63,7 +64,7 @@ bool RaceWorld::Restore( const std::vector<std::uint8_t>& bytes, std::string& er
     std::int64_t lTime = 0;
     if( !MR_RestoreLevelState( mSession->GetCurrentLevel(), bytes.data(), bytes.size(), lExternal, ReplayFormat::kSimulationRules, lTime, error ) ) return false;
     mSession->SetSimulationTime( static_cast<MR_SimulationTime>( lTime ) );
-    mTick = static_cast<std::uint32_t>( lTime / ReplayFormat::kFrameMs );
+    mTick = static_cast<std::uint32_t>( ( lTime - mStartMs ) / ReplayFormat::kFrameMs );
     return true;
 }
 }

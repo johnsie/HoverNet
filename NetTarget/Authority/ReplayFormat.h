@@ -12,7 +12,14 @@ namespace ReplayFormat
 constexpr int kFrameMs = 16;
 constexpr std::uint32_t kCheckpointTicks = 250;
 constexpr std::uint16_t kVersion = 1;
-constexpr std::uint32_t kSimulationRules = 6;  // bump when a deliberate change alters the golden hashes
+constexpr std::uint32_t kSimulationRules = 7;  // bump when a deliberate change alters the golden hashes
+// Rules 7 (19 October 2026): a race starts with a countdown that is part of the simulation, 375 ticks (6 seconds, as in single player) at negative
+// simulation time, so a player can pick the craft with the steering keys before the race starts (MR_MainCharacter::SetControlState does that while the
+// time is below zero). Tick 0 of a replay is the first countdown tick; the race itself starts at tick kCountdownTicks. Rules 6 replays have no countdown
+// (tick 0 is the start) and can still be watched and verified.
+constexpr std::uint32_t kCountdownTicks = 375;
+inline bool RulesSupported(std::uint32_t rules) { return rules == 6 || rules == kSimulationRules; }
+inline std::int64_t StartTimeMs(std::uint32_t rules) { return rules >= 7 ? -static_cast<std::int64_t>(kCountdownTicks) * kFrameMs : 0; }
 constexpr std::uint32_t kMaxTicks = 2u * 60 * 60 * 1000 / kFrameMs;  // two hours
 constexpr int kMaxPlayers = 8;
 

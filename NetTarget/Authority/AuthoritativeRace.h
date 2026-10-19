@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include "ReplayFormat.h"
+
 class MR_GameSession;
 class MR_MainCharacter;
 
@@ -27,6 +29,7 @@ struct RaceConfig
     bool weapons = true;
     int maxFutureTicks = 64;    // an input for a tick further ahead than this is refused
     std::uint32_t maxTicks = 0; // time limit in ticks; 0 = the replay format's limit (two hours)
+    std::uint32_t rules = ReplayFormat::kSimulationRules;   // the rules the race runs under (an older replay is re-simulated under its own: when the countdown starts)
 };
 
 enum class InputResult

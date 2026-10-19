@@ -93,6 +93,9 @@ int main(int argc, char** argv)
     RaceWorld world;
     if (!world.Build(SimHarness::TrackPath(track), track, 1, laps, false, error)) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }
 
+    // The race starts with its countdown (rules 7): sit it out with no input (the steering keys would pick another craft), then search from the start line.
+    std::vector<std::uint16_t> countdown(ReplayFormat::kCountdownTicks, 0);
+    for (std::uint16_t c : countdown) world.Step(&c);
     Node root;
     root.snapshot = world.Snapshot();
     std::vector<Node> beam(1, root);
@@ -143,6 +146,7 @@ int main(int argc, char** argv)
         beam.swap(keep);
     }
     if (solution.empty()) { std::fprintf(stderr, "no finish found (best stage %d)\n", best); return 1; }
+    solution.insert(solution.begin(), countdown.begin(), countdown.end());
 
     // Re-run the controls on the authoritative race and write its replay: the file is what the server would have recorded.
     AuthoritativeRace race;

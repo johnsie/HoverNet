@@ -11,8 +11,9 @@ bool PredictingClient::Init(const std::string& trackPath, const Protocol3::Hello
     mLastConfirmed.assign(static_cast<std::size_t>(mPlayers), 0);
     mLocalInputs.clear();
     mSnapshotValid = false;
-    return mConfirmed.Build(trackPath, ack.track, mPlayers, ack.laps, ack.weapons, error) &&
-           mPredicted.Build(trackPath, ack.track, mPlayers, ack.laps, ack.weapons, error);
+    const std::int64_t startMs = ReplayFormat::StartTimeMs(ack.rules);   // the countdown is part of the race (rules 7)
+    return mConfirmed.Build(trackPath, ack.track, mPlayers, ack.laps, ack.weapons, error, startMs) &&
+           mPredicted.Build(trackPath, ack.track, mPlayers, ack.laps, ack.weapons, error, startMs);
 }
 
 bool PredictingClient::OnTick(const Protocol3::Tick& tick)

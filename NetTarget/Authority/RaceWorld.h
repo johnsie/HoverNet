@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "ReplayFormat.h"
+
 class MR_GameSession;
 class MR_MainCharacter;
 
@@ -20,7 +22,8 @@ public:
     RaceWorld();
     ~RaceWorld();
 
-    bool Build(const std::string& trackPath, const std::string& trackName, int players, int laps, bool weapons, std::string& error);
+    bool Build(const std::string& trackPath, const std::string& trackName, int players, int laps, bool weapons, std::string& error,
+               std::int64_t startTimeMs = ReplayFormat::StartTimeMs(ReplayFormat::kSimulationRules));   // the simulation clock at tick 0 (negative: a countdown first, see ReplayFormat.h)
     void Step(const std::uint16_t* controls);       // one 16 ms tick; controls has one word per player
     std::uint64_t Hash() const;
     std::vector<std::uint8_t> Snapshot() const;
@@ -33,6 +36,7 @@ private:
     std::unique_ptr<MR_GameSession> mSession;
     std::vector<MR_MainCharacter*> mCraft;
     std::uint32_t mTick;
+    std::int64_t mStartMs = 0;
 };
 }
 

@@ -92,14 +92,14 @@ int Verify(const std::string& path)
     std::string error;
     if (!ReadFile(path, file)) { std::fprintf(stderr, "Could not read %s\n", path.c_str()); return 1; }
     if (!Decode(file, r, error)) { std::fprintf(stderr, "%s: %s\n", path.c_str(), error.c_str()); return 1; }
-    if (r.rules != kSimulationRules) {
+    if (!ReplayFormat::RulesSupported(r.rules)) {
         std::fprintf(stderr, "%s: recorded under simulation rules %u, this build is %u; it cannot be verified\n", path.c_str(), r.rules, kSimulationRules);
         return 1;
     }
     const std::string sha = Sha256::HashFile(TrackPath(r.track));
     if (sha != r.trackSha256) { std::fprintf(stderr, "%s: the track file differs from the one recorded\n", path.c_str()); return 1; }
     World w;
-    if (!w.Build(TrackPath(r.track), r.track, r.players, r.laps, r.weapons)) { std::fprintf(stderr, "Could not load %s\n", r.track.c_str()); return 1; }
+    if (!w.Build(TrackPath(r.track), r.track, r.players, r.laps, r.weapons, ReplayFormat::StartTimeMs(r.rules))) { std::fprintf(stderr, "Could not load %s\n", r.track.c_str()); return 1; }
     for (std::uint32_t t = 0; t < r.ticks; ++t) {
         w.Step(&r.inputs[static_cast<std::size_t>(t) * r.players]);
         if ((t + 1) % kCheckpointTicks == 0 && w.Hash() != r.checkpoints[(t + 1) / kCheckpointTicks - 1]) {
@@ -168,7 +168,7 @@ int Replay_(const std::string& path, long dumpTick, bool trace)
     std::string error;
     if (!ReadFile(path, file) || !Decode(file, r, error)) { std::fprintf(stderr, "%s: %s\n", path.c_str(), error.empty() ? "unreadable" : error.c_str()); return 1; }
     World w;
-    if (!w.Build(TrackPath(r.track), r.track, r.players, r.laps, r.weapons)) { std::fprintf(stderr, "Could not load %s\n", r.track.c_str()); return 1; }
+    if (!w.Build(TrackPath(r.track), r.track, r.players, r.laps, r.weapons, ReplayFormat::StartTimeMs(r.rules))) { std::fprintf(stderr, "Could not load %s\n", r.track.c_str()); return 1; }
     if (dumpTick == 0) MR_DumpLevelState(w.session->GetCurrentLevel(), w.session->GetSimulationTime(), stdout);
     for (std::uint32_t t = 0; t < r.ticks; ++t) {
         w.Step(&r.inputs[static_cast<std::size_t>(t) * r.players]);
@@ -185,7 +185,7 @@ bool ComputeResults(const std::string& path, Replay& r, std::vector<Authority::P
     std::vector<std::uint8_t> file;
     std::string error;
     if (!ReadFile(path, file) || !Decode(file, r, error)) { std::fprintf(stderr, "%s: %s\n", path.c_str(), error.empty() ? "unreadable" : error.c_str()); return false; }
-    if (r.rules != kSimulationRules) { std::fprintf(stderr, "%s: recorded under simulation rules %u, this build is %u\n", path.c_str(), r.rules, kSimulationRules); return false; }
+    if (!ReplayFormat::RulesSupported(r.rules)) { std::fprintf(stderr, "%s: recorded under simulation rules %u, this build is %u\n", path.c_str(), r.rules, kSimulationRules); return false; }
     if (Sha256::HashFile(TrackPath(r.track)) != r.trackSha256) { std::fprintf(stderr, "%s: the track file differs from the one recorded\n", path.c_str()); return false; }
     Authority::RaceConfig config;
     config.trackName = r.track;
@@ -194,6 +194,7 @@ bool ComputeResults(const std::string& path, Replay& r, std::vector<Authority::P
     config.laps = r.laps;
     config.weapons = r.weapons;
     config.maxTicks = r.ticks;
+    config.rules = r.rules;
     Authority::AuthoritativeRace race;
     if (!race.Start(config, error)) { std::fprintf(stderr, "%s\n", error.c_str()); return false; }
     for (std::uint32_t t = 0; t < r.ticks; ++t) {

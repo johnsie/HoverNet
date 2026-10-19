@@ -145,6 +145,55 @@ int main(int argc, char** argv)
         Check(rankSum == players * (players + 1) / 2, "ranks are 1..n");
     }
 
+    // ---- 1b. the craft is picked with the steering keys during the countdown ----------------------------------
+    {
+        const std::uint16_t right = MR_MainCharacter::eRight, left = MR_MainCharacter::eLeft;
+        auto run = [&](int firstPress, std::uint16_t key, int presses, int pressTick, int& model, bool& reproduces) {
+            (void)firstPress;
+            AuthoritativeRace race;
+            if (!race.Start(Config(track, players), error)) { model = -2; return; }
+            const std::uint32_t total = ReplayFormat::kCountdownTicks + 60;
+            for (std::uint32_t t = 0; t < total; ++t) {
+                // A key press is a change from not pressed to pressed: hold it for one tick, release for one, press again.
+                for (int p = 0; p < players; ++p) {
+                    std::uint16_t in = 0;
+                    if (p == 0) for (int k = 0; k < presses; ++k) if (t == static_cast<std::uint32_t>(pressTick + 2 * k)) in = key;
+                    race.SubmitInput(p, t, in);
+                }
+                race.AdvanceTick();
+            }
+            model = race.CraftModel(0);
+            reproduces = ReplayReproduces(race.ReplayBytes(), track);
+        };
+        int model = -1; bool reproduces = false;
+        run(0, right, 1, 10, model, reproduces);
+        Check(model == 1, "one press of right in the countdown picks the next craft (Hi-Tech)");
+        Check(reproduces, "a race with a craft pick reproduces from its replay");
+        (void)left;
+        run(0, right, 2, 10, model, reproduces);
+        Check(model == 2, "two presses of right pick the third craft (Bi-Turbo)");
+        run(0, right, 3, 10, model, reproduces);
+        Check(model == 3, "three presses of right pick the fourth craft (Eon)");
+        {
+            AuthoritativeRace race;
+            Check(race.Start(Config(track, players), error), "start the race (left key)");
+            for (std::uint32_t t = 0; t < 60; ++t) {
+                std::uint16_t in = 0;
+                if (t == 10 || t == 12) in = right;      // Basic -> Hi-Tech -> Bi-Turbo
+                if (t == 20) in = left;                  // -> Hi-Tech
+                for (int p = 0; p < players; ++p) race.SubmitInput(p, t, p == 0 ? in : 0);
+                race.AdvanceTick();
+            }
+            Check(race.CraftModel(0) == 1, "left in the countdown goes back one craft");
+        }
+        run(0, right, 1, static_cast<int>(ReplayFormat::kCountdownTicks) + 5, model, reproduces);
+        Check(model == 0, "a press after the race has started changes nothing");
+        run(0, right, 0, 10, model, reproduces);
+        Check(model == 0, "no press keeps the Basic craft");
+        AuthoritativeRace other;
+        Check(other.Start(Config(track, players), error) && other.CraftModel(1) == 0, "another player's craft is not changed by the first player's keys");
+    }
+
     // ---- 2. input policy and tampering -------------------------------------------------------------------------
     {
         AuthoritativeRace race;

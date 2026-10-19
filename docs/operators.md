@@ -35,7 +35,7 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 | `--port`, `--bind`, `--max-connections` | network (port 0 picks a free port) |
 | `--identity-file FILE`, `--require-encryption` | the server's secret key (created if missing) and refusing plain connections |
 | `--limit-ticks N` | end each race after N ticks (16 ms each); free-play tracks default to 10 minutes |
-| `--start-delay-ms` | countdown before tick 0 |
+| `--start-delay-ms` | time clients get to load the race before its first tick (default 1000); the 6 s countdown (craft pick) is simulated after it |
 | `--spectator-delay-ms` | how far behind the drivers spectators see the race |
 | `--replay-dir DIR` | save a replay of every race (with `--lobby` they are also offered to every player: the Server replays and Track records tabs of Watch a Replay) |
 | `--replay-keep N` | keep the newest N replays in `--replay-dir` (default 200; older ones and their results tables are removed as new ones are saved) |

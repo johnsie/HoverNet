@@ -1,7 +1,7 @@
 // HoverNetAuthServer -- a dedicated server for authoritative races over TCP (protocol 3.0 framing, no encryption yet).
 //
 //   HoverNetAuthServer --track ClassicH --players 8 [--laps 3] [--port 9610] [--bind 127.0.0.1] [--once]
-//                      [--limit-ticks N] [--start-delay-ms 3000] [--max-connections 64] [--replay-dir DIR]
+//                      [--limit-ticks N] [--start-delay-ms 1000] [--max-connections 64] [--replay-dir DIR]
 //   HoverNetAuthServer --lobby [--tracks "ClassicH,The River"] [--port 9610]     many races: players host and join through the lobby
 //
 // It hosts one race at a time (RaceHost) and starts a fresh one when the race ends. It binds to the loopback address unless
@@ -405,7 +405,7 @@ int main(int argc, char** argv)
     cfg.race.trackName = "ClassicH";
     cfg.race.players = 2;
     cfg.race.laps = 3;
-    cfg.startDelayMs = 3000;
+    cfg.startDelayMs = 1000;
     int port = 9610, maxConnections = 64;
     std::string bind = "127.0.0.1";
     bool once = false;

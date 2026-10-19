@@ -10,8 +10,10 @@ resource file or SDL.
 - The simulation: positions, collisions, weapons, pickups, laps, finishes and the result are computed by the server's own copy
   of the race. A client can send exactly one thing, a control word for a tick (`SubmitInput(player, tick, controls)`); it
   cannot report where it is, what it hit or when it finished.
-- Time: the race advances only through `AdvanceTick()`, in exact 16 ms ticks, from tick 0 for everybody at once. (The
-  countdown is the clients' presentation phase before tick 0.)
+- Time: the race advances only through `AdvanceTick()`, in exact 16 ms ticks, from tick 0 for everybody at once. Since rules
+  version 7 the race starts with a **simulated countdown**: tick 0 is at simulation time -6000 ms (`ReplayFormat::kCountdownTicks`,
+  375 ticks) and the race itself starts 375 ticks later. During the countdown the steering keys pick the craft (the simulation
+  does that while its time is below zero), so the pick is part of the inputs and of every replay.
 - The record: `ReplayBytes()` is a verifiable replay of the race as it was simulated (the inputs actually used, a state hash
   every 250 ticks, and the race settings), and `Snapshot()` is a state snapshot for spectators and reconnects.
 

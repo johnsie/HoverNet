@@ -73,9 +73,9 @@ bool AuthoritativeRace::Start( const RaceConfig& config, std::string& error )
             if( lElement->GetTypeId().mDllId == 1 && lElement->GetTypeId().mClassId == 202 ) { mFreePlay = false; break; }
         }
     }
-    if( mFreePlay && mConfig.maxTicks == 0 ) mConfig.maxTicks = 37500;
-    // The countdown is the clients' presentation phase; the authoritative race begins at tick 0 for everybody at once.
-    mSession->SetSimulationTime( 0 );
+    if( mFreePlay && mConfig.maxTicks == 0 ) mConfig.maxTicks = 37500 + ( mConfig.rules >= 7 ? ReplayFormat::kCountdownTicks : 0 );
+    // Rules 7: the countdown is simulated (negative time, the craft can be picked with the steering keys), the race starts after kCountdownTicks ticks.
+    mSession->SetSimulationTime( static_cast<MR_SimulationTime>( ReplayFormat::StartTimeMs( mConfig.rules ) ) );
     mLastInput.assign( config.players, 0 );
     mPending.assign( config.players, std::vector<std::int32_t>() );
     mTick = 0;
@@ -217,6 +217,7 @@ std::vector<std::uint8_t> AuthoritativeRace::ReplayBytes() const
     lReplay.ticks = mTick;
     lReplay.players = mConfig.players;
     lReplay.laps = mConfig.laps;
+    lReplay.rules = mConfig.rules;
     lReplay.weapons = mConfig.weapons;
     lReplay.inputs = mHistory;
     lReplay.checkpoints = mCheckpoints;

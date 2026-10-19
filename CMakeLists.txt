@@ -970,6 +970,9 @@ if(BUILD_TESTING AND NOT WIN32)
         add_test(NAME HoverNetSmoothMotion
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-smooth-motion.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetNetProxy> $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetCraftPick
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-craft-pick.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetFreeDrive
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-free-drive.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

@@ -98,7 +98,7 @@ int FuzzSnapshots(const std::string& path, const std::string& track, const std::
             for (int b = 0; b < 8; ++b) bytes[bytes.size() - 8 + b] = static_cast<std::uint8_t>(h >> (b * 8));
         }
         World victim;
-        if (!victim.Build(path, track, 2)) return Fail("could not build a race to fuzz");
+        if (!victim.Build(path, track, 2, 5, true, 0)) return Fail("could not build a race to fuzz");
         std::string error;
         if (Restore(victim, bytes, kRules, error)) ++accepted; else ++rejected;
     }
@@ -125,7 +125,7 @@ int main(int argc, char** argv)
     const std::string path = SimHarness::TrackPath(track);
 
     World world;
-    if (!world.Build(path, track, 2)) return Fail("could not build the race (needs two start slots)");
+    if (!world.Build(path, track, 2, 5, true, 0)) return Fail("could not build the race (needs two start slots)");
     for (int t = 0; t < snapshotTick; ++t) StepScripted(world, t);
 
     const std::uint64_t savedHash = world.Hash();
@@ -155,7 +155,7 @@ int main(int argc, char** argv)
 
     // 2. Restore into a brand new session.
     World fresh;
-    if (!fresh.Build(path, track, 2)) return Fail("could not build a second race");
+    if (!fresh.Build(path, track, 2, 5, true, 0)) return Fail("could not build a second race");
     if (!Restore(fresh, snapshot, kRules, error)) { std::fprintf(stderr, "restore failed: %s\n", error.c_str()); return Fail("restore into a new session"); }
     if (fresh.Hash() != savedHash) return Fail("hash in the new session differs from the hash at save time");
     for (int t = snapshotTick; t < endTick; ++t) {
@@ -165,7 +165,7 @@ int main(int argc, char** argv)
 
     // 4. Refusals.
     World victim;
-    if (!victim.Build(path, track, 2)) return Fail("could not build a third race");
+    if (!victim.Build(path, track, 2, 5, true, 0)) return Fail("could not build a third race");
     std::vector<std::uint8_t> damaged = snapshot;
     damaged[damaged.size() / 2] ^= 0x55;
     if (Restore(victim, damaged, kRules, error)) return Fail("a damaged snapshot was accepted");

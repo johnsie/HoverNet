@@ -14,6 +14,7 @@
 #include "../MainCharacter/MainCharacter.h"
 #undef private
 #undef protected
+#include "../Authority/ReplayFormat.h"
 #include "../Model/GameSession.h"
 #include "../Model/StateHash.h"
 #include "../Util/RecordFile.h"
@@ -28,7 +29,8 @@ struct World
     std::unique_ptr<MR_GameSession> session;
     std::vector<MR_MainCharacter*> craft;
 
-    bool Build(const std::string& path, const std::string& name, int players, int laps = 5, bool weapons = true)
+    bool Build(const std::string& path, const std::string& name, int players, int laps = 5, bool weapons = true,
+               std::int64_t startTimeMs = ReplayFormat::StartTimeMs(ReplayFormat::kSimulationRules))   // the clock at tick 0: negative = a countdown first (ReplayFormat.h)
     {
         MR_RecordFile* track = new MR_RecordFile;
         if (!track->OpenForRead(path.c_str())) { delete track; return false; }
@@ -47,7 +49,7 @@ struct World
             if (level->InsertElement(c, room, FALSE) == nullptr) return false;
             craft.push_back(c);
         }
-        session->SetSimulationTime(0);
+        session->SetSimulationTime(static_cast<MR_SimulationTime>(startTimeMs));
         return true;
     }
 

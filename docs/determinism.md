@@ -53,6 +53,11 @@ original game's speed (46.662, double) instead of the truncated 46 the portable 
 state (weapons, stocks, laps, countdowns, and every element's own state); the golden files were regenerated once. Hashes
 quoted in older notes below are from earlier versions; all current tables and files are version 6.
 
+**Rules version 7 (19 October 2026)** added the simulated countdown of online races: a race starts at simulation time -6000 ms (375 ticks,
+`ReplayFormat::kCountdownTicks`), so the craft can be picked with the steering keys before the start, as in single player. No simulation code
+changed, so the golden hashes (which run from time 0) are unchanged. What changed is when the server's, the predicting client's and the replay
+tools' clocks start (`ReplayFormat::StartTimeMs`). Rules 6 replays have no countdown and can still be watched and verified.
+
 ## Results
 
 | Comparison | Result |

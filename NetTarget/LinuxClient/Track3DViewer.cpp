@@ -7575,13 +7575,17 @@ struct AuthOnline
 };
 #endif
 
-void ReplayTickHook(void* pData, unsigned pTick)
+void ReplayTickHook(void* pData, unsigned)
 {
+    // The tick about to run is replay->tick (the playback steps one tick at a time). The hook's own argument is the simulation time over 16 and is clamped
+    // at 0 during the countdown (rules 7 replays start at a negative time), so it cannot say which tick that is.
     ReplayPlayback* replay = static_cast<ReplayPlayback*>(pData);
+    const unsigned pTick = replay->tick;
     if (pTick >= replay->data.ticks) return;
     for (int p = 0; p < replay->data.players; ++p) {
         replay->craft[static_cast<std::size_t>(p)]->SetControlState(
-            replay->data.inputs[static_cast<std::size_t>(pTick) * replay->data.players + p], pTick * 16);
+            replay->data.inputs[static_cast<std::size_t>(pTick) * replay->data.players + p],
+            static_cast<MR_SimulationTime>(pTick) * 16 + static_cast<MR_SimulationTime>(ReplayFormat::StartTimeMs(replay->data.rules)));   // below zero: the countdown (rules 7)
     }
 }
 #endif
@@ -8124,7 +8128,7 @@ int RunClient(int argc, char** argv)
         if (auth.spectator && (auth.watch < 0 || auth.watch >= auth.ack.players)) auth.watch = 0;
         const std::string placeError = placeRaceCraft(auth.ack.players, auth.ack.laps, auth.ack.weapons, auth.spectator ? auth.watch : auth.ack.player, auth.craft);
         if (!placeError.empty()) return placeError;
-        session.SetSimulationTime(0);
+        session.SetSimulationTime(static_cast<MR_SimulationTime>(ReplayFormat::StartTimeMs(auth.ack.rules)));   // the countdown is part of the race: pick your craft in it
         if (!auth.predictor.Init(authTrackPath, auth.ack, error)) return error;
         auth.world.reset(new RenderedWorld(session, auth.craft));
         auth.active = true;
@@ -8193,7 +8197,7 @@ int RunClient(int argc, char** argv)
         std::string error;
         if (!ReadWholeFile(path, bytes)) return "Could not read the replay file " + path;
         if (!ReplayFormat::Decode(bytes, next.data, error)) return "This is not a valid replay: " + error;
-        if (next.data.rules != ReplayFormat::kSimulationRules) {
+        if (!ReplayFormat::RulesSupported(next.data.rules)) {
             return "This replay was recorded with a different version of the game rules and cannot be shown.";
         }
         const std::string trackPath = Tracks().PathFor(next.data.track);
@@ -8212,7 +8216,7 @@ int RunClient(int argc, char** argv)
         }
         const std::string placeError = placeRaceCraft(replay.data.players, replay.data.laps, replay.data.weapons, replay.watch, replay.craft);
         if (!placeError.empty()) return placeError;
-        session.SetSimulationTime(0);
+        session.SetSimulationTime(static_cast<MR_SimulationTime>(ReplayFormat::StartTimeMs(replay.data.rules)));   // rules 7: the race starts with its countdown
         replay.active = true;
         replay.lapsSeen.assign(static_cast<std::size_t>(replay.data.players), 0);
         if (const char* speed = std::getenv("HOVERNET_TEST_REPLAY_SPEED")) replay.speedStep = std::max(0, std::min(4, std::atoi(speed)));   // test hook: start at this speed step
@@ -8675,8 +8679,13 @@ int RunClient(int argc, char** argv)
             if (!auth.spectator && now - auth.lastSend >= 16) {
                 auth.lastSend = now;
                 const std::uint32_t target = auth.predictor.ConfirmedTick() + auth.lead;
-                const std::uint16_t input = auth.scripted ? SimHarnessScripted(auth.ack.player, target)
-                                                          : static_cast<std::uint16_t>(controlState & 0xFFFF);
+                std::uint16_t input = auth.scripted ? SimHarnessScripted(auth.ack.player, target)
+                                                    : static_cast<std::uint16_t>(controlState & 0xFFFF);
+                if (auth.scripted && target < ReplayFormat::kCountdownTicks + 16) input = 0;   // the scripted driver sits out the countdown: its steering would pick another craft
+                if (const char* pick = std::getenv("HOVERNET_TEST_PICK_CRAFT")) {   // test hook (scripts/test-craft-pick.sh): N presses of the right steering key in the countdown (each held 6 ticks)
+                    const int presses = std::atoi(pick);
+                    if (target >= 10 && target < 10 + 12 * static_cast<std::uint32_t>(presses) && (target - 10) % 12 < 6) input = MR_MainCharacter::eRight;   // each press held 6 ticks, released 6
+                }
                 auth.predictor.SetLocalInput(target, input);
                 Protocol3::Input in;
                 in.firstTick = target >= 15 ? target - 15 : 0;

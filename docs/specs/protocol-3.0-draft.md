@@ -64,7 +64,7 @@ No lobby, race or gameplay frame is processed before step 2 succeeds.
 | 1 | Hello | client to server | magic `HN3\0`, major, minor, capabilities, max frame, player name (1 to 32 bytes of UTF-8) |
 | 2 | HelloAck | server to client | version, capabilities, negotiated max frame, your player slot, players, tick length, rules version, track name and SHA-256, laps, weapons, resume token; then, only if the client set capability bit 0 (`kCapRaceId`) in Hello, a `u32` race number (the lobby's number for the race, 0 outside a lobby), so a host can tell friends which private race to join |
 | 3 | Reject | server to client | reason (version, full, bad message, rate limited, not in race), short message; the connection is then closed |
-| 4 | Start | server to client | countdown in ms before tick 0 |
+| 4 | Start | server to client | ms before the first tick, time for clients to load the race. From rules 7 the countdown itself is simulated: tick 0 is at simulation time -6000 ms and the race starts at tick 375, so the craft is picked with the steering keys in those ticks |
 | 5 | Resume | client to server | the resume token from the HelloAck (replaces Hello when rejoining a running race; answered with a HelloAck for the same slot) |
 | 10 | Input | client to server | first tick, 1 to 32 control words (the newest are for the future, the older repeat earlier ones for loss) |
 | 11 | Tick | server to client | tick number, state hash after it, the control word each player used (so a client or spectator can re-simulate the race exactly) |

@@ -8,6 +8,10 @@ and how to roll one back.
 
 ## 2.3.19 - 2026-10-18
 
+### Fixed
+- **You can pick your craft in the countdown of an online race again** (Left and Right on a keyboard, the steering stick on a phone). The server's race used to start at time zero with no countdown at all, so the simulation never saw the keys pressed before the start and every online race was driven in the Basic craft. The countdown is now part of the race: **6 seconds** (375 ticks, as in single player), simulated by the server and by the game, and recorded in the replay, so the craft you pick is the craft the server runs, shows on the leaderboards and replays. The wait from the lobby to the start is about a second longer than before (1 s for the game to load the race, then the 6 s countdown) but you can now use it.
+- **Update the game and the server together.** This changes the game's rules version (6 to 7): a 2.3.18 game cannot join a 2.3.19 server and says so. Replays saved before (rules 6) can still be watched and verified. One thing is unchanged: Left pressed on the Basic craft keeps it Basic (Right four times reaches the Manta), as the simulation has always counted.
+
 ### Added
 - **Leaderboards: Records broken tab**, now the first tab; the former *Records* tab is called **All records**. Lists the newest results that beat a record (a craft's best lap, or best race time of a given lap count, on a track), with the time, the holder they beat and a Watch button. The first result on a board sets a record and is not listed; a tie does not break one. It is worked out from the replays the server keeps, like the Records tab. Update the game and the server together: an older server does not know the tab (the game says so).
 
