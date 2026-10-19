@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.22 - 2026-10-19
+
 ### Added
 - **Community tracks work in online races, on every client (Linux, Windows and the browser).** Host any community track in the lobby (the button says **Download & Create** if you do not have it yet), and join or watch races on one (**Download & Join**); a private race downloads its track when it is about to start. A server hosts a community track when its owner has put it in the server's community folder (`--community-dir`; the packaged service reads `/var/lib/hovernet/community-tracks`, filled by `scripts/sync-server-community-tracks.sh`, about 700 MB, every file checked against the manifest). Servers without the folder keep hosting the official tracks only, and say so when a community track is asked for. See [community-tracks.md](docs/community-tracks.md). **Operators:** run the sync script on the server to offer them; nothing changes until you do.
 
