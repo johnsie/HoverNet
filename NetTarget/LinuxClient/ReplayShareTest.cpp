@@ -184,14 +184,14 @@ int main()
         SetAge(bdir + "/ClassicH-1-1.hnr", 500); SetAge(bdir + "/ClassicH-2-2.hnr", 400); SetAge(bdir + "/ClassicH-3-3.hnr", 300); SetAge(bdir + "/ClassicH-4-4.hnr", 200); SetAge(bdir + "/ClassicH-5-5.hnr", 100);
         DirReplayStore breaks(bdir, 50);
         const Protocol3::RecordBreakList list3 = breaks.RecordBreaks(15);
-        // Newest first. Four boards are set by the oldest race (a result on a board with nobody before it sets the record, listed with previousMs 0), then
-        // three records are broken (Cara twice in one race, Anna's faster lap), then Dee's lap breaks Anna's and her race on another lap count sets a board.
-        Check(list3.breaks.size() == 9, "records broken and records set are listed (not a tie, not a table without a craft)");
-        Check(list3.breaks.size() == 9 && list3.breaks[0].name == "Dee" && list3.breaks[0].lap && list3.breaks[0].ms == 60000 && list3.breaks[0].previousMs == 80000 && list3.breaks[0].previousName == "Anna", "the newest first, with the time and the holder it beat");
-        Check(list3.breaks.size() == 9 && list3.breaks[1].name == "Dee" && !list3.breaks[1].lap && list3.breaks[1].raceLaps == 3 && list3.breaks[1].previousMs == 0 && list3.breaks[1].previousName.empty(), "the first time on a board (a race of another lap count) sets the record: no previous time");
-        Check(list3.breaks.size() == 9 && list3.breaks[2].name == "Anna" && list3.breaks[2].lap && list3.breaks[2].ms == 80000 && list3.breaks[2].previousMs == 85000 && list3.breaks[2].previousName == "Cara", "a faster lap in a slower race breaks the lap record only");
-        Check(list3.breaks.size() == 9 && list3.breaks[3].name == "Cara" && list3.breaks[3].lap && list3.breaks[3].previousName == "Anna" && list3.breaks[4].name == "Cara" && !list3.breaks[4].lap && list3.breaks[4].raceLaps == 1 && list3.breaks[4].ms == 85000 && list3.breaks[4].previousMs == 90000, "one result can break both the lap and the race record");
-        Check(list3.breaks.size() == 9 && list3.breaks[5].name == "Ben" && list3.breaks[5].craft == 2 && list3.breaks[5].previousMs == 0 && list3.breaks[6].name == "Ben" && list3.breaks[7].name == "Anna" && list3.breaks[7].previousMs == 0 && list3.breaks[8].name == "Anna" && list3.breaks[8].craft == 0 && list3.breaks[8].track == "ClassicH", "the first times of a craft on a board are listed too, each craft on its own board");
+        // Newest first. In a race of one lap the finish is the lap, so a result that sets or breaks both boards is listed once (as the lap): Anna's and Ben's
+        // firsts in the oldest race, Cara's two breaks in the next. Dee's lap breaks Anna's and her race on another lap count sets a board of its own.
+        Check(list3.breaks.size() == 6, "records broken and records set are listed, once each (not a tie, not a table without a craft, a lap that is also the race once)");
+        Check(list3.breaks.size() == 6 && list3.breaks[0].name == "Dee" && list3.breaks[0].lap && list3.breaks[0].ms == 60000 && list3.breaks[0].previousMs == 80000 && list3.breaks[0].previousName == "Anna", "the newest first, with the time and the holder it beat");
+        Check(list3.breaks.size() == 6 && list3.breaks[1].name == "Dee" && !list3.breaks[1].lap && list3.breaks[1].raceLaps == 3 && list3.breaks[1].previousMs == 0 && list3.breaks[1].previousName.empty(), "the first time on a board (a race of another lap count) sets the record: no previous time");
+        Check(list3.breaks.size() == 6 && list3.breaks[2].name == "Anna" && list3.breaks[2].lap && list3.breaks[2].ms == 80000 && list3.breaks[2].previousMs == 85000 && list3.breaks[2].previousName == "Cara", "a faster lap in a slower race breaks the lap record only");
+        Check(list3.breaks.size() == 6 && list3.breaks[3].name == "Cara" && list3.breaks[3].lap && list3.breaks[3].ms == 85000 && list3.breaks[3].previousMs == 90000 && list3.breaks[3].previousName == "Anna", "a race of one lap that breaks the lap and the race record is one entry");
+        Check(list3.breaks.size() == 6 && list3.breaks[4].name == "Ben" && list3.breaks[4].craft == 2 && list3.breaks[4].previousMs == 0 && list3.breaks[5].name == "Anna" && list3.breaks[5].previousMs == 0 && list3.breaks[5].craft == 0 && list3.breaks[5].track == "ClassicH", "the first times of a craft on a board are listed too, each craft on its own board");
         const Protocol3::RecordBreakList one = breaks.RecordBreaks(1);
         Check(one.breaks.size() == 1 && one.breaks[0].name == "Dee", "the list is cut to the number asked for, newest kept");
         Protocol3::RecordBreakList round;
@@ -207,7 +207,7 @@ int main()
         viewer3.Send(Protocol3::kListRecordBreaks, Protocol3::Encode(Protocol3::ListRecordBreaks()), 100);
         viewer3.Pump();
         Protocol3::RecordBreakList got4;
-        Check(viewer3.frames.size() == 1 && viewer3.frames[0].first == Protocol3::kRecordBreakList && Protocol3::Decode(viewer3.frames[0].second, got4) && got4.breaks.size() == 9, "the lobby answers the records broken");
+        Check(viewer3.frames.size() == 1 && viewer3.frames[0].first == Protocol3::kRecordBreakList && Protocol3::Decode(viewer3.frames[0].second, got4) && got4.breaks.size() == 6, "the lobby answers the records broken");
         for (const char* name : {"ClassicH-1-1.hnr", "ClassicH-1-1.results.tsv", "ClassicH-2-2.hnr", "ClassicH-2-2.results.tsv", "ClassicH-3-3.hnr", "ClassicH-3-3.results.tsv", "ClassicH-4-4.hnr", "ClassicH-4-4.results.tsv", "ClassicH-5-5.hnr", "ClassicH-5-5.results.tsv"})
             std::remove((bdir + "/" + name).c_str());
 #ifdef _WIN32

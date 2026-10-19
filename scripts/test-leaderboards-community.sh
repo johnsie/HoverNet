@@ -34,7 +34,7 @@ shot() { env HOVERNET_COMMUNITY_MANIFEST="$dir/manifest.tsv" HOVERNET_COMMUNITY_
   HOVERNET_TEST_AUTH_SERVER="127.0.0.1:$port" HOVERNET_TEST_MENU=leaderboards HOVERNET_TEST_MENU_FORCE=1 HOVERNET_TEST_REPLAY_LIBRARY=1 HOVERNET_TEST_RECORDS_TRACK="$name" "$@" \
   timeout -s KILL 90 "$client" --play --replay-hash --frames 1500 2>&1; }
 out=$(shot HOVERNET_TEST_LEADERBOARD_TAB=3)
-if grep -qF "BREAKS 6 | $name Basic lap: Dee 85000 beat Anna 90000 | $name Basic race: Dee 85000 beat Anna 90000 | $name Bi-Turbo lap: Ben 95000 set the first record | $name Bi-Turbo race: Ben 95000 set the first record | $name Basic lap: Anna 90000 set the first record | $name Basic race: Anna 90000 set the first record" <<< "$out"; then echo "ok   Records Broken lists the records broken and set on a community track"; else echo "FAIL: records broken on a community track"; grep BREAKS <<< "$out"; fail=1; fi
+if grep -qF "BREAKS 3 | $name Basic lap: Dee 85000 beat Anna 90000 | $name Bi-Turbo lap: Ben 95000 set the first record | $name Basic lap: Anna 90000 set the first record" <<< "$out"; then echo "ok   Records Broken lists the records broken and set on a community track"; else echo "FAIL: records broken on a community track"; grep BREAKS <<< "$out"; fail=1; fi
 out=$(shot HOVERNET_TEST_LEADERBOARD_PICK=1)
 if grep -qF "LEADERBOARDS $name laps 0 boards 2 | Basic: Dee 85000 | Bi-Turbo: Ben 95000" <<< "$out"; then echo "ok   All Records shows the community track's boards per craft"; else echo "FAIL: the community track's records"; grep LEADERBOARDS <<< "$out"; fail=1; fi
 got=$(sed -n 's/^replay hash \([0-9a-f]*\) ticks.*/\1/p' <<< "$out")

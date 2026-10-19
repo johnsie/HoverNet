@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.24 - 2026-10-19
+
+### Fixed
+- **Records broken listed a one-lap race twice** ("Fastest lap" and "Fastest race, 1 lap" with the same time): in a race of one lap the finish is the lap, so the result is now listed once, as the lap. The 1-lap race record is still on All records. The server makes the change: updating it is enough.
+
 ## 2.3.23 - 2026-10-19
 
 ### Fixed

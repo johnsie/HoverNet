@@ -270,6 +270,7 @@ Protocol3::RecordBreakList DirReplayStore::RecordBreaks(int max)
         const Item* item = *it;
         for (const ReplayRun& run : item->runs) {
             if (run.craft < 0) continue;
+            int raceEntry = -1;   // where this result's race entry went, to drop it if the lap entry says the same
             for (int lap = 0; lap < 2; ++lap) {
                 std::int32_t ms;
                 if (lap == 1) { if (run.bestLapMs <= 0) continue; ms = run.bestLapMs; }
@@ -281,7 +282,13 @@ Protocol3::RecordBreakList DirReplayStore::RecordBreaks(int max)
                 b.replay = item->info.id; b.track = item->info.track; b.slot = run.slot; b.raceLaps = item->info.laps; b.craft = static_cast<std::uint8_t>(run.craft); b.lap = lap == 1;
                 b.savedAt = item->info.savedAt; b.ms = ms; b.name = run.name;
                 if (found != best.end()) { b.previousMs = found->second.ms; b.previousName = found->second.name; }   // else the first time on this board: it sets the record (previousMs 0)
+                // In a race of one lap the finish is the lap: the same time on both boards, with the same holder beaten, is one record, listed once (as the lap).
+                if (lap == 1 && raceEntry >= 0) {
+                    const Protocol3::RecordBreakEntry& r = out.breaks[static_cast<std::size_t>(raceEntry)];
+                    if (r.ms == b.ms && r.previousMs == b.previousMs && r.previousName == b.previousName) out.breaks.erase(out.breaks.begin() + raceEntry);
+                }
                 out.breaks.push_back(b);
+                if (lap == 0) raceEntry = static_cast<int>(out.breaks.size()) - 1;
                 best[key] = {ms, run.name};
             }
         }
