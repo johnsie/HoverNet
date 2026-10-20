@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creates/updates HoverNet's confidential Keycloak client (hovernet-account) and installs the account service with its secrets.
+# Creates/updates HoverNet's confidential Keycloak client (hovernet-web, the existing public client is converted: it gets a secret) and installs the account service with its secrets.
 # Run as root ON THE HOST THAT RUNS KEYCLOAK AND THE WEB SITE (the same host as hovernet.outiva.com), from this checkout:
 #   sudo bash packaging/web/configure-account-oidc.sh
 # The secrets are written to /etc/hovernet/account.env (root:hovernet 0640) and never printed. Safe to run again: the client secret and the
@@ -7,7 +7,7 @@
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-CLIENT_JSON="$HERE/keycloak/hovernet-account-client.json"
+CLIENT_JSON="$HERE/keycloak/hovernet-web-client.json"
 KEYCLOAK_ENV=/etc/keycloak/keycloak.env
 ACCOUNT_ENV=/etc/hovernet/account.env
 KCADM=/opt/keycloak/bin/kcadm.sh
@@ -24,7 +24,7 @@ admin_config=$(mktemp); trap 'rm -f "$admin_config"' EXIT; chmod 0600 "$admin_co
 "$KCADM" config credentials --config "$admin_config" --server http://127.0.0.1:8180 --realm master \
   --user "$KC_BOOTSTRAP_ADMIN_USERNAME" --password "$KC_BOOTSTRAP_ADMIN_PASSWORD"
 
-client_uuid=$("$KCADM" get clients --config "$admin_config" -r outiva -q clientId=hovernet-account --fields id --format csv --noquotes | head -n 1)
+client_uuid=$("$KCADM" get clients --config "$admin_config" -r outiva -q clientId=hovernet-web --fields id --format csv --noquotes | head -n 1)
 if [ -n "$client_uuid" ]; then "$KCADM" update "clients/$client_uuid" --config "$admin_config" -r outiva -f "$CLIENT_JSON"
 else client_uuid=$("$KCADM" create clients --config "$admin_config" -r outiva -f "$CLIENT_JSON" -i); fi
 
@@ -41,7 +41,7 @@ secrets_tmp=$(mktemp /etc/hovernet/account.env.XXXXXX); trap 'rm -f "$admin_conf
 {
   echo 'HOVERNET_OIDC_ISSUER=https://accounts.outiva.com/realms/outiva'
   echo 'HOVERNET_OIDC_BACKCHANNEL_URL=http://127.0.0.1:8180/realms/outiva'
-  echo 'HOVERNET_OIDC_CLIENT_ID=hovernet-account'
+  echo 'HOVERNET_OIDC_CLIENT_ID=hovernet-web'
   printf 'HOVERNET_OIDC_CLIENT_SECRET=%s\n' "$client_secret"
   printf 'HOVERNET_SESSION_SECRET=%s\n' "$session_secret"
   echo 'HOVERNET_ORIGIN=https://hovernet.outiva.com'

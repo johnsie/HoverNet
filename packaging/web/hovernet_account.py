@@ -18,7 +18,7 @@ authorises anything in a race: a signed-in name is a convenience, not proof to t
 Configuration (environment, normally /etc/hovernet/account.env, written by configure-account-oidc.sh):
     HOVERNET_OIDC_ISSUER           https://accounts.outiva.com/realms/outiva
     HOVERNET_OIDC_BACKCHANNEL_URL  http://127.0.0.1:8180/realms/outiva   (optional: where this server reaches Keycloak directly)
-    HOVERNET_OIDC_CLIENT_ID        hovernet-account
+    HOVERNET_OIDC_CLIENT_ID        hovernet-web
     HOVERNET_OIDC_CLIENT_SECRET
     HOVERNET_SESSION_SECRET        at least 32 bytes, signs the session cookie
     HOVERNET_ORIGIN                https://hovernet.outiva.com

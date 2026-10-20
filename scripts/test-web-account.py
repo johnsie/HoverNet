@@ -34,7 +34,7 @@ class FakeKeycloak(BaseHTTPRequestHandler):
         entry = FakeKeycloak.codes.get(body.get("code", [""])[0])
         if entry is None or entry.get("token_status", 200) != 200 or body.get("client_secret") != ["s3cret"]:
             self.send_response(entry.get("token_status", 400) if entry else 400); self.send_header("Content-Length", "0"); self.end_headers(); return
-        claims = {"iss": entry.get("iss", ISSUER), "aud": entry.get("aud", "hovernet-account"), "sub": entry["sub"], "nonce": entry["nonce"], "exp": int(time.time()) + 300}
+        claims = {"iss": entry.get("iss", ISSUER), "aud": entry.get("aud", "hovernet-web"), "sub": entry["sub"], "nonce": entry["nonce"], "exp": int(time.time()) + 300}
         out = json.dumps({"id_token": "x.%s.y" % b64(claims), "access_token": "tok-" + entry["sub"]}).encode()
         self.send_response(200); self.send_header("Content-Length", str(len(out))); self.end_headers(); self.wfile.write(out)
 
@@ -55,7 +55,7 @@ kc = serve(FakeKeycloak)
 tmp = tempfile.mkdtemp()
 callsign_file = os.path.join(tmp, "callsigns.json")
 now = [time.time()]
-account = ha.Account(ISSUER, "hovernet-account", "s3cret", "x" * 40, ORIGIN, "https://outiva.com",
+account = ha.Account(ISSUER, "hovernet-web", "s3cret", "x" * 40, ORIGIN, "https://outiva.com",
                      "http://127.0.0.1:%d" % kc.server_address[1], callsign_file, clock=lambda: now[0])
 app = serve(ha.make_handler(account))
 guest_app = serve(ha.make_handler(None))
@@ -88,7 +88,7 @@ q, code, callback = sign_in()
 status, headers, _ = call(app, "GET", "/account/login?prompt=none&mode=redirect")
 location = urllib.parse.urlsplit(headers["location"])
 check(status == 302 and location.path == "/realms/outiva/protocol/openid-connect/auth", "login redirects to Keycloak's authorization endpoint")
-check(q["client_id"] == "hovernet-account" and q["redirect_uri"] == ORIGIN + "/account/callback" and q["code_challenge_method"] == "S256" and q["prompt"] == "none" and q["response_type"] == "code", "authorization request: client, exact redirect_uri, PKCE S256, silent")
+check(q["client_id"] == "hovernet-web" and q["redirect_uri"] == ORIGIN + "/account/callback" and q["code_challenge_method"] == "S256" and q["prompt"] == "none" and q["response_type"] == "code", "authorization request: client, exact redirect_uri, PKCE S256, silent")
 status, headers, _ = call(app, "GET", "/account/login?mode=redirect")
 check("prompt" not in urllib.parse.parse_qs(urllib.parse.urlsplit(headers["location"]).query), "without prompt=none the request is not silent")
 

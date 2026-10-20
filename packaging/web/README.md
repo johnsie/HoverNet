@@ -162,7 +162,7 @@ show it and never run any of the VR code.
 for the browser game, the same design as NetPanzer's: see `docs/online-services.md`. Install on the host that runs Keycloak:
 
 ```sh
-sudo bash packaging/web/configure-account-oidc.sh     # Keycloak client "hovernet-account", secrets, systemd service
+sudo bash packaging/web/configure-account-oidc.sh     # Keycloak client "hovernet-web", secrets, systemd service
 sudo apachectl configtest && sudo systemctl reload apache2   # after installing the site file with the /account/ proxy lines
 curl -s -o /dev/null -w '%{http_code}\n' https://hovernet.outiva.com/account/me     # 204 = running, guest
 ```

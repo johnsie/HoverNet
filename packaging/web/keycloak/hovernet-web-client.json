@@ -1,5 +1,5 @@
 {
-  "clientId": "hovernet-account",
+  "clientId": "hovernet-web",
   "name": "HoverNet",
   "description": "Optional Outiva sign-in for the HoverNet browser game (server-side, confidential client)",
   "enabled": true,
