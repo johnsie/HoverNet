@@ -746,10 +746,9 @@ if(EMSCRIPTEN)
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/LinuxClient/assets@/NetTarget/LinuxClient/assets"
     )
     set_target_properties(HoverNetGame2Player PROPERTIES SUFFIX ".html"
-        LINK_DEPENDS "${CMAKE_SOURCE_DIR}/packaging/web/shell.html;${CMAKE_SOURCE_DIR}/packaging/web/web-pre.js;${CMAKE_SOURCE_DIR}/packaging/web/outiva-auth.js")
-    add_custom_command(TARGET HoverNetGame2Player POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_SOURCE_DIR}/packaging/web/outiva-auth.js" "$<TARGET_FILE_DIR:HoverNetGame2Player>/outiva-auth.js")
+        LINK_DEPENDS "${CMAKE_SOURCE_DIR}/packaging/web/shell.html;${CMAKE_SOURCE_DIR}/packaging/web/web-pre.js")
+    configure_file("${CMAKE_SOURCE_DIR}/packaging/web/outiva-auth.js"
+        "${CMAKE_BINARY_DIR}/outiva-auth.js" COPYONLY)
 else()
     add_dependencies(HoverNetGame2Player HoverNetHeadlessObjFac1)
 endif()
