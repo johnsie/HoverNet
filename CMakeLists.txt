@@ -59,7 +59,14 @@ else()
     find_package(SDL2 REQUIRED)
 endif()
 include(CTest)
-find_package(Threads REQUIRED)
+if(EMSCRIPTEN)
+    # CMake 4.2's FindThreads probe no longer recognises Emscripten's pthread
+    # support. Browser builds already receive the required compiler/linker
+    # flags above, so expose the standard target without a native probe.
+    add_library(Threads::Threads INTERFACE IMPORTED GLOBAL)
+else()
+    find_package(Threads REQUIRED)
+endif()
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 # Shown in the Linux client's window title (see SDL2Graphics.cpp). Matches the
