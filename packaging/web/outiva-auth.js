@@ -18,6 +18,11 @@ function returnToConsole(appId) {
   location.replace(`https://outiva.com/?outiva_sso=complete#/play/${encodeURIComponent(appId)}`);
 }
 
+function handoffToConsole(appId, idToken) {
+  window.name = JSON.stringify({ type: 'outiva-identity', appId, idToken });
+  returnToConsole(appId);
+}
+
 function clearCallback() {
   const url = new URL(location.href);
   CALLBACK_KEYS.forEach(key => url.searchParams.delete(key));
@@ -67,13 +72,20 @@ async function finish(clientId, appId, params) {
   const tokens = await response.json();
   const profile = await verifyIdToken(tokens.id_token, clientId, pending.nonce);
   localStorage.setItem(storageKey(clientId), tokens.id_token);
-  clearCallback(); returnToConsole(appId);
+  clearCallback(); handoffToConsole(appId, tokens.id_token);
   return profile;
 }
 
 export async function initialiseOutivaIdentity({ clientId, appId }) {
   const params = new URLSearchParams(location.search);
   try {
+    const handoff = new URLSearchParams(location.hash.slice(1)).get('outiva_token');
+    if (handoff) {
+      history.replaceState(null, '', `${location.pathname}${location.search}`);
+      const profile = await verifyIdToken(handoff, clientId);
+      localStorage.setItem(storageKey(clientId), handoff);
+      return profile;
+    }
     if (params.has('code') || params.has('error')) return await finish(clientId, appId, params);
     if (params.get('outiva_sso') === '1') { await begin(clientId); return null; }
     const token = localStorage.getItem(storageKey(clientId));
