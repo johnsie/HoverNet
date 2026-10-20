@@ -36,6 +36,7 @@
 #include "../ThirdParty/imgui/imgui.h"
 #include "../ThirdParty/imgui/imgui_internal.h"
 #include "../ThirdParty/imgui/backends/imgui_impl_sdl2.h"
+#include "MenuInput.h"
 #include "../ThirdParty/imgui/backends/imgui_impl_sdlrenderer2.h"
 #endif
 #include "../Model/GameSession.h"
@@ -2591,7 +2592,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
                 if (ConfirmQuit(graphics, buffer, viewport, font)) {
                     g_QuitConfirmed = true;
@@ -2876,7 +2877,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             const float panelWidth = std::min(520.0f, ImGui::GetContentRegionAvail().x);
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
                                  std::max(0.0f, (ImGui::GetContentRegionAvail().x - panelWidth) * 0.5f));
-            ImGui::BeginChild("ConnectionLost", ImVec2(panelWidth, 275), true);
+            MenuBeginChild("ConnectionLost", ImVec2(panelWidth, 275), true);
             HoverNetSectionHeading("CONNECTION LOST");
             ImGui::TextWrapped("The RaceServer connection closed. Race and player details shown before the disconnect may no longer be valid.");
             if (!statusText.empty()) {
@@ -2903,7 +2904,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 std::max(20.0f, (ImGui::GetContentRegionAvail().y - cardHeight) * 0.36f));
             ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetSurface);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
-            ImGui::BeginChild("ChooseRacerName", ImVec2(cardWidth, cardHeight), true);
+            MenuBeginChild("ChooseRacerName", ImVec2(cardWidth, cardHeight), true);
             HoverNetSectionHeading("WELCOME, RACER");
             ImGui::Spacing();
             ImGui::TextDisabled("Choose the name other drivers will see in the lobby.");
@@ -2990,7 +2991,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
 
             if (!tabbed || lobbyTab == 0) {
             if (!inWaitingRoom) {
-                ImGui::BeginChild("GameListPanel", ImVec2(stacked ? 0.0f : leftColWidth, listHeight), true);
+                MenuBeginChild("GameListPanel", ImVec2(stacked ? 0.0f : leftColWidth, listHeight), true);
                 HoverNetSectionHeading("Game list");
                 if (ImGui::BeginListBox("##races", ImVec2(-FLT_MIN, -FLT_MIN))) {
                     if (games.empty()) {
@@ -3017,7 +3018,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 if (!stacked) ImGui::SameLine();
             }
 
-            ImGui::BeginChild("GameDetailsPanel", ImVec2(stacked ? 0.0f : detailsColWidth, detailsHeight), true,
+            MenuBeginChild("GameDetailsPanel", ImVec2(stacked ? 0.0f : detailsColWidth, detailsHeight), true,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             HoverNetSectionHeading(inWaitingRoom ? "Your race" : "Game details");
             // One consistent "label  value" row style for both modes (labels dimmed).
@@ -3034,7 +3035,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 // height, so all eight players are visible without scrolling.
                 const float infoWidth = std::max(250.0f, ImGui::GetContentRegionAvail().x * 0.46f);
                 // Narrow screens: race info on top, the player list underneath at full width.
-                ImGui::BeginChild("RaceInfoColumn",
+                MenuBeginChild("RaceInfoColumn",
                                   stacked ? ImVec2(0.0f, ImGui::GetContentRegionAvail().y * 0.44f) : ImVec2(infoWidth, 0),
                                   false, ImGuiWindowFlags_NoScrollbar);
                 const int waitingTrackIndex = FindHostableTrack(outTrackName);
@@ -3051,15 +3052,15 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                     if (!preview.mLoaded) {
                         preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(waitingTrackIndex).c_str());
                     }
-                    ImGui::BeginChild("SelectedRaceMap", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
+                    MenuBeginChild("SelectedRaceMap", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
                     DrawTrackPreview(preview, 80.0f, false);
                     ImGui::EndChild();
                 }
                 ImGui::EndChild();
                 if (!stacked) ImGui::SameLine();
-                ImGui::BeginChild("PlayersColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
+                MenuBeginChild("PlayersColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
                 ImGui::Text("Players (%d / %d)", 1 + static_cast<int>(raceMembers.size()), kMaxPlayersPerRace);
-                ImGui::BeginChild("PlayersListBox", ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y), true);
+                MenuBeginChild("PlayersListBox", ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y), true);
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 2.0f)); // compact rows
                 ImGui::BulletText("%s (you)%s", username.c_str(), isHost ? " - host" : "");
                 for (const std::string& member : raceMembers) {
@@ -3076,7 +3077,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 const TrackBriefing briefing = BriefingFor(trackIndex);
                 const float mapWidth = std::min(190.0f, ImGui::GetContentRegionAvail().x * 0.36f);
                 const float infoHeight = 178.0f;
-                ImGui::BeginChild("SelectedRaceMap", ImVec2(mapWidth, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
+                MenuBeginChild("SelectedRaceMap", ImVec2(mapWidth, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
                 if (trackIndex >= 0) {
                     TrackPreview& preview = lobbyTrackPreviews[trackIndex];
                     if (!preview.mLoaded) {
@@ -3089,7 +3090,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 }
                 ImGui::EndChild();
                 ImGui::SameLine();
-                ImGui::BeginChild("SelectedRaceInfo", ImVec2(0, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
+                MenuBeginChild("SelectedRaceInfo", ImVec2(0, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f)); // compact rows
                 if (haveSelection) {
                     infoRow("Track:", trackName);
@@ -3118,7 +3119,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             ImGui::EndChild();
 
             if (!stacked) ImGui::SameLine();
-            ImGui::BeginChild("ActionsPanel", ImVec2(0, actionsHeight), true);
+            MenuBeginChild("ActionsPanel", ImVec2(0, actionsHeight), true);
             if (inWaitingRoom) {
                 if (isHost) {
                     // The one primary action: the only filled red button on the screen.
@@ -3186,7 +3187,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
 
             // ---- bottom row: who is here, and the chat ----
             if (!tabbed || lobbyTab == 2) {
-            ImGui::BeginChild("UsersListPanel", ImVec2(tabbed ? 0.0f : leftColWidth, 0), true);
+            MenuBeginChild("UsersListPanel", ImVec2(tabbed ? 0.0f : leftColWidth, 0), true);
             // You are always in the list, then everyone else who is in the lobby (the
             // server announces only the *other* users, so you have to add yourself).
             std::vector<std::string> otherUsers;
@@ -3204,7 +3205,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 std::snprintf(heading, sizeof(heading), "Users list (%d)", 1 + static_cast<int>(otherUsers.size()));
                 HoverNetSectionHeading(heading);
             }
-            ImGui::BeginChild("UsersListBox", ImVec2(-FLT_MIN, -FLT_MIN), true);
+            MenuBeginChild("UsersListBox", ImVec2(-FLT_MIN, -FLT_MIN), true);
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f)); // compact rows
             ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetCoral);
             ImGui::Text("%s (you)", username.c_str());
@@ -3219,10 +3220,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
 
             if (!tabbed) ImGui::SameLine();
             if (!tabbed || lobbyTab == 1) {
-            ImGui::BeginChild("ChatPanel", ImVec2(0, 0), true);
+            MenuBeginChild("ChatPanel", ImVec2(0, 0), true);
             HoverNetSectionHeading("Chat");
             const float chatInputRow = ImGui::GetFrameHeightWithSpacing();
-            ImGui::BeginChild("ChatLog", ImVec2(0, ImGui::GetContentRegionAvail().y - chatInputRow), true);
+            MenuBeginChild("ChatLog", ImVec2(0, ImGui::GetContentRegionAvail().y - chatInputRow), true);
             {
                 // Scroll positions read here are last frame's, i.e. *before* any line
                 // added this frame: if the log was at the bottom (or a message was just
@@ -3295,7 +3296,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             const float gap = ImGui::GetStyle().ItemSpacing.x;
             const float controlsWidth = sideBySide ? contentWidth * 0.52f : contentWidth;
 
-            ImGui::BeginChild("HostRaceOptions",
+            MenuBeginChild("HostRaceOptions",
                               ImVec2(controlsWidth, sideBySide ? selectorHeight : 315.0f), false);
             ImGui::TextUnformatted("Track");
             ImGui::SetNextItemWidth(-1.0f);
@@ -3324,7 +3325,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 ImGui::TextDisabled("Suggested: %d", guide.mSuggestedLaps);
             }
             ImGui::SetNextItemWidth(-1.0f);
-            ImGui::SliderInt("##HostLaps", &hostPrefs.mLaps, 1, 20);
+            MenuSliderInt("##HostLaps", &hostPrefs.mLaps, 1, 20);
             ImGui::EndDisabled();
             ImGui::Checkbox("Weapons enabled", &hostPrefs.mWeapons);
             ImGui::EndChild();
@@ -3335,13 +3336,13 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             }
             if (sideBySide) {
                 ImGui::SameLine(0.0f, gap);
-                ImGui::BeginChild("HostTrackPreview", ImVec2(0, selectorHeight), false);
+                MenuBeginChild("HostTrackPreview", ImVec2(0, selectorHeight), false);
                 DrawTrackPreview(preview);
                 ImGui::EndChild();
             }
             else {
                 ImGui::Spacing();
-                ImGui::BeginChild("HostTrackPreview", ImVec2(0, 190.0f), false);
+                MenuBeginChild("HostTrackPreview", ImVec2(0, 190.0f), false);
                 DrawTrackPreview(preview);
                 ImGui::EndChild();
             }
@@ -3462,7 +3463,7 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
                 confirmed = true; // A second close request is deliberate.
                 running = false;
@@ -3504,7 +3505,7 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.98f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
-        ImGui::BeginChild("QuitConfirmationPanel", ImVec2(panelWidth, panelHeight), true);
+        MenuBeginChild("QuitConfirmationPanel", ImVec2(panelWidth, panelHeight), true);
         HoverNetSectionHeading("LEAVE THE RACE?");
         ImGui::Spacing();
         ImGui::TextWrapped("Quit HoverNet and return to your desktop?");
@@ -3615,7 +3616,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
                 if (ConfirmQuit(graphics, buffer, viewport, font)) {
                     choice = PauseChoice::eQuit;
@@ -3686,7 +3687,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.96f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 20.0f));
-        ImGui::BeginChild("PauseMenuPanel", ImVec2(panelWidth, panelHeight), true);
+        MenuBeginChild("PauseMenuPanel", ImVec2(panelWidth, panelHeight), true);
         HoverNetSectionHeading("RACE OPTIONS");
         ImGui::Spacing();
 
@@ -3762,7 +3763,7 @@ ReplayEndChoice RunReplayEndScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) { if (ConfirmQuit(graphics, buffer, viewport, font)) { choice = ReplayEndChoice::eQuit; running = false; } }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) running = false;
             else if (event.type == SDL_CONTROLLERBUTTONDOWN && (event.cbutton.button == SDL_CONTROLLER_BUTTON_B || event.cbutton.button == SDL_CONTROLLER_BUTTON_START)) running = false;
@@ -3813,7 +3814,7 @@ ReplayEndChoice RunReplayEndScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.96f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 20.0f));
-        ImGui::BeginChild("ReplayEndPanel", ImVec2(panelWidth, panelHeight), true);
+        MenuBeginChild("ReplayEndPanel", ImVec2(panelWidth, panelHeight), true);
         HoverNetSectionHeading("WHAT NEXT?");
         ImGui::Spacing();
         struct Action { const char* label; ReplayEndChoice choice; };
@@ -3899,7 +3900,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
                 if (ConfirmQuit(graphics, buffer, viewport, font)) {
                     choice = PostRaceChoice::eQuit;
@@ -3951,7 +3952,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.065f, 0.065f, 0.085f, 0.97f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 12.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
-        ImGui::BeginChild("ResultsCard", ImVec2(cardWidth, cardHeight), true);
+        MenuBeginChild("ResultsCard", ImVec2(cardWidth, cardHeight), true);
 
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
         ImGui::SetWindowFontScale(2.0f);
@@ -4123,7 +4124,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
                 cancelled = true;
                 if (ConfirmQuit(graphics, buffer, viewport, font)) {
@@ -4171,7 +4172,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         const bool phoneLayout = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneLayout ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, phoneLayout ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
+        MenuBeginChild("HeaderBar", ImVec2(0, phoneLayout ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
         ImGui::SetWindowFontScale(phoneLayout ? 1.1f : 1.35f);
         ImGui::TextUnformatted("LOCAL RACE SETUP");
@@ -4185,14 +4186,14 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         const float panelWidth = std::min(900.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
-        ImGui::BeginChild("LocalRaceSetupPanel", ImVec2(panelWidth, 0), true);
+        MenuBeginChild("LocalRaceSetupPanel", ImVec2(panelWidth, 0), true);
 
         const float contentWidth = ImGui::GetContentRegionAvail().x;
         const bool sideBySide = contentWidth >= 610.0f;
         const float gap = ImGui::GetStyle().ItemSpacing.x;
         const float controlsWidth = sideBySide ? contentWidth * 0.52f : contentWidth;
         // Stacked (narrow) layout: size the options to their content so Cancel is never clipped.
-        ImGui::BeginChild("RaceOptions", ImVec2(controlsWidth, sideBySide ? 0.0f : 0.0f),
+        MenuBeginChild("RaceOptions", ImVec2(controlsWidth, sideBySide ? 0.0f : 0.0f),
                           sideBySide ? ImGuiChildFlags_None : ImGuiChildFlags_AutoResizeY,
                           sideBySide ? ImGuiWindowFlags_None : ImGuiWindowFlags_NoScrollbar);
         // Short landscape: keep Start Race and Cancel on screen by dropping the course-briefing
@@ -4229,7 +4230,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             ImGui::TextDisabled("Suggested: %d", guide.mSuggestedLaps);
         }
         ImGui::PushItemWidth(-1.0f);
-        ImGui::SliderInt("##Laps", &prefs.mLaps, 1, 20);
+        MenuSliderInt("##Laps", &prefs.mLaps, 1, 20);
         ImGui::PopItemWidth();
         ImGui::EndDisabled();
         if (!tightHeight && !guide.mFreePlay) {
@@ -4293,13 +4294,13 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         if (sideBySide) {
             ImGui::SameLine(0.0f, gap);
-            ImGui::BeginChild("TrackPreview", ImVec2(0, 0), false);
+            MenuBeginChild("TrackPreview", ImVec2(0, 0), false);
             DrawTrackPreview(preview);
             ImGui::EndChild();
         }
         else {
             ImGui::Spacing();
-            ImGui::BeginChild("TrackPreview", ImVec2(0, phoneLayout ? 200.0f : 240.0f), false);
+            MenuBeginChild("TrackPreview", ImVec2(0, phoneLayout ? 200.0f : 240.0f), false);
             DrawTrackPreview(preview);
             ImGui::EndChild();
         }
@@ -4463,7 +4464,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
                 cancelled = true;
                 if (ConfirmQuit(graphics, buffer, viewport, font)) {
@@ -4510,7 +4511,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         const bool phoneHeader = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneHeader ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
+        MenuBeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
         ImGui::SetWindowFontScale(phoneHeader ? 1.1f : 1.35f);
         ImGui::TextUnformatted("SETTINGS");
@@ -4527,7 +4528,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         // Fill the available height so added accessibility/audio controls do not
         // force scrolling while the screen still has unused space below.
         // Phones: the Save/Cancel row is pinned under the scrolling panel so it never needs a scroll.
-        ImGui::BeginChild("SettingsPanel", ImVec2(centerWidth, phoneHeader ? -52.0f : 0.0f), true);
+        MenuBeginChild("SettingsPanel", ImVec2(centerWidth, phoneHeader ? -52.0f : 0.0f), true);
         if (const char* testScroll = std::getenv("HOVERNET_TEST_SETTINGS_SCROLL")) { if (framesShown >= 2) ImGui::SetScrollY(static_cast<float>(std::atoi(testScroll))); }   // screenshot tests: look further down
 
         ImGui::TextUnformatted("Display Name");
@@ -4621,7 +4622,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::PushItemWidth(-1.0f);
         // Keep the chosen level independently of mute so unmuting restores it
         // instead of forgetting the player's setting. Both controls preview live.
-        if (ImGui::SliderFloat("##Volume", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
+        if (MenuSliderFloat("##Volume", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
             MR_SoundServer::SetMasterVolume(muted ? 0.0 : volumePercent / 100.0);
         }
         ImGui::PopItemWidth();
@@ -4629,7 +4630,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Spacing();
         ImGui::TextUnformatted("UI Scale");
         ImGui::PushItemWidth(-1.0f);
-        if (ImGui::SliderFloat("##UiScale", &uiScalePercent, 75.0f, 150.0f, "%.0f%%",
+        if (MenuSliderFloat("##UiScale", &uiScalePercent, 75.0f, 150.0f, "%.0f%%",
                                ImGuiSliderFlags_AlwaysClamp)) {
             applyUiScale = true;
         }
@@ -4896,6 +4897,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
     };
     constexpr int pageCount = sizeof(titles) / sizeof(titles[0]);
     int page = std::max(0, std::min(pStartPage, pageCount - 1));
+    bool focusNext = true;   // the NEXT button has the focus on every page, so A alone pages through the briefing
     int framesShown = 0;
     bool completed = false;
     bool running = true;
@@ -4903,8 +4905,21 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
-            if (event.type == SDL_QUIT) {
+            const bool padBack = event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_B;
+            MenuProcessEvent(event);
+            if (padBack && event.type == SDL_KEYDOWN && page > 0) {
+                --page;   // B goes back a page; from the first page it leaves the briefing
+                focusNext = true;
+            }
+            else if (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER && page > 0) {
+                --page;
+                focusNext = true;
+            }
+            else if (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER && page < pageCount - 1) {
+                ++page;
+                focusNext = true;
+            }
+            else if (event.type == SDL_QUIT) {
                 g_QuitConfirmed = true;
                 running = false;
             }
@@ -4942,7 +4957,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetSurface);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, compact ? ImVec2(14.0f, 10.0f) : ImVec2(28.0f, 24.0f));
-        ImGui::BeginChild("OnboardingPanel", ImVec2(panelWidth, compact ? -6.0f : -20.0f), true);
+        MenuBeginChild("OnboardingPanel", ImVec2(panelWidth, compact ? -6.0f : -20.0f), true);
 
         const float progressWidth = ImGui::GetContentRegionAvail().x;
         const float segmentGap = 8.0f;
@@ -4973,7 +4988,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
         const ImGuiChildFlags cardFlags = compact ? (ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY)
                                                   : ImGuiChildFlags_Border;
         const float contentAvailHeight = contentHeight;
-        ImGui::BeginChild("BriefingContent", ImVec2(0, contentHeight), false);
+        MenuBeginChild("BriefingContent", ImVec2(0, contentHeight), false);
         if (page == 0) {
             const float gap = compact ? 10.0f : 18.0f;
             const float cardWidth = narrow ? ImGui::GetContentRegionAvail().x
@@ -4982,7 +4997,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
             auto modeCard = [&](const char* number, const char* heading, const char* copy, bool primary) {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, primary ? ImVec4(0.20f, 0.055f, 0.085f, 1.0f)
                                                                 : ImVec4(0.065f, 0.075f, 0.105f, 1.0f));
-                ImGui::BeginChild(heading, ImVec2(cardWidth, cardHeight), cardFlags, ImGuiWindowFlags_NoScrollbar);
+                MenuBeginChild(heading, ImVec2(cardWidth, cardHeight), cardFlags, ImGuiWindowFlags_NoScrollbar);
                 ImGui::TextColored(kHoverNetCoral, "%s", number);
                 ImGui::SetWindowFontScale(1.25f);
                 ImGui::TextUnformatted(heading);
@@ -5014,7 +5029,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
             for (int pad = 0; pad < 8; ++pad) {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.09f, 1.0f));
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 6.0f));
-                ImGui::BeginChild(touchPads[pad][0], ImVec2(cardWidth, cardHeight), cardFlags, ImGuiWindowFlags_NoScrollbar);
+                MenuBeginChild(touchPads[pad][0], ImVec2(cardWidth, cardHeight), cardFlags, ImGuiWindowFlags_NoScrollbar);
                 ImGui::TextColored(kHoverNetCoral, "%s", touchPads[pad][0]);
                 ImGui::TextUnformatted(touchPads[pad][1]);
                 ImGui::EndChild();
@@ -5036,7 +5051,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
             for (int key = 0; key < 6; ++key) {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.09f, 1.0f));
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, compact ? ImVec2(10.0f, 6.0f) : ImVec2(18.0f, 14.0f));
-                ImGui::BeginChild(keys[key][0], ImVec2(cardWidth, compact ? 0.0f : 98.0f), cardFlags, ImGuiWindowFlags_NoScrollbar);
+                MenuBeginChild(keys[key][0], ImVec2(cardWidth, compact ? 0.0f : 98.0f), cardFlags, ImGuiWindowFlags_NoScrollbar);
                 if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
                 ImGui::TextColored(kHoverNetCoral, "%s", keys[key][0]);
                 if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
@@ -5054,7 +5069,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
             else {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.085f, 0.055f, 0.075f, 1.0f));
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
-                ImGui::BeginChild("ControllerSummary", ImVec2(0.0f, compact ? 0.0f : 112.0f), cardFlags, ImGuiWindowFlags_NoScrollbar);
+                MenuBeginChild("ControllerSummary", ImVec2(0.0f, compact ? 0.0f : 112.0f), cardFlags, ImGuiWindowFlags_NoScrollbar);
                 HoverNetSectionHeading("CONTROLLER");
                 ImGui::TextWrapped("LEFT STICK  Steer    |    TRIGGERS  Accelerate / brake    |    A  Jump    |    X  Fire    |    Y  Select weapon");
                 ImGui::TextDisabled("Review and remap every binding from Controls.");
@@ -5091,7 +5106,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
             const float featureWidth = (ImGui::GetContentRegionAvail().x - featureGap * (featureColumns - 1)) / featureColumns;
             for (int feature = 0; feature < 4; ++feature) {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.09f, 1.0f));
-                ImGui::BeginChild(features[feature][0], ImVec2(featureColumns > 1 ? featureWidth : 0.0f, compact ? 0.0f : 68.0f),
+                MenuBeginChild(features[feature][0], ImVec2(featureColumns > 1 ? featureWidth : 0.0f, compact ? 0.0f : 68.0f),
                                   cardFlags, ImGuiWindowFlags_NoScrollbar);
                 ImGui::TextColored(kHoverNetCoral, "%s", features[feature][0]);
                 if (narrow || featureColumns > 1) {
@@ -5112,12 +5127,13 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
         ImGui::Separator();
         ImGui::Spacing();
         if (page > 0) {
-            if (HoverNetQuietButton("BACK", ImVec2(compact ? 96.0f : 130.0f, 44))) --page;
+            if (HoverNetQuietButton("BACK", ImVec2(compact ? 96.0f : 130.0f, 44))) { --page; focusNext = true; }
             ImGui::SameLine();
         }
         const char* nextLabel = compact ? (page == pageCount - 1 ? "FINISH" : "NEXT")
                                         : (page == pageCount - 1 ? "FINISH BRIEFING" : "NEXT BRIEFING");
         const float nextWidth = compact ? 130.0f : (page == pageCount - 1 ? 190.0f : 175.0f);
+        if (focusNext) { ImGui::SetKeyboardFocusHere(); focusNext = false; }
         if (HoverNetButton(nextLabel, ImVec2(nextWidth, 44))) {
             if (page == pageCount - 1) {
                 completed = true;
@@ -5125,6 +5141,7 @@ bool RunOnboardingScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, int pSt
             }
             else {
                 ++page;
+                focusNext = true;
             }
         }
         ImGui::EndChild();
@@ -5176,13 +5193,15 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
     int listeningForBinding = -1;
     int listeningForControllerBinding = -1;
     std::string bindingStatus;
+    struct CaptureReset { ~CaptureReset() { g_MenuGamepadCapture = false; } } captureReset;
     bool running = true;
     int framesShown = 0;
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
         SDL_Event event;
+        g_MenuGamepadCapture = listeningForControllerBinding >= 0;   // B can be bound while waiting for a button
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
                 g_QuitConfirmed = true;
                 running = false;
@@ -5260,7 +5279,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         const bool phoneHeader = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneHeader ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
+        MenuBeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
         ImGui::SetWindowFontScale(phoneHeader ? 1.1f : 1.35f);
         ImGui::TextUnformatted("CONTROLS");
@@ -5273,7 +5292,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
 
         const float centerWidth = std::min(700.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
-        ImGui::BeginChild("ControlsPanel", ImVec2(centerWidth, -52.0f), true);
+        MenuBeginChild("ControlsPanel", ImVec2(centerWidth, -52.0f), true);
         int recognizedControllers = 0;
         const char* firstControllerName = nullptr;
         for (int index = 0; index < SDL_NumJoysticks(); ++index) {
@@ -5380,7 +5399,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         controllerAxesChanged |= ImGui::Checkbox("Invert brake direction",
                                                   &gControllerBindings.invertBrake);
         ImGui::SetNextItemWidth(-1.0f);
-        controllerAxesChanged |= ImGui::SliderInt("Axis deadzone", &gControllerBindings.deadzone,
+        controllerAxesChanged |= MenuSliderInt("Axis deadzone", &gControllerBindings.deadzone,
                                                    0, 24000, "%d");
         if (controllerAxesChanged) {
             gControllerBindings.steerAxis = static_cast<SDL_GameControllerAxis>(steerAxis);
@@ -5541,7 +5560,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) { g_QuitConfirmed = true; running = false; }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) running = false;
             else if (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_B) running = false;
@@ -5602,7 +5621,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
         const bool phoneHeader = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneHeader ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
+        MenuBeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
         ImGui::SetWindowFontScale(phoneHeader ? 1.1f : 1.35f);
         ImGui::TextUnformatted("WATCH A REPLAY");
@@ -5615,7 +5634,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
 
         const float centerWidth = std::min(760.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
-        ImGui::BeginChild("ReplayPanel", ImVec2(centerWidth, -52.0f), true);
+        MenuBeginChild("ReplayPanel", ImVec2(centerWidth, -52.0f), true);
         const ImVec4 warn(1.0f, 0.55f, 0.45f, 1.0f);
         if (ImGui::BeginTabBar("ReplayTabs")) {
             // ---- my races
@@ -5864,7 +5883,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) { g_QuitConfirmed = true; running = false; }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) running = false;
             else if (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_B) running = false;
@@ -5946,7 +5965,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
         const bool phoneHeader = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneHeader ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
-        ImGui::BeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
+        MenuBeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
         ImGui::SetWindowFontScale(phoneHeader ? 1.1f : 1.35f);
         ImGui::TextUnformatted("LEADERBOARDS");
@@ -5958,7 +5977,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
         ImGui::Spacing();
         const float centerWidth = std::min(760.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
-        ImGui::BeginChild("LeaderboardPanel", ImVec2(centerWidth, -52.0f), true);
+        MenuBeginChild("LeaderboardPanel", ImVec2(centerWidth, -52.0f), true);
         const ImVec4 warn(1.0f, 0.55f, 0.45f, 1.0f);
         if (server.GetState() == OnlineLobby::State::eFailed) {
             ImGui::PushTextWrapPos(0.0f);
@@ -6340,7 +6359,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
                 running = false;
                 g_QuitConfirmed = true;
@@ -6518,7 +6537,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(10.0f, (ImGui::GetContentRegionAvail().y - 300.0f) * 0.36f));
             ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetSurface);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
-            ImGui::BeginChild("EntryCard", ImVec2(cardWidth, 0), ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoScrollbar);
+            MenuBeginChild("EntryCard", ImVec2(cardWidth, 0), ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoScrollbar);
             if (!nameKnown) {
                 // ---- the first time: only a name, as in the classic lobby ----
                 HoverNetSectionHeading("WELCOME, RACER");
@@ -6618,7 +6637,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
 
             if (!tabbed || lobbyTab == 0) {
             if (!waitingRoom) {
-                ImGui::BeginChild("GameListPanel", ImVec2(stacked ? 0.0f : listWidth, listHeight), true);
+                MenuBeginChild("GameListPanel", ImVec2(stacked ? 0.0f : listWidth, listHeight), true);
                 HoverNetSectionHeading("Game list");
                 if (ImGui::BeginListBox("##races", ImVec2(-FLT_MIN, -FLT_MIN))) {
                     if (races.empty()) {
@@ -6643,7 +6662,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 if (!stacked) ImGui::SameLine();
             }
 
-            ImGui::BeginChild("GameDetailsPanel", ImVec2(stacked ? 0.0f : detailsWidth, detailsHeight), true,
+            MenuBeginChild("GameDetailsPanel", ImVec2(stacked ? 0.0f : detailsWidth, detailsHeight), true,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             HoverNetSectionHeading(waitingRoom ? "Your race" : "Game details");
             if (waitingRoom) {
@@ -6653,7 +6672,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 const TrackBriefing briefing = BriefingFor(trackIndex);
                 // Race info and the map on the left, the player list on the right at full height, as in the classic waiting room.
                 const float infoWidth = stacked ? 0.0f : std::max(250.0f, ImGui::GetContentRegionAvail().x * 0.50f);
-                ImGui::BeginChild("RaceInfoColumn", stacked ? ImVec2(0.0f, ImGui::GetContentRegionAvail().y * 0.55f) : ImVec2(infoWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
+                MenuBeginChild("RaceInfoColumn", stacked ? ImVec2(0.0f, ImGui::GetContentRegionAvail().y * 0.55f) : ImVec2(infoWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
                 infoRow("Track:", ack.track.empty() ? "-" : ack.track);
                 if (!ack.track.empty()) {
                     infoRow("Laps:", briefing.mFreePlay ? "none (free play)" : std::to_string(ack.laps));
@@ -6668,15 +6687,15 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 }
                 ImGui::Spacing();
                 if (trackIndex >= 0) {
-                    ImGui::BeginChild("RaceMapColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
+                    MenuBeginChild("RaceMapColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
                     DrawTrackPreview(previewFor(trackIndex), 80.0f, false);
                     ImGui::EndChild();
                 }
                 ImGui::EndChild();
                 if (!stacked) ImGui::SameLine();
-                ImGui::BeginChild("PlayersColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
+                MenuBeginChild("PlayersColumn", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
                 ImGui::Text("Players (%d / %d)", static_cast<int>(roster.members.size()), roster.seats != 0 ? static_cast<int>(roster.seats) : static_cast<int>(ack.players));
-                ImGui::BeginChild("PlayersListBox", ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y), true);
+                MenuBeginChild("PlayersListBox", ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y), true);
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 2.0f));
                 for (const auto& member : roster.members) {
                     const bool isYou = member.first == ack.player;
@@ -6692,11 +6711,11 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 const TrackBriefing briefing = BriefingFor(trackIndex);
                 const float mapWidth = std::min(190.0f, ImGui::GetContentRegionAvail().x * 0.36f);
                 const float infoHeight = 178.0f;
-                ImGui::BeginChild("SelectedRaceMap", ImVec2(mapWidth, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
+                MenuBeginChild("SelectedRaceMap", ImVec2(mapWidth, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
                 DrawTrackPreview(trackIndex >= 0 ? previewFor(trackIndex) : TrackPreview(), 96.0f, false);
                 ImGui::EndChild();
                 ImGui::SameLine();
-                ImGui::BeginChild("SelectedRaceInfo", ImVec2(0, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
+                MenuBeginChild("SelectedRaceInfo", ImVec2(0, infoHeight), false, ImGuiWindowFlags_NoScrollbar);
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f));
                 infoRow("Track:", selectedInfo->track);
                 infoRow("Laps:", briefing.mFreePlay ? "none (free play)" : std::to_string(selectedInfo->laps));
@@ -6721,7 +6740,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             ImGui::EndChild();
 
             if (!stacked) ImGui::SameLine();
-            ImGui::BeginChild("ActionsPanel", ImVec2(0, actionsHeight), true);
+            MenuBeginChild("ActionsPanel", ImVec2(0, actionsHeight), true);
             if (waitingRoom) {
                 const bool alone = lobby.GetRoster().members.size() < 2;
                 if (lobby.IsHost()) {
@@ -6784,11 +6803,11 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
 
             // ---- the bottom row: who is here, and the chat, as in the classic lobby ----
             if (!waitingRoom && (!tabbed || lobbyTab == 2)) {
-                ImGui::BeginChild("UsersListPanel", ImVec2(tabbed ? 0.0f : listWidth, 0), true);
+                MenuBeginChild("UsersListPanel", ImVec2(tabbed ? 0.0f : listWidth, 0), true);
                 char heading[48];
                 std::snprintf(heading, sizeof(heading), "In the lobby (%d)", lobby.UsersTotal() > 0 ? lobby.UsersTotal() : 1);
                 HoverNetSectionHeading(heading);
-                ImGui::BeginChild("UsersListBox", ImVec2(-FLT_MIN, -FLT_MIN), true);
+                MenuBeginChild("UsersListBox", ImVec2(-FLT_MIN, -FLT_MIN), true);
                 bool listedYou = false;
                 for (const std::string& user : lobby.Users()) {
                     if (!listedYou && user == name) { ImGui::BulletText("%s (you)", user.c_str()); listedYou = true; }
@@ -6801,10 +6820,10 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 if (!tabbed) ImGui::SameLine();
             }
             if (!tabbed || lobbyTab == 1) {
-                ImGui::BeginChild("ChatPanel", ImVec2(0, 0), true);
+                MenuBeginChild("ChatPanel", ImVec2(0, 0), true);
                 HoverNetSectionHeading(waitingRoom ? "Race chat" : "Lobby chat");
                 const float inputRow = ImGui::GetFrameHeightWithSpacing() + 4.0f;
-                ImGui::BeginChild("ChatLog", ImVec2(0, std::max(40.0f, ImGui::GetContentRegionAvail().y - inputRow)), true);
+                MenuBeginChild("ChatLog", ImVec2(0, std::max(40.0f, ImGui::GetContentRegionAvail().y - inputRow)), true);
                 for (const std::string& line : lobby.ChatLines()) {
                     ImGui::PushTextWrapPos(0.0f);
                     ImGui::TextUnformatted(line.c_str());
@@ -6834,7 +6853,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             const bool sideBySide = contentWidth >= 610.0f;
             const float gap = ImGui::GetStyle().ItemSpacing.x;
             const float controlsWidth = sideBySide ? contentWidth * 0.52f : contentWidth;
-            ImGui::BeginChild("HostRaceOptions", ImVec2(controlsWidth, sideBySide ? selectorHeight : 330.0f), false);
+            MenuBeginChild("HostRaceOptions", ImVec2(controlsWidth, sideBySide ? selectorHeight : 330.0f), false);
             ImGui::TextUnformatted("Track");
             ImGui::SetNextItemWidth(-1.0f);
             TrackSelector("##HostTrack", 2, prefs.mTrackIndex);
@@ -6862,7 +6881,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             ImGui::SameLine();
             ImGui::TextDisabled(guide.mFreePlay ? "Not used on a free-play track" : "Suggested: %d", guide.mSuggestedLaps);
             ImGui::SetNextItemWidth(-1.0f);
-            ImGui::SliderInt("##HostLaps", &laps, 1, 10);
+            MenuSliderInt("##HostLaps", &laps, 1, 10);
             ImGui::EndDisabled();
             ImGui::Checkbox("Weapons enabled", &weapons);
             ImGui::TextUnformatted("Private code");
@@ -6875,13 +6894,13 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             ImGui::EndChild();
             if (sideBySide) {
                 ImGui::SameLine(0.0f, gap);
-                ImGui::BeginChild("HostTrackPreview", ImVec2(0, selectorHeight), false);
+                MenuBeginChild("HostTrackPreview", ImVec2(0, selectorHeight), false);
                 DrawTrackPreview(previewFor(prefs.mTrackIndex));
                 ImGui::EndChild();
             }
             else {
                 ImGui::Spacing();
-                ImGui::BeginChild("HostTrackPreview", ImVec2(0, 190.0f), false);
+                MenuBeginChild("HostTrackPreview", ImVec2(0, 190.0f), false);
                 DrawTrackPreview(previewFor(prefs.mTrackIndex));
                 ImGui::EndChild();
             }
@@ -7045,7 +7064,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         ++framesShown;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
                 if (ConfirmQuit(graphics, buffer, viewport, font)) {
                     g_QuitConfirmed = true;
@@ -7196,7 +7215,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.94f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phone ? ImVec2(14.0f, 12.0f) : ImVec2(22.0f, 20.0f));
-        ImGui::BeginChild("MainMenuPanel", ImVec2(panelWidth, panelHeight), true, phone ? 0 : ImGuiWindowFlags_NoScrollbar);   // a phone in landscape cannot show every button: the panel scrolls
+        MenuBeginChild("MainMenuPanel", ImVec2(panelWidth, panelHeight), true, phone ? 0 : ImGuiWindowFlags_NoScrollbar);   // a phone in landscape cannot show every button: the panel scrolls
         ImGui::TextColored(kHoverNetCoral, "READY TO RACE?");
         if (!phone) ImGui::TextDisabled("Choose your mode");
         if (!phone) ImGui::Spacing();

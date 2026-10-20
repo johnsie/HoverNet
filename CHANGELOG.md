@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **Gamepad menus behave the same on every screen.** B (back) only worked on about half of the menu screens; on Settings, Controls, the lobby, the online-servers screen and others it did nothing, so you had to reach for the keyboard. B now does what Escape does on every menu screen, on the desktop and web clients. While you are typing in a field or a drop-down is open, B closes that first, and while Controls waits for a button to bind, B can be bound. Covered by `HoverNetMenuInputSmoke` (`NetTarget/LinuxClient/MenuInput.h`).
+- **Screens with blocks of options, the laps setting and the How to Play briefing are now workable with a gamepad.** The D-pad used to stay trapped inside the first block of a screen (you had to press A to enter a block and B to leave it); it now moves through every option on the screen in order. A slider (laps, volume, UI scale, axis deadzone) changes with left/right as soon as it is highlighted, instead of needing A first. In the briefing the focus starts on NEXT, so A pages through it, B goes back a page (and leaves from the first page), and LB / RB turn the pages.
+
 ## 2.3.25 - 2026-10-20
 
 ### Fixed
