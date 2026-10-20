@@ -10,6 +10,11 @@
   <title>HoverNet</title>
   <meta name="hn-build" content="__HN_BUILD__">
   <meta name="hn-order" content="__HN_ORDER__">
+  <script>
+    window.outivaIdentityReady = import('./outiva-auth.js').then(function (auth) {
+      return auth.initialiseOutivaIdentity({ clientId: 'hovernet-web', appId: 'hovernet' });
+    });
+  </script>
   <script id="hn-fresh">
     // Phones (iPhones in particular) sometimes keep an old copy of this page, in the HTTP cache, a restored tab or a home-screen app, and
     // then run an outdated client. The build id above is filled in when a build is packaged. At load the page asks the server for its own
@@ -78,6 +83,7 @@
     #loader h1 { margin: 0; font: 800 clamp(2rem, 8vw, 3.4rem)/1 system-ui, sans-serif; letter-spacing: .12em; color: #eaf2ff;
       text-shadow: 0 0 24px rgba(90, 160, 255, .55); }
     #loader .tag { margin: 0; color: #8fa6c6; font-size: .95rem; letter-spacing: .06em; }
+    #outiva-account { margin: -.45rem 0 0; color: #8fa6c6; font-size: .8rem; }
     #bar { width: min(420px, 80vw); height: 10px; border-radius: 999px; background: rgba(160, 200, 255, .15); overflow: hidden; }
     #bar > i { display: block; height: 100%; width: 0; border-radius: inherit;
       background: linear-gradient(90deg, #3d7bff, #7fd0ff); transition: width .2s ease-out; }
@@ -171,6 +177,7 @@
   <div id="loader">
     <h1>HOVERNET</h1>
     <p class="tag">Hovercraft racing in your browser</p>
+    <p id="outiva-account">Guest play — no Outiva account required</p>
     <div id="bar" class="indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Loading"><i></i></div>
     <p id="status" role="status" aria-live="polite">Loading HoverNet…</p>
     <pre id="startlog" aria-hidden="true"></pre>

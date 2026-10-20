@@ -26,8 +26,8 @@ done
 
 cp -- "${BUILD_DIR}/HoverNet.html" "${STAGE_DIR}/index.html"
 sed -i "s/__HN_BUILD__/${RELEASE_ID}/; s/__HN_ORDER__/$(git log -1 --format=%ct)/" "${STAGE_DIR}/index.html"   # build id the page checks against the server (shell.html)
-cp -- "${BUILD_DIR}/HoverNet.js" "${BUILD_DIR}/HoverNet.wasm" "${BUILD_DIR}/HoverNet.data" "${STAGE_DIR}/"
-tar -czf "${ARCHIVE_PATH}" -C "${STAGE_DIR}" index.html HoverNet.js HoverNet.wasm HoverNet.data
+cp -- "${BUILD_DIR}/HoverNet.js" "${BUILD_DIR}/HoverNet.wasm" "${BUILD_DIR}/HoverNet.data" "${BUILD_DIR}/outiva-auth.js" "${STAGE_DIR}/"
+tar -czf "${ARCHIVE_PATH}" -C "${STAGE_DIR}" index.html HoverNet.js HoverNet.wasm HoverNet.data outiva-auth.js
 
 echo "Uploading ${ARCHIVE_NAME} to ${REMOTE}..."
 scp -F /dev/null -- "${ARCHIVE_PATH}" "${REMOTE}:${REMOTE_TMP}"

@@ -164,9 +164,9 @@ build:game:web:
         mkdir -p dist/web
         cp "$WEB_BUILD_DIR/HoverNet.html" dist/web/index.html
         sed -i "s/__HN_BUILD__/${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}/; s/__HN_ORDER__/$(git log -1 --format=%ct)/" dist/web/index.html   # the page checks the id against the server (packaging/web/shell.html); hovernet-web-deploy refuses a build whose commit time is older than the live one
-        cp "$WEB_BUILD_DIR/HoverNet.js" "$WEB_BUILD_DIR/HoverNet.wasm" "$WEB_BUILD_DIR/HoverNet.data" dist/web/
+        cp "$WEB_BUILD_DIR/HoverNet.js" "$WEB_BUILD_DIR/HoverNet.wasm" "$WEB_BUILD_DIR/HoverNet.data" "$WEB_BUILD_DIR/outiva-auth.js" dist/web/
       ) 8>"${WEB_BUILD_DIR}.lock"
-    - tar -czf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web index.html HoverNet.js HoverNet.wasm HoverNet.data
+    - tar -czf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web index.html HoverNet.js HoverNet.wasm HoverNet.data outiva-auth.js
     - 'if [ "$CI_COMMIT_BRANCH" = "$HOVERNET_MAIN_BRANCH" ]; then sudo /usr/local/sbin/hovernet-web-deploy "dist/hovernet-web-${CI_COMMIT_SHORT_SHA}.tar.gz"; fi'
   artifacts:
     name: "hovernet-web-${CI_COMMIT_REF_SLUG}"

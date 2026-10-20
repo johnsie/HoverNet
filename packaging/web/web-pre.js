@@ -16,7 +16,27 @@ Module.preRun.push(function() {
   if (!FS.analyzePath('/home/web').exists) FS.mkdir('/home/web');
   FS.mount(IDBFS, {}, '/home/web');
   addRunDependency('hovernet-idbfs');
-  hoverNetSync(true, function() { removeRunDependency('hovernet-idbfs'); });
+  hoverNetSync(true, function() {
+    Promise.resolve(window.outivaIdentityReady).then(function(profile) {
+      window.outivaProfile = profile;
+      var account = document.getElementById('outiva-account');
+      if (profile) {
+        var label = profile.name || profile.preferred_username || profile.email || 'Outiva user';
+        if (account) account.textContent = 'Outiva account: ' + label;
+        var source = profile.preferred_username || profile.name || (profile.email || '').split('@')[0];
+        var callsign = source.replace(/[^A-Za-z0-9 _-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 32);
+        var configDir = hoverNetConfigPath + '/hovernet';
+        var username = configDir + '/username';
+        if (callsign && !FS.analyzePath(username).exists) {
+          if (!FS.analyzePath(configDir).exists) FS.mkdir(configDir);
+          FS.writeFile(username, callsign + '\n');
+          hoverNetSync(false);
+        }
+      }
+    }).catch(function(error) {
+      console.warn('Optional Outiva identity was not available', error);
+    }).finally(function() { removeRunDependency('hovernet-idbfs'); });
+  });
   window.setInterval(function() { hoverNetSync(false); }, 15000);
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'hidden') hoverNetSync(false);
