@@ -72,6 +72,9 @@
 #include <sstream>
 #include <vector>
 
+// Who drove each slot of the replay about to be shown (set where the names are known, taken by startReplayFile): the "Following ..." message and the craft cycling name the racer.
+static std::vector<std::string> g_nextReplayNames;
+
 #ifdef HOVERNET_WEB
 void HoverNetInitializeWebFactory();
 void HoverNetCleanWebFactory();
@@ -5746,6 +5749,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                 ImGui::Spacing();
                 if (HoverNetButton("CANCEL", ImVec2(360, 34))) { craftChoice.active = false; ImGui::CloseCurrentPopup(); }
                 if (chosen >= 0) {
+                    g_nextReplayNames = craftChoice.slotNames;
                     std::string note;
                     if (chosen == craftChoice.mySlot) note = "you";
                     else if (chosen == craftChoice.winnerSlot) note = craftChoice.winnerName.empty() ? std::string("the winner") : "the winner, " + craftChoice.winnerName;
@@ -5839,7 +5843,8 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
     // manifest), then the replay is fetched and played.
     DownloadUi trackDownload;
     struct PendingWatch { std::uint64_t id = 0; int slot = 0; std::string note; } pendingWatch;
-    auto watchReplay = [&](std::uint64_t replayId, int slot, const std::string& note, const std::string& trackName) {
+    auto watchReplay = [&](std::uint64_t replayId, int slot, const std::string& note, const std::string& trackName, const std::string& racerName) {
+        g_nextReplayNames.assign(8, std::string()); if (slot >= 0 && slot < 8) g_nextReplayNames[static_cast<std::size_t>(slot)] = racerName;
         downloadId = replayId; downloadSlot = slot; downloadNote = note; message.clear();
         const TrackEntry* entry = Tracks().Get(Tracks().Find(trackName));
         if (entry != nullptr && !entry->mInstalled && entry->mHasDownload && !trackDownload.Active()) {
@@ -5894,7 +5899,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             std::printf("\n");
             std::fflush(stdout);
             if (std::getenv("HOVERNET_TEST_LEADERBOARD_PICK") != nullptr && !r.boards.empty() && !r.boards[0].entries.empty()) {   // test hook: watch the first record
-                watchReplay(r.boards[0].entries[0].replay, r.boards[0].entries[0].slot, laps == 0 ? "the fastest lap" : "the record holder", r.track);
+                watchReplay(r.boards[0].entries[0].replay, r.boards[0].entries[0].slot, laps == 0 ? "the fastest lap" : "the record holder", r.track, r.boards[0].entries[0].name);
             }
         }
 
@@ -5990,7 +5995,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                     ImGui::PopTextWrapPos();
                     const bool busy = downloadId != 0;
                     if (HoverNetButton(busy && downloadId == b.replay ? "DOWNLOADING..." : "WATCH", ImVec2(-FLT_MIN, 34)) && !busy) {
-                        watchReplay(b.replay, b.slot, b.lap ? "the fastest lap" : "the record holder", b.track);
+                        watchReplay(b.replay, b.slot, b.lap ? "the fastest lap" : "the record holder", b.track, b.name);
                     }
                     ImGui::PopID();
                     ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
@@ -6041,7 +6046,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                         ImGui::SameLine(ImGui::GetContentRegionMax().x - 120.0f);
                         const bool busy = downloadId != 0;
                         if (HoverNetButton(busy && downloadId == e.replay ? "..." : "WATCH", ImVec2(110, 0)) && !busy) {
-                            watchReplay(e.replay, e.slot, laps == 0 ? "the fastest lap" : "the record holder", Tracks().Get(track)->mName);
+                            watchReplay(e.replay, e.slot, laps == 0 ? "the fastest lap" : "the record holder", Tracks().Get(track)->mName, e.name);
                         }
                         ImGui::PopID();
                     }
@@ -6070,7 +6075,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                     ImGui::Text("Winner: %s%s%s%s   %s", w.name.empty() ? "player" : w.name.c_str(), w.craft < Authority::kCraftCount ? " (" : "", w.craft < Authority::kCraftCount ? Authority::CraftName(w.craft) : "", w.craft < Authority::kCraftCount ? ")" : "", time);
                     const bool busy = downloadId != 0;
                     if (HoverNetButton(busy && downloadId == w.replay ? "DOWNLOADING..." : "WATCH THE RACE", ImVec2(-FLT_MIN, 34)) && !busy) {
-                        watchReplay(w.replay, w.slot, "the winner", w.track);
+                        watchReplay(w.replay, w.slot, "the winner", w.track, w.name);
                     }
                     ImGui::PopID();
                     ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
@@ -7510,6 +7515,7 @@ struct ReplayPlayback
     bool markerTest = false;     // test mode: play to tick 8000, jump to the previous lap marker, play on, print the markers found
     bool markerTestDone = false;
     std::string path;            // the file being shown (to watch it again)
+    std::vector<std::string> names;   // who drove each slot, where known (empty entries: unknown)
     bool ended = false;          // the replay has just reached its end: the end screen is offered at the next frame
     // Timeline markers: every lap crossing and finish, noted the moment the replay plays through it (the same lap counts the race
     // itself keeps, so nothing is computed twice). They stay after a seek back, and a seek forward finds the rest on the way.
@@ -8265,6 +8271,12 @@ int RunClient(int argc, char** argv)
     // Plays a replay file in the normal game window (from the command line or from the Watch a Replay screen): checks the file, the rules and the track
     // first, then loads the track and puts the craft on the grid. An error before the track is loaded changes nothing (the caller shows it and
     // carries on); after that, fatal is set and the race in the session is no longer usable.
+    // "NAME, player 3" when the replay's racer in that slot is known, else "player 3".
+    auto replayWatchLabel = [&](int slot) -> std::string {
+        std::string label = "player " + std::to_string(slot + 1);
+        if (replay.active && slot >= 0 && slot < static_cast<int>(replay.names.size()) && !replay.names[static_cast<std::size_t>(slot)].empty()) label = replay.names[static_cast<std::size_t>(slot)] + ", " + label;
+        return label;
+    };
     auto startReplayFile = [&](const std::string& path, int watch, bool& fatal, const std::string& note = std::string()) -> std::string {
         fatal = false;
         ReplayPlayback next;
@@ -8282,6 +8294,8 @@ int RunClient(int argc, char** argv)
         }
         next.watch = (watch < 0 || watch >= next.data.players) ? 0 : watch;
         next.path = path;
+        next.names = std::move(g_nextReplayNames);
+        g_nextReplayNames.clear();
         replay = next;
         fatal = true;
         rememberLocal = false;
@@ -8298,7 +8312,7 @@ int RunClient(int argc, char** argv)
         if (const char* speed = std::getenv("HOVERNET_TEST_REPLAY_SPEED")) replay.speedStep = std::max(0, std::min(4, std::atoi(speed)));   // test hook: start at this speed step
         replay.lastTicks = SDL_GetTicks();
         if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) { std::printf("REPLAYTEST following player %d of %d (%s)\n", replay.watch + 1, replay.data.players, note.c_str()); std::fflush(stdout); }
-        session.AddMessage(("Following player " + std::to_string(replay.watch + 1) + " of " + std::to_string(replay.data.players) + (note.empty() ? std::string() : " (" + note + ")") + ".  P pause, 1-5 speed, [ ] craft, C camera, Esc menu").c_str());
+        session.AddMessage(("Following " + replayWatchLabel(replay.watch) + " of " + std::to_string(replay.data.players) + (note.empty() ? std::string() : " (" + note + ")") + ".  P pause, 1-5 speed, [ ] craft, C camera, Esc menu").c_str());
         fatal = false;
         return std::string();
     };
@@ -8623,7 +8637,7 @@ int RunClient(int argc, char** argv)
         const int count = static_cast<int>(crafts->size());
         *watch = (*watch + direction + count) % count;
         mainCharacter = (*crafts)[static_cast<std::size_t>(*watch)];
-        session.AddMessage(("Following player " + std::to_string(*watch + 1) + " of " + std::to_string(count)).c_str());
+        session.AddMessage(("Following " + replayWatchLabel(*watch) + " of " + std::to_string(count)).c_str());
         if (std::getenv("HOVERNET_TEST_WATCH") != nullptr) { std::printf("WATCHTEST watching player %d of %d\n", *watch + 1, count); std::fflush(stdout); }
     };
     // Chat works in a race on the old lobby server and in one on a HoverNet 3.0 server, during the race and after the player has finished.
