@@ -1,0 +1,30 @@
+{
+  "clientId": "hovernet-account",
+  "name": "HoverNet",
+  "description": "Optional Outiva sign-in for the HoverNet browser game (server-side, confidential client)",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "clientAuthenticatorType": "client-secret",
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "authorizationServicesEnabled": false,
+  "frontchannelLogout": true,
+  "rootUrl": "https://hovernet.outiva.com",
+  "baseUrl": "https://hovernet.outiva.com/",
+  "adminUrl": "https://hovernet.outiva.com/",
+  "redirectUris": [
+    "https://hovernet.outiva.com/account/callback"
+  ],
+  "webOrigins": [
+    "https://hovernet.outiva.com"
+  ],
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "post.logout.redirect.uris": "https://hovernet.outiva.com/"
+  },
+  "defaultClientScopes": ["web-origins", "acr", "roles", "profile", "email"],
+  "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+}

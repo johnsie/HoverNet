@@ -52,6 +52,7 @@ lint:gitlab-ci:
     - test -f packaging/web/websocket_gateway.py
     - test -f packaging/web/hovernet-websocket-gateway.service
     - test -x packaging/web/hovernet-web-deploy
+    - python3 -I scripts/test-web-account.py   # the optional Outiva sign-in service, against a stand-in Keycloak
     - scripts/test-web-deploy-order.sh   # the web deploy wrapper must refuse a build older than the live one
     - GIT_DEPTH=0 git fetch --unshallow --quiet 2>/dev/null || true; scripts/test-conffile-upgrade.sh || [ $? -eq 77 ]   # the server package must upgrade over an edited configuration without a question
 
@@ -164,9 +165,9 @@ build:game:web:
         mkdir -p dist/web
         cp "$WEB_BUILD_DIR/HoverNet.html" dist/web/index.html
         sed -i "s/__HN_BUILD__/${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}/; s/__HN_ORDER__/$(git log -1 --format=%ct)/" dist/web/index.html   # the page checks the id against the server (packaging/web/shell.html); hovernet-web-deploy refuses a build whose commit time is older than the live one
-        cp "$WEB_BUILD_DIR/HoverNet.js" "$WEB_BUILD_DIR/HoverNet.wasm" "$WEB_BUILD_DIR/HoverNet.data" "$WEB_BUILD_DIR/outiva-auth.js" dist/web/
+        cp "$WEB_BUILD_DIR/HoverNet.js" "$WEB_BUILD_DIR/HoverNet.wasm" "$WEB_BUILD_DIR/HoverNet.data" dist/web/
       ) 8>"${WEB_BUILD_DIR}.lock"
-    - tar -czf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web index.html HoverNet.js HoverNet.wasm HoverNet.data outiva-auth.js
+    - tar -czf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web index.html HoverNet.js HoverNet.wasm HoverNet.data
     - 'if [ "$CI_COMMIT_BRANCH" = "$HOVERNET_MAIN_BRANCH" ]; then sudo /usr/local/sbin/hovernet-web-deploy "dist/hovernet-web-${CI_COMMIT_SHORT_SHA}.tar.gz"; fi'
   artifacts:
     name: "hovernet-web-${CI_COMMIT_REF_SLUG}"

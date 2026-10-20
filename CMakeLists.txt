@@ -754,8 +754,6 @@ if(EMSCRIPTEN)
     )
     set_target_properties(HoverNetGame2Player PROPERTIES SUFFIX ".html"
         LINK_DEPENDS "${CMAKE_SOURCE_DIR}/packaging/web/shell.html;${CMAKE_SOURCE_DIR}/packaging/web/web-pre.js")
-    configure_file("${CMAKE_SOURCE_DIR}/packaging/web/outiva-auth.js"
-        "${CMAKE_BINARY_DIR}/outiva-auth.js" COPYONLY)
 else()
     add_dependencies(HoverNetGame2Player HoverNetHeadlessObjFac1)
 endif()

@@ -1,0 +1,29 @@
+[Unit]
+Description=HoverNet optional Outiva sign-in (OpenID Connect client for the browser game)
+After=network-online.target outiva-keycloak.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hovernet
+Group=hovernet
+EnvironmentFile=-/etc/hovernet/account.env
+Environment=HOVERNET_ACCOUNT_HOST=127.0.0.1
+Environment=HOVERNET_ACCOUNT_PORT=9602
+Environment=HOVERNET_CALLSIGN_FILE=/var/lib/hovernet-account/callsigns.json
+ExecStart=/usr/bin/python3 /usr/lib/hovernet/hovernet_account.py
+StateDirectory=hovernet-account
+StateDirectoryMode=0750
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

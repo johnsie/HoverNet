@@ -13,7 +13,7 @@ import tempfile
 
 RUNNER_BUILDS = Path("/home/gitlab-runner/builds").resolve()
 WEB_ROOT = Path("/var/www/hovernet.outiva.com")
-REQUIRED = {"index.html", "HoverNet.js", "HoverNet.wasm", "HoverNet.data", "outiva-auth.js"}
+REQUIRED = {"index.html", "HoverNet.js", "HoverNet.wasm", "HoverNet.data"}
 ARCHIVE_NAME = re.compile(r"^hovernet-web-([A-Za-z0-9._+-]{1,100})\.tar\.gz$")
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_FILE_BYTES = 256 * 1024 * 1024

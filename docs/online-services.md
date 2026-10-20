@@ -1,7 +1,7 @@
 # Online services basics (Stage 6a)
 
 What the authoritative server provides for safe public play today, how moderators work, and the privacy and retention rules it
-follows. Nothing here needs an account: players are identified by the display name they choose for the session. Accounts, sign-in,
+follows. Nothing here needs an account (the web client has an optional Outiva sign-in, below): players are identified by the display name they choose for the session. Accounts, sign-in,
 ratings, matchmaking and sanctions with appeals are Stage 6b and later.
 
 ## What players can do
@@ -59,6 +59,19 @@ no personal data, so they need no deletion for privacy reasons. There is no acco
 
 **Children.** The server collects no age, email or real name. Operators who run public servers are responsible for their own rules and
 for complying with the law where they operate.
+
+## Optional Outiva sign-in (web client)
+
+The browser client at hovernet.outiva.com can recognise a signed-in Outiva account; everything works the same as a guest. A small service on
+the web host (`packaging/web/hovernet_account.py`, behind Apache at `/account/`) is the OpenID Connect client for `accounts.outiva.com`
+(Keycloak): Authorization Code with PKCE, a confidential client whose secret never reaches the browser. The browser only receives one signed
+HttpOnly cookie, and asks `/account/me` for the profile. The outiva.com console starts a signed-in user's game with a silent round trip
+through `/account/login`, so the framed game already has its session.
+
+What it stores: per account (the immutable OIDC `sub`), the display name the player chose, in `/var/lib/hovernet-account/callsigns.json`
+(mode 0600). The profile in the cookie is name, username and email, signed, kept 8 hours, never written to disk. **What it does not do:** the
+race servers never see the account, so a signed-in name is not verified in a race, and the desktop clients have no sign-in. Deleting an
+account's saved name means removing its entry from that file (the account itself is Outiva's, in Keycloak). Tests: `scripts/test-web-account.py`.
 
 ## Tests
 

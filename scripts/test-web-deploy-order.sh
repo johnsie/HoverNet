@@ -9,7 +9,6 @@ spec = importlib.util.spec_from_loader("deploy", loader)
 d = importlib.util.module_from_spec(spec)
 loader.exec_module(d)
 
-assert "outiva-auth.js" in d.REQUIRED, "the deployed web bundle must include the Outiva identity module"
 
 def refused(new, live):
     try:

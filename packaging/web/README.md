@@ -156,6 +156,21 @@ show it and never run any of the VR code.
 - `HOVERNET_TEST_VR=<dir>` (native) writes each eye's frame as a PPM, for checking the stereo camera
   without a headset.
 
+## Optional Outiva sign-in
+
+`hovernet_account.py` (service `hovernet-account.service`, loopback port 9602, proxied by Apache at `/account/`) is the OpenID Connect client
+for the browser game, the same design as NetPanzer's: see `docs/online-services.md`. Install on the host that runs Keycloak:
+
+```sh
+sudo bash packaging/web/configure-account-oidc.sh     # Keycloak client "hovernet-account", secrets, systemd service
+sudo apachectl configtest && sudo systemctl reload apache2   # after installing the site file with the /account/ proxy lines
+curl -s -o /dev/null -w '%{http_code}\n' https://hovernet.outiva.com/account/me     # 204 = running, guest
+```
+
+Without the service `/account/me` fails and the game starts as a guest. `scripts/test-web-account.py` tests the service against a stand-in
+Keycloak (the whole round trip and every failure, which must end as a guest). The outiva.com console launches the sign-in with the
+`ssoLogin` field of the game's entry in its `web/games.json`.
+
 ## Never serving an older build
 
 A CI job for an old commit (a retry, a late runner) must not replace a newer release: the old page would then be the live one, and an old
