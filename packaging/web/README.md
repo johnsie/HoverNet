@@ -156,6 +156,16 @@ show it and never run any of the VR code.
 - `HOVERNET_TEST_VR=<dir>` (native) writes each eye's frame as a PPM, for checking the stereo camera
   without a headset.
 
+## Never serving an older build
+
+A CI job for an old commit (a retry, a late runner) must not replace a newer release: the old page would then be the live one, and an old
+page has no update check. The CI job and `deploy-local-build.sh` stamp the page with the commit time (`<meta name="hn-order">`, from
+`git log -1 --format=%ct`); `hovernet-web-deploy` reads it from the archive and from the live `current/index.html` and refuses a build that is
+older than the live one, or that has no stamp when the live one does (equal is allowed, so a tag of the live commit deploys). A rollback
+is a new commit that reverts. `scripts/test-web-deploy-order.sh` tests the rule. The wrapper is installed by hand and is not updated by a
+deploy: reinstall it (`sudo install -o root -g root -m 0755 packaging/web/hovernet-web-deploy /usr/local/sbin/`) after changing it.
+If a stale release is live anyway, `scripts/web-set-current.sh <release>` on the web host points `current` back.
+
 ## Outdated cached pages (phones)
 
 `shell.html` carries a build id (`<meta name="hn-build">`, the placeholder `__HN_BUILD__` filled in by the CI web job, and by

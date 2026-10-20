@@ -25,7 +25,7 @@ for required in HoverNet.html HoverNet.js HoverNet.wasm HoverNet.data; do
 done
 
 cp -- "${BUILD_DIR}/HoverNet.html" "${STAGE_DIR}/index.html"
-sed -i "s/__HN_BUILD__/${RELEASE_ID}/" "${STAGE_DIR}/index.html"   # build id the page checks against the server (shell.html)
+sed -i "s/__HN_BUILD__/${RELEASE_ID}/; s/__HN_ORDER__/$(git log -1 --format=%ct)/" "${STAGE_DIR}/index.html"   # build id the page checks against the server (shell.html)
 cp -- "${BUILD_DIR}/HoverNet.js" "${BUILD_DIR}/HoverNet.wasm" "${BUILD_DIR}/HoverNet.data" "${STAGE_DIR}/"
 tar -czf "${ARCHIVE_PATH}" -C "${STAGE_DIR}" index.html HoverNet.js HoverNet.wasm HoverNet.data
 

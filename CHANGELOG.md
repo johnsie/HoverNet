@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **The web site could end up serving an old client** (a late or re-run CI job for an old commit replaced the newer release; the old page had no self-update check, so browsers stayed on it). The web builds now carry their commit time and the deploy wrapper refuses to put a build older than the live one in front of it. **Operators:** install the new `packaging/web/hovernet-web-deploy` on the web host (the next deploy does not update it by itself).
+
 ## 2.3.24 - 2026-10-19
 
 ### Fixed

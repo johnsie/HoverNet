@@ -3,6 +3,7 @@
 
 import os
 import fcntl
+from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -16,6 +17,45 @@ REQUIRED = {"index.html", "HoverNet.js", "HoverNet.wasm", "HoverNet.data"}
 ARCHIVE_NAME = re.compile(r"^hovernet-web-([A-Za-z0-9._+-]{1,100})\.tar\.gz$")
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_FILE_BYTES = 256 * 1024 * 1024
+
+
+class _OrderFinder(HTMLParser):
+    """Finds <meta name="hn-order" content="..."> (the page is minified, so no text pattern is reliable)."""
+
+    def __init__(self):
+        super().__init__()
+        self.order = None
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag == "meta" and values.get("name") == "hn-order" and (values.get("content") or "").isdigit():
+            self.order = int(values["content"])
+
+
+def build_order(html):
+    """The commit time (Unix seconds) the build was made from, stamped into its page by CI, or None for a build without one."""
+    finder = _OrderFinder()
+    finder.feed(html)
+    return finder.order
+
+
+def refuse_older(new_order, live_order):
+    """A late or re-run job for an old commit must never replace a newer live build (it did, and the site showed an old client)."""
+    if live_order is None:
+        return  # nothing stamped is live yet: this is the first stamped build
+    if new_order is None:
+        raise SystemExit("refusing: this build carries no commit time (hn-order) but the live build does, so it cannot be told "
+                         "to be newer; rebuild it from the current CI job")
+    if new_order < live_order:
+        raise SystemExit("refusing: this build is from an older commit than the live one (%d < %d); a rollback is a new commit "
+                         "that reverts, built and deployed normally" % (new_order, live_order))
+
+
+def live_build_order():
+    try:
+        return build_order((WEB_ROOT / "current" / "index.html").read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return None
 
 
 def main():
@@ -65,6 +105,7 @@ def main():
                 extracted.add(path.name)
         if extracted != REQUIRED:
             raise SystemExit("archive is missing one or more required browser files")
+        refuse_older(build_order((staging / "index.html").read_text(encoding="utf-8", errors="replace")), live_build_order())
 
         # mkdtemp creates mode 0700 by default; Apache must be able to traverse
         # each immutable release directory to serve its static files.
