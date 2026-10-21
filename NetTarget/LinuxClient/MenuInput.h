@@ -11,12 +11,19 @@
 
 #include <SDL.h>
 
-inline bool g_MenuGamepadCapture = false;
+// A function-local static keeps this header C++14-compatible while still giving
+// every menu translation unit the same capture flag.  An inline variable would
+// require C++17 (the Windows client intentionally still builds as C++14).
+inline bool& MenuGamepadCapture()
+{
+    static bool capture = false;
+    return capture;
+}
 
 inline void MenuProcessEvent(SDL_Event& event)
 {
     ImGui_ImplSDL2_ProcessEvent(&event);
-    if (event.type != SDL_CONTROLLERBUTTONDOWN || event.cbutton.button != SDL_CONTROLLER_BUTTON_B || g_MenuGamepadCapture) return;
+    if (event.type != SDL_CONTROLLERBUTTONDOWN || event.cbutton.button != SDL_CONTROLLER_BUTTON_B || MenuGamepadCapture()) return;
     if (ImGui::GetCurrentContext() == nullptr) return;
     if (ImGui::GetIO().WantTextInput ||
         ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) return;

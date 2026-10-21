@@ -5193,13 +5193,13 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
     int listeningForBinding = -1;
     int listeningForControllerBinding = -1;
     std::string bindingStatus;
-    struct CaptureReset { ~CaptureReset() { g_MenuGamepadCapture = false; } } captureReset;
+    struct CaptureReset { ~CaptureReset() { MenuGamepadCapture() = false; } } captureReset;
     bool running = true;
     int framesShown = 0;
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
         SDL_Event event;
-        g_MenuGamepadCapture = listeningForControllerBinding >= 0;   // B can be bound while waiting for a button
+        MenuGamepadCapture() = listeningForControllerBinding >= 0;   // B can be bound while waiting for a button
         while (SDL_PollEvent(&event)) {
             MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {

@@ -108,11 +108,11 @@ int main()
     MenuProcessEvent(e);
     Check(e.type == SDL_CONTROLLERBUTTONDOWN, "Start is left alone (the pause screens handle it)");
 
-    g_MenuGamepadCapture = true;
+    MenuGamepadCapture() = true;
     e = Button(SDL_CONTROLLER_BUTTON_B);
     MenuProcessEvent(e);
     Check(e.type == SDL_CONTROLLERBUTTONDOWN, "B is not Escape while a button is being bound");
-    g_MenuGamepadCapture = false;
+    MenuGamepadCapture() = false;
 
     // A text field being edited keeps B.
     for (int i = 0; i < 3; ++i) Frame(renderer, TextBody);
