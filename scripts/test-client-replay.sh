@@ -34,6 +34,12 @@ else
   want=$("$tool" verify "$mine" 2>/dev/null | sed -n 's/.*final hash \([0-9a-f]*\).*/\1/p')
   got=$("$client" --replay "$mine" --replay-hash --frames 100000 2>/dev/null | sed -n 's/^replay hash \([0-9a-f]*\) ticks.*/\1/p')
   [ -n "$want" ] && [ "$want" = "$got" ] && echo "ok   the client's replay is byte for byte the server's, and the game plays it back to $got" || { echo "FAIL: the saved replay does not play back (tool $want, game ${got:-none})"; fail=1; }
+  names="$mine.names"
+  if [ -f "$names" ] && [ "$(awk -F'\t' 'NF == 2 && $1 ~ /^[0-7]$/ && $2 != "" {n++} END {print n+0}' "$names")" = "$players" ]; then
+    echo "ok   the client saved every racer's lobby name beside its replay"
+  else
+    echo "FAIL: the replay should have a name for every racer"; cat "$names" 2>/dev/null; grep REPLAYTEST "$dir/client.txt"; fail=1
+  fi
 fi
 table=$(ls "$dir/official/"*.results.tsv 2>/dev/null | head -1)
 if [ -n "$table" ] && [ "$(awk -F'\t' 'NR>1 && $7 != "" {n++} END {print n+0}' "$table")" = "$players" ]; then echo "ok   the server's results table names every player (the display names they typed)"; else echo "FAIL: the results table should name every player"; cat "$table" 2>/dev/null; fail=1; fi
@@ -44,5 +50,5 @@ mine=$(ls "$(folder)/"*.hnr 2>/dev/null | head -1); theirs=$(ls "$dir/official/"
 if [ -z "$mine" ]; then echo "ok   a client that missed ticks saved no replay"
 elif [ -n "$theirs" ] && cmp -s "$mine" "$theirs"; then echo "ok   a client that reconnected saved a replay identical to the server's"
 else echo "FAIL: a client that lost its connection saved a replay that is not the server's"; fail=1; fi
-[ $fail -eq 0 ] && echo "client replay: the race a client followed is saved as the server's replay"
+[ $fail -eq 0 ] && echo "client replay: the race a client followed is saved as the server's replay, with its roster names"
 exit $fail

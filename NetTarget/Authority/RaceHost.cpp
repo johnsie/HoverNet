@@ -216,6 +216,13 @@ void RaceHost::StartNow(std::int64_t nowMs)
         mSlotNames[static_cast<std::size_t>(o->player)] = o->name;
         mSlotDevices[static_cast<std::size_t>(o->player)] = SlotDevice{o->hasDevice, o->deviceHigh, o->deviceLow};
     }
+    Protocol3::Roster roster;
+    roster.seats = static_cast<std::uint8_t>(mConfig.race.players);
+    for (std::size_t slot = 0; slot < mSlotNames.size(); ++slot)
+        if (!mSlotNames[slot].empty()) roster.members.push_back(std::make_pair(static_cast<std::uint8_t>(slot), mSlotNames[slot]));
+    const std::vector<std::uint8_t> rosterFrame = Protocol3::EncodeFrame(Protocol3::kRoster, Protocol3::Encode(roster));
+    for (auto& o : mConnections)
+        if (!o->closed && o->helloDone && o->player >= 0 && (o->caps & (Protocol3::kCapHostStart | Protocol3::kCapRoster)) != 0) Send(*o, rosterFrame);
     mStartMs = nowMs + mConfig.startDelayMs;
     Protocol3::Start s;
     s.countdownMs = static_cast<std::uint32_t>(mConfig.startDelayMs);
@@ -258,7 +265,7 @@ void RaceHost::SendRosterIfChanged()
     if (signature == mLastRoster) return;
     mLastRoster = signature;
     const std::vector<std::uint8_t> frame = Protocol3::EncodeFrame(Protocol3::kRoster, Protocol3::Encode(r));
-    for (auto& o : mConnections) if (!o->closed && o->helloDone && o->player >= 0 && (o->caps & Protocol3::kCapHostStart) != 0) Send(*o, frame);
+    for (auto& o : mConnections) if (!o->closed && o->helloDone && o->player >= 0 && (o->caps & (Protocol3::kCapHostStart | Protocol3::kCapRoster)) != 0) Send(*o, frame);
 }
 
 void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::uint8_t>& payload, std::int64_t nowMs)
@@ -469,7 +476,16 @@ void RaceHost::StartSpectator(Connection& c, std::int64_t)
     a.resumeToken = 0;
     a.raceId = mConfig.raceId;
     a.includeRaceId = (c.caps & kCapRaceId) != 0;
-    if (c.specCursor == 0 && !c.specResultSent) Send(c, EncodeFrame(kHelloAck, Encode(a)));
+    if (c.specCursor == 0 && !c.specResultSent) {
+        Send(c, EncodeFrame(kHelloAck, Encode(a)));
+        if ((c.caps & kCapRoster) != 0) {
+            Roster roster;
+            roster.seats = static_cast<std::uint8_t>(mConfig.race.players);
+            for (std::size_t slot = 0; slot < mSlotNames.size(); ++slot)
+                if (!mSlotNames[slot].empty()) roster.members.push_back(std::make_pair(static_cast<std::uint8_t>(slot), mSlotNames[slot]));
+            Send(c, EncodeFrame(kRoster, Encode(roster)));
+        }
+    }
     const std::size_t per = 900;
     const std::size_t count = (key->second.size() + per - 1) / per;
     for (std::size_t i = 0; i < count; ++i) {

@@ -13,6 +13,7 @@ lib="$HOME/.config/hovernet/replays"; mkdir -p "$lib"
 "$tool" record "The River" 700 "$lib/The_River_20261017-101010.hnr" --players=2 > /dev/null 2>&1 || { echo "FAIL: could not record a second replay"; exit 1; }
 echo "not a replay" > "$lib/Broken_20261018-150000.hnr"
 echo 2 > "$lib/ClassicH_20261018-142355.hnr.slot"   # the player drove craft 3 of the 3 in that race
+printf '0\tAnn\n1\tBen\n2\tCara\n' > "$lib/ClassicH_20261018-142355.hnr.names"
 want=$("$tool" verify "$lib/ClassicH_20261018-142355.hnr" 2>/dev/null | sed -n 's/.*final hash \([0-9a-f]*\).*/\1/p')
 out=$(HOVERNET_TEST_REPLAY_LIBRARY=1 HOVERNET_TEST_MENU=replays HOVERNET_TEST_REPLAY_PICK=1 HOVERNET_TEST_REPLAY_PICK_CRAFT=default timeout 120 "$client" --play --replay-hash --frames 100000 2>&1)
 fail=0
@@ -22,5 +23,6 @@ got=$(sed -n 's/^replay hash \([0-9a-f]*\) ticks.*/\1/p' <<< "$out")
 if [ -n "$want" ] && [ "$want" = "$got" ]; then echo "ok   Watch a Replay lists the saved replays and plays the chosen one to the verified hash ($got)"
 else echo "FAIL: the replay chosen in the menu did not play to the verified hash (tool $want, game ${got:-none})"; tail -5 <<< "$out"; fail=1; fi
 grep -q "REPLAYTEST following player 3 of 3 (you)" <<< "$out" || { echo "FAIL: the replay should have followed the player's own craft (player 3, you)"; grep REPLAYTEST <<< "$out"; fail=1; }
+grep -q "REPLAYTEST racer Cara" <<< "$out" || { echo "FAIL: playback should use the saved name for craft 3"; grep REPLAYTEST <<< "$out"; fail=1; }
 [ $fail -eq 0 ] && echo "replay library screen: listing, a damaged file flagged, playing from the menu"
 exit $fail

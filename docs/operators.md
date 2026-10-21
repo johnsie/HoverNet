@@ -143,6 +143,16 @@ inputs accepted and late, invalid messages, snapshots served. Alert on `hovernet
 disappearing (crash reports are in the crash directory). A server costs about 0.2 to 0.4 CPU-seconds per race-minute for eight players
 in a debug build ([authoritative-race.md](authoritative-race.md)); size for tens of races per core.
 
+### Public status for the Outiva console
+
+Only a small adapter is public; the monitoring port stays on loopback. `packaging/web/hovernet_account.py` (the account service, which runs
+with or without OIDC) answers `GET /outiva-status.json` with `{"status":"available"|"degraded","players":N}`, `Cache-Control: public,
+max-age=15` and `Access-Control-Allow-Origin: https://outiva.com`. It reads `HOVERNET_STATUS_URL` (default `http://127.0.0.1:9612`, so the
+server needs `status-port 9612`; any non-loopback address is refused at start-up) with a 2-second timeout and caches for 5 seconds.
+`available` means `/health` is 200 and `hovernet_players_active` could be read; a draining server (`/health` 503), an unreachable port or an
+unreadable gauge is `degraded` (local play still works). `players` is `hovernet_players_active`: drivers in races that have not finished,
+excluding spectators, lobby visitors and moderators; it is 0 when it cannot be read. Proxy it as in `packaging/web/hovernet.outiva.com.conf`.
+
 ## Upgrades and rollback
 
 1. Start the new version on a second port and watch `/metrics`.

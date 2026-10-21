@@ -82,6 +82,13 @@ int LobbyServer::RunningRaces() const
     return n;
 }
 
+int LobbyServer::ActivePlayers() const
+{
+    int n = 0;
+    for (const auto& r : mRaces) if (!r.second->host->RaceFinished()) n += r.second->host->ConnectedPlayers();
+    return n;
+}
+
 const RaceHost* LobbyServer::Race(std::uint32_t id) const
 {
     auto it = mRaces.find(id);

@@ -5570,7 +5570,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
         std::string startNote;
         if (framesShown == 3 && std::getenv("HOVERNET_TEST_REPLAY_PICK") != nullptr) {
             for (const ReplayLibrary::Entry& e : entries) if (e.valid) {
-                if (std::getenv("HOVERNET_TEST_REPLAY_PICK_CRAFT") != nullptr && e.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.path = e.path; craftChoice.title = e.track; craftChoice.players = e.players; craftChoice.mySlot = e.mySlot; }   // through the question
+                if (std::getenv("HOVERNET_TEST_REPLAY_PICK_CRAFT") != nullptr && e.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.path = e.path; craftChoice.title = e.track; craftChoice.players = e.players; craftChoice.mySlot = e.mySlot; craftChoice.slotNames = e.names; }   // through the question
                 else startPath = e.path;
                 break;
             }
@@ -5662,8 +5662,8 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                     if (e.valid) {
                         if (focusFirst) { ImGui::SetKeyboardFocusHere(); focusFirst = false; }
                         if (HoverNetButton("WATCH", ImVec2(buttonWidth, 34))) {
-                            if (e.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.path = e.path; craftChoice.title = e.track; craftChoice.players = e.players; craftChoice.mySlot = e.mySlot; }
-                            else { startPath = e.path; startSlot = 0; }
+                            if (e.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.path = e.path; craftChoice.title = e.track; craftChoice.players = e.players; craftChoice.mySlot = e.mySlot; craftChoice.slotNames = e.names; }
+                            else { g_nextReplayNames = e.names; startPath = e.path; startSlot = 0; }
                         }
                         ImGui::SameLine();
                     }
@@ -7654,6 +7654,7 @@ struct AuthOnline
     int rttMs = -1;               // the last measured round trip to the server (-1: not measured yet), shown on the HUD
     ReplayRecorder recorder;      // the race as a replay, built from the Ticks the client follows (saved when the race ends)
     bool replaySaved = false;
+    std::vector<std::string> slotNames;   // who sits in each slot, from the lobby roster (saved beside the replay so it can show names)
     std::vector<MR_MainCharacter*> craft;
     std::unique_ptr<RenderedWorld> world;
     bool interpolationOff = std::getenv("HOVERNET_TEST_NO_INTERPOLATION") != nullptr;   // test: the picture without the between-tick interpolation
@@ -8257,6 +8258,12 @@ int RunClient(int argc, char** argv)
         const AuthScreenResult screen = RunAuthServerScreen(graphics, lobby, frameLimit);
         if (screen != AuthScreenResult::eRace) return screen;
         auth.ack = lobby.Ack();
+        auth.slotNames.assign(8, std::string());
+        for (const auto& member : lobby.GetRoster().members) if (member.first < 8) auth.slotNames[member.first] = member.second;
+        if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) {
+            std::printf("REPLAYTEST roster %zu\n", lobby.GetRoster().members.size());
+            std::fflush(stdout);
+        }
         auth.backlog = lobby.TakeBacklog();
         auth.spectator = lobby.Spectating();
         auth.conn.Swap(lobby.Connection());
@@ -8296,6 +8303,11 @@ int RunClient(int argc, char** argv)
         if (replay.active && slot >= 0 && slot < static_cast<int>(replay.names.size()) && !replay.names[static_cast<std::size_t>(slot)].empty()) label = replay.names[static_cast<std::size_t>(slot)] + ", " + label;
         return label;
     };
+    // Who drove a slot, for the HUD and the end screen: their name, else "Player 3".
+    auto replayRacerName = [&](int slot) -> std::string {
+        if (replay.active && slot >= 0 && slot < static_cast<int>(replay.names.size()) && !replay.names[static_cast<std::size_t>(slot)].empty()) return replay.names[static_cast<std::size_t>(slot)];
+        return "Player " + std::to_string(slot + 1);
+    };
     auto startReplayFile = [&](const std::string& path, int watch, bool& fatal, const std::string& note = std::string()) -> std::string {
         fatal = false;
         ReplayPlayback next;
@@ -8330,7 +8342,12 @@ int RunClient(int argc, char** argv)
         replay.lapsSeen.assign(static_cast<std::size_t>(replay.data.players), 0);
         if (const char* speed = std::getenv("HOVERNET_TEST_REPLAY_SPEED")) replay.speedStep = std::max(0, std::min(4, std::atoi(speed)));   // test hook: start at this speed step
         replay.lastTicks = SDL_GetTicks();
-        if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) { std::printf("REPLAYTEST following player %d of %d (%s)\n", replay.watch + 1, replay.data.players, note.c_str()); std::fflush(stdout); }
+        if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) {
+            std::printf("REPLAYTEST following player %d of %d (%s)\n", replay.watch + 1, replay.data.players, note.c_str());
+            if (replay.watch < static_cast<int>(replay.names.size()) && !replay.names[static_cast<std::size_t>(replay.watch)].empty())
+                std::printf("REPLAYTEST racer %s\n", replay.names[static_cast<std::size_t>(replay.watch)].c_str());
+            std::fflush(stdout);
+        }
         session.AddMessage(("Following " + replayWatchLabel(replay.watch) + " of " + std::to_string(replay.data.players) + (note.empty() ? std::string() : " (" + note + ")") + ".  P pause, 1-5 speed, [ ] craft, C camera, Esc menu").c_str());
         fatal = false;
         return std::string();
@@ -8456,6 +8473,7 @@ int RunClient(int argc, char** argv)
             if (!auth.conn.Connect(auth.host, auth.port, error, auth.serverKey.empty() ? nullptr : auth.serverKey.data())) return FatalClientError(error);
             Protocol3::Hello hello;
             hello.name = auth.name.substr(0, 32);
+            hello.capabilities = Protocol3::kCapRoster;
             auth.conn.Send(auth.spectator ? Protocol3::kSpectate : Protocol3::kHello, Protocol3::Encode(hello));
             bool gotAck = false, gotStart = false;
             const Uint32 waitStart = SDL_GetTicks();
@@ -8465,6 +8483,13 @@ int RunClient(int argc, char** argv)
                 const bool open = auth.conn.Pump(frames);
                 for (const AuthFrame& f : frames) {
                     if (f.type == Protocol3::kHelloAck) gotAck = Protocol3::Decode(f.payload, auth.ack);
+                    else if (f.type == Protocol3::kRoster) {
+                        Protocol3::Roster roster;
+                        if (Protocol3::Decode(f.payload, roster)) {
+                            auth.slotNames.assign(8, std::string());
+                            for (const auto& member : roster.members) if (member.first < 8) auth.slotNames[member.first] = member.second;
+                        }
+                    }
                     else if (f.type == Protocol3::kStart) gotStart = true;
                     else if (f.type == Protocol3::kReject) {
                         Protocol3::Reject r;
@@ -8722,7 +8747,7 @@ int RunClient(int argc, char** argv)
                     auth.replaySaved = true;
                     const std::vector<std::uint8_t> bytes = auth.recorder.Bytes();
                     if (!bytes.empty()) {
-                        const std::string saved = ReplayLibrary(ConfigDirPath() + "/replays").Save(bytes, auth.ack.track, std::time(nullptr), auth.spectator ? -1 : static_cast<int>(auth.ack.player));
+                        const std::string saved = ReplayLibrary(ConfigDirPath() + "/replays").Save(bytes, auth.ack.track, std::time(nullptr), auth.spectator ? -1 : static_cast<int>(auth.ack.player), auth.slotNames);
                         if (!saved.empty()) {
                             session.AddMessage("This race was saved: Watch a Replay in the menu");
                             if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) { std::printf("REPLAYTEST saved %s %u ticks\n", saved.c_str(), auth.recorder.Ticks()); std::fflush(stdout); }
@@ -9190,9 +9215,9 @@ int RunClient(int argc, char** argv)
             for (const auto& m : replay.markers) if (m.finished) done.push_back(m);
             std::sort(done.begin(), done.end(), [](const ReplayPlayback::Marker& a, const ReplayPlayback::Marker& b) { return a.tick < b.tick; });
             for (std::size_t i = 0; i < done.size(); ++i) {
-                char line[64];
+                char line[96];
                 const long long ms = static_cast<long long>(done[i].tick) * 16;
-                std::snprintf(line, sizeof line, "%zu. Player %d   %lld:%02lld.%02lld", i + 1, done[i].player + 1, ms / 60000, (ms % 60000) / 1000, (ms % 1000) / 10);
+                std::snprintf(line, sizeof line, "%zu. %s   %lld:%02lld.%02lld", i + 1, replayRacerName(done[i].player).c_str(), ms / 60000, (ms % 60000) / 1000, (ms % 1000) / 10);
                 finishers.push_back(line);
             }
             if (finishers.empty()) finishers.push_back("Nobody finished the race.");
@@ -10061,7 +10086,7 @@ int RunClient(int argc, char** argv)
                     if (menuFontHandle != nullptr) {
                         const int sec = static_cast<int>(replay.tick * 16 / 1000), total = static_cast<int>(static_cast<std::int64_t>(replay.data.ticks) * 16 / 1000);
                         char label[96];
-                        std::snprintf(label, sizeof label, "Player %d   %d:%02d / %d:%02d   x%g%s", replay.watch + 1, sec / 60, sec % 60, total / 60, total % 60,
+                        std::snprintf(label, sizeof label, "%s   %d:%02d / %d:%02d   x%g%s", replayRacerName(replay.watch).c_str(), sec / 60, sec % 60, total / 60, total % 60,
                                       kReplaySpeeds[replay.speedStep], replay.paused ? "   paused" : "");
                         DrawUiText(*menuFontHandle->GetSprite(), barX + barW, barY - 44, label, &viewport, MR_Sprite::eRight, MR_Sprite::eBottom, 1);
                     }

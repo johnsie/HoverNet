@@ -164,5 +164,60 @@ status, headers, _ = call(app, "POST", "/account/logout", {"Origin": ORIGIN})
 check(status == 204 and "Max-Age=0" in headers["set-cookie"], "logout clears the cookie")
 check(call(app, "GET", "/account/nope")[0] == 404, "unknown paths are 404")
 
+# 7. the public status for the Outiva console (outiva-status.json): a small view of the loopback monitoring port
+class FakeMonitor(BaseHTTPRequestHandler):
+    health, metrics, delay, hits = 200, "# TYPE hovernet_players_active gauge\nhovernet_players_active 7\nhovernet_connections_open 12\n", 0, 0
+
+    def log_message(self, *a): pass
+
+    def do_GET(self):
+        FakeMonitor.hits += 1
+        time.sleep(FakeMonitor.delay)
+        status, body = (FakeMonitor.health, "ok\n" if FakeMonitor.health == 200 else "draining\n") if self.path == "/health" else (200, FakeMonitor.metrics) if self.path == "/metrics" else (404, "")
+        self.send_response(status); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body.encode())
+
+
+monitor = serve(FakeMonitor)
+monitor_url = "http://127.0.0.1:%d" % monitor.server_address[1]
+clock = [1000.0]
+
+
+def status_app(url=monitor_url, **kw):
+    adapter = ha.StatusAdapter(url, clock=lambda: clock[0], **kw)
+    return adapter, serve(ha.make_handler(None, adapter, "https://outiva.com"))   # no OIDC configured: it must still answer
+
+
+adapter, sapp = status_app()
+status, headers, body = call(sapp, "GET", "/outiva-status.json")
+check(status == 200 and json.loads(body) == {"status": "available", "players": 7}, "a healthy server is available with its active players")
+check(headers.get("cache-control") == "public, max-age=15" and headers.get("access-control-allow-origin") == "https://outiva.com", "public cache for 15 seconds, CORS for the console only")
+check(b"connections" not in body and b"hovernet_" not in body and len(body) < 60, "nothing but status and players is passed on")
+hits = FakeMonitor.hits
+call(sapp, "GET", "/outiva-status.json")
+check(FakeMonitor.hits == hits, "answers within the cache window do not hit the monitoring port again")
+FakeMonitor.health = 503; clock[0] += 10
+check(json.loads(call(sapp, "GET", "/outiva-status.json")[2]) == {"status": "degraded", "players": 7}, "a draining server is degraded, and still reports its players")
+FakeMonitor.health = 200
+for what, text in (("malformed", "hovernet_players_active seven\n"), ("negative", "hovernet_players_active -3\n"), ("missing", "hovernet_connections_open 4\n"), ("huge", "hovernet_players_active 99999999999\n")):
+    FakeMonitor.metrics = text; clock[0] += 10
+    check(json.loads(call(sapp, "GET", "/outiva-status.json")[2]) == {"status": "degraded", "players": 0}, "%s player gauge: degraded, no count" % what)
+FakeMonitor.metrics = "hovernet_players_active 2\n"
+FakeMonitor.delay = 1.0; clock[0] += 10
+slow, slow_app = status_app(timeout=0.2)
+started = time.time()
+check(json.loads(call(slow_app, "GET", "/outiva-status.json")[2]) == {"status": "degraded", "players": 0} and time.time() - started < 0.9, "a monitoring port that does not answer in time is degraded (short timeout)")
+FakeMonitor.delay = 0
+import socket
+probe = socket.socket(); probe.bind(("127.0.0.1", 0)); dead_port = probe.getsockname()[1]; probe.close()
+down, down_app = status_app("http://127.0.0.1:%d" % dead_port)
+check(json.loads(call(down_app, "GET", "/outiva-status.json")[2]) == {"status": "degraded", "players": 0}, "a refused connection is degraded")
+for url in ("http://192.168.10.181:9612", "http://example.com:9612", "https://127.0.0.1:9612", "http://user@127.0.0.1:9612", "http://:pass@127.0.0.1:9612", "http://127.0.0.1:9612/metrics", "http://127.0.0.1:9612?path=/metrics", "http://127.0.0.1:notaport"):
+    try:
+        ha.StatusAdapter(url); refused = False
+    except ValueError:
+        refused = True
+    check(refused, "the status URL %s is refused (loopback only, no path)" % url)
+check(call(app, "GET", "/outiva-status.json")[0] == 404 and call(sapp, "GET", "/account/me")[0] == 204, "without an adapter the path is 404; the adapter does not change guest play")
+
 print("%d failure(s)" % failures if failures else "web account service: all checks passed")
 sys.exit(1 if failures else 0)

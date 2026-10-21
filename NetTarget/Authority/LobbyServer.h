@@ -91,6 +91,8 @@ public:
     void SetDraining(bool draining) { mDraining = draining; }
     bool Draining() const { return mDraining; }
     int RunningRaces() const;
+    // Drivers in races that have not finished (waiting or running): spectators, lobby visitors and moderators are not counted.
+    int ActivePlayers() const;
     // Counters of every race the server has hosted (running races plus those already removed).
     RaceHost::Metrics TotalMetrics() const;
 

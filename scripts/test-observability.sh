@@ -33,6 +33,9 @@ status=$(sed -n 's/.*status on 127.0.0.1:\([0-9]*\) .*/\1/p' "$dir/server.txt" |
 "$bot" --port "$port" --name o1 --host-race ClassicH:2 > "$dir/o1.txt" 2>&1 &
 sleep 0.4
 "$bot" --port "$port" --name o2 --join-race ClassicH --track ClassicH > "$dir/o2.txt" 2>&1 &
+sleep 0.5
+active=""; [ -z "$PY" ] || active=$(get "$status" metrics | tr -d "\r")
+[ -z "$PY" ] || echo "$active" | grep -q "^hovernet_players_active 2$" || { echo "FAIL: the players_active gauge should count the two drivers during the race"; fail=1; }
 wait %2 %3 2>/dev/null
 sleep 1
 m=""; [ -z "$PY" ] || m=$(get "$status" metrics | tr -d "\r")
@@ -40,6 +43,7 @@ m=""; [ -z "$PY" ] || m=$(get "$status" metrics | tr -d "\r")
 ticks=$(echo "$m" | sed -n 's/^hovernet_ticks_simulated_total \([0-9]*\)$/\1/p')
 [ -z "$PY" ] || [ "${ticks:-0}" -ge 290 ] || { echo "FAIL: ticks simulated is ${ticks:-none}"; fail=1; }
 [ -z "$PY" ] || echo "$m" | grep -q "^hovernet_invalid_messages_total 0$" || { echo "FAIL: invalid messages"; fail=1; }
+[ -z "$PY" ] || { echo "$m" | grep -q "^# TYPE hovernet_players_active gauge$" && echo "$m" | grep -q "^hovernet_players_active 0$"; } || { echo "FAIL: the players_active gauge should be 0 after the race finishes (the Outiva status adapter reads it)"; fail=1; }
 [ -z "$PY" ] || echo "$m" | grep -q "^# TYPE hovernet_bytes_sent_total counter$" || { echo "FAIL: metrics format"; fail=1; }
 kill %1 2>/dev/null; wait %1 2>/dev/null
 # A crash leaves a report.

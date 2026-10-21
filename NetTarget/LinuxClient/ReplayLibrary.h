@@ -37,6 +37,7 @@ public:
         int players = 0;
         int laps = 0;
         int mySlot = -1;            // the craft the player drove in this race (-1: they only watched, or it is not known)
+        std::vector<std::string> names;   // who drove each slot (by slot; empty where not known), from the lobby roster when the race was saved
         std::uint32_t ticks = 0;
         long long durationMs() const { return static_cast<long long>(ticks) * ReplayFormat::kFrameMs; }
         std::string when;           // "2026-10-18 14:23" from the file name, empty when it has none
@@ -64,7 +65,8 @@ public:
 
     // Writes a replay (bytes as ReplayRecorder::Bytes made them) and prunes. Returns the file name, or empty on failure.
     // mySlot: the player's own slot in the race, kept in a small file beside it (<name>.hnr.slot) so the replay itself stays the server's exact bytes.
-    std::string Save(const std::vector<std::uint8_t>& bytes, const std::string& track, std::time_t now, int mySlot = -1)
+    // names: who drove each slot, kept the same way (<name>.hnr.names, one "slot<TAB>name" line each); a race saved without them is shown as player 1, 2, ...
+    std::string Save(const std::vector<std::uint8_t>& bytes, const std::string& track, std::time_t now, int mySlot = -1, const std::vector<std::string>& names = std::vector<std::string>())
     {
         if (bytes.empty() || bytes.size() > kMaxFileBytes) return std::string();
         MakeDirectory();
@@ -83,6 +85,7 @@ public:
         if (mySlot >= 0 && mySlot < 8) {
             if (std::FILE* sf = std::fopen((path + ".slot").c_str(), "w")) { std::fprintf(sf, "%d\n", mySlot); std::fclose(sf); }
         }
+        WriteNames(path + ".names", names);
         Prune();
         return name;
     }
@@ -109,6 +112,7 @@ public:
                     if (std::fscanf(sf, "%d", &slot) == 1 && slot >= 0 && slot < r.players) e.mySlot = slot;
                     std::fclose(sf);
                 }
+                ReadNames(e.path + ".names", e.names);
             }
             entries.push_back(e);
         }
@@ -119,6 +123,7 @@ public:
     {
         if (!IsReplayName(name)) return false;
         std::remove((mDir + "/" + name + ".slot").c_str());
+        std::remove((mDir + "/" + name + ".names").c_str());
         return std::remove((mDir + "/" + name).c_str()) == 0;
     }
 
@@ -155,6 +160,38 @@ public:
     }
 
 private:
+    static void WriteNames(const std::string& path, const std::vector<std::string>& names)
+    {
+        bool any = false;
+        for (const std::string& n : names) any = any || !n.empty();
+        if (!any) return;
+        if (std::FILE* f = std::fopen(path.c_str(), "w")) {
+            for (std::size_t i = 0; i < names.size() && i < 8; ++i) {
+                std::string clean;
+                for (char c : names[i]) if (static_cast<unsigned char>(c) >= 32 && c != 127) clean += c;
+                if (!clean.empty()) std::fprintf(f, "%zu\t%s\n", i, clean.c_str());
+            }
+            std::fclose(f);
+        }
+    }
+
+    static void ReadNames(const std::string& path, std::vector<std::string>& names)
+    {
+        std::FILE* f = std::fopen(path.c_str(), "r");
+        if (f == nullptr) return;
+        names.assign(8, std::string());
+        char line[200];
+        while (std::fgets(line, sizeof line, f) != nullptr) {
+            std::string text(line);
+            while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) text.pop_back();
+            const std::size_t tab = text.find('\t');
+            if (tab == std::string::npos || tab == 0) continue;
+            const int slot = std::atoi(text.substr(0, tab).c_str());
+            if (slot >= 0 && slot < 8) names[static_cast<std::size_t>(slot)] = text.substr(tab + 1);
+        }
+        std::fclose(f);
+    }
+
     // "20261018-142355" as people write it in the UK: "18 Oct 2026, 14:23".
     static std::string UkDateTime(const std::string& stamp)
     {
@@ -204,7 +241,7 @@ private:
     void Prune() const
     {
         std::vector<Entry> all = List();   // newest first
-        for (std::size_t i = kKeep; i < all.size(); ++i) { std::remove(all[i].path.c_str()); std::remove((all[i].path + ".slot").c_str()); }
+        for (std::size_t i = kKeep; i < all.size(); ++i) { std::remove(all[i].path.c_str()); std::remove((all[i].path + ".slot").c_str()); std::remove((all[i].path + ".names").c_str()); }
     }
 
     std::string mDir;

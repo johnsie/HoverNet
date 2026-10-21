@@ -55,7 +55,7 @@ bool OnlineLobby::Connect(const std::string& host, int port, const std::string& 
     if (!mConn.Connect(host, port, error, serverKey.empty() ? nullptr : serverKey.data())) { Fail(error.empty() ? "Could not connect to the server." : error); return false; }
     Hello hello;
     hello.name = name.substr(0, 32);
-    hello.capabilities = kCapRaceId | kCapLobbyChat | kCapHostStart;   // this client shows the race number to a host, and the lobby's chat and users
+    hello.capabilities = kCapRaceId | kCapLobbyChat | kCapHostStart | kCapRoster;   // race number, lobby chat/users, host-controlled start, and final racer names
     if (gHasDevice) { hello.capabilities |= kCapDeviceId; hello.hasDevice = true; hello.deviceHigh = gDeviceHigh; hello.deviceLow = gDeviceLow; }
     mRaces.clear(); mBacklog.clear(); mUsers.clear(); mUsersTotal = 0; mChat.clear(); mRoster = Roster(); mIsHost = false;
     mGotAck = mGotStart = mSpectating = false;

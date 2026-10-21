@@ -22,6 +22,7 @@ constexpr std::uint32_t kCapRaceId = 1;
 constexpr std::uint32_t kCapDeviceId = 16;    // the Hello ends with the client's device id (16 random bytes it made once and keeps): the monthly league counts a race only if its players are on different devices
 constexpr std::uint32_t kCapHostStart = 4;    // the host of a race starts it (StartRace) instead of it starting when the last seat fills; the server sends Roster while it waits
 constexpr std::uint32_t kCapLobbyChat = 2;   // the lobby carries chat (Chat / ChatMessage before a race is joined) and sends LobbyUsers   // HelloAck carries the number of the race (so a host can tell friends which private race to join)
+constexpr std::uint32_t kCapRoster = 8;      // the server sends the final slot/name roster before Start (and to a spectator), without changing who starts the race
 constexpr std::uint16_t kMinMaxFrame = 64;
 constexpr int kMaxInputsPerMessage = 32;
 
@@ -50,7 +51,7 @@ enum Type : std::uint8_t
     kChatMessage = 31,     // server to client: someone said something
     kBlock = 32,           // client to server: stop showing me this name
     kReport = 33,          // client to server: report a name to the moderators
-    kRoster = 35,          // server to client, only with kCapHostStart: who has joined the race that has not started (slot and name), and how many seats
+    kRoster = 35,          // server to client with kCapHostStart or kCapRoster: slot/name pairs and the number of seats
     kListRecords = 44,     // client to server (lobby): the track records of one track; see ListRecords
     kRecordList = 45,      // server to client: the answer, see RecordList
     kListWinners = 46,     // client to server (lobby): the recent winners of races with at least two players; see ListWinners

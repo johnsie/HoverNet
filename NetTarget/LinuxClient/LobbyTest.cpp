@@ -168,6 +168,7 @@ int main()
         b.Pump(); a.Pump();
         Check(b.player == 1, "the joiner gets slot 1");
         Check(a.started && b.started, "the race starts when it is full");
+        Check(lobby.ActivePlayers() == 2, "the active-player count includes drivers, not lobby visitors");
 
         c.Hello("carol", now); c.Pump();
         c.Send(Protocol3::kHostRace, Protocol3::Encode(Host("The River", 2)), now);
@@ -180,6 +181,7 @@ int main()
         d.Send(Protocol3::kJoinRace, Protocol3::Encode(Protocol3::JoinRace{secondRace}), now);
         d.Pump(); c.Pump();
         Check(c.started && d.started && lobby.RaceCount() == 2, "the second race is running beside the first");
+        Check(lobby.ActivePlayers() == 4, "the active-player count spans unfinished races");
 
         // Both races are driven for 600 ticks by the same scripted inputs as standalone runs.
         {

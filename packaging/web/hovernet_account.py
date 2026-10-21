@@ -9,6 +9,7 @@ hovernet.outiva.com. The page (and the copy framed inside outiva.com, which is t
     GET  /account/callback                          Keycloak returns here; sets the cookie, then goes back to outiva.com (mode=redirect)
                                                     or to the game
     GET  /account/me                                200 {sub,name,preferred_username,email,callsign} or 204 for a guest
+    GET  /outiva-status.json                        {"status":"available"|"degraded","players":N} for the Outiva games console (no sign-in needed)
     PUT  /account/callsign                          {"callsign": "..."} remembers the display name for this account
     POST /account/logout                            forgets the session
 
@@ -25,6 +26,7 @@ Configuration (environment, normally /etc/hovernet/account.env, written by confi
     HOVERNET_OUTIVA_ORIGIN         https://outiva.com
     HOVERNET_CALLSIGN_FILE         /var/lib/hovernet-account/callsigns.json
     HOVERNET_ACCOUNT_HOST / HOVERNET_ACCOUNT_PORT   127.0.0.1 / 9602
+    HOVERNET_STATUS_URL            http://127.0.0.1:9612   (the race server's loopback monitoring port; only loopback addresses are accepted)
 """
 
 import base64
@@ -214,8 +216,68 @@ class Account:
             print("OIDC callback failed: %s" % error, file=sys.stderr)
             return None, request["redirect"]
 
+STATUS_PATH = "/outiva-status.json"
+PLAYERS_GAUGE = re.compile(r"^hovernet_players_active ([0-9]{1,6})$", re.M)
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 
-def make_handler(account):
+
+class StatusAdapter:
+    """The small public view of the race server for the Outiva console: availability and how many players are driving.
+
+    It reads the loopback monitoring port (/health, /metrics) and passes on nothing else: no raw metrics, names, results or device ids.
+    A draining or unreachable server is "degraded" (local play and the web assets still work); the count is the explicit
+    hovernet_players_active gauge, which excludes spectators and lobby visitors, and is 0 when it cannot be read."""
+
+    def __init__(self, base_url, timeout=2.0, fetch=None, clock=time.time, cache_seconds=5):
+        parts = urllib.parse.urlsplit(base_url)
+        try:
+            port = parts.port
+        except ValueError:
+            port = None
+        if (parts.scheme != "http" or parts.hostname not in LOOPBACK_HOSTS or parts.username is not None or parts.password is not None
+                or parts.path not in ("", "/") or parts.query or parts.fragment or port is None):
+            raise ValueError("the status URL must be http:// on a loopback address (the monitoring port is never public)")
+        self.base_url = "%s://%s" % (parts.scheme, parts.netloc)
+        self.timeout = timeout
+        self.fetch = fetch or self.http_get
+        self.clock = clock
+        self.cache_seconds = cache_seconds
+        self.cached = None
+        self.lock = threading.Lock()
+        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def http_get(self, path):
+        try:
+            with self.opener.open(self.base_url + path, timeout=self.timeout) as response:
+                return response.status, response.read(65536).decode("utf-8", "replace")
+        except urllib.error.HTTPError as error:   # /health answers 503 while draining
+            return error.code, error.read(65536).decode("utf-8", "replace")
+
+    def compute(self):
+        try:
+            health, _ = self.fetch("/health")
+        except (OSError, ValueError):
+            return {"status": "degraded", "players": 0}
+        players = None
+        if health in (200, 503):
+            try:
+                code, text = self.fetch("/metrics")
+                found = PLAYERS_GAUGE.search(text) if code == 200 else None
+                players = int(found.group(1)) if found else None
+            except (OSError, ValueError):
+                pass
+        available = health == 200 and players is not None
+        return {"status": "available" if available else "degraded", "players": players or 0}
+
+    def status(self):
+        with self.lock:
+            now = self.clock()
+            if self.cached is None or now - self.cached[0] >= self.cache_seconds or now < self.cached[0]:
+                self.cached = (now, self.compute())
+            return dict(self.cached[1])
+
+
+def make_handler(account, status=None, console_origin="https://outiva.com"):
     class Handler(BaseHTTPRequestHandler):
         server_version = "HoverNetAccount"
         sys_version = ""
@@ -225,7 +287,8 @@ def make_handler(account):
 
         def send(self, status, headers=None, body=b""):
             self.send_response(status)
-            self.send_header("Cache-Control", "no-store")
+            if "Cache-Control" not in (headers or {}):
+                self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             for key, value in (headers or {}).items():
                 self.send_header(key, value)
@@ -236,6 +299,12 @@ def make_handler(account):
         def do_GET(self):
             url = urllib.parse.urlsplit(self.path)
             query = urllib.parse.parse_qs(url.query)
+            if url.path == STATUS_PATH:
+                if status is None:
+                    return self.send(404)
+                return self.send(200, {"Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=15",
+                                       "Access-Control-Allow-Origin": console_origin, "Vary": "Origin"},
+                                 json.dumps(status.status(), separators=(",", ":")).encode())
             if account is None:   # not configured: everyone is a guest
                 return self.send(204) if url.path == "/account/me" else self.send(404)
             if url.path == "/account/me":
@@ -301,7 +370,12 @@ def main():
     account = account_from_environment()
     host = os.environ.get("HOVERNET_ACCOUNT_HOST", "127.0.0.1")
     port = int(os.environ.get("HOVERNET_ACCOUNT_PORT", "9602"))
-    server = ThreadingHTTPServer((host, port), make_handler(account))
+    try:
+        status = StatusAdapter(os.environ.get("HOVERNET_STATUS_URL", "http://127.0.0.1:9612"))
+    except ValueError as error:
+        raise SystemExit("HOVERNET_STATUS_URL: %s" % error)
+    console = os.environ.get("HOVERNET_OUTIVA_ORIGIN", "https://outiva.com")
+    server = ThreadingHTTPServer((host, port), make_handler(account, status, console))
     print("HoverNet account service on %s:%d (OIDC %s)" % (host, port, "enabled" if account else "disabled: guests only"), flush=True)
     server.serve_forever()
 

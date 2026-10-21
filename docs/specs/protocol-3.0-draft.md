@@ -130,3 +130,7 @@ one seat, a time trial, still starts at once). The server sends that race's clie
 who are there; when fewer than the seats, the race is set up again for that number, slots are numbered from 0 with no gap, and every player gets a fresh
 HelloAck (new slot and resume token) before Start. If the host leaves before then, the others are sent away (`kNotInRace`, "the host left the race").
 A race whose first player did not set the bit keeps the old behaviour (it starts when full).
+
+**Final racer names (capability bit 3, `kCapRoster`).** A client that sets it receives `Roster` with the final slot/name mapping immediately before
+`Start`, without asking to control when the race starts. A spectator receives the same frozen roster after `HelloAck`. This lets a client label and
+save a replay without exposing names anywhere outside the race connection. `kCapHostStart` clients continue to receive the waiting-room roster too.
