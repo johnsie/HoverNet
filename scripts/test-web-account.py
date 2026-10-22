@@ -166,7 +166,7 @@ check(call(app, "GET", "/account/nope")[0] == 404, "unknown paths are 404")
 
 # 7. the public status for the Outiva console (outiva-status.json): a small view of the loopback monitoring port
 class FakeMonitor(BaseHTTPRequestHandler):
-    health, metrics, delay, hits = 200, "# TYPE hovernet_players_active gauge\nhovernet_players_active 7\nhovernet_connections_open 12\n", 0, 0
+    health, metrics, delay, hits = 200, "# TYPE hovernet_players_active gauge\nhovernet_players_active 7\nhovernet_lobby_users 3\nhovernet_connections_open 12\n", 0, 0
 
     def log_message(self, *a): pass
 
@@ -189,19 +189,21 @@ def status_app(url=monitor_url, **kw):
 
 adapter, sapp = status_app()
 status, headers, body = call(sapp, "GET", "/outiva-status.json")
-check(status == 200 and json.loads(body) == {"status": "available", "players": 7}, "a healthy server is available with its active players")
+check(status == 200 and json.loads(body) == {"status": "available", "players": 10}, "a healthy server is available with drivers plus lobby users")
 check(headers.get("cache-control") == "public, max-age=15" and headers.get("access-control-allow-origin") == "https://outiva.com", "public cache for 15 seconds, CORS for the console only")
 check(b"connections" not in body and b"hovernet_" not in body and len(body) < 60, "nothing but status and players is passed on")
 hits = FakeMonitor.hits
 call(sapp, "GET", "/outiva-status.json")
 check(FakeMonitor.hits == hits, "answers within the cache window do not hit the monitoring port again")
 FakeMonitor.health = 503; clock[0] += 10
-check(json.loads(call(sapp, "GET", "/outiva-status.json")[2]) == {"status": "degraded", "players": 7}, "a draining server is degraded, and still reports its players")
+check(json.loads(call(sapp, "GET", "/outiva-status.json")[2]) == {"status": "degraded", "players": 10}, "a draining server is degraded, and still reports its players")
 FakeMonitor.health = 200
-for what, text in (("malformed", "hovernet_players_active seven\n"), ("negative", "hovernet_players_active -3\n"), ("missing", "hovernet_connections_open 4\n"), ("huge", "hovernet_players_active 99999999999\n")):
+for what, text in (("malformed", "hovernet_players_active seven\n"), ("negative", "hovernet_players_active -3\n"), ("missing", "hovernet_connections_open 4\n"), ("huge", "hovernet_players_active 99999999999\n"), ("lobby only", "hovernet_lobby_users 4\n")):
     FakeMonitor.metrics = text; clock[0] += 10
     check(json.loads(call(sapp, "GET", "/outiva-status.json")[2]) == {"status": "degraded", "players": 0}, "%s player gauge: degraded, no count" % what)
-FakeMonitor.metrics = "hovernet_players_active 2\n"
+FakeMonitor.metrics = "hovernet_players_active 2\n"   # an older server without the lobby gauge still works
+clock[0] += 10
+check(json.loads(call(sapp, "GET", "/outiva-status.json")[2]) == {"status": "available", "players": 2}, "a server without the lobby gauge reports its drivers only")
 FakeMonitor.delay = 1.0; clock[0] += 10
 slow, slow_app = status_app(timeout=0.2)
 started = time.time()

@@ -89,6 +89,13 @@ int LobbyServer::ActivePlayers() const
     return n;
 }
 
+int LobbyServer::LobbyUsers() const
+{
+    int n = 0;
+    for (const auto& c : mConns) if (!c->closed && c->helloDone && c->raceId == 0) ++n;
+    return n;
+}
+
 const RaceHost* LobbyServer::Race(std::uint32_t id) const
 {
     auto it = mRaces.find(id);

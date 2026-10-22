@@ -150,8 +150,8 @@ with or without OIDC) answers `GET /outiva-status.json` with `{"status":"availab
 max-age=15` and `Access-Control-Allow-Origin: https://outiva.com`. It reads `HOVERNET_STATUS_URL` (default `http://127.0.0.1:9612`, so the
 server needs `status-port 9612`; any non-loopback address is refused at start-up) with a 2-second timeout and caches for 5 seconds.
 `available` means `/health` is 200 and `hovernet_players_active` could be read; a draining server (`/health` 503), an unreachable port or an
-unreadable gauge is `degraded` (local play still works). `players` is `hovernet_players_active`: drivers in races that have not finished,
-excluding spectators, lobby visitors and moderators; it is 0 when it cannot be read. Proxy it as in `packaging/web/hovernet.outiva.com.conf`.
+unreadable gauge is `degraded` (local play still works). `players` is `hovernet_players_active` (drivers in races that have not finished) plus `hovernet_lobby_users` (people in the lobby who are
+not in a race yet; a server without that gauge counts drivers only), excluding spectators and moderators; it is 0 when it cannot be read. Proxy it as in `packaging/web/hovernet.outiva.com.conf`.
 
 ## Upgrades and rollback
 

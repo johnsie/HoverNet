@@ -351,7 +351,7 @@ void PumpStatus(AuthSocket listener, std::vector<std::unique_ptr<StatusPeer>>& p
     peers.erase(std::remove_if(peers.begin(), peers.end(), [](const std::unique_ptr<StatusPeer>& p) { return p->socket == kInvalidSocket; }), peers.end());
 }
 
-std::string RenderMetrics(const RaceHost::Metrics& m, unsigned long long races, unsigned long long racesHosted, unsigned long long connections, unsigned long long players, std::int64_t uptimeMs)
+std::string RenderMetrics(const RaceHost::Metrics& m, unsigned long long races, unsigned long long racesHosted, unsigned long long connections, unsigned long long players, unsigned long long lobbyUsers, std::int64_t uptimeMs)
 {
     std::string out;
     out += Metric("hovernet_uptime_seconds", "Seconds since the server started.", "counter", static_cast<unsigned long long>(uptimeMs / 1000));
@@ -359,6 +359,7 @@ std::string RenderMetrics(const RaceHost::Metrics& m, unsigned long long races, 
     out += Metric("hovernet_races_hosted_total", "Races hosted since start.", "counter", racesHosted);
     out += Metric("hovernet_connections_open", "Open connections now.", "gauge", connections);
     out += Metric("hovernet_players_active", "Players driving in races that have not finished (not spectators or lobby visitors).", "gauge", players);
+    out += Metric("hovernet_lobby_users", "People in the lobby who are not in a race yet.", "gauge", lobbyUsers);
     out += Metric("hovernet_connections_accepted_total", "Connections accepted.", "counter", m.connectionsAccepted);
     out += Metric("hovernet_connections_rejected_total", "Connections refused with a message.", "counter", m.rejectedConnections);
     out += Metric("hovernet_bytes_received_total", "Bytes received.", "counter", m.bytesIn);
@@ -577,7 +578,7 @@ int main(int argc, char** argv)
         std::printf("listening on %s:%d, lobby with %zu tracks\n", bind.c_str(), boundPort, lobbyConfig.tracks.size());
         LogEvent("server_start", std::string("\"version\":\"") + HOVERNET_SERVER_VERSION + "\",\"mode\":\"lobby\"");
         std::fflush(stdout);
-        metricsText = [&]() { return RenderMetrics(lobby.TotalMetrics(), static_cast<unsigned long long>(lobby.RaceCount()), lobby.RacesHosted(), static_cast<unsigned long long>(lobby.OpenConnections()), static_cast<unsigned long long>(lobby.ActivePlayers()), NowMs() - serverStart); };
+        metricsText = [&]() { return RenderMetrics(lobby.TotalMetrics(), static_cast<unsigned long long>(lobby.RaceCount()), lobby.RacesHosted(), static_cast<unsigned long long>(lobby.OpenConnections()), static_cast<unsigned long long>(lobby.ActivePlayers()), static_cast<unsigned long long>(lobby.LobbyUsers()), NowMs() - serverStart); };
         std::vector<std::unique_ptr<Peer>> lobbyPeers;
         std::int64_t drainStarted = -1, drainedAt = -1;
         for (;;) {
@@ -615,7 +616,7 @@ int main(int argc, char** argv)
     std::fflush(stdout);
 
     std::vector<std::unique_ptr<Peer>> peers;
-    metricsText = [&]() { return RenderMetrics(host->GetMetrics(), 1, 1, static_cast<unsigned long long>(peers.size()), host->RaceFinished() ? 0 : static_cast<unsigned long long>(host->ConnectedPlayers()), NowMs() - serverStart); };
+    metricsText = [&]() { return RenderMetrics(host->GetMetrics(), 1, 1, static_cast<unsigned long long>(peers.size()), host->RaceFinished() ? 0 : static_cast<unsigned long long>(host->ConnectedPlayers()), 0, NowMs() - serverStart); };
     std::int64_t raceEndedAt = -1, drainStartedFixed = -1;
     for (;;) {
         PumpSockets(*host, listener, peers, maxConnections, moderation.get(), security);

@@ -170,7 +170,9 @@ int main()
         Check(a.started && b.started, "the race starts when it is full");
         Check(lobby.ActivePlayers() == 2, "the active-player count includes drivers, not lobby visitors");
 
+        Check(lobby.LobbyUsers() == 0, "nobody is in the lobby once both players are in a race");
         c.Hello("carol", now); c.Pump();
+        Check(lobby.LobbyUsers() == 1 && lobby.ActivePlayers() == 2, "a greeted player not yet in a race counts as a lobby user, not a driver");
         c.Send(Protocol3::kHostRace, Protocol3::Encode(Host("The River", 2)), now);
         c.Pump();
         d.Hello("dave", now); d.Pump();

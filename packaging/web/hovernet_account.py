@@ -218,15 +218,17 @@ class Account:
 
 STATUS_PATH = "/outiva-status.json"
 PLAYERS_GAUGE = re.compile(r"^hovernet_players_active ([0-9]{1,6})$", re.M)
+LOBBY_GAUGE = re.compile(r"^hovernet_lobby_users ([0-9]{1,6})$", re.M)   # optional: an older server does not have it
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 
 
 class StatusAdapter:
-    """The small public view of the race server for the Outiva console: availability and how many players are driving.
+    """The small public view of the race server for the Outiva console: availability and how many people are online (drivers plus the lobby).
 
     It reads the loopback monitoring port (/health, /metrics) and passes on nothing else: no raw metrics, names, results or device ids.
     A draining or unreachable server is "degraded" (local play and the web assets still work); the count is the explicit
-    hovernet_players_active gauge, which excludes spectators and lobby visitors, and is 0 when it cannot be read."""
+    hovernet_players_active gauge (drivers in unfinished races) plus hovernet_lobby_users (people in the lobby), excluding spectators
+    and moderators; it is 0 when it cannot be read."""
 
     def __init__(self, base_url, timeout=2.0, fetch=None, clock=time.time, cache_seconds=5):
         parts = urllib.parse.urlsplit(base_url)
@@ -264,6 +266,9 @@ class StatusAdapter:
                 code, text = self.fetch("/metrics")
                 found = PLAYERS_GAUGE.search(text) if code == 200 else None
                 players = int(found.group(1)) if found else None
+                lobby = LOBBY_GAUGE.search(text) if players is not None else None
+                if lobby:
+                    players += int(lobby.group(1))
             except (OSError, ValueError):
                 pass
         available = health == 200 and players is not None

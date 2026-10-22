@@ -13,7 +13,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const check = (ok, what) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${what}`); if (!ok) failures++; };
 
-let health = 200, metrics = '# TYPE hovernet_players_active gauge\nhovernet_players_active 5\nhovernet_connections_open 9\n';
+let health = 200, metrics = '# TYPE hovernet_players_active gauge\nhovernet_players_active 5\nhovernet_lobby_users 2\nhovernet_connections_open 9\n';
 const monitor = http.createServer((req, res) => {
   const [code, body] = req.url === '/health' ? [health, health === 200 ? 'ok\n' : 'draining\n'] : req.url === '/metrics' ? [200, metrics] : [404, ''];
   res.writeHead(code); res.end(body);
@@ -28,7 +28,7 @@ try {
   for (let i = 0; i < 40 && !first; i++) { try { first = await ask(); } catch (e) { await sleep(250); } }
   if (!first) { check(false, 'the account service started'); }
   else {
-    check(first.r.status === 200 && JSON.stringify(JSON.parse(first.text)) === '{"status":"available","players":5}', 'a healthy server: {"status":"available","players":5}');
+    check(first.r.status === 200 && JSON.stringify(JSON.parse(first.text)) === '{"status":"available","players":7}', 'a healthy server: {"status":"available","players":7} (5 driving + 2 in the lobby)');
     check(first.r.headers.get('access-control-allow-origin') === 'https://outiva.com', 'CORS allows only https://outiva.com');
     check(first.r.headers.get('cache-control') === 'public, max-age=15', 'Cache-Control: public, max-age=15');
     check((first.r.headers.get('content-type') || '').startsWith('application/json'), 'served as JSON');

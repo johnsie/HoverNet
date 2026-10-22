@@ -44,6 +44,7 @@ ticks=$(echo "$m" | sed -n 's/^hovernet_ticks_simulated_total \([0-9]*\)$/\1/p')
 [ -z "$PY" ] || [ "${ticks:-0}" -ge 290 ] || { echo "FAIL: ticks simulated is ${ticks:-none}"; fail=1; }
 [ -z "$PY" ] || echo "$m" | grep -q "^hovernet_invalid_messages_total 0$" || { echo "FAIL: invalid messages"; fail=1; }
 [ -z "$PY" ] || { echo "$m" | grep -q "^# TYPE hovernet_players_active gauge$" && echo "$m" | grep -q "^hovernet_players_active 0$"; } || { echo "FAIL: the players_active gauge should be 0 after the race finishes (the Outiva status adapter reads it)"; fail=1; }
+[ -z "$PY" ] || echo "$m" | grep -q "^hovernet_lobby_users 0$" || { echo "FAIL: the lobby_users gauge should be 0 once the bots have left (the Outiva status adapter adds it)"; fail=1; }
 [ -z "$PY" ] || echo "$m" | grep -q "^# TYPE hovernet_bytes_sent_total counter$" || { echo "FAIL: metrics format"; fail=1; }
 kill %1 2>/dev/null; wait %1 2>/dev/null
 # A crash leaves a report.

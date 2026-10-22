@@ -5,7 +5,7 @@
 **Done and tested locally on Linux** (`scripts/test-web-account.py`, `scripts/test-observability.sh`; nothing deployed, nothing pushed):
 
 - `GET /outiva-status.json` in `packaging/web/hovernet_account.py` (works without OIDC): `available` / `degraded`, 15 s public cache, CORS for `https://outiva.com` only, loopback-only status URL (`HOVERNET_STATUS_URL`, default `http://127.0.0.1:9612`), 2 s timeout, 5 s internal cache.
-- New `hovernet_players_active` gauge in the server's `/metrics` (drivers in unfinished races; excludes spectators and lobby visitors).
+- New `hovernet_players_active` gauge in the server's `/metrics` (drivers in unfinished races) and `hovernet_lobby_users` (people in the lobby); the adapter reports their sum.
 - Adapter tests: healthy, draining, malformed/negative/missing/huge gauge, timeout, refused connection, non-loopback URLs refused, headers.
 - Observability script checks the gauge; `docs/operators.md` and `CHANGELOG.md` updated; Apache proxy lines added to `packaging/web/hovernet.outiva.com.conf`.
 
