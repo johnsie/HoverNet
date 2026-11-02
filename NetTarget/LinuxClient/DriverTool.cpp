@@ -75,6 +75,7 @@ int main(int argc, char** argv)
     }
     if (laps < 1 || laps > 5 || kHold < 1 || kHold > 60 || kWidth < 1 || kWidth > 1000) { std::fprintf(stderr, "bad arguments\n"); return 2; }
     MR_InitTrigoTables();
+    MR_DllObjectFactory::MR_DllObjectFactoryCleanup factoryCleanup;   // frees the registrations at exit (a leak check fails the tool otherwise)
     MR_MainCharacter::RegisterFactory();
     MR_RegisterSimElements();
 

@@ -7805,6 +7805,8 @@ int RunClient(int argc, char** argv)
     viewport.Setup(&buffer, 0, 0, kWidth, kHeight, 800);
 #ifdef HOVERNET_GAME2_PLAYER
     MR_Observer* observer = playerMode ? MR_Observer::New() : nullptr;
+    // Whatever way RunClient returns, the observer is released (an online run's early returns used to leak it, and everything it drew with).
+    struct ObserverGuard { MR_Observer* o; ~ObserverGuard() { if (o != nullptr) o->Delete(); } } observerGuard{observer};
     if (observer != nullptr) {
         // Wide frames show less above and below the horizon than 4:3, which cut the hovercraft off
         // at the bottom. Nudge the view (each step is 1/8 of the frame height) -- by environment
@@ -7995,6 +7997,7 @@ int RunClient(int argc, char** argv)
 
 #ifdef HOVERNET_GAME2_PLAYER
     MR_SpriteHandle* menuFontHandle = playerMode ? LoadUiFont() : nullptr;
+    struct FontGuard { MR_SpriteHandle* h; ~FontGuard() { delete h; } } menuFontGuard{menuFontHandle};
 #if defined(HOVERNET_AUTH)
     EnsureDeviceId();
 #endif
@@ -8612,10 +8615,6 @@ int RunClient(int argc, char** argv)
         // Menu-only bounded runs and a confirmed quit have no race to report or
         // enter. Returning here also prevents reads of race-only state after the
         // menu flow, which previously produced corrupted counters in real logs.
-#ifdef HOVERNET_GAME2_PLAYER
-        delete menuFontHandle;
-        observer->Delete();
-#endif
         return 0;
     }
     if (playerMode && (level == nullptr || mainCharacter == nullptr)) {
@@ -8650,6 +8649,7 @@ int RunClient(int argc, char** argv)
     GhostRun ghostRecording, ghostBest;
     std::string ghostKey;                 // "track/laps" the ghostBest belongs to
     MR_MainCharacter* ghostCraft = nullptr;
+    struct GhostCraftGuard { MR_MainCharacter*& c; ~GhostCraftGuard() { delete c; } } ghostCraftGuard{ghostCraft};   // the ghost's craft is made on first use and freed on every way out
     MR_SimulationTime ghostLastTime = 0;  // a time that goes back means the race was restarted
     bool ghostShownReported = false;      // test hook: say once that the ghost was on screen
     bool ghostGapReported = false;        // test hook: say once that the HUD had a gap to the ghost
@@ -10192,11 +10192,6 @@ int RunClient(int argc, char** argv)
         std::fprintf(stderr, "Firing did not create a missile\n");
         return 1;
     }
-
-#ifdef HOVERNET_GAME2_PLAYER
-    delete menuFontHandle;
-    observer->Delete();
-#endif
 
     return 0;
 }

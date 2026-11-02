@@ -903,6 +903,11 @@ if(BUILD_TESTING AND NOT WIN32)
     set_tests_properties(HoverNetModeration PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetLoad COMMAND HoverNetLoadTest 4 8 0.5 2)
     set_tests_properties(HoverNetLoad PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    if(HOVERNET_SANITIZE)
+        # AddressSanitizer keeps freed memory in a 256 MB quarantine, so the server's RSS climbs about 75 MB a round until it fills and the test's
+        # memory-growth check reads that as a leak. A small quarantine shows the real figure (flat at about 49 MB over four rounds).
+        set_tests_properties(HoverNetLoad PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:quarantine_size_mb=1")
+    endif()
     add_test(NAME HoverNetWebSocket COMMAND HoverNetWebSocketTest)
     add_test(NAME HoverNetEd25519 COMMAND HoverNetEd25519Test)
     add_test(NAME HoverNetLobby COMMAND HoverNetLobbyTest)
@@ -1045,6 +1050,11 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetObservability
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-observability.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    if(HOVERNET_SANITIZE)
+        # The test crashes the server on purpose (a store through a null pointer) and checks the server's own crash report. AddressSanitizer
+        # would handle the SIGSEGV first, and UndefinedBehaviorSanitizer with halt_on_error would stop the process at the null store, before the crash.
+        set_tests_properties(HoverNetObservability PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1:handle_segv=0;UBSAN_OPTIONS=halt_on_error=0")
+    endif()
     add_test(NAME HoverNetNetworkConditions
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-network-conditions.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetAuthBot> $<TARGET_FILE:HoverNetNetProxy> $<TARGET_FILE:HoverNetGame2Player>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

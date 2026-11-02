@@ -82,7 +82,7 @@ void Car(gf o)
         o[i] += (1LL << 16);
         const i64 c = o[i] >> 16;
         o[(i + 1) * (i < 15)] += c - 1 + 37 * (c - 1) * (i == 15);
-        o[i] -= c << 16;
+        o[i] -= c * (1LL << 16);   // not c << 16: c can be negative, and shifting a negative value is undefined
     }
 }
 
@@ -206,7 +206,7 @@ void ModL(std::uint8_t* r, i64 x[64])
     for (int i = 63; i >= 32; --i) {
         carry = 0;
         int j;
-        for (j = i - 32; j < i - 12; ++j) { x[j] += carry - 16 * x[i] * static_cast<i64>(kL[j - (i - 32)]); carry = (x[j] + 128) >> 8; x[j] -= carry << 8; }
+        for (j = i - 32; j < i - 12; ++j) { x[j] += carry - 16 * x[i] * static_cast<i64>(kL[j - (i - 32)]); carry = (x[j] + 128) >> 8; x[j] -= carry * 256; }
         x[j] += carry;
         x[i] = 0;
     }
