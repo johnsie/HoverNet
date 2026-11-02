@@ -36,6 +36,7 @@ struct LobbyServer::Entry
     HostConfig cfg;
     std::int64_t finishedAt = -1;
     std::int64_t emptySince = -1;   // since when a started race has had nobody in it (-1: somebody is, or it has not started)
+    bool startNotified = false;
     int badAttempts = 0;            // wrong codes tried on this race; after 30 it refuses everyone
     std::string code;               // non-empty: a private race, unlisted, joined or watched only with this code
 };
@@ -284,6 +285,7 @@ void LobbyServer::Handle(Conn& c, std::uint8_t type, const std::vector<std::uint
         c.hasDevice = h.hasDevice; c.deviceHigh = h.deviceHigh; c.deviceLow = h.deviceLow;
         c.parser.SetMaxFrame(std::min<std::uint16_t>(h.maxFrame, kDefaultMaxFrame));
         SendList(c);
+        if (mOnLobbyJoined) mOnLobbyJoined(c.name);
         return;
     }
     if (type == kResume && !c.helloDone) {
@@ -525,6 +527,10 @@ void LobbyServer::Advance(std::int64_t nowMs)
     for (auto it = mRaces.begin(); it != mRaces.end();) {
         Entry& e = *it->second;
         e.host->Advance(nowMs);
+        if (e.host->Started() && !e.startNotified) {
+            e.startNotified = true;
+            if (mOnStarted) mOnStarted(e.id, *e.host);
+        }
         if (e.host->RaceFinished() && e.finishedAt < 0) {
             e.finishedAt = nowMs;
             if (mOnFinished) mOnFinished(e.id, *e.host);

@@ -45,11 +45,27 @@ one fixed race (`--track`, `--players`, `--laps`). Everything can be put in a co
 | `--status-port P`, `--crash-dir DIR` | `/health`, `/metrics`; crash reports |
 | `--ws-origin ORIGINS`, `--ws-path P` | accept browsers over WebSocket from these comma-separated origins, at this path (default `/auth/`) |
 | `--event-log FILE` | append one JSON object per line: `server_start`, `race_finished` (track, ticks, final hash, each player's rank, laps and times), `drain_start`, `drained`; no names or addresses |
+| `--discord-webhook URL` | post lobby joins, race starts and authoritative finish results to a Discord webhook (lobby mode; requires `curl`) |
 | `--drain-timeout S` | longest a drain waits for races under way (default 600 seconds) |
 | `--once` | serve one race and exit (tests) |
 | `--config FILE` | read options from a file |
 
 ## Running it as a service
+
+To enable Discord notifications for the packaged service, create a webhook for the desired Discord channel, then keep its secret URL outside
+the world-readable server configuration:
+
+    sudo scripts/enable-discord-notifications.sh /path/to/hovernet-server_VERSION_amd64.deb
+
+The script prompts for the URL without echoing it or placing it in shell history, tests the webhook, installs the updated package, writes the
+protected environment file, restarts the service through its normal drain, and verifies that notifications are enabled. To configure it
+manually instead:
+
+    sudo sh -c 'umask 077; printf "%s\n" "HOVERNET_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/..." > /etc/hovernet/discord.env'
+    sudo systemctl restart hovernet-server
+
+The notification worker is asynchronous and bounded: Discord outages do not pause races. Messages identify lobby arrivals, the host and
+settings when a race starts, and each racer's rank, finish time and best lap when it ends. Player names cannot trigger Discord mentions.
 
 - Debian/Ubuntu package: `packaging/debian/build-authserver-deb.sh VERSION BUILD_DIR` builds `hovernet-server` (the server, `HoverNetModTool`,
   `HoverNetReplay`, the seven official tracks, `/etc/hovernet/server.conf`, the systemd unit, the licence as `copyright`). Installing creates

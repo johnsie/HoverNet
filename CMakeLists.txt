@@ -384,9 +384,16 @@ else()
     add_executable(HoverNetAuthServer
         NetTarget/LinuxClient/AuthServer.cpp
         NetTarget/LinuxClient/CrashReporter.cpp
+        NetTarget/LinuxClient/DiscordNotifier.cpp
     )
     target_compile_definitions(HoverNetAuthServer PRIVATE HOVERNET_SERVER_VERSION="${HOVERNET_VERSION}")
     target_link_libraries(HoverNetAuthServer PRIVATE HoverNetSim)
+    add_executable(HoverNetDiscordNotifierTest
+        NetTarget/LinuxClient/DiscordNotifierTest.cpp
+        NetTarget/LinuxClient/DiscordNotifier.cpp
+    )
+    target_link_libraries(HoverNetDiscordNotifierTest PRIVATE HoverNetSim)
+    add_test(NAME HoverNetDiscordNotifier COMMAND HoverNetDiscordNotifierTest)
     add_executable(HoverNetNetProxy
         NetTarget/LinuxClient/NetProxy.cpp
     )

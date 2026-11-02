@@ -28,6 +28,7 @@
 #include "AuthSocket.h"
 #include "SimHarness.h"
 #include "CrashReporter.h"
+#include "DiscordNotifier.h"
 #include "../Authority/SecureChannel.h"
 #include "../Authority/WebSocket.h"
 #include "../Authority/LobbyServer.h"
@@ -427,6 +428,7 @@ int main(int argc, char** argv)
     bool requireEncryption = false;
     std::string trackList;
     std::string communityDir;       // --community-dir: community tracks players may host, as "<name>.trk" files (empty: the official tracks only)
+    std::string discordWebhook;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto value = [&]() -> const char* { return i + 1 < argc ? argv[++i] : ""; };
@@ -457,10 +459,17 @@ int main(int argc, char** argv)
         else if (a == "--spectator-delay-ms") cfg.spectatorDelayMs = std::atoi(value());
         else if (a == "--tracks") trackList = value();
         else if (a == "--community-dir") communityDir = value();
+        else if (a == "--discord-webhook") discordWebhook = value();
         else if (a == "--no-weapons") cfg.race.weapons = false;
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     }
     if (leaguePath.empty() && !replayDir.empty()) leaguePath = replayDir + "/league.tsv";
+    if (discordWebhook.empty()) {
+        const char* fromEnvironment = std::getenv("HOVERNET_DISCORD_WEBHOOK_URL");
+        if (fromEnvironment != nullptr) discordWebhook = fromEnvironment;
+    }
+    DiscordNotifier discord(discordWebhook);
+    if (discord.Enabled()) std::printf("Discord race notifications enabled\n");
     Authority::League league(leaguePath);   // the monthly league (Authority/League.h)
     cfg.race.trackPath = SimHarness::TrackPath(cfg.race.trackName);
 
@@ -553,10 +562,13 @@ int main(int argc, char** argv)
         lobbyConfig.maxConnections = maxConnections;
         lobbyConfig.communityDirectory = communityDir;
         LobbyServer lobby(lobbyConfig);
+        lobby.SetLobbyJoinedCallback([&discord](const std::string& name) { discord.LobbyJoined(name); });
+        lobby.SetRaceStartedCallback([&discord](std::uint32_t id, const RaceHost& race) { discord.RaceStarted(id, race); });
         lobby.SetLeagueSource([&league](const std::string& month) { return league.Data(month, static_cast<std::int64_t>(std::time(nullptr))); });
         std::unique_ptr<DirReplayStore> replayStore;
         if (!replayDir.empty()) { replayStore.reset(new DirReplayStore(replayDir, static_cast<std::size_t>(replayKeep))); lobby.SetReplayStore(replayStore.get()); }
         lobby.SetRaceFinishedCallback([&](std::uint32_t id, const RaceHost& finished) {
+            discord.RaceFinished(id, finished);
             std::printf("race %u over after %u ticks, final hash %016llx\n", id, finished.Race().CurrentTick(), static_cast<unsigned long long>(finished.Race().StateHash()));
             for (const auto& r : finished.Race().Results()) std::printf("  player %d: rank %d, laps %d%s\n", r.player, r.rank, r.laps, r.finished ? ", finished" : "");
             LogEvent("race_finished", ResultFields(finished.Config().race.trackName, finished.Race().CurrentTick(), finished.Race().StateHash(), finished.Race().Results(), finished.Race().Events()));

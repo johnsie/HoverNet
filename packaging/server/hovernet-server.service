@@ -21,6 +21,8 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/hovernet
+# Optional, root-owned mode-600 file containing HOVERNET_DISCORD_WEBHOOK_URL=...
+EnvironmentFile=-/etc/hovernet/discord.env
 
 [Install]
 WantedBy=multi-user.target

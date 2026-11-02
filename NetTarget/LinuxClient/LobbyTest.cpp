@@ -150,10 +150,16 @@ int main()
     // ---- two races at once, hosted and joined through the lobby ------------------------------------------------
     {
         LobbyServer lobby(MakeConfig());
+        std::vector<std::string> joinedNames;
+        int startedNotifications = 0;
+        std::uint32_t startedRace = 0;
+        lobby.SetLobbyJoinedCallback([&](const std::string& name) { joinedNames.push_back(name); });
+        lobby.SetRaceStartedCallback([&](std::uint32_t id, const RaceHost&) { ++startedNotifications; startedRace = id; });
         std::int64_t now = 1000;
         Client a, b, c, d;
         a.Open(lobby, now); b.Open(lobby, now); c.Open(lobby, now); d.Open(lobby, now);
         a.Hello("alice", now); a.Pump();
+        Check(joinedNames == std::vector<std::string>{"alice"}, "a valid Hello raises one lobby-joined event with the player's name");
         Check(a.gotList && a.list.races.empty(), "an empty server lists no races");
         a.Send(Protocol3::kHostRace, Protocol3::Encode(Host("ClassicH", 2)), now);
         a.Pump();
@@ -165,9 +171,11 @@ int main()
               "a second player sees the open race with one of two joined");
         const std::uint32_t firstRace = b.list.races.empty() ? 0 : b.list.races[0].id;
         b.Send(Protocol3::kJoinRace, Protocol3::Encode(Protocol3::JoinRace{firstRace}), now);
+        lobby.Advance(now);
         b.Pump(); a.Pump();
         Check(b.player == 1, "the joiner gets slot 1");
         Check(a.started && b.started, "the race starts when it is full");
+        Check(startedNotifications == 1 && startedRace == firstRace, "a race start raises one lifecycle event with its id");
         Check(lobby.ActivePlayers() == 2, "the active-player count includes drivers, not lobby visitors");
 
         Check(lobby.LobbyUsers() == 0, "nobody is in the lobby once both players are in a race");

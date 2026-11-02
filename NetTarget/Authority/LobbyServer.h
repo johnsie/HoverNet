@@ -80,6 +80,10 @@ public:
 
     // Called once when a race ends (to save its replay, log it, ...).
     void SetRaceFinishedCallback(std::function<void(std::uint32_t, const RaceHost&)> callback) { mOnFinished = callback; }
+    // Lifecycle notifications used by optional external integrations. A lobby join
+    // fires after a valid Hello; a race start fires on the Started() transition.
+    void SetLobbyJoinedCallback(std::function<void(const std::string&)> callback) { mOnLobbyJoined = callback; }
+    void SetRaceStartedCallback(std::function<void(std::uint32_t, const RaceHost&)> callback) { mOnStarted = callback; }
 
     std::uint64_t RacesHosted() const { return mRacesHosted; }
     int RaceCount() const { return static_cast<int>(mRaces.size()); }
@@ -122,6 +126,8 @@ private:
     bool mDraining = false;
     std::string mLastUsers;          // the lobby's user list as last sent (a change is sent to those that asked for it)
     std::function<void(std::uint32_t, const RaceHost&)> mOnFinished;
+    std::function<void(const std::string&)> mOnLobbyJoined;
+    std::function<void(std::uint32_t, const RaceHost&)> mOnStarted;
     ReplayStore* mReplays = nullptr;
     std::function<Protocol3::LeagueData(const std::string&)> mLeague;
     std::function<std::int64_t()> mClock;
