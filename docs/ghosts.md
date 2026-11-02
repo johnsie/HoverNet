@@ -7,6 +7,10 @@ a ghost"** switches it off (a new best is still saved).
 - **Local, desktop and browser alike.** The ghost is a small file (`ghost_<track>_<laps>.bin`, about 20 bytes per 48 ms of racing, 40 KB for a
   two-minute run) in the same per-user settings folder as the personal bests (`~/.config/hovernet`, `%APPDATA%\HoverNet`; the browser keeps it in
   IndexedDB with the other settings). Nothing is sent anywhere. Delete the file to forget the ghost.
+- **The gap on the HUD.** While the ghost is shown, the status line adds `Ghost +1.2s` (you are behind it) or `Ghost -0.4s` (ahead). It is
+  the difference between now and the race time at which the ghost passed the place you are at, taken from the part of its run within 15 seconds
+  of now so a track that crosses itself does not match the wrong visit (`GhostRun::GapMs`). It is left out when you are more than about 12 m
+  from the ghost's line or in another room, and when the ghost has finished.
 - **Only drawn.** The ghost is not a craft in the race: it cannot hit anything or be hit, does not change the state hash, and is not sent to
   a server, so it works the same in a local race and a race on a HoverNet server. It is drawn with the craft of the room it is in, so walls hide
   it like any other craft. It uses the same craft model as yours in another colour, and disappears a second after it finishes.
@@ -17,5 +21,5 @@ a ghost"** switches it off (a new best is still saved).
 Tests: `HoverNetGhostRun` (the format, interpolation, damaged files, file names) and `HoverNetGhost` (`scripts/test-ghost.sh`: the real client
 saves a ghost on a new best, shows it in the next race, does not replace it with a slower run, hides it when the setting is off).
 
-Not yet: a gap to the ghost on the HUD, a ghost taken from a server replay or a friend's run, several ghosts, and a ghost in the web client's
+Not yet: a ghost taken from a server replay or a friend's run, several ghosts, and a ghost in the web client's
 real-browser test (it builds and shares the code; the headless browser test does not finish a race).

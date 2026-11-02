@@ -39,6 +39,22 @@ int main()
     run.Record(50, 0, 0, 0, 0, 0);   // time goes backwards: a restarted race
     Check(run.samples.size() == 1 && run.samples[0].t == 50, "a time that goes backwards starts the run again");
 
+    {   // The gap to the ghost: it passed the craft's place at another time.
+        GhostRun line;
+        for (int i = 0; i <= 200; ++i) line.Record(i * 100, i * 1000, 0, 0, 0, 1);   // 10 m a 100 ms, on a straight, in room 1
+        std::int64_t gap = 0;
+        Check(line.GapMs(5000, 45000, 0, 0, 1, gap) && gap == 500, "a craft at where the ghost was 4.5 s in, at 5.0 s, is 0.5 s behind");
+        Check(line.GapMs(5000, 55000, 0, 0, 1, gap) && gap == -500, "a craft where the ghost will be at 5.5 s is 0.5 s ahead");
+        Check(line.GapMs(5000, 50000, 3000, 0, 1, gap) && gap == 0, "a little off the line still matches");
+        Check(!line.GapMs(5000, 50000, 20000, 0, 1, gap), "far off the ghost's line there is no gap");
+        Check(!line.GapMs(5000, 50000, 0, 0, 2, gap), "in another room there is no gap");
+        Check(!line.GapMs(25000, 50000, 0, 0, 1, gap), "after the ghost has gone there is no gap");
+        GhostRun loop;   // a path that returns to the same place 40 s later: the nearer visit in time wins
+        for (int i = 0; i <= 800; ++i) loop.Record(i * 100, (i % 400) * 1000, 0, 0, 0, 1);
+        Check(loop.GapMs(42000, 4000, 0, 0, 1, gap) && gap == 1600, "a second visit to a place matches the visit near now, not the first");
+        Check(GhostRun::FormatGap(1234) == "+1.2s" && GhostRun::FormatGap(-400) == "-0.4s" && GhostRun::FormatGap(0) == "+0.0s", "the gap is shown to a tenth of a second");
+    }
+
     GhostRun full;
     full.track = "Metro Spiral"; full.laps = 3; full.finishMs = 83456;
     for (int i = 0; i < 400; ++i) full.Record(i * 48, i * 10, -i * 20, 700, (i * 37) % 4096, i / 50);

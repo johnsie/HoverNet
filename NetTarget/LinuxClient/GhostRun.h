@@ -85,6 +85,47 @@ public:
         return true;
     }
 
+    // How far behind (positive) or ahead of (negative) the ghost a craft is, in milliseconds: the ghost passed the place the craft is at now
+    // at some other race time, and the gap is the difference. Only the recording within kGapWindowMs of the race time is searched, so a
+    // track that crosses itself, or a later lap past the same place, does not match the wrong visit; false when the craft is farther than
+    // kGapMaxDistance from every point of the ghost there (it is off the ghost's line, e.g. after a fall or a shortcut) or the ghost is not
+    // being shown (before its start, or more than a second after its end).
+    static constexpr int kGapWindowMs = 15000;
+    static constexpr std::int64_t kGapMaxDistance = 12000;   // the game's distance units (millimetres): about a craft's length
+
+    bool GapMs(std::int64_t timeMs, std::int32_t x, std::int32_t y, std::int32_t z, int room, std::int64_t& gap) const
+    {
+        if (samples.empty() || timeMs < samples.front().t || timeMs > static_cast<std::int64_t>(samples.back().t) + 1000) return false;
+        const std::int64_t from = timeMs - kGapWindowMs, to = timeMs + kGapWindowMs;
+        std::size_t low = 0, high = samples.size();   // first sample at or after the window start
+        while (low < high) {
+            const std::size_t middle = (low + high) / 2;
+            if (samples[middle].t < from) low = middle + 1; else high = middle;
+        }
+        std::int64_t best = kGapMaxDistance * kGapMaxDistance + 1;
+        std::int64_t bestTime = 0;
+        for (std::size_t i = low; i < samples.size() && samples[i].t <= to; ++i) {
+            const Sample& s = samples[i];
+            if (s.room != room) continue;
+            const std::int64_t dx = static_cast<std::int64_t>(s.x) - x, dy = static_cast<std::int64_t>(s.y) - y, dz = static_cast<std::int64_t>(s.z) - z;
+            const std::int64_t d = dx * dx + dy * dy + dz * dz;
+            if (d < best) { best = d; bestTime = s.t; }
+        }
+        if (best > kGapMaxDistance * kGapMaxDistance) return false;
+        gap = timeMs - bestTime;
+        return true;
+    }
+
+    // The gap as the HUD shows it: "+1.2s" when behind the ghost, "-0.4s" when ahead.
+    static std::string FormatGap(std::int64_t gapMs)
+    {
+        char text[24];
+        const std::int64_t magnitude = gapMs < 0 ? -gapMs : gapMs;
+        std::snprintf(text, sizeof(text), "%c%lld.%llds", gapMs < 0 ? '-' : '+',
+                      static_cast<long long>(magnitude / 1000), static_cast<long long>((magnitude % 1000) / 100));
+        return text;
+    }
+
     // The file name for a track and lap count: only letters, digits, '.', '-' and '_' are kept, so a track name can never name another path.
     static std::string FileName(const std::string& trackName, int lapCount)
     {

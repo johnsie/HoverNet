@@ -8652,6 +8652,7 @@ int RunClient(int argc, char** argv)
     MR_MainCharacter* ghostCraft = nullptr;
     MR_SimulationTime ghostLastTime = 0;  // a time that goes back means the race was restarted
     bool ghostShownReported = false;      // test hook: say once that the ghost was on screen
+    bool ghostGapReported = false;        // test hook: say once that the HUD had a gap to the ghost
 #endif
 #ifdef HOVERNET_GAME2_PLAYER
     // A mid-race RaceServer drop (crash, network outage) currently just makes
@@ -10029,6 +10030,19 @@ int RunClient(int argc, char** argv)
                                 ghostCraft->SetOrientation(at.orientation);
                                 ghostCraft->mRoom = at.room;
                                 observer->SetGhost(ghostCraft);
+                                std::int64_t ghostGap = 0;
+                                if (ghostBest.GapMs(ghostTime, mainCharacter->mPosition.mX, mainCharacter->mPosition.mY, mainCharacter->mPosition.mZ,
+                                                    mainCharacter->mRoom, ghostGap)) {
+                                    observer->SetGhostGapText(GhostRun::FormatGap(ghostGap).c_str());
+                                    if (!ghostGapReported && std::getenv("HOVERNET_TEST_GHOST") != nullptr) {
+                                        ghostGapReported = true;
+                                        std::printf("GHOSTTEST gap %s at %d ms\n", GhostRun::FormatGap(ghostGap).c_str(), static_cast<int>(ghostTime));
+                                        std::fflush(stdout);
+                                    }
+                                }
+                                else {
+                                    observer->SetGhostGapText(nullptr);
+                                }
                                 if (!ghostShownReported && std::getenv("HOVERNET_TEST_GHOST") != nullptr) {
                                     ghostShownReported = true;
                                     std::printf("GHOSTTEST ghost shown at %d ms in room %d\n", static_cast<int>(ghostTime), at.room);
@@ -10038,6 +10052,7 @@ int RunClient(int argc, char** argv)
                         }
                         else {
                             observer->SetGhost(nullptr);
+                            observer->SetGhostGapText(nullptr);
                         }
                     }
                     if (HoverNetVrActive()) {

@@ -92,6 +92,7 @@ MR_Observer::MR_Observer()
    mCockpitView = FALSE;
    mChaseScale = 100;
    mGhost = NULL;
+   mGhostGapText[0] = 0;
    mNetworkLatencyMs = -2;
    mLargeHudText = FALSE;
    mFeedbackCharacter = NULL;
@@ -162,6 +163,14 @@ void MR_Observer::Delete()
 void MR_Observer::SetCockpitView( BOOL pOn )
 {
    mCockpitView = pOn;
+}
+
+void MR_Observer::SetGhostGapText( const char* pText )
+{
+   if( pText == NULL )
+      mGhostGapText[0] = 0;
+   else
+      snprintf( mGhostGapText, sizeof(mGhostGapText), "%s", pText );
 }
 
 void MR_Observer::SetNetworkLatency( int pLatencyMs )
@@ -1865,8 +1874,13 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
          lHudFont->StrBlt( lXRes/2, lStatusY + lHudFont->GetItemHeight() + 3,
                            Ascii2Simple( lWeaponStatus ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
+         char lNetworkLine[96];
+         if( mGhostGapText[0] != 0 )
+            snprintf( lNetworkLine, sizeof(lNetworkLine), "%s   Ghost %s", lNetworkStatus, mGhostGapText );
+         else
+            snprintf( lNetworkLine, sizeof(lNetworkLine), "%s", lNetworkStatus );
          lHudFont->StrBlt( lXRes/2, lStatusY + 2*(lHudFont->GetItemHeight() + 3),
-                           Ascii2Simple( lNetworkStatus ), &m3DView,
+                           Ascii2Simple( lNetworkLine ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
       }
       else
@@ -1874,6 +1888,11 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
          char lStatusLine[208];
          snprintf( lStatusLine, sizeof(lStatusLine), "%s   Speed %d%%   %s   %s   %s",
                    lPositionStatus, lSpeedPercent, lFuelStatus, lWeaponStatus, lNetworkStatus );
+         if( mGhostGapText[0] != 0 )
+         {
+            const size_t lUsed = strlen( lStatusLine );
+            snprintf( lStatusLine + lUsed, sizeof(lStatusLine) - lUsed, "   Ghost %s", mGhostGapText );
+         }
          lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lStatusLine ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
       }

@@ -21,6 +21,7 @@ first=$(stat -c %s "$cfg"/ghost_ClassicH_*.bin)
 drive 95000     # a slower finish: the ghost stays, and is shown during the race
 grep -q "GHOSTTEST ghost shown" "$dir/out.txt" || { echo "FAIL: the saved ghost was not shown in the next race"; grep -E "GHOST" "$dir/out.txt"; exit 1; }
 grep -q "GHOSTTEST saved" "$dir/out.txt" && { echo "FAIL: a slower finish replaced the ghost"; exit 1; }
+grep -qE "GHOSTTEST gap [+-][0-9]+\.[0-9]s" "$dir/out.txt" || { echo "FAIL: the HUD had no gap to the ghost while racing it"; grep GHOST "$dir/out.txt"; exit 1; }
 
 echo 0 > "$cfg/ghost_run"      # the setting is off: no ghost is shown
 drive 85000
@@ -30,4 +31,4 @@ rm -f "$cfg/ghost_run"
 
 drive 80000     # a faster finish replaces it; the ghost of the previous run was shown while it was driven
 grep -q "GHOSTTEST ghost shown" "$dir/out.txt" && grep -q "GHOSTTEST saved" "$dir/out.txt" || { echo "FAIL: a faster finish should show the old ghost and save a new one"; grep GHOST "$dir/out.txt"; exit 1; }
-echo "ghost: a new best is saved and shown in the next race, a slower one is not saved, the setting hides it"
+echo "ghost: a new best is saved and shown in the next race with a gap on the HUD, a slower one is not saved, the setting hides it"
