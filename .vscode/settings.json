@@ -1,0 +1,40 @@
+{
+	"files.watcherExclude": {
+		"**/.git/objects/**": true,
+		"**/.git/subtree-cache/**": true,
+		"**/.tools/**": true,
+		"**/build/**": true,
+		"**/dist/**": true,
+		"**/.vs/**": true,
+		"**/test_output/**": true,
+		"**/NetTarget/CommunityTracks/**": true
+	},
+	"search.exclude": {
+		"**/.tools": true,
+		"**/build": true,
+		"**/dist": true,
+		"**/.vs": true,
+		"**/test_output": true,
+		"**/NetTarget/CommunityTracks": true,
+		"**/*.log": true
+	},
+	"files.exclude": {
+		"**/.vs": true
+	},
+	"python.analysis.exclude": [
+		"**/.tools",
+		"**/build",
+		"**/dist",
+		"**/.vs",
+		"**/node_modules"
+	],
+	"python.analysis.indexing": false,
+	"python.analysis.diagnosticMode": "openFilesOnly",
+	"C_Cpp.files.exclude": {
+		"**/.tools": true,
+		"**/build": true,
+		"**/dist": true,
+		"**/.vs": true
+	},
+	"cmake.configureOnOpen": false
+}
