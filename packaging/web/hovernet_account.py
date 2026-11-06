@@ -76,7 +76,9 @@ def safe_profile(profile):
     def text(key):
         value = profile.get(key)
         return value[:254] if isinstance(value, str) else ""
-    return {"sub": text("sub"), "name": text("name"), "preferred_username": text("preferred_username"), "email": text("email")}
+    callsign = text("callsign")   # the name chosen on the Outiva account
+    return {"sub": text("sub"), "name": text("name"), "preferred_username": text("preferred_username"), "email": text("email"),
+            "callsign": callsign if CALLSIGN.match(callsign) else ""}
 
 
 class Callsigns:
@@ -316,7 +318,8 @@ def make_handler(account, status=None, console_origin="https://outiva.com"):
                 current = account.profile(self.headers.get("Cookie"))
                 if not current:
                     return self.send(204)
-                current["callsign"] = account.callsigns.get(current["sub"])
+                current["accountCallsign"] = current.get("callsign", "")
+                current["callsign"] = current["accountCallsign"] or account.callsigns.get(current["sub"])
                 return self.send(200, {"Content-Type": "application/json; charset=utf-8"}, json.dumps(current).encode())
             if url.path == "/account/login":
                 return self.send(302, {"Location": account.login_url(query)})
