@@ -101,9 +101,15 @@ class Callsigns:
         with self.lock:
             return self.players.get(sub, {}).get("callsign", "")
 
-    def set(self, sub, callsign):
+    def custom(self, sub):
+        """The name this player chose for this game on purpose, as opposed to one that only followed their account callsign."""
         with self.lock:
-            self.players[sub] = {"callsign": callsign, "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+            entry = self.players.get(sub, {})
+            return entry.get("callsign", "") if entry.get("custom") else ""
+
+    def set(self, sub, callsign, custom=False):
+        with self.lock:
+            self.players[sub] = {"callsign": callsign, "custom": bool(custom), "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
             if not self.filename:
                 return
             os.makedirs(os.path.dirname(self.filename), mode=0o750, exist_ok=True)
@@ -319,7 +325,7 @@ def make_handler(account, status=None, console_origin="https://outiva.com"):
                 if not current:
                     return self.send(204)
                 current["accountCallsign"] = current.get("callsign", "")
-                current["callsign"] = current["accountCallsign"] or account.callsigns.get(current["sub"])
+                current["callsign"] = account.callsigns.custom(current["sub"]) or current["accountCallsign"] or account.callsigns.get(current["sub"])
                 return self.send(200, {"Content-Type": "application/json; charset=utf-8"}, json.dumps(current).encode())
             if url.path == "/account/login":
                 return self.send(302, {"Location": account.login_url(query)})
@@ -348,7 +354,8 @@ def make_handler(account, status=None, console_origin="https://outiva.com"):
                 return self.send(400)
             if not CALLSIGN.match(callsign):
                 return self.send(400)
-            account.callsigns.set(current["sub"], callsign)
+            # A name different from the Outiva account callsign is this game's own choice and is remembered as such.
+            account.callsigns.set(current["sub"], callsign, bool(current.get("callsign")) and callsign != current["callsign"])
             return self.send(204)
 
         def do_POST(self):
