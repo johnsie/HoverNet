@@ -21,6 +21,10 @@
 
 ---
 
+<p align="center">
+  <img src="docs/images/hovernet-pilot.png" alt="A HoverNet hovercraft with a helmeted pilot in the red cockpit and flames from the jet engine" width="720">
+</p>
+
 > ### &#127937; HOVERNET 2.0 IS OUT
 > Grab it from the [Releases page](../../releases). It is the one marked **Latest**.
 > **We still want your feedback.** Found a bug, or have an idea? [Open an issue](../../issues).
