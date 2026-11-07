@@ -7150,9 +7150,8 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         const float craftY = workPos.y + workSize.y * 0.68f;
         const float craftScale = std::min(workSize.x / 1200.0f, workSize.y / 760.0f);
         if (menuHovercraftTexture != nullptr) {
-            // This hero render is derived from HoverNet's original round-skirt
-            // craft: oversized turbines and a visible pilot give the menu a
-            // stronger arcade-racing identity without under-body lighting.
+            // Hero render of the HoverNet craft (a pilot in the red cockpit, a
+            // jet engine with a flame) on a transparent background, drawn square.
             float availableWidth = std::max(220.0f, workSize.x - panelWidth - 66.0f);
             float craftSize = std::min(availableWidth, workSize.y * 0.72f);
             float imageX = workPos.x + std::max(8.0f, (availableWidth - craftSize) * 0.5f);

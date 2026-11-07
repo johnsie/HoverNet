@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Changed
+- **New hovercraft picture on the main menu**: the red craft with a helmeted pilot and a flaming jet engine replaces the earlier artwork (`NetTarget/LinuxClient/assets/menu-hovercraft.bmp`, 768x768 with a transparent background, shared by the desktop and browser clients). Display only: no change to the simulation, replays or golden files. Origin and licence of the picture are not recorded yet (see `THIRD_PARTY_NOTICES.md`).
+
 ## 2.3.26 - 2026-11-02
 
 ### Fixed
