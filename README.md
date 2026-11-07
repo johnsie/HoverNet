@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="docs/images/hovernet-logo.png" alt="HoverNet logo: a hovercraft with a jet engine beside the blue HoverNet wordmark" width="640">
+</p>
+
+<p align="center">
   <img src="docs/images/hovercraft.png" alt="The red number 1 HoverNet hovercraft with twin jet engines" width="380">
 </p>
 
