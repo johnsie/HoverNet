@@ -7029,6 +7029,22 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         }
     }
 
+    // The hovercraft banner picture; when it is missing the earlier hovercraft picture is used.
+    SDL_Texture* menuBannerTexture = nullptr;
+    float menuBannerAspect = 1.0f;
+    {
+        const std::string bannerPath = SourcePath("NetTarget/LinuxClient/assets/menu-banner.bmp");
+        if (SDL_Surface* bannerSurface = SDL_LoadBMP(bannerPath.c_str())) {
+            SDL_SetSurfaceBlendMode(bannerSurface, SDL_BLENDMODE_BLEND);
+            menuBannerTexture = SDL_CreateTextureFromSurface(graphics.GetRenderer(), bannerSurface);
+            if (menuBannerTexture != nullptr) {
+                SDL_SetTextureBlendMode(menuBannerTexture, SDL_BLENDMODE_BLEND);
+                menuBannerAspect = static_cast<float>(bannerSurface->w) / static_cast<float>(std::max(1, bannerSurface->h));
+            }
+            SDL_FreeSurface(bannerSurface);
+        }
+    }
+
     const char* options[] = {"Local Play", "Online Lobby", "Watch a Replay", "Leaderboards", "Settings", "Controls", "How to Play"};
     constexpr int optionCount = sizeof(options) / sizeof(options[0]);
     MenuChoice choice = MenuChoice::eLocalPlay;
@@ -7149,7 +7165,19 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         const float craftX = workPos.x + workSize.x * 0.30f;
         const float craftY = workPos.y + workSize.y * 0.68f;
         const float craftScale = std::min(workSize.x / 1200.0f, workSize.y / 760.0f);
-        if (menuHovercraftTexture != nullptr) {
+        if (menuBannerTexture != nullptr) {
+            // The banner picture fills the space left of the panel (above the panel on a portrait phone).
+            const float availableWidth = phonePortrait ? workSize.x - 8.0f
+                                       : std::max(220.0f, workSize.x - panelWidth - 66.0f);
+            const float bannerWidth = std::min(availableWidth, workSize.y * 0.9f * menuBannerAspect);
+            const float bannerHeight = bannerWidth / menuBannerAspect;
+            const float bannerX = workPos.x + (phonePortrait ? 4.0f : std::max(8.0f, (availableWidth - bannerWidth) * 0.5f + 8.0f));
+            const float bannerY = phonePortrait ? workPos.y + std::max(40.0f, (panelPos.y - bannerHeight) * 0.5f)
+                                                : workPos.y + std::max(40.0f, (workSize.y - bannerHeight) * 0.5f);
+            background->AddImage(reinterpret_cast<ImTextureID>(menuBannerTexture),
+                                 ImVec2(bannerX, bannerY), ImVec2(bannerX + bannerWidth, bannerY + bannerHeight));
+        }
+        else if (menuHovercraftTexture != nullptr) {
             // Hero render of the HoverNet craft (a pilot in the red cockpit, a
             // jet engine with a flame) on a transparent background, drawn square.
             float availableWidth = std::max(220.0f, workSize.x - panelWidth - 66.0f);
@@ -7206,7 +7234,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
         ImGui::TextColored(kHoverNetCoral, "HIGH-SPEED COMBAT RACING");
         ImGui::Spacing();
-        ImGui::TextDisabled("RACE THE LINE.  OWN THE TRACK.");
+        ImGui::TextDisabled("FAST, FUN, FREE!");
         ImGui::PopStyleColor();
         ImGui::EndGroup();
 
@@ -7281,6 +7309,9 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 
     if (menuHovercraftTexture != nullptr) {
         SDL_DestroyTexture(menuHovercraftTexture);
+    }
+    if (menuBannerTexture != nullptr) {
+        SDL_DestroyTexture(menuBannerTexture);
     }
     ImGui_ImplSDLRenderer2_Shutdown();
     ImGui_ImplSDL2_Shutdown();

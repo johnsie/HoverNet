@@ -7,7 +7,7 @@ and how to roll one back.
 ## Unreleased
 
 ### Changed
-- **New hovercraft picture on the main menu**: the red craft with a helmeted pilot and a flaming jet engine replaces the earlier artwork (`NetTarget/LinuxClient/assets/menu-hovercraft.bmp`, 768x768 with a transparent background, shared by the desktop and browser clients). Display only: no change to the simulation, replays or golden files. Origin and licence of the picture are not recorded yet (see `THIRD_PARTY_NOTICES.md`).
+- **New hovercraft picture on the main menu**: a large render of the red craft (jet engine with flame, chrome and red cockpit) now fills the left of the menu (`NetTarget/LinuxClient/assets/menu-banner.bmp`, transparent background; the earlier pilot picture `menu-hovercraft.bmp` stays as the fallback). The third line under the title now reads "FAST, FUN, FREE!". Display only: no change to the simulation, replays or golden files. Checked by rendering the native client headlessly at desktop and phone-portrait sizes; the browser, Windows and phone-landscape renders were not checked. The origin and licence of the pictures are not recorded yet (see `THIRD_PARTY_NOTICES.md`).
 
 ## 2.3.26 - 2026-11-02
 

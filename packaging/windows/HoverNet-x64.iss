@@ -28,6 +28,7 @@ Source: "{#SourceDir}\NetTarget\ObjFac1.dat"; DestDir: "{app}\NetTarget"; Flags:
 Source: "{#SourceDir}\NetTarget\Tracks\*.trk"; DestDir: "{app}\NetTarget\Tracks"; Flags: ignoreversion
 Source: "{#SourceDir}\NetTarget\CommunityTracks.tsv"; DestDir: "{app}\NetTarget"; Flags: ignoreversion
 Source: "{#SourceDir}\NetTarget\LinuxClient\assets\menu-hovercraft.bmp"; DestDir: "{app}\NetTarget\LinuxClient\assets"; Flags: ignoreversion
+Source: "{#SourceDir}\NetTarget\LinuxClient\assets\menu-banner.bmp"; DestDir: "{app}\NetTarget\LinuxClient\assets"; Flags: ignoreversion
 Source: "{#SourceDir}\NetTarget\LinuxClient\assets\tutorial-race.bmp"; DestDir: "{app}\NetTarget\LinuxClient\assets"; Flags: ignoreversion
 Source: "{#SourceDir}\NetTarget\LinuxClient\assets\*.ttf"; DestDir: "{app}\NetTarget\LinuxClient\assets"; Flags: ignoreversion
 Source: "{#SourceDir}\NetTarget\LinuxClient\assets\*-OFL.txt"; DestDir: "{app}\NetTarget\LinuxClient\assets"; Flags: ignoreversion
