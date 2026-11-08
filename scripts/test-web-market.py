@@ -252,6 +252,13 @@ sbody, sctype = multipart({"source": b"HTTP SOURCE", "name": "Http Source", "aut
 status, data = request("POST", "/market/submit-source", sbody, {"Content-Type": sctype, "Origin": ORIGIN, "Cookie": cookie_for(session, "sub-bob", "bob")})
 check(status == 422 or status == 201, "the editor's Publish request is accepted by the HTTP layer (status %d)" % status)
 check(request("POST", "/market/submit-source", sbody, {"Content-Type": sctype})[0] == 403, "and refused without the site's Origin header (cross-site)")
+status, data = request("GET", "/market/info")
+info = json.loads(data)
+check(status == 200 and info["declaration"] == "v1" and "I made this track" in info["declarationText"] and info["you"] == {"signedIn": False, "invited": False}, "the editor can ask what Publish needs: the declaration, the licences, and that a guest is not signed in")
+status, data = request("GET", "/market/info", headers={"Cookie": cookie_for(session, "sub-alice", "alice")})
+check(json.loads(data)["you"] == {"signedIn": True, "invited": True}, "an invited, signed-in author is told so")
+status, data = request("GET", "/market/info", headers={"Cookie": cookie_for(session, "sub-mallory", "mallory")})
+check(json.loads(data)["you"] == {"signedIn": True, "invited": False}, "a signed-in author who is not invited is told that, before they fill anything in")
 check(request("GET", "/market/other")[0] == 404, "unknown paths are 404")
 server.shutdown()
 

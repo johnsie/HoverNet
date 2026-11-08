@@ -18,8 +18,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const check = (ok, what) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${what}`); if (!ok) failures++; };
 
+// a stand-in Track Market: what the editor asks it and what the editor sends it
+let marketAnswer = { status: 201, body: { id: 1, status: 'waiting for review', name: 'Test Publish', version: 1 } };
+let infoAnswer = { declaration: 'draft-0', declarationText: 'I made this track, or I have the right to publish it.', licences: ['CC0-1.0', 'CC-BY-4.0', 'CC-BY-SA-4.0'], you: { signedIn: true, invited: true } };
+const received = [];
 const server = http.createServer((req, res) => {
   const pathname = req.url.split('?')[0];
+  if (pathname === '/market/info') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(infoAnswer)); return; }
+  if (pathname === '/market/submit-source' && req.method === 'POST') {
+    const chunks = []; req.on('data', (c) => chunks.push(c));
+    req.on('end', () => { received.push({ origin: req.headers.origin, type: req.headers['content-type'], body: Buffer.concat(chunks).toString('utf8') }); res.writeHead(marketAnswer.status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(marketAnswer.body)); });
+    return;
+  }
   if (pathname === '/sample.track.txt') { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end(sample); return; }
   const file = path.join(webDir, path.normalize(pathname === '/' ? '/HoverNetTrackEditor.html' : pathname).replace(/^(\.\.[/\\])+/, ''));
   if (!file.startsWith(path.resolve(webDir)) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
@@ -97,7 +107,33 @@ try {
     check(file === 'Tidal Causeway.track.txt' && text.startsWith('[Header]') && (text.match(/^\[Room\]/gm) || []).length === 39, 'the download is named like the opened file and holds the 39 rooms');
     check(text === sample.toString(), 'saved straight after undoing, it is the original track exactly');
   }
+  // publishing: the same request the Publish button sends (the form itself is checked by looking at it below)
+  const publish = (name, author, licence, declaration, description) => evalJs(`Module.ccall('hn_publish_test',null,['string','string','string','string','string'],[${JSON.stringify(name)},${JSON.stringify(author)},${JSON.stringify(licence)},${JSON.stringify(declaration)},${JSON.stringify(description)}])`);
+  await publish('Test Publish', 'Pat Racer', 'CC-BY-4.0', 'draft-0', 'a test');
+  check(await waitFor(async () => (await call('hn_publish_working')) === 0 && (await call('hn_publish_http')) === 201, 10000), 'Publish sends the track and the market answers 201');
+  const req = received[received.length - 1];
+  const field = (n) => { const m = new RegExp(`name="${n}"\\r\\n\\r\\n([^\\r]*)`).exec(req.body); return m ? m[1] : null; };
+  check(req.origin === base.replace(/\/$/, '') && /^multipart\/form-data/.test(req.type), 'the request is a same-site form post (the market refuses anything else)');
+  check(field('name') === 'Test Publish' && field('author') === 'Pat Racer' && field('licence') === 'CC-BY-4.0' && field('declaration') === 'draft-0' && field('description') === 'a test', 'it carries the name, author, licence, declaration and description exactly');
+  check(req.body.includes('[Header]') && (req.body.match(/^\[Room\]/gm) || []).length === 39 && req.body.includes(sample.toString().split('\n')[0]), 'and the track source itself: the 39 rooms of the track being edited');
+  marketAnswer = { status: 422, body: { id: 2, status: 'refused', reasons: ['no way of driving a lap round this track was found'] } };
+  await publish('Another One', 'Pat Racer', 'CC0-1.0', 'draft-0', '');
+  check(await waitFor(async () => (await call('hn_publish_working')) === 0 && (await call('hn_publish_http')) === 422, 10000), 'a turned-down track is reported (422) and the editor is free to try again');
+  marketAnswer = { status: 403, body: { error: 'the Track Market is in private beta' } };
+  await publish('Third', 'Pat', 'CC0-1.0', 'draft-0', '');
+  check(await waitFor(async () => (await call('hn_publish_working')) === 0 && (await call('hn_publish_http')) === 403, 10000), 'a refusal because the author is not invited is reported (403)');
+  check(await evalJs("localStorage.getItem('hn_author')") === 'Pat', 'the author name used is remembered in the browser for next time');
+
+  // the Publish dialog, opened with the real mouse through the Track menu
+  marketAnswer = { status: 201, body: { id: 3, status: 'waiting for review' } };
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 178, y: 10 }); await sleep(300);
+  await mouse('mousePressed', 178, 10); await mouse('mouseReleased', 178, 10); await sleep(500);
+  fs.writeFileSync(path.join(downloads, 'menu.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 200, y: 50 }); await sleep(300);
+  await mouse('mousePressed', 200, 50); await mouse('mouseReleased', 200, 50); await sleep(1200);
+  const dlg = await shot('publish-dialog.png');
+  check(dlg > 25000, 'the Publish dialog opens and is drawn');
   check(exceptions.length === 0, 'no uncaught page exceptions' + (exceptions.length ? ': ' + exceptions[0] : ''));
 } finally { try { chrome.kill(); } catch (e) {} await sleep(500); server.close(); }
 if (failures) { console.log(`${failures} check(s) failed`); process.exit(1); }
-console.log('web editor test passed');
+console.log('web editor test passed (pictures in ' + downloads + ')');

@@ -713,7 +713,7 @@ if(EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH=1
         -sASYNCIFY=1
         -sFORCE_FILESYSTEM=1
-        "-sEXPORTED_FUNCTIONS=_main,_hn_file_ready,_hn_resize,_hn_rooms,_hn_elements,_hn_dirty,_hn_problems,_hn_element_px,_hn_element_py,_hn_element_section"
+        "-sEXPORTED_FUNCTIONS=_main,_hn_file_ready,_hn_resize,_hn_rooms,_hn_elements,_hn_dirty,_hn_problems,_hn_element_px,_hn_element_py,_hn_element_section,_hn_info_done,_hn_publish_done,_hn_author_known,_hn_publish_test,_hn_publish_http,_hn_publish_working"
         "-sEXPORTED_RUNTIME_METHODS=ccall,FS"
         --shell-file "${CMAKE_SOURCE_DIR}/packaging/web/editor-shell.html")
     set_target_properties(HoverNetTrackEditor PROPERTIES SUFFIX ".html")

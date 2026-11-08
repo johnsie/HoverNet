@@ -49,7 +49,7 @@ struct App
     View panView;
     bool fitPending = true;
     // dialogs
-    bool openNew = false, openOpen = false, openSaveAs = false, openQuit = false, openCheck = false, showGrid = true;
+    bool openNew = false, openOpen = false, openSaveAs = false, openQuit = false, openCheck = false, openPublish = false, showGrid = true;
     char fileBuffer[512] = "";
     NewTrackOptions newOptions;
     char newName[64] = "My New Track";
@@ -85,10 +85,57 @@ EM_JS(void, hn_download, (const char* path, const char* name), {
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 });
+// Publishing (docs/adr/0004-track-marketplace.md, docs/specs/track-market.md section 1b): the page already holds the author's Outiva sign-in (an HttpOnly cookie on
+// this site), so the editor can send the track to the market itself; the service compiles it, proves it can be driven round and checks it.
+EM_JS(void, hn_fetch_info, (), {
+    var done = function (a, b, c, d, e) { Module.ccall('hn_info_done', null, ['number', 'number', 'number', 'string', 'string'], [a, b, c, d, e]); };
+    fetch('/market/info', { credentials: 'same-origin' }).then(function (r) {
+        return r.json().then(function (j) { var you = j.you || {}; done(r.status, you.signedIn ? 1 : 0, you.invited ? 1 : 0, j.declaration || '', j.declarationText || ''); });
+    }).catch(function () { done(0, 0, 0, '', ''); });
+});
+EM_JS(void, hn_publish_js, (const char* source, const char* name, const char* author, const char* licence, const char* declaration, const char* description), {
+    var fd = new FormData();
+    fd.append('source', new Blob([UTF8ToString(source)], { type: 'text/plain' }), 'track.track.txt');
+    fd.append('name', UTF8ToString(name)); fd.append('author', UTF8ToString(author)); fd.append('licence', UTF8ToString(licence));
+    fd.append('declaration', UTF8ToString(declaration)); fd.append('description', UTF8ToString(description));
+    try { localStorage.setItem('hn_author', UTF8ToString(author)); } catch (e) {}
+    var done = function (status, text) { Module.ccall('hn_publish_done', null, ['number', 'string'], [status, text]); };
+    fetch('/market/submit-source', { method: 'POST', body: fd, credentials: 'same-origin' }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+            var msg = '';
+            if (j.error) msg = j.error;
+            else if (j.reasons && j.reasons.length) msg = 'Turned down:\n' + j.reasons.join('\n');
+            else if (j.status) msg = 'Sent. ' + (j.status === 'listed' ? 'It is listed: players can find it in the Community tracks list.' : 'It is ' + j.status + ': a moderator looks at an author\'s first track before it is listed.');
+            else msg = 'The Track Market answered with status ' + r.status;
+            done(r.status, msg);
+        });
+    }).catch(function () { done(0, 'Could not reach the Track Market: check your connection and try again.'); });
+});
+EM_JS(void, hn_open_signin, (), { window.open('/account/login', '_blank');   /* signs in in a new tab and ends on the game page; the editor tab keeps the work */ });
 std::string gUploadName;
 bool gUploadReady = false;
 int gResizeW = 0, gResizeH = 0;
+struct PublishState
+{
+    bool infoLoaded = false, infoAsked = false, signedIn = false, invited = false, reachable = true;
+    std::string declaration, declarationText;
+    bool working = false;
+    int lastHttp = -1;
+    std::string message;
+    char name[64] = "", author[48] = "", description[208] = "";
+    int licence = 0;
+    bool accepted = false;
+};
+PublishState gPublish;
 extern "C" {
+EMSCRIPTEN_KEEPALIVE void hn_info_done(int status, int signedIn, int invited, const char* declaration, const char* text)
+{
+    gPublish.infoLoaded = true; gPublish.reachable = status == 200;
+    gPublish.signedIn = signedIn != 0; gPublish.invited = invited != 0;
+    gPublish.declaration = declaration ? declaration : ""; gPublish.declarationText = text ? text : "";
+}
+EMSCRIPTEN_KEEPALIVE void hn_publish_done(int status, const char* text) { gPublish.working = false; gPublish.lastHttp = status; gPublish.message = text ? text : ""; }
+EMSCRIPTEN_KEEPALIVE void hn_author_known(const char* saved) { if (saved && gPublish.author[0] == '\0') std::snprintf(gPublish.author, sizeof(gPublish.author), "%s", saved); }
 EMSCRIPTEN_KEEPALIVE void hn_file_ready(const char* name) { gUploadName = name ? name : "track.track.txt"; gUploadReady = true; }
 EMSCRIPTEN_KEEPALIVE void hn_resize(int w, int h) { gResizeW = w; gResizeH = h; }
 }
@@ -299,6 +346,7 @@ void Menus(App& a)
         }
         if (ImGui::BeginMenu("Track")) {
             if (ImGui::MenuItem("Compile and check...")) RunCheck(a);
+            if (ImGui::MenuItem("Publish to the community...")) a.openPublish = true;
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -421,6 +469,61 @@ void Dialogs(App& a)
         if (ImGui::Button("Keep editing")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+    if (a.openPublish) {
+        ImGui::OpenPopup("Publish");
+        a.openPublish = false;
+#ifdef __EMSCRIPTEN__
+        gPublish.infoLoaded = false; gPublish.message.clear(); gPublish.accepted = false;
+        if (gPublish.name[0] == '\0') {   // a name to start from: the file's, without its ending
+            std::string base = a.ed.path.empty() ? std::string("") : a.ed.path;
+            const std::size_t slash = base.find_last_of('/'); if (slash != std::string::npos) base = base.substr(slash + 1);
+            for (const char* ending : {".track.txt", ".txt"}) { const std::string e = ending; if (base.size() > e.size() && base.compare(base.size() - e.size(), e.size(), e) == 0) { base.resize(base.size() - e.size()); break; } }
+            std::snprintf(gPublish.name, sizeof(gPublish.name), "%s", base.c_str());
+        }
+        hn_fetch_info();
+#endif
+    }
+    if (ImGui::BeginPopupModal("Publish", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+#ifdef __EMSCRIPTEN__
+        PublishState& p = gPublish;
+        ImGui::PushTextWrapPos(560.0f);
+        if (!p.infoLoaded) ImGui::TextUnformatted("Asking the Track Market...");
+        else if (!p.reachable) ImGui::TextUnformatted("The Track Market cannot be reached from here. Try again later; your track is safe in this window, and File > Save to your computer keeps a copy.");
+        else if (!p.signedIn) {
+            ImGui::TextUnformatted("Sign in with your Outiva account to publish. It opens in a new tab; come back here afterwards and press Check again. Your work stays in this tab.");
+            if (ImGui::Button("Sign in (new tab)")) hn_open_signin();
+            ImGui::SameLine();
+            if (ImGui::Button("Check again")) { p.infoLoaded = false; hn_fetch_info(); }
+        }
+        else if (!p.invited) ImGui::TextUnformatted("You are signed in, but publishing is in a private beta for invited authors for now. Anyone can already download community tracks. Ask the person who runs HoverNet to invite you.");
+        else {
+            const char* licences[] = {"CC-BY-4.0", "CC0-1.0", "CC-BY-SA-4.0"};
+            const char* explain[] = {"Anyone may use and share it if they credit you (the game shows your name next to the track).", "No conditions at all: anyone may do anything with it.", "As CC BY, and changed versions must be shared the same way."};
+            ImGui::InputText("Track name", p.name, sizeof(p.name));
+            ImGui::InputText("Your name (shown as the author)", p.author, sizeof(p.author));
+            ImGui::InputText("Short description", p.description, sizeof(p.description));
+            ImGui::Combo("Licence", &p.licence, licences, 3);
+            ImGui::TextDisabled("%s", explain[p.licence]);
+            ImGui::Spacing();
+            ImGui::TextUnformatted(p.declarationText.c_str());
+            ImGui::Checkbox("I agree to this", &p.accepted);
+            ImGui::Spacing();
+            if (!a.ed.problems.empty()) ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1), "The editor sees %zu thing(s) to look at first (see the list below the plan).", a.ed.problems.size());
+            ImGui::BeginDisabled(p.working || !p.accepted || p.name[0] == '\0' || p.author[0] == '\0');
+            if (ImGui::Button(p.working ? "Sending... (a minute at most)" : "Publish")) {
+                p.working = true; p.message.clear();
+                hn_publish_js(a.ed.Text().c_str(), p.name, p.author, licences[p.licence], p.declaration.c_str(), p.description);
+            }
+            ImGui::EndDisabled();
+        }
+        if (!p.message.empty()) { ImGui::Spacing(); ImGui::TextUnformatted(p.message.c_str()); }
+        ImGui::PopTextWrapPos();
+#else
+        ImGui::TextWrapped("Publishing is done from the browser editor at https://hovernet.outiva.com/editor/ : you sign in there with your Outiva account. Save this track (File > Save) and open it in the browser editor with File > Open from your computer.");
+#endif
+        if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
     if (a.openCheck) { ImGui::OpenPopup("Compile and check"); a.openCheck = false; }
     if (ImGui::BeginPopupModal("Compile and check", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(a.checkOutput.c_str());
@@ -532,6 +635,10 @@ App* gApp = nullptr;
 extern "C" {
 EMSCRIPTEN_KEEPALIVE int hn_rooms() { return gApp ? gApp->ed.model.CountRooms() : -1; }
 EMSCRIPTEN_KEEPALIVE int hn_elements() { return gApp ? static_cast<int>(gApp->ed.model.freeElements.size()) : -1; }
+EMSCRIPTEN_KEEPALIVE void hn_publish_test(const char* name, const char* author, const char* licence, const char* declaration, const char* description)
+{ if (gApp) { gPublish.working = true; hn_publish_js(gApp->ed.Text().c_str(), name, author, licence, declaration, description); } }
+EMSCRIPTEN_KEEPALIVE int hn_publish_http() { return gPublish.lastHttp; }
+EMSCRIPTEN_KEEPALIVE int hn_publish_working() { return gPublish.working ? 1 : 0; }
 EMSCRIPTEN_KEEPALIVE int hn_dirty() { return gApp && gApp->ed.dirty ? 1 : 0; }
 EMSCRIPTEN_KEEPALIVE int hn_problems() { return gApp ? static_cast<int>(gApp->ed.problems.size()) : -1; }
 EMSCRIPTEN_KEEPALIVE int hn_element_px(int i) { return i >= 0 && i < static_cast<int>(gElementScreen.size()) ? static_cast<int>(gElementScreen[static_cast<std::size_t>(i)].x) : -1; }

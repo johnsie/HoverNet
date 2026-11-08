@@ -29,6 +29,8 @@
         };
         window.addEventListener('resize', fit);
         fit();
+        // the author name last used here is offered again
+        try { var saved = localStorage.getItem('hn_author'); if (saved && Module._hn_author_known) Module.ccall('hn_author_known', null, ['string'], [saved]); } catch (e) {}
       }
     };
     // leaving with unsaved changes asks first

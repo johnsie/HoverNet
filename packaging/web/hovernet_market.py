@@ -8,6 +8,8 @@ Authors publish from the track editor; every player can browse and download. Thi
     POST /market/submit-source        multipart: source (the editor's .track.txt), name, author, licence, declaration, description. The service compiles it,
                                       packs it, finds a finishing run in the real simulation, then applies exactly the checks above (this is what the editor's
                                       Publish button sends, so a browser author needs no command-line tools)
+    GET  /market/info                 what the editor needs before it offers Publish: the current declaration (version and text), the licences, and whether the
+                                      person is signed in and invited (public; says nothing about anyone else)
     GET  /market/mine                 the signed-in author's submissions and their state
     POST /market/unlist               {"id": N}: the author takes a track down
     POST /market/report               {"asset": "<sha256>", "reason": "unlawful"|"other", "note": "..."}: anyone may report a listed track
@@ -83,6 +85,10 @@ def community_names(filename):
         pass
     return names
 SHARD = "market"
+DECLARATION_TEXT = ("I made this track, or I have the right to publish it. It does not copy someone else's work without permission. I choose the licence shown here "
+                    "and I understand that anyone may download, use, copy and share the track under that licence, including HoverNet and the people who run HoverNet "
+                    "servers. The name, description and anything else I enter are mine to publish and are not unlawful, abusive or misleading, and contain no private "
+                    "information about anyone. I understand the track may be reviewed, unlisted or removed as described in the terms.")
 COLUMNS = ["name", "mode", "starts", "rooms", "warnings", "bytes", "sha256", "shard", "asset", "gzip", "author", "licence", "listed", "version", "status"]
 
 
@@ -563,6 +569,10 @@ def make_handler(market, session, origin):
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 return self.wfile.write(data)
+            if self.path == "/market/info":
+                who = self.profile()
+                return self.send_json(200, {"declaration": market.declaration, "declarationText": DECLARATION_TEXT, "licences": list(LICENCES), "privateBeta": True,
+                                            "you": {"signedIn": bool(who), "invited": bool(who) and market.allow.contains(who)}})
             if self.path == "/market/mine":
                 return self.send_json(*market.mine(self.profile()))
             if self.path == "/market/review":
