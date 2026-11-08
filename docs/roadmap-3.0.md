@@ -296,6 +296,40 @@ frame-time budgets hold on the reference hardware list. A clean browser profile 
 UI, join the same server, race native players and complete the same post-race flow. The feature-parity matrix has no unexplained gaps and
 the SDL2/web visual regression suite passes.
 
+### Longer term: one web-based UI for every platform (an idea, not decided)
+
+*Recorded 8 November 2026. Nothing is built and nothing is decided. It is not needed to meet the Stage 3 exit gate; it is the direction to weigh when the interim steps
+(a restyle of the existing SDL2 and Dear ImGui screens, and possibly a move to an HTML and CSS-style C++ toolkit such as RmlUi) have shown how far they go.*
+
+**Why.** The menus and tools look like developer tools because Dear ImGui is a developer-tool toolkit, and the browser build is already a web page. A UI written in HTML, CSS and
+JavaScript has by far the best text, layout, animation, icons and designer tooling, and the same pages could run in the browser and on the desktop, so the parity rule below would
+hold by construction instead of by checking two UIs against each other.
+
+**The idea.** Menus, settings, lobby, the Community tracks list and the Track Market, replays, results, and the track editor's panels are web pages. The race itself (the
+renderer and the in-race HUD, which must be fast and sit on the game view) stays in C++. The pages and the game talk through a small, versioned message interface (commands such as
+"start a local race", "host", "join", "download a track", "save settings", and events such as "race finished"); the session, networking and simulation code stays where it is.
+In the browser the pages are the page. On Windows and Linux the same pages are shown by the system web view (WebView2 on Windows, WebKitGTK on Linux) next to the game view, or
+an in-process alternative if one proves better.
+
+**What it must meet before it replaces anything**
+- **Controller and keyboard first:** every screen fully usable with a gamepad (spatial focus navigation, glyphs) and with touch, as today; a mouse is optional.
+- **Offline desktop:** every page shipped in the installer and loaded from disk; no remote content or scripts, a strict content security policy, no navigation away, and a bridge that
+  accepts only the known commands. No third-party trackers (the same rule as the web client).
+- **Accessibility:** real text that scales and can be read by a screen reader, high contrast, reduced motion, colour-safe indicators.
+- **Cost:** startup time, memory, and frame time with the web view open, measured on the reference hardware list; the in-race frame budget must not move.
+- **No new install burden:** a machine without a usable web view still works, so the existing SDL2 UI stays as the fallback until the parity matrix says otherwise.
+- **Licences recorded** before use (the web view runtime's redistribution terms, WebKitGTK's LGPL, any front-end framework, fonts and icon sets) in `THIRD_PARTY_NOTICES.md`.
+
+**How to decide.** Build one slice (the main menu and the Community tracks list) as web pages, run it in the browser build and in a desktop web view, and measure the points
+above, including a play-through with only a gamepad. Move screens one at a time behind a switch, keep the SDL2 screens as the fallback, and retire them only when the web
+parity matrix is fully accepted for that screen. The track editor, which is already a browser program, is the natural first user.
+
+**Risks.** Two UI worlds inside one game (mitigated by moving whole screens, never half of one); web view differences between platforms and versions; gamepad focus handling in the
+DOM is work; a larger attack surface than a native toolkit (mitigated by local-only pages, the content policy and a narrow bridge); the Windows runtime must be present or installed.
+
+**Exit gate (for this idea only):** the first slice runs in the browser and in a desktop web view with measured numbers inside the budgets above and is fully usable with a gamepad,
+and the owner decides to proceed or to stay with the improved SDL2 UI.
+
 ## Stage 4: Content pipeline and the HoverCad successor
 
 **Months 4 to 14, in parallel with the networking stages**
@@ -481,3 +515,4 @@ foundations.
 - Confirm SDL2 as the canonical UI/UX reference for browser parity and define screenshot
   tolerances/viewports for the visual regression suite.
 - Confirm the browser support matrix and the production secure-WebSocket deployment model.
+- Decide, after the interim restyle of the SDL2 UI, whether to try the web-based UI slice described under Stage 3 ("Longer term: one web-based UI for every platform"); not needed for 3.0.
