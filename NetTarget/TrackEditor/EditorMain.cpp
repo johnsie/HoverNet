@@ -14,6 +14,10 @@
 
 #include <SDL.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -54,6 +58,42 @@ struct App
     bool quit = false;
 };
 
+
+#ifdef __EMSCRIPTEN__
+// The browser has no file paths: a track is opened through the browser's file picker (the file is copied into the page's own memory file system) and saved
+// as a download. The page and these functions are packaging/web/editor-shell.html.
+EM_JS(void, hn_pick_file, (), {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt,.track,.track.txt,text/plain';
+    input.onchange = function () {
+        var f = input.files[0];
+        if (!f) return;
+        var r = new FileReader();
+        r.onload = function () { FS.writeFile('/upload.track.txt', new Uint8Array(r.result)); Module.ccall('hn_file_ready', null, ['string'], [f.name]); };
+        r.readAsArrayBuffer(f);
+    };
+    input.click();
+});
+EM_JS(void, hn_download, (const char* path, const char* name), {
+    var data = FS.readFile(UTF8ToString(path));
+    var blob = new Blob([data], { type: 'text/plain' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = UTF8ToString(name);
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+});
+std::string gUploadName;
+bool gUploadReady = false;
+int gResizeW = 0, gResizeH = 0;
+extern "C" {
+EMSCRIPTEN_KEEPALIVE void hn_file_ready(const char* name) { gUploadName = name ? name : "track.track.txt"; gUploadReady = true; }
+EMSCRIPTEN_KEEPALIVE void hn_resize(int w, int h) { gResizeW = w; gResizeH = h; }
+}
+#endif
+
 ImU32 Col(int r, int g, int b, int a = 255) { return IM_COL32(r, g, b, a); }
 
 ImVec2 ToScreen(const View& v, const ImVec2& origin, const ImVec2& size, double x, double y)
@@ -75,6 +115,8 @@ void Fit(App& a, const ImVec2& size)
     const double w = std::max(1.0, b.maxX - b.minX), h = std::max(1.0, b.maxY - b.minY);
     a.view.scale = std::max(0.2, std::min((size.x - 40) / w, (size.y - 40) / h));
 }
+
+std::vector<ImVec2> gElementScreen;   // where each element was last drawn (the browser test clicks there)
 
 struct ElementLook { ImU32 colour; const char* letter; };
 ElementLook LookOf(int type)
@@ -158,9 +200,11 @@ void DrawPlan(App& a, const ImVec2& origin, const ImVec2& size)
         if (v.scale > 3.0) { char t[8]; std::snprintf(t, sizeof(t), "%d", s.team); d->AddText(ImVec2(p.x + 6, p.y + 4), Col(160, 210, 255), t); }
     }
     // elements: a coloured disc with a letter
+    gElementScreen.assign(ed.model.freeElements.size(), ImVec2(-1, -1));
     for (std::size_t i = 0; i < ed.model.freeElements.size(); ++i) {
         const TrackFreeElement& e = ed.model.freeElements[i];
         const ImVec2 p = ToScreen(v, origin, size, e.x, e.y);
+        gElementScreen[i] = p;
         const ElementLook look = LookOf(e.elementType);
         const bool picked = ed.selection.kind == Selection::Element && ed.selection.index == static_cast<int>(i);
         d->AddCircleFilled(p, 8.0f, Col(10, 10, 14));
@@ -209,16 +253,37 @@ void RunCheck(App& a)
     a.openCheck = true;
 }
 
+// Save: on a computer, to the file; in the browser, to a download of that name (the browser decides where it goes).
+void DoSave(App& a)
+{
+#ifdef __EMSCRIPTEN__
+    std::string name = a.ed.path.empty() ? "MyTrack.track.txt" : a.ed.path;
+    const std::size_t slash = name.find_last_of('/');
+    if (slash != std::string::npos) name = name.substr(slash + 1);
+    if (a.ed.SaveAs("/work.track.txt")) { hn_download("/work.track.txt", name.c_str()); a.ed.path = name; a.ed.status = "Saved as a download: " + name; }
+#else
+    if (!a.ed.path.empty()) a.ed.Save();
+    else { std::snprintf(a.fileBuffer, sizeof(a.fileBuffer), "MyTrack.track.txt"); a.openSaveAs = true; }
+#endif
+}
+
 void Menus(App& a)
 {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("New loop...")) a.openNew = true;
+#ifdef __EMSCRIPTEN__
+            if (ImGui::MenuItem("Open from your computer...")) hn_pick_file();
+            if (ImGui::MenuItem("Save to your computer", "Ctrl+S")) DoSave(a);
+#else
             if (ImGui::MenuItem("Open...")) { std::snprintf(a.fileBuffer, sizeof(a.fileBuffer), "%s", a.ed.path.c_str()); a.openOpen = true; }
             if (ImGui::MenuItem("Save", "Ctrl+S", false, !a.ed.path.empty())) a.ed.Save();
             if (ImGui::MenuItem("Save as...")) { std::snprintf(a.fileBuffer, sizeof(a.fileBuffer), "%s", a.ed.path.empty() ? "MyTrack.track.txt" : a.ed.path.c_str()); a.openSaveAs = true; }
+#endif
             ImGui::Separator();
+#ifndef __EMSCRIPTEN__
             if (ImGui::MenuItem("Quit")) { if (a.ed.dirty) a.openQuit = true; else a.quit = true; }
+#endif
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
@@ -442,7 +507,7 @@ void Frame(App& a, int width, int height)
         const bool ctrl = io.KeyCtrl;
         if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z)) { if (io.KeyShift) a.ed.Redo(); else a.ed.Undo(); }
         else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Y)) a.ed.Redo();
-        else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S)) { if (!a.ed.path.empty()) a.ed.Save(); else { std::snprintf(a.fileBuffer, sizeof(a.fileBuffer), "MyTrack.track.txt"); a.openSaveAs = true; } }
+        else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S)) DoSave(a);
         else if (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace)) a.ed.DeleteSelected();
         else if (ImGui::IsKeyPressed(ImGuiKey_Escape)) { a.tool = Tool::Select; a.ed.Select(Selection()); }
         else if (ImGui::IsKeyPressed(ImGuiKey_F)) a.fitPending = true;
@@ -459,11 +524,26 @@ bool SaveCapture(SDL_Renderer* renderer, const std::string& file)
     SDL_FreeSurface(surface);
     return ok;
 }
+App* gApp = nullptr;
 }  // namespace
+
+#ifdef __EMSCRIPTEN__
+// What the browser test asks the editor, to prove that an upload or a click changed the real track (not just the picture).
+extern "C" {
+EMSCRIPTEN_KEEPALIVE int hn_rooms() { return gApp ? gApp->ed.model.CountRooms() : -1; }
+EMSCRIPTEN_KEEPALIVE int hn_elements() { return gApp ? static_cast<int>(gApp->ed.model.freeElements.size()) : -1; }
+EMSCRIPTEN_KEEPALIVE int hn_dirty() { return gApp && gApp->ed.dirty ? 1 : 0; }
+EMSCRIPTEN_KEEPALIVE int hn_problems() { return gApp ? static_cast<int>(gApp->ed.problems.size()) : -1; }
+EMSCRIPTEN_KEEPALIVE int hn_element_px(int i) { return i >= 0 && i < static_cast<int>(gElementScreen.size()) ? static_cast<int>(gElementScreen[static_cast<std::size_t>(i)].x) : -1; }
+EMSCRIPTEN_KEEPALIVE int hn_element_py(int i) { return i >= 0 && i < static_cast<int>(gElementScreen.size()) ? static_cast<int>(gElementScreen[static_cast<std::size_t>(i)].y) : -1; }
+EMSCRIPTEN_KEEPALIVE int hn_element_section(int i) { return gApp && i >= 0 && i < static_cast<int>(gApp->ed.model.freeElements.size()) ? gApp->ed.model.freeElements[static_cast<std::size_t>(i)].section : -1; }
+}
+#endif
 
 int main(int argc, char** argv)
 {
     App app;
+    gApp = &app;
     int width = 1280, height = 800, frames = -1;
     std::string capture, openFile;
     bool newLoop = false, checkOnly = false;
@@ -512,6 +592,13 @@ int main(int argc, char** argv)
 
     int drawn = 0;
     while (!app.quit) {
+#ifdef __EMSCRIPTEN__
+        if (gResizeW > 0 && gResizeH > 0) { SDL_SetWindowSize(window, gResizeW, gResizeH); gResizeW = gResizeH = 0; }
+        if (gUploadReady) {
+            gUploadReady = false;
+            if (app.ed.Open("/upload.track.txt")) { app.ed.path = gUploadName; app.ed.dirty = false; app.fitPending = true; app.ed.status = "Opened " + gUploadName; }
+        }
+#endif
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
@@ -532,6 +619,9 @@ int main(int argc, char** argv)
             break;
         }
         SDL_RenderPresent(renderer);
+#ifdef __EMSCRIPTEN__
+        SDL_Delay(1);   // gives the browser its turn (the build uses ASYNCIFY, as the game does)
+#endif
     }
     ImGui_ImplSDLRenderer2_Shutdown();
     ImGui_ImplSDL2_Shutdown();

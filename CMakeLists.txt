@@ -705,9 +705,18 @@ add_library(HoverNetTrackEditorCore STATIC NetTarget/TrackEditor/TrackSource.cpp
 target_include_directories(HoverNetTrackEditorCore PUBLIC NetTarget/TrackEditor)
 add_executable(HoverNetTrackSource NetTarget/TrackEditor/TrackSourceTool.cpp)
 # The editor's window (docs/roadmap-track-editor.md, Phase 2): SDL2 + Dear ImGui like the game, over the same core that the tests exercise.
-if(NOT EMSCRIPTEN)
-    add_executable(HoverNetTrackEditor NetTarget/TrackEditor/EditorMain.cpp)
-    target_link_libraries(HoverNetTrackEditor PRIVATE HoverNetTrackEditorCore HoverNetImGui SDL2::SDL2)
+add_executable(HoverNetTrackEditor NetTarget/TrackEditor/EditorMain.cpp)
+target_link_libraries(HoverNetTrackEditor PRIVATE HoverNetTrackEditorCore HoverNetImGui SDL2::SDL2)
+if(EMSCRIPTEN)
+    # The browser editor: the same program, with the page and file hooks in packaging/web/editor-shell.html (open through the file picker, save as a download).
+    target_link_options(HoverNetTrackEditor PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sASYNCIFY=1
+        -sFORCE_FILESYSTEM=1
+        "-sEXPORTED_FUNCTIONS=_main,_hn_file_ready,_hn_resize,_hn_rooms,_hn_elements,_hn_dirty,_hn_problems,_hn_element_px,_hn_element_py,_hn_element_section"
+        "-sEXPORTED_RUNTIME_METHODS=ccall,FS"
+        --shell-file "${CMAKE_SOURCE_DIR}/packaging/web/editor-shell.html")
+    set_target_properties(HoverNetTrackEditor PROPERTIES SUFFIX ".html")
 endif()
 target_link_libraries(HoverNetTrackSource PRIVATE HoverNetTrackEditorCore)
 if(EMSCRIPTEN)

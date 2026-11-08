@@ -8,18 +8,20 @@
 # Options (all optional):
 #   --backup-to DIR   also copy the secret key to DIR (a USB stick) and check the copy matches
 #   --install-market  also install the Track Market service on the web/race host (packaging/web/install-market.sh; asks for your sudo password there)
+#   --deploy-editor   also put the browser track editor on the web host at /editor/ (packaging/web/deploy-editor.sh; one sudo password prompt there)
 #   --push            then push main to GitLab (deploys the web client) and GitHub, after you type "push" to confirm
 #   --version X.Y.Z   the release to check (default 2.3.26)
 # Environment: HOVERNET_KEYS_DIR (default ~/hovernet-keys), RACE_HOST (default john@192.168.10.181).
 # Safe to run again: each step skips what is already done.
 set -uo pipefail
 cd "$(dirname "$0")/../.."
-backup=""; push=no; market=no; version="2.3.26"
+backup=""; push=no; market=no; editor=no; version="2.3.26"
 while [ $# -gt 0 ]; do
   case "$1" in
     --backup-to) backup="${2:?--backup-to needs a folder}"; shift 2;;
     --push) push=yes; shift;;
     --install-market) market=yes; shift;;
+    --deploy-editor) editor=yes; shift;;
     --version) version="${2:?}"; shift 2;;
     *) echo "unknown option: $1"; exit 2;;
   esac
@@ -74,6 +76,13 @@ EOT
 tar -C dist -czf dist/hovernet-legal-review-pack.tar.gz hovernet-legal-review-pack && echo "Made dist/hovernet-legal-review-pack.tar.gz (documents + a cover note you can paste into an email)."
 todo+=("Fill in the [OWNER: ...] placeholders in $pack/COVER-NOTE.txt and docs/track-market-terms-draft.md, then send dist/hovernet-legal-review-pack.tar.gz to your lawyer")
 todo+=("Make the list of Outiva account names you will invite to publish first (one per line) and keep it for me")
+
+if [ "$editor" = yes ]; then
+  line "Browser track editor"
+  bash packaging/web/deploy-editor.sh || todo+=("The editor deploy did not finish: read the messages above; build it first with  (cd build/web && cmake --build . --target HoverNetTrackEditor)")
+else
+  todo+=("To put the browser track editor online at https://hovernet.outiva.com/editor/ : rerun with --deploy-editor (or  bash packaging/web/deploy-editor.sh --dry-run  first)")
+fi
 
 line "4/5 Track Market service"
 if [ "$market" = yes ]; then

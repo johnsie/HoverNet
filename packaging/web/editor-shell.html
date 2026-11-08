@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HoverNet Track Editor</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0e0e14; color: #ddd; font-family: system-ui, sans-serif; overflow: hidden; }
+    #canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+    #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+    #loading.done { display: none; }
+  </style>
+</head>
+<body>
+  <div id="loading">Loading the track editor...</div>
+  <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+  <script>
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      print: function (t) { console.log(t); },
+      printErr: function (t) { console.error(t); },
+      onRuntimeInitialized: function () {
+        document.getElementById('loading').className = 'done';
+        // the editor fills the window, and follows it when it changes size
+        var fit = function () {
+          var w = Math.max(320, window.innerWidth), h = Math.max(240, window.innerHeight);
+          Module.canvas.width = w; Module.canvas.height = h;
+          if (Module._hn_resize) Module._hn_resize(w, h);
+        };
+        window.addEventListener('resize', fit);
+        fit();
+      }
+    };
+    // leaving with unsaved changes asks first
+    window.addEventListener('beforeunload', function (e) {
+      if (Module._hn_dirty && Module._hn_dirty()) { e.preventDefault(); e.returnValue = ''; }
+    });
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

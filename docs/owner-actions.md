@@ -50,6 +50,14 @@ Until this is done, nothing may be described as signed (docs/signing.md).
 
 (or add `--install-market` to the one-liner.) It sends the committed source to the host, builds the few check programs there in `/opt/hovernet-market` (niced, so races are not disturbed), proves they work on a bundled track, installs the service (`hovernet-market.service`, hardened, CPU- and memory-limited), creates `/etc/hovernet/market.env` using the account service's session secret, adds the Apache snippet **after testing the Apache configuration** (and undoes it if the test fails), and checks the answer locally and through https. If the build fails it puts the previous version back. It also installs a ten-minute timer (`hovernet-market-sync.timer`) that copies every listed track into the race server's community folder (`/var/lib/hovernet/community-tracks`) and removes revoked or unlisted ones, so a listed track can be hosted online straight away (the server looks for the file each time a race is hosted; no restart). It does not touch the game, the race server's program or configuration, or the site's own Apache file. The market starts **closed**: nobody can publish until you add account names to the allow-list on the host (the script prints the two commands). To remove it: `bash packaging/web/install-market.sh --uninstall` (keeps the data).
 
+## 2c. Put the browser track editor online (2 minutes, from this computer)
+
+    (cd build/web && cmake --build . --target HoverNetTrackEditor)     # the WebAssembly files; they do not depend on the server's libraries
+    bash packaging/web/deploy-editor.sh --dry-run                       # every step, nothing changed
+    bash packaging/web/deploy-editor.sh                                 # does it (one sudo password prompt on 192.168.10.181)
+
+(or `--deploy-editor` on the one-liner). It copies three files to `/var/www/hovernet.outiva.com/editor/`, enables an Apache snippet **after testing the Apache configuration** (undoing it if the test fails) and checks that https://hovernet.outiva.com/editor/ answers with the headers the editor needs. It does not touch the game, the race server, the account service or the site's own Apache file. Remove it with `--remove`. The editor starts with a new loop track; File > Open from your computer / Save to your computer (a download). Publishing and the in-browser compile are not in it yet.
+
 ## 3. Get the Track Market terms reviewed (the one thing that decides when it can open)
 
 `docs/track-market-terms-draft.md` is a first draft of the terms of use, the author declaration and the takedown procedure, with the questions to put to a lawyer at the end. It is **not legal advice and not in force**. Send it with `docs/adr/0002-content-licence-policy.md`, `docs/adr/0004-track-marketplace.md` and `docs/account-privacy-policy-draft.md` (all in the kit's `docs/`):
