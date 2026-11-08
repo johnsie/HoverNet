@@ -827,6 +827,7 @@ std::string TrackNameAt(int index)
 
 void HoverNetSectionHeading(const char* label);
 bool HoverNetButton(const char* label, const ImVec2& size);
+bool HoverNetQuietButton(const char* label, const ImVec2& size);
 
 struct TrackPreview
 {
@@ -908,12 +909,19 @@ TrackPreview LoadTrackPreview(SDL_Renderer* renderer, const char* trackName)
 
         std::vector<MR_UInt8> pixels(static_cast<std::size_t>(preview.mWidth) * preview.mHeight * 4);
         const MR_UInt8* source = indexed.GetBuffer();
-        for (int pixel = 0; pixel < preview.mWidth * preview.mHeight; ++pixel) {
-            const int colorIndex = source[pixel];
-            pixels[pixel * 4] = palette[colorIndex * 3];
-            pixels[pixel * 4 + 1] = palette[colorIndex * 3 + 1];
-            pixels[pixel * 4 + 2] = palette[colorIndex * 3 + 2];
-            pixels[pixel * 4 + 3] = colorIndex == 0 ? 0 : 255;
+        // The map is drawn as a clean plan: the road in one slate-blue fill that is a little lighter towards the top, with a thin bright edge, rather than in the
+        // raw colours of the game's old palette (a flat lavender blob on black).
+        const int w = preview.mWidth, h = preview.mHeight;
+        auto solid = [&](int x, int y) { return x >= 0 && y >= 0 && x < w && y < h && source[y * w + x] != 0; };
+        for (int y = 0; y < h; ++y) {
+            for (int x = 0; x < w; ++x) {
+                const int pixel = y * w + x;
+                if (!solid(x, y)) { pixels[pixel * 4 + 3] = 0; continue; }
+                const bool edge = !solid(x - 1, y) || !solid(x + 1, y) || !solid(x, y - 1) || !solid(x, y + 1);
+                const float t = static_cast<float>(y) / static_cast<float>(h);
+                const MR_UInt8 r = edge ? 232 : static_cast<MR_UInt8>(70 - 18 * t), g = edge ? 238 : static_cast<MR_UInt8>(80 - 18 * t), b = edge ? 252 : static_cast<MR_UInt8>(122 - 28 * t);
+                pixels[pixel * 4] = r; pixels[pixel * 4 + 1] = g; pixels[pixel * 4 + 2] = b; pixels[pixel * 4 + 3] = 255;
+            }
         }
 
         preview.mTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
@@ -943,8 +951,8 @@ void DrawTrackPreview(const TrackPreview& preview, float minimumHeight = 180.0f,
     const ImVec2 frameMin = ImGui::GetCursorScreenPos();
     const ImVec2 frameMax(frameMin.x + frameSize.x, frameMin.y + frameSize.y);
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    draw->AddRectFilled(frameMin, frameMax, IM_COL32(13, 13, 18, 255), 8.0f);
-    draw->AddRect(frameMin, frameMax, IM_COL32(105, 105, 120, 255), 8.0f);
+    draw->AddRectFilledMultiColor(frameMin, frameMax, IM_COL32(16, 18, 30, 255), IM_COL32(16, 18, 30, 255), IM_COL32(9, 10, 18, 255), IM_COL32(9, 10, 18, 255));
+    draw->AddRect(frameMin, frameMax, IM_COL32(58, 64, 92, 255), 10.0f, 0, 1.5f);
 
     if (preview.mTexture != nullptr && preview.mWidth > 0 && preview.mHeight > 0) {
         const float inset = 18.0f;
@@ -1317,7 +1325,7 @@ public:
                 ImGui::TextDisabled("%s of %s", FormatMegabytes(mJob->BytesDone()).c_str(),
                                     FormatMegabytes(totalBytes).c_str());
                 ImGui::Spacing();
-                if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, 0))) {
+                if (HoverNetQuietButton("Cancel", ImVec2(-FLT_MIN, 0))) {
                     mJob->Cancel();
                 }
             }
@@ -2132,6 +2140,12 @@ bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
     const bool pressed = ImGui::Button(label, size);
     ImGui::PopStyleColor();
+    // a little depth: a soft highlight across the top half and a shade along the bottom, so a button reads as a button and not a flat block
+    const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+    const float rounding = ImGui::GetStyle().FrameRounding;
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilled(lo, ImVec2(hi.x, lo.y + (hi.y - lo.y) * 0.5f), IM_COL32(255, 255, 255, ImGui::IsItemHovered() ? 38 : 20), rounding, ImDrawFlags_RoundCornersTop);
+    draw->AddRectFilled(ImVec2(lo.x, hi.y - 3.0f), hi, IM_COL32(0, 0, 0, 46), rounding, ImDrawFlags_RoundCornersBottom);
     return pressed;
 }
 
@@ -2195,6 +2209,26 @@ void DrawHoverNetScreenBackdrop(const ImGuiViewport* viewport)
         const float y = horizon + (end.y - horizon) * amount;
         draw->AddLine(ImVec2(start.x, y), ImVec2(end.x, y), IM_COL32(224, 42, 67, 28), 1.0f);
     }
+}
+
+// A screen's title: the display face straight on the dark backdrop, with a thin accent rule that fades out under it. It replaces the solid red slab the older
+// screens drew (a big flat block with the title stuck in its top corner). `compact` is the phone layout.
+void HoverNetScreenHeader(const char* title, bool compact)
+{
+    ImGui::Dummy(ImVec2(0.0f, compact ? 2.0f : 6.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+    if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
+    ImGui::SetWindowFontScale(compact ? 1.0f : 1.3f);
+    ImGui::TextUnformatted(title);
+    ImGui::SetWindowFontScale(1.0f);
+    if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
+    ImGui::PopStyleColor();
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    const float width = ImGui::GetContentRegionAvail().x;
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilledMultiColor(ImVec2(at.x, at.y + 2.0f), ImVec2(at.x + width, at.y + 4.0f),
+                                  IM_COL32(224, 42, 67, 255), IM_COL32(224, 42, 67, 0), IM_COL32(224, 42, 67, 0), IM_COL32(224, 42, 67, 255));
+    ImGui::Dummy(ImVec2(0.0f, compact ? 8.0f : 14.0f));
 }
 
 void HoverNetScreenHeading(const char* eyebrow, const char* title, const char* detail)
@@ -2937,10 +2971,10 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
             if (HoverNetButton("Reconnect", ImVec2(-1, 42))) {
                 reconnectToServer();
             }
-            if (HoverNetButton("Open Settings", ImVec2(-1, 42))) {
+            if (HoverNetQuietButton("Open Settings", ImVec2(-1, 42))) {
                 requestOpenRecoverySettings = true;
             }
-            if (HoverNetButton("Back to main menu", ImVec2(-1, 42))) {
+            if (HoverNetQuietButton("Back to main menu", ImVec2(-1, 42))) {
                 running = false;
             }
             ImGui::EndChild();
@@ -3409,7 +3443,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
                 }
             }
             ImGui::SameLine();
-            if (HoverNetButton("Cancel", ImVec2(120, 36)) && !download.Active()) {
+            if (HoverNetQuietButton("Cancel", ImVec2(120, 36)) && !download.Active()) {
                 hostPopupOpen = false;
                 ImGui::CloseCurrentPopup();
             }
@@ -4219,17 +4253,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         // Phones (narrow or short windows): slim header bar and no wasted vertical space.
         const bool phoneLayout = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneLayout ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
-        MenuBeginChild("HeaderBar", ImVec2(0, phoneLayout ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
-        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(phoneLayout ? 1.1f : 1.35f);
-        ImGui::TextUnformatted("LOCAL RACE SETUP");
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
+        HoverNetScreenHeader("LOCAL RACE SETUP", phoneLayout);
         ImGui::Spacing();
         if (!phoneLayout) ImGui::Spacing();
 
@@ -4317,7 +4341,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             }
         }
         if (tightHeight) ImGui::SameLine(); else ImGui::Spacing();
-        if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, tightHeight ? 40.0f : 36.0f))) {
+        if (HoverNetQuietButton("Cancel", ImVec2(-FLT_MIN, tightHeight ? 40.0f : 36.0f))) {
             cancelled = true;
             running = false;
         }
@@ -4330,7 +4354,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             std::snprintf(label, sizeof(label), "Download all %d community tracks (%s)",
                           static_cast<int>(missing.size()),
                           FormatMegabytes(Tracks().MissingDownloadBytes()).c_str());
-            if (HoverNetButton(label, ImVec2(-FLT_MIN, 0)) && !download.Active()) {
+            if (HoverNetQuietButton(label, ImVec2(-FLT_MIN, 0)) && !download.Active()) {
                 download.Begin(missing, 0);
                 startAfterDownload = false;
             }
@@ -4558,17 +4582,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         DrawHoverNetScreenBackdrop(mainViewport);
 
         const bool phoneHeader = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneHeader ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
-        MenuBeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
-        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(phoneHeader ? 1.1f : 1.35f);
-        ImGui::TextUnformatted("SETTINGS");
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
+        HoverNetScreenHeader("SETTINGS", phoneHeader);
         ImGui::Spacing();
         ImGui::Spacing();
 
@@ -4580,7 +4594,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         MenuBeginChild("SettingsPanel", ImVec2(centerWidth, phoneHeader ? -52.0f : 0.0f), true);
         if (const char* testScroll = std::getenv("HOVERNET_TEST_SETTINGS_SCROLL")) { if (framesShown >= 2) ImGui::SetScrollY(static_cast<float>(std::atoi(testScroll))); }   // screenshot tests: look further down
 
-        ImGui::TextUnformatted("Display Name");
+        HoverNetSectionHeading("Display Name");
         ImGui::PushItemWidth(-1.0f);
         ImGui::InputText("##Username", usernameBuf, sizeof(usernameBuf));
         ImGui::PopItemWidth();
@@ -4616,7 +4630,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 #else
         const bool authAddressValid = true;
 #endif
-        ImGui::TextUnformatted("RaceServer Address");
+        HoverNetSectionHeading("RaceServer Address");
         ImGui::SetNextItemWidth(-96.0f);
         ImGui::InputText("##ServerHost", hostBuf, sizeof(hostBuf));
         ImGui::SameLine();
@@ -4631,7 +4645,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             HoverNetHint("Port must be between 1 and 65535");
         }
         ImGui::Spacing();
-        if (HoverNetButton("Reset to default server", ImVec2(-FLT_MIN, 0))) {
+        if (HoverNetQuietButton("Reset to default server", ImVec2(-FLT_MIN, 0))) {
             std::snprintf(hostBuf, sizeof(hostBuf), "%s", kDefaultLobbyHost);
             port = static_cast<int>(kDefaultLobbyPort);
         }
@@ -4640,8 +4654,10 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
-        ImGui::TextUnformatted("HoverNet server (online multiplayer)");
+        HoverNetSectionHeading("Online server");
+        ImGui::PushTextWrapPos(0.0f);
         ImGui::TextDisabled("Leave empty to use the official HoverNet server. For a friend's or a club's server, type its address.");
+        ImGui::PopTextWrapPos();
         ImGui::SetNextItemWidth(-1.0f);
 #ifdef HOVERNET_WEB
         ImGui::InputTextWithHint("##AuthAddress", "official HoverNet server (wss://race.example.org/auth/ for another)", authAddressBuf, sizeof(authAddressBuf));
@@ -4654,7 +4670,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 #endif
         if (authAddressBuf[0] != '\0' && !authAddressValid) HoverNetHint(authAddressProblem);
         ImGui::Spacing();
-        if (HoverNetButton("Use the official HoverNet server", ImVec2(-FLT_MIN, 0))) {
+        if (HoverNetQuietButton("Use the official HoverNet server", ImVec2(-FLT_MIN, 0))) {
             authAddressBuf[0] = '\0';
             authKeyBuf[0] = '\0';
         }
@@ -4664,7 +4680,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Separator();
         ImGui::Spacing();
 
-        ImGui::TextUnformatted("Audio");
+        HoverNetSectionHeading("Audio");
         if (ImGui::Checkbox("Mute all sound", &muted)) {
             MR_SoundServer::SetMasterVolume(muted ? 0.0 : volumePercent / 100.0);
         }
@@ -4788,7 +4804,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Spacing();
         ImGui::Spacing();
 
-        if (HoverNetButton("Restore defaults", ImVec2(-FLT_MIN, 34))) {
+        if (HoverNetQuietButton("Restore defaults", ImVec2(-FLT_MIN, 34))) {
             std::snprintf(usernameBuf, sizeof(usernameBuf), "%s", "Player");
             std::snprintf(hostBuf, sizeof(hostBuf), "%s", kDefaultLobbyHost);
             port = static_cast<int>(kDefaultLobbyPort);
@@ -4832,7 +4848,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             }
             ImGui::EndDisabled();
             ImGui::Spacing();
-            if (HoverNetButton("Cancel", ImVec2(-FLT_MIN, 36))) {
+            if (HoverNetQuietButton("Cancel", ImVec2(-FLT_MIN, 36))) {
                 cancelled = true;
                 running = false;
             }
@@ -4848,7 +4864,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             }
             ImGui::EndDisabled();
             ImGui::SameLine();
-            if (HoverNetButton("Cancel", ImVec2(half, 40))) {
+            if (HoverNetQuietButton("Cancel", ImVec2(half, 40))) {
                 cancelled = true;
                 running = false;
             }
@@ -5326,17 +5342,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         DrawHoverNetScreenBackdrop(mainViewport);
 
         const bool phoneHeader = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneHeader ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
-        MenuBeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
-        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(phoneHeader ? 1.1f : 1.35f);
-        ImGui::TextUnformatted("CONTROLS");
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
+        HoverNetScreenHeader("CONTROLS", phoneHeader);
         ImGui::Spacing();
 
         const float centerWidth = std::min(700.0f, ImGui::GetContentRegionAvail().x);
@@ -5457,7 +5463,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
             SaveControllerBindings(gControllerBindings);
         }
         ImGui::Spacing();
-        if (HoverNetButton("Reset all control defaults", ImVec2(-FLT_MIN, 34))) {
+        if (HoverNetQuietButton("Reset all control defaults", ImVec2(-FLT_MIN, 34))) {
             gKeyboardBindings = KeyboardBindings{};
             gControllerBindings = ControllerBindings{};
             SaveKeyboardBindings(gKeyboardBindings);
@@ -5473,7 +5479,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         HoverNetHint("Remaps, axis direction, and deadzone changes apply immediately. Reusing an input swaps bindings.");
         ImGui::EndChild();
         ImGui::Spacing();
-        if (HoverNetButton("Back", ImVec2(-FLT_MIN, 40))) {
+        if (HoverNetQuietButton("Back", ImVec2(-FLT_MIN, 40))) {
             running = false;
         }
         ImGui::End();
@@ -5668,17 +5674,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
         DrawHoverNetScreenBackdrop(mainViewport);
         const bool phoneHeader = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneHeader ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
-        MenuBeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
-        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(phoneHeader ? 1.1f : 1.35f);
-        ImGui::TextUnformatted("WATCH A REPLAY");
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
+        HoverNetScreenHeader("WATCH A REPLAY", phoneHeader);
         ImGui::Spacing();
 
         const float centerWidth = std::min(760.0f, ImGui::GetContentRegionAvail().x);
@@ -5815,7 +5811,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                     if (HoverNetButton(label, ImVec2(360, 38))) chosen = slot;
                 }
                 ImGui::Spacing();
-                if (HoverNetButton("CANCEL", ImVec2(360, 34))) { craftChoice.active = false; ImGui::CloseCurrentPopup(); }
+                if (HoverNetQuietButton("CANCEL", ImVec2(360, 34))) { craftChoice.active = false; ImGui::CloseCurrentPopup(); }
                 if (chosen >= 0) {
                     g_nextReplayNames = craftChoice.slotNames;
                     std::string note;
@@ -5838,7 +5834,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
         }
         ImGui::EndChild();
         ImGui::Spacing();
-        if (HoverNetButton("Back", ImVec2(-FLT_MIN, 40))) running = false;
+        if (HoverNetQuietButton("Back", ImVec2(-FLT_MIN, 40))) running = false;
         ImGui::End();
 
         ImGui::Render();
@@ -6012,17 +6008,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
         ImGui::Begin("HoverNet Leaderboards", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
         DrawHoverNetScreenBackdrop(mainViewport);
         const bool phoneHeader = mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f;
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetRed);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phoneHeader ? ImVec2(14.0f, 8.0f) : ImVec2(16.0f, 12.0f));
-        MenuBeginChild("HeaderBar", ImVec2(0, phoneHeader ? 40.0f : 76.0f), false, ImGuiWindowFlags_NoScrollbar);
-        ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
-        ImGui::SetWindowFontScale(phoneHeader ? 1.1f : 1.35f);
-        ImGui::TextUnformatted("LEADERBOARDS");
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
+        HoverNetScreenHeader("LEADERBOARDS", phoneHeader);
         ImGui::Spacing();
         const float centerWidth = std::min(760.0f, ImGui::GetContentRegionAvail().x);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
@@ -6211,7 +6197,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
         if (!message.empty()) { ImGui::PushTextWrapPos(0.0f); ImGui::TextColored(warn, "%s", message.c_str()); ImGui::PopTextWrapPos(); }
         ImGui::EndChild();
         ImGui::Spacing();
-        if (HoverNetButton("Back", ImVec2(-FLT_MIN, 40))) running = false;
+        if (HoverNetQuietButton("Back", ImVec2(-FLT_MIN, 40))) running = false;
         {   // the track of a replay being watched is downloaded first when it is a community track this computer does not have
             const DownloadUi::State trackState = trackDownload.Draw(0);
             if (trackState == DownloadUi::State::eDone && pendingWatch.id != 0) { const std::uint64_t id = pendingWatch.id; pendingWatch.id = 0; downloadId = id; downloadSlot = pendingWatch.slot; downloadNote = pendingWatch.note; server.FetchReplay(id); }
@@ -6969,7 +6955,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             createCenter = centreOfLastItem();
             ImGui::EndDisabled();
             ImGui::SameLine();
-            if (HoverNetButton("Cancel", ImVec2(120, 36)) && !trackDownload.Active()) { hostPopupOpen = false; ImGui::CloseCurrentPopup(); }
+            if (HoverNetQuietButton("Cancel", ImVec2(120, 36)) && !trackDownload.Active()) { hostPopupOpen = false; ImGui::CloseCurrentPopup(); }
             {
                 const DownloadUi::State downloadState = trackDownload.Draw(1);
                 if (downloadState == DownloadUi::State::eDone && afterDownload == AfterDownload::eHost) { afterDownload = AfterDownload::eNone; createRace(); }

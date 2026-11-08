@@ -141,6 +141,94 @@ EMSCRIPTEN_KEEPALIVE void hn_resize(int w, int h) { gResizeW = w; gResizeH = h; 
 }
 #endif
 
+
+// ---- the look: the game's (Inter for text, Oxanium for headings, near-black panels with one red accent), so the editor and the game feel like one product ----
+ImFont* gDisplayFont = nullptr;
+const ImVec4 kRed(0.86f, 0.20f, 0.27f, 1.0f), kRedHover(0.95f, 0.32f, 0.38f, 1.0f), kRedActive(0.70f, 0.12f, 0.18f, 1.0f), kCoral(0.98f, 0.45f, 0.48f, 1.0f);
+
+std::string AssetPath(const char* name)
+{
+#ifdef __EMSCRIPTEN__
+    return std::string("/assets/") + name;
+#else
+    return std::string(HOVERNET_SOURCE_DIR "/NetTarget/LinuxClient/assets/") + name;
+#endif
+}
+
+void ApplyTheme(ImGuiIO& io)
+{
+    ImFontConfig body;
+    body.SizePixels = 17.0f; body.OversampleH = 2; body.OversampleV = 2; body.RasterizerMultiply = 1.08f;
+    ImFont* bodyFont = io.Fonts->AddFontFromFileTTF(AssetPath("Inter-Variable.ttf").c_str(), body.SizePixels, &body);
+    if (!bodyFont) io.Fonts->AddFontDefault();
+    ImFontConfig display;
+    display.SizePixels = 21.0f; display.OversampleH = 2; display.OversampleV = 2; display.RasterizerMultiply = 1.1f;
+    gDisplayFont = io.Fonts->AddFontFromFileTTF(AssetPath("Oxanium-Variable.ttf").c_str(), display.SizePixels, &display);
+    if (!gDisplayFont) gDisplayFont = bodyFont;
+
+    ImGuiStyle& st = ImGui::GetStyle();
+    ImGui::StyleColorsDark(&st);
+    st.WindowPadding = ImVec2(16, 14); st.FramePadding = ImVec2(10, 6); st.ItemSpacing = ImVec2(10, 9); st.ScrollbarSize = 13;
+    st.WindowRounding = 0; st.ChildRounding = 10; st.FrameRounding = 7; st.GrabRounding = 7; st.PopupRounding = 10; st.ScrollbarRounding = 8; st.TabRounding = 7;
+    st.WindowBorderSize = 0; st.PopupBorderSize = 1; st.FrameBorderSize = 0;
+    ImVec4* c = st.Colors;
+    const ImVec4 panel(0.075f, 0.080f, 0.105f, 1.0f), field(0.045f, 0.050f, 0.070f, 1.0f), border(0.20f, 0.22f, 0.29f, 1.0f);
+    c[ImGuiCol_Text] = ImVec4(0.93f, 0.93f, 0.95f, 1.0f);
+    c[ImGuiCol_TextDisabled] = ImVec4(0.62f, 0.65f, 0.72f, 1.0f);
+    c[ImGuiCol_WindowBg] = panel; c[ImGuiCol_ChildBg] = panel; c[ImGuiCol_PopupBg] = panel;
+    c[ImGuiCol_Border] = border; c[ImGuiCol_Separator] = border;
+    c[ImGuiCol_FrameBg] = field; c[ImGuiCol_FrameBgHovered] = ImVec4(0.12f, 0.13f, 0.18f, 1.0f); c[ImGuiCol_FrameBgActive] = ImVec4(0.16f, 0.17f, 0.23f, 1.0f);
+    c[ImGuiCol_CheckMark] = kCoral; c[ImGuiCol_SliderGrab] = kRed; c[ImGuiCol_SliderGrabActive] = kRedActive;
+    c[ImGuiCol_Button] = kRed; c[ImGuiCol_ButtonHovered] = kRedHover; c[ImGuiCol_ButtonActive] = kRedActive;
+    c[ImGuiCol_Header] = ImVec4(0.86f, 0.20f, 0.27f, 0.35f); c[ImGuiCol_HeaderHovered] = ImVec4(0.86f, 0.20f, 0.27f, 0.55f); c[ImGuiCol_HeaderActive] = ImVec4(0.86f, 0.20f, 0.27f, 0.75f);
+    c[ImGuiCol_TitleBg] = panel; c[ImGuiCol_TitleBgActive] = ImVec4(0.11f, 0.12f, 0.17f, 1.0f); c[ImGuiCol_MenuBarBg] = ImVec4(0.035f, 0.040f, 0.060f, 1.0f);
+    c[ImGuiCol_ModalWindowDimBg] = ImVec4(0.01f, 0.01f, 0.02f, 0.72f); c[ImGuiCol_NavHighlight] = kCoral;
+    c[ImGuiCol_ScrollbarBg] = ImVec4(0.035f, 0.040f, 0.060f, 1.0f); c[ImGuiCol_ScrollbarGrab] = ImVec4(0.30f, 0.30f, 0.34f, 1.0f);
+    c[ImGuiCol_PopupBg] = ImVec4(0.075f, 0.080f, 0.105f, 0.98f);
+}
+
+// A heading with the game's red bar, in the display face.
+void Heading(const char* label)
+{
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    const float h = ImGui::GetTextLineHeight();
+    ImGui::GetWindowDrawList()->AddRectFilled(at, ImVec2(at.x + 4.0f, at.y + h), ImGui::ColorConvertFloat4ToU32(kRed), 2.0f);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 12.0f);
+    ImGui::PushStyleColor(ImGuiCol_Text, kCoral);
+    if (gDisplayFont) ImGui::PushFont(gDisplayFont);
+    ImGui::TextUnformatted(label);
+    if (gDisplayFont) ImGui::PopFont();
+    ImGui::PopStyleColor();
+}
+
+// A secondary action: a quiet, outlined button, so a dialog has one red button (the thing to press) and the rest recede.
+bool QuietButton(const char* label, const ImVec2& size = ImVec2(0, 0))
+{
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.11f, 0.15f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.12f, 0.16f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.28f, 0.10f, 0.15f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.31f, 0.33f, 0.41f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+    const bool pressed = ImGui::Button(label, size);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(4);
+    return pressed;
+}
+
+// The primary button, with a little depth (a highlight across the top, a shade along the bottom).
+bool PrimaryButton(const char* label, const ImVec2& size = ImVec2(0, 0))
+{
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+    const bool pressed = ImGui::Button(label, size);
+    ImGui::PopStyleColor();
+    const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+    const float r = ImGui::GetStyle().FrameRounding;
+    ImDrawList* d = ImGui::GetWindowDrawList();
+    d->AddRectFilled(lo, ImVec2(hi.x, lo.y + (hi.y - lo.y) * 0.5f), IM_COL32(255, 255, 255, ImGui::IsItemHovered() ? 38 : 20), r, ImDrawFlags_RoundCornersTop);
+    d->AddRectFilled(ImVec2(lo.x, hi.y - 3.0f), hi, IM_COL32(0, 0, 0, 46), r, ImDrawFlags_RoundCornersBottom);
+    return pressed;
+}
+
 ImU32 Col(int r, int g, int b, int a = 255) { return IM_COL32(r, g, b, a); }
 
 ImVec2 ToScreen(const View& v, const ImVec2& origin, const ImVec2& size, double x, double y)
@@ -163,7 +251,9 @@ void Fit(App& a, const ImVec2& size)
     a.view.scale = std::max(0.2, std::min((size.x - 40) / w, (size.y - 40) / h));
 }
 
-std::vector<ImVec2> gElementScreen;   // where each element was last drawn (the browser test clicks there)
+std::vector<ImVec2> gElementScreen;
+ImVec2 gMenuTrack(-1, -1), gMenuPublish(-1, -1);   // where the Track menu and its Publish item were last drawn (the browser test clicks there)
+bool gPublishVisible = false;   // where each element was last drawn (the browser test clicks there)
 
 struct ElementLook { ImU32 colour; const char* letter; };
 ElementLook LookOf(int type)
@@ -190,7 +280,7 @@ void DrawPlan(App& a, const ImVec2& origin, const ImVec2& size)
 {
     ImDrawList* d = ImGui::GetWindowDrawList();
     d->PushClipRect(origin, ImVec2(origin.x + size.x, origin.y + size.y), true);
-    d->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), Col(14, 14, 20));
+    d->AddRectFilledMultiColor(origin, ImVec2(origin.x + size.x, origin.y + size.y), Col(12, 15, 26), Col(24, 11, 22), Col(8, 10, 17), Col(12, 8, 14));
     const View& v = a.view;
     if (a.showGrid && v.scale > 1.2) {
         const double step = v.scale > 6 ? 10.0 : 50.0;
@@ -213,7 +303,7 @@ void DrawPlan(App& a, const ImVec2& origin, const ImVec2& size)
         for (const WallPoint& w : r.walls) pts.push_back(ToScreen(v, origin, size, w.x, w.y));
         const bool selected = (ed.selection.kind == Selection::Room || ed.selection.kind == Selection::Corner) && ed.selection.index == static_cast<int>(i);
         const bool problem = false;
-        d->AddConvexPolyFilled(pts.data(), static_cast<int>(pts.size()), r.isFeature ? Col(120, 80, 160, 110) : (selected ? Col(70, 70, 110) : Col(40, 44, 64)));
+        d->AddConvexPolyFilled(pts.data(), static_cast<int>(pts.size()), r.isFeature ? Col(150, 90, 190, 120) : (selected ? Col(78, 82, 132) : Col(44, 49, 78)));
         for (std::size_t k = 0; k < pts.size(); ++k) {
             const bool isJoin = joined.count({r.id, static_cast<int>(k)}) != 0 && !r.isFeature;
             d->AddLine(pts[k], pts[(k + 1) % pts.size()], isJoin ? Col(70, 74, 100) : Col(235, 235, 245), isJoin ? 1.0f : 2.0f);
@@ -344,9 +434,12 @@ void Menus(App& a)
             ImGui::MenuItem("Grid", nullptr, &a.showGrid);
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Track")) {
+        const bool trackMenuOpen = ImGui::BeginMenu("Track");
+        { const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax(); gMenuTrack = ImVec2((lo.x + hi.x) / 2, (lo.y + hi.y) / 2); }
+        if (trackMenuOpen) {
             if (ImGui::MenuItem("Compile and check...")) RunCheck(a);
             if (ImGui::MenuItem("Publish to the community...")) a.openPublish = true;
+            { const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax(); gMenuPublish = ImVec2((lo.x + hi.x) / 2, (lo.y + hi.y) / 2); }
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -356,7 +449,7 @@ void Menus(App& a)
 void Inspector(App& a)
 {
     EditorSession& ed = a.ed;
-    ImGui::TextUnformatted("Tool");
+    Heading("Tool");
     int tool = static_cast<int>(a.tool);
     ImGui::RadioButton("Select / move", &tool, 0);
     ImGui::RadioButton("Place an element", &tool, 1);
@@ -390,7 +483,7 @@ void Inspector(App& a)
     };
     if ((s.kind == Selection::Room || s.kind == Selection::Corner) && s.index >= 0 && s.index < static_cast<int>(ed.model.rooms.size())) {
         const TrackRoom& r = ed.model.rooms[static_cast<std::size_t>(s.index)];
-        ImGui::Text("%s %d", r.isFeature ? "Feature" : "Room", r.id);
+        Heading((std::string(r.isFeature ? "Feature " : "Room ") + std::to_string(r.id)).c_str());
         if (r.isFeature) ImGui::Text("in room %d", r.parent);
         float floorH = static_cast<float>(r.floor.height), ceilH = static_cast<float>(r.ceiling.height);
         if (ImGui::InputFloat("Floor height (m)", &floorH, 0.5f, 1.0f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue)) ed.SetHeight(SurfaceSlot::Floor, floorH);
@@ -402,22 +495,23 @@ void Inspector(App& a)
     }
     else if (s.kind == Selection::Start && s.index >= 0 && s.index < static_cast<int>(ed.model.starts.size())) {
         const TrackStart& st = ed.model.starts[static_cast<std::size_t>(s.index)];
-        ImGui::Text("Start, team %d", st.team);
+        Heading((std::string("Start, team ") + std::to_string(st.team)).c_str());
         ImGui::Text("in room %d at %.1f, %.1f", st.section, st.x, st.y);
         float o = static_cast<float>(st.orientation);
         if (ImGui::InputFloat("Facing (degrees)", &o, 5.0f, 45.0f, "%.1f", ImGuiInputTextFlags_EnterReturnsTrue)) ed.SetOrientationOfSelected(o);
         ImGui::TextDisabled("0 is along +x; turning is anticlockwise.");
-        if (ImGui::Button("Delete this start")) ed.DeleteSelected();
+        if (QuietButton("Delete this start")) ed.DeleteSelected();
     }
     else if (s.kind == Selection::Element && s.index >= 0 && s.index < static_cast<int>(ed.model.freeElements.size())) {
         const TrackFreeElement& e = ed.model.freeElements[static_cast<std::size_t>(s.index)];
-        ImGui::Text("%s", ElementName(e.elementType).c_str());
+        Heading(ElementName(e.elementType).c_str());
         ImGui::Text("in room %d at %.1f, %.1f", e.section, e.x, e.y);
         float o = static_cast<float>(e.orientation);
         if (ImGui::InputFloat("Facing (degrees)", &o, 5.0f, 45.0f, "%.1f", ImGuiInputTextFlags_EnterReturnsTrue)) ed.SetOrientationOfSelected(o);
-        if (ImGui::Button("Delete this element")) ed.DeleteSelected();
+        if (QuietButton("Delete this element")) ed.DeleteSelected();
     }
     else {
+        Heading("This track");
         ImGui::Text("%d rooms, %d features", ed.model.CountRooms(), ed.model.CountFeatures());
         ImGui::Text("%zu starts, %zu elements", ed.model.starts.size(), ed.model.freeElements.size());
         ImGui::Spacing();
@@ -428,6 +522,8 @@ void Inspector(App& a)
 void Dialogs(App& a)
 {
     if (a.openNew) { ImGui::OpenPopup("New loop"); a.openNew = false; }
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(420, 0), ImVec2(620, std::max(200.0f, ImGui::GetIO().DisplaySize.y - 40.0f)));
     if (ImGui::BeginPopupModal("New loop", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::InputText("Name", a.newName, sizeof(a.newName));
         ImGui::SliderInt("Rooms", &a.newOptions.rooms, 8, 96);
@@ -436,12 +532,12 @@ void Dialogs(App& a)
         if (ImGui::SliderFloat("Road width (m)", &width, 12.0f, 80.0f)) a.newOptions.halfWidth = width / 2.0;
         ImGui::Checkbox("With pickups, fuel and a speed pad", &a.newOptions.pickups);
         ImGui::TextDisabled("Makes a complete track: eight starts, the finish line and both checkpoints.");
-        if (ImGui::Button("Make it")) {
+        if (PrimaryButton("Make it")) {
             a.newOptions.name = a.newName;
             if (a.ed.NewLoop(a.newOptions)) { a.fitPending = true; ImGui::CloseCurrentPopup(); }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        if (QuietButton("Cancel")) ImGui::CloseCurrentPopup();
         if (!a.ed.status.empty()) ImGui::TextWrapped("%s", a.ed.status.c_str());
         ImGui::EndPopup();
     }
@@ -450,11 +546,11 @@ void Dialogs(App& a)
         if (ImGui::BeginPopupModal(title, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetNextItemWidth(420);
             const bool enter = ImGui::InputText("File", a.fileBuffer, sizeof(a.fileBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
-            if (ImGui::Button(save ? "Save" : "Open") || enter) {
+            if (PrimaryButton(save ? "Save" : "Open") || enter) {
                 if (save ? a.ed.SaveAs(a.fileBuffer) : a.ed.Open(a.fileBuffer)) { if (!save) a.fitPending = true; ImGui::CloseCurrentPopup(); }
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+            if (QuietButton("Cancel")) ImGui::CloseCurrentPopup();
             if (!a.ed.status.empty()) ImGui::TextWrapped("%s", a.ed.status.c_str());
             ImGui::EndPopup();
         }
@@ -464,9 +560,9 @@ void Dialogs(App& a)
     if (a.openQuit) { ImGui::OpenPopup("Unsaved changes"); a.openQuit = false; }
     if (ImGui::BeginPopupModal("Unsaved changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted("The track has changes that are not saved.");
-        if (ImGui::Button("Leave without saving")) a.quit = true;
+        if (QuietButton("Leave without saving")) a.quit = true;
         ImGui::SameLine();
-        if (ImGui::Button("Keep editing")) ImGui::CloseCurrentPopup();
+        if (PrimaryButton("Keep editing")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
     if (a.openPublish) {
@@ -483,7 +579,12 @@ void Dialogs(App& a)
         hn_fetch_info();
 #endif
     }
+    gPublishVisible = false;
+    // centred, and never taller than the window (a small browser window scrolls the dialog instead of losing its buttons off the bottom)
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(420, 0), ImVec2(620, std::max(200.0f, ImGui::GetIO().DisplaySize.y - 40.0f)));
     if (ImGui::BeginPopupModal("Publish", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        gPublishVisible = true;
 #ifdef __EMSCRIPTEN__
         PublishState& p = gPublish;
         ImGui::PushTextWrapPos(560.0f);
@@ -491,9 +592,9 @@ void Dialogs(App& a)
         else if (!p.reachable) ImGui::TextUnformatted("The Track Market cannot be reached from here. Try again later; your track is safe in this window, and File > Save to your computer keeps a copy.");
         else if (!p.signedIn) {
             ImGui::TextUnformatted("Sign in with your Outiva account to publish. It opens in a new tab; come back here afterwards and press Check again. Your work stays in this tab.");
-            if (ImGui::Button("Sign in (new tab)")) hn_open_signin();
+            if (PrimaryButton("Sign in (new tab)")) hn_open_signin();
             ImGui::SameLine();
-            if (ImGui::Button("Check again")) { p.infoLoaded = false; hn_fetch_info(); }
+            if (QuietButton("Check again")) { p.infoLoaded = false; hn_fetch_info(); }
         }
         else if (!p.invited) ImGui::TextUnformatted("You are signed in, but publishing is in a private beta for invited authors for now. Anyone can already download community tracks. Ask the person who runs HoverNet to invite you.");
         else {
@@ -510,7 +611,7 @@ void Dialogs(App& a)
             ImGui::Spacing();
             if (!a.ed.problems.empty()) ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1), "The editor sees %zu thing(s) to look at first (see the list below the plan).", a.ed.problems.size());
             ImGui::BeginDisabled(p.working || !p.accepted || p.name[0] == '\0' || p.author[0] == '\0');
-            if (ImGui::Button(p.working ? "Sending... (a minute at most)" : "Publish")) {
+            if (PrimaryButton(p.working ? "Sending... (a minute at most)" : "Publish")) {
                 p.working = true; p.message.clear();
                 hn_publish_js(a.ed.Text().c_str(), p.name, p.author, licences[p.licence], p.declaration.c_str(), p.description);
             }
@@ -521,7 +622,7 @@ void Dialogs(App& a)
 #else
         ImGui::TextWrapped("Publishing is done from the browser editor at https://hovernet.outiva.com/editor/ : you sign in there with your Outiva account. Save this track (File > Save) and open it in the browser editor with File > Open from your computer.");
 #endif
-        if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+        if (QuietButton("Close")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
     if (a.openCheck) { ImGui::OpenPopup("Compile and check"); a.openCheck = false; }
@@ -587,14 +688,15 @@ void Frame(App& a, int width, int height)
     // the inspector
     ImGui::SetNextWindowPos(ImVec2(width - sideW, menuH));
     ImGui::SetNextWindowSize(ImVec2(sideW, height - menuH - bottomH));
-    ImGui::Begin("Properties", nullptr, fixed);
+    ImGui::Begin("Properties", nullptr, fixed | ImGuiWindowFlags_NoTitleBar);
     Inspector(a);
     ImGui::End();
 
     // problems and status
     ImGui::SetNextWindowPos(ImVec2(0, height - bottomH));
     ImGui::SetNextWindowSize(ImVec2(static_cast<float>(width), bottomH));
-    ImGui::Begin("Problems", nullptr, fixed);
+    ImGui::Begin("Problems", nullptr, fixed | ImGuiWindowFlags_NoTitleBar);
+    Heading("Problems");
     ImGui::TextColored(a.ed.problems.empty() ? ImVec4(0.5f, 0.9f, 0.6f, 1) : ImVec4(1.0f, 0.8f, 0.4f, 1), "%s",
                        a.ed.problems.empty() ? "No problems the editor can see." : (std::to_string(a.ed.problems.size()) + " thing(s) to look at:").c_str());
     for (std::size_t i = 0; i < a.ed.problems.size() && i < 6; ++i) ImGui::BulletText("%s", a.ed.problems[i].c_str());
@@ -639,6 +741,11 @@ EMSCRIPTEN_KEEPALIVE void hn_publish_test(const char* name, const char* author, 
 { if (gApp) { gPublish.working = true; hn_publish_js(gApp->ed.Text().c_str(), name, author, licence, declaration, description); } }
 EMSCRIPTEN_KEEPALIVE int hn_publish_http() { return gPublish.lastHttp; }
 EMSCRIPTEN_KEEPALIVE int hn_publish_working() { return gPublish.working ? 1 : 0; }
+EMSCRIPTEN_KEEPALIVE int hn_menu_track_x() { return static_cast<int>(gMenuTrack.x); }
+EMSCRIPTEN_KEEPALIVE int hn_menu_track_y() { return static_cast<int>(gMenuTrack.y); }
+EMSCRIPTEN_KEEPALIVE int hn_menu_publish_x() { return static_cast<int>(gMenuPublish.x); }
+EMSCRIPTEN_KEEPALIVE int hn_menu_publish_y() { return static_cast<int>(gMenuPublish.y); }
+EMSCRIPTEN_KEEPALIVE int hn_publish_visible() { return gPublishVisible ? 1 : 0; }
 EMSCRIPTEN_KEEPALIVE int hn_dirty() { return gApp && gApp->ed.dirty ? 1 : 0; }
 EMSCRIPTEN_KEEPALIVE int hn_problems() { return gApp ? static_cast<int>(gApp->ed.problems.size()) : -1; }
 EMSCRIPTEN_KEEPALIVE int hn_element_px(int i) { return i >= 0 && i < static_cast<int>(gElementScreen.size()) ? static_cast<int>(gElementScreen[static_cast<std::size_t>(i)].x) : -1; }
@@ -689,8 +796,7 @@ int main(int argc, char** argv)
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
-    io.FontGlobalScale = 1.15f;
-    ImGui::StyleColorsDark();
+    ApplyTheme(io);
     ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer2_Init(renderer);
 

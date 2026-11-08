@@ -13,7 +13,7 @@ if (!webDir) { console.error('usage: node web-editor.mjs <web-dir>'); process.ex
 const chromeBin = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'].find((b) => spawnSync('sh', ['-c', `command -v ${b}`]).status === 0);
 if (!chromeBin) { console.log('SKIP: no Chrome/Chromium installed'); process.exit(77); }
 const sample = fs.readFileSync(new URL('../../NetTarget/TrackSources/Tidal Causeway.track.txt', import.meta.url));
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.data': 'application/octet-stream' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const check = (ok, what) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${what}`); if (!ok) failures++; };
@@ -126,13 +126,17 @@ try {
 
   // the Publish dialog, opened with the real mouse through the Track menu
   marketAnswer = { status: 201, body: { id: 3, status: 'waiting for review' } };
-  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 178, y: 10 }); await sleep(300);
-  await mouse('mousePressed', 178, 10); await mouse('mouseReleased', 178, 10); await sleep(500);
-  fs.writeFileSync(path.join(downloads, 'menu.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
-  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 200, y: 50 }); await sleep(300);
-  await mouse('mousePressed', 200, 50); await mouse('mouseReleased', 200, 50); await sleep(1200);
+  const tx0 = await call('hn_menu_track_x'), ty0 = await call('hn_menu_track_y');
+  check(tx0 > 0 && ty0 > 0, `the editor reports where its Track menu is drawn (${tx0},${ty0})`);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: tx0, y: ty0 }); await sleep(300);
+  await mouse('mousePressed', tx0, ty0); await mouse('mouseReleased', tx0, ty0); await sleep(600);
+  const px1 = await call('hn_menu_publish_x'), py1 = await call('hn_menu_publish_y');
+  check(px1 > 0 && py1 > 0, `the Publish item is in the open menu (${px1},${py1})`);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: px1, y: py1 }); await sleep(300);
+  await mouse('mousePressed', px1, py1); await mouse('mouseReleased', px1, py1); await sleep(1500);
   const dlg = await shot('publish-dialog.png');
-  check(dlg > 25000, 'the Publish dialog opens and is drawn');
+  check(await call('hn_publish_visible') === 1, 'clicking Track > Publish to the community opens the Publish dialog');
+  check(dlg > 25000, 'and it is drawn');
   check(exceptions.length === 0, 'no uncaught page exceptions' + (exceptions.length ? ': ' + exceptions[0] : ''));
 } finally { try { chrome.kill(); } catch (e) {} await sleep(500); server.close(); }
 if (failures) { console.log(`${failures} check(s) failed`); process.exit(1); }
