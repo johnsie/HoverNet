@@ -119,7 +119,16 @@ EM_JS(void, hn_publish_js, (const char* source, const char* name, const char* au
     }).catch(function () { done(0, 'Could not reach the Track Market: check your connection and try again.'); });
 });
 EM_JS(void, hn_open_signin, (), { window.open('/account/login', '_blank');   /* signs in in a new tab and ends on the game page; the editor tab keeps the work */ });
+// Autosave: the browser keeps a copy of the track being edited (in this site's local storage) a moment after every change, and offers it back the next time the
+// editor opens, so a closed tab or a crash does not lose an author's work. Saving to a file (a download) is still how a track is kept for good.
+EM_JS(void, hn_autosave_put, (const char* text), { try { localStorage.setItem('hn_autosave', UTF8ToString(text)); } catch (e) {} });
+EM_JS(void, hn_autosave_clear, (), { try { localStorage.removeItem('hn_autosave'); } catch (e) {} });
 std::string gUploadName;
+std::string gRestoreText;            // a copy found at start-up, waiting for the person's answer
+bool gRestoreAsked = false;
+bool gRestoreVisible = false;
+std::string gLastAutosaved;
+ImVec2 gRestoreBtn(-1, -1), gFreshBtn(-1, -1);   // where the two answers were drawn (the browser test clicks them)
 bool gUploadReady = false;
 int gResizeW = 0, gResizeH = 0;
 struct PublishState
@@ -142,6 +151,7 @@ EMSCRIPTEN_KEEPALIVE void hn_info_done(int status, int signedIn, int invited, co
     gPublish.declaration = declaration ? declaration : ""; gPublish.declarationText = text ? text : "";
 }
 EMSCRIPTEN_KEEPALIVE void hn_publish_done(int status, const char* text) { gPublish.working = false; gPublish.lastHttp = status; gPublish.message = text ? text : ""; }
+EMSCRIPTEN_KEEPALIVE void hn_autosave_found(const char* text) { if (text && text[0]) { gRestoreText = text; gRestoreAsked = true; } }
 EMSCRIPTEN_KEEPALIVE void hn_author_known(const char* saved) { if (saved && gPublish.author[0] == '\0') std::snprintf(gPublish.author, sizeof(gPublish.author), "%s", saved); }
 EMSCRIPTEN_KEEPALIVE void hn_file_ready(const char* name) { gUploadName = name ? name : "track.track.txt"; gUploadReady = true; }
 EMSCRIPTEN_KEEPALIVE void hn_resize(int w, int h) { gResizeW = w; gResizeH = h; }
@@ -416,7 +426,7 @@ void DoSave(App& a)
     std::string name = a.ed.path.empty() ? "MyTrack.track.txt" : a.ed.path;
     const std::size_t slash = name.find_last_of('/');
     if (slash != std::string::npos) name = name.substr(slash + 1);
-    if (a.ed.SaveAs("/work.track.txt")) { hn_download("/work.track.txt", name.c_str()); a.ed.path = name; a.ed.status = "Saved as a download: " + name; }
+    if (a.ed.SaveAs("/work.track.txt")) { hn_download("/work.track.txt", name.c_str()); a.ed.path = name; a.ed.status = "Saved as a download: " + name; hn_autosave_clear(); gLastAutosaved = a.ed.Text(); }
 #else
     if (!a.ed.path.empty()) a.ed.Save();
     else { std::snprintf(a.fileBuffer, sizeof(a.fileBuffer), "MyTrack.track.txt"); a.openSaveAs = true; }
@@ -661,6 +671,28 @@ void Dialogs(App& a)
         if (QuietButton("Close")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+#ifdef __EMSCRIPTEN__
+    if (gRestoreAsked) { ImGui::OpenPopup("Restore your work"); gRestoreAsked = false; }
+    gRestoreVisible = false;
+    if (ImGui::BeginPopupModal("Restore your work", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        gRestoreVisible = true;
+        ImGui::PushTextWrapPos(520.0f);
+        ImGui::TextUnformatted("The editor kept a copy of a track you were working on in this browser, and it was not saved to a file. Do you want it back?");
+        ImGui::PopTextWrapPos();
+        const bool restoreClicked = PrimaryButton("Restore my work");
+        { const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax(); gRestoreBtn = ImVec2((lo.x + hi.x) / 2, (lo.y + hi.y) / 2); }
+        if (restoreClicked) {
+            if (a.ed.OpenText(gRestoreText, "Restored your unsaved work from this browser: save it to a file to keep it.")) { a.fitPending = true; gLastAutosaved = a.ed.Text(); }
+            gRestoreText.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        const bool freshClicked = QuietButton("Start fresh");
+        { const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax(); gFreshBtn = ImVec2((lo.x + hi.x) / 2, (lo.y + hi.y) / 2); }
+        if (freshClicked) { hn_autosave_clear(); gRestoreText.clear(); ImGui::CloseCurrentPopup(); }
+        ImGui::EndPopup();
+    }
+#endif
     if (a.openCheck) { ImGui::OpenPopup("Compile and check"); a.openCheck = false; }
     if (ImGui::BeginPopupModal("Compile and check", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(a.checkOutput.c_str());
@@ -805,6 +837,11 @@ EMSCRIPTEN_KEEPALIVE void hn_test_tool_extend() { if (gApp) { gApp->tool = Tool:
 EMSCRIPTEN_KEEPALIVE int hn_open_end_px() { if (!gApp || gApp->ed.model.rooms.empty()) return -1; const TrackRoom& r = gApp->ed.model.rooms.back(); return static_cast<int>(ToScreen(gApp->view, gCanvasOrigin, gCanvasSize, (r.walls[1].x + r.walls[2].x) / 2, (r.walls[1].y + r.walls[2].y) / 2).x); }
 EMSCRIPTEN_KEEPALIVE int hn_open_end_py() { if (!gApp || gApp->ed.model.rooms.empty()) return -1; const TrackRoom& r = gApp->ed.model.rooms.back(); return static_cast<int>(ToScreen(gApp->view, gCanvasOrigin, gCanvasSize, (r.walls[1].x + r.walls[2].x) / 2, (r.walls[1].y + r.walls[2].y) / 2).y); }
 EMSCRIPTEN_KEEPALIVE int hn_all_rooms() { return gApp ? static_cast<int>(gApp->ed.model.rooms.size()) : -1; }
+EMSCRIPTEN_KEEPALIVE int hn_restore_visible() { return gRestoreVisible ? 1 : 0; }
+EMSCRIPTEN_KEEPALIVE int hn_restore_btn_x() { return static_cast<int>(gRestoreBtn.x); }
+EMSCRIPTEN_KEEPALIVE int hn_restore_btn_y() { return static_cast<int>(gRestoreBtn.y); }
+EMSCRIPTEN_KEEPALIVE int hn_fresh_btn_x() { return static_cast<int>(gFreshBtn.x); }
+EMSCRIPTEN_KEEPALIVE int hn_fresh_btn_y() { return static_cast<int>(gFreshBtn.y); }
 EMSCRIPTEN_KEEPALIVE int hn_dirty() { return gApp && gApp->ed.dirty ? 1 : 0; }
 EMSCRIPTEN_KEEPALIVE int hn_problems() { return gApp ? static_cast<int>(gApp->ed.problems.size()) : -1; }
 EMSCRIPTEN_KEEPALIVE int hn_element_px(int i) { return i >= 0 && i < static_cast<int>(gElementScreen.size()) ? static_cast<int>(gElementScreen[static_cast<std::size_t>(i)].x) : -1; }
@@ -898,6 +935,19 @@ int main(int argc, char** argv)
         SDL_SetRenderDrawColor(renderer, 14, 14, 20, 255);
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+#ifdef __EMSCRIPTEN__
+        {   // a moment after a change, keep a copy in the browser (not while the person is still deciding about an earlier copy)
+            static Uint32 lastCheck = 0;
+            const Uint32 now = SDL_GetTicks();
+            if (now - lastCheck > 700 && gRestoreText.empty() && !gRestoreVisible) {
+                lastCheck = now;
+                if (app.ed.dirty && (app.ed.CanUndo() || app.ed.CanRedo())) {   // not a track nobody has touched
+                    const std::string text = app.ed.Text();
+                    if (text != gLastAutosaved) { hn_autosave_put(text.c_str()); gLastAutosaved = text; }
+                }
+            }
+        }
+#endif
         ++drawn;
         if (frames >= 0 && drawn >= frames) {
             if (!capture.empty() && !SaveCapture(renderer, capture)) std::fprintf(stderr, "could not save the picture\n");

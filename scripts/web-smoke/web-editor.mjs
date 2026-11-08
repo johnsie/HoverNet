@@ -91,6 +91,29 @@ try {
   await keyEv('rawKeyDown', 'Control', 'ControlLeft', 17, 2); await keyEv('rawKeyDown', 'z', 'KeyZ', 90, 2); await keyEv('keyUp', 'z', 'KeyZ', 90, 2); await keyEv('keyUp', 'Control', 'ControlLeft', 17);
   check(await waitFor(async () => (await call('hn_all_rooms')) === 2, 5000), 'Ctrl+Z takes the last room off again');
 
+  // autosave: the editor keeps a copy in the browser, and offers it back after a reload
+  await sleep(1500);
+  const kept = await evalJs("localStorage.getItem('hn_autosave')");
+  check(typeof kept === 'string' && (kept.match(/^\[Room\]/gm) || []).length === 2, 'a moment after a change the editor keeps a copy in the browser (the two rooms)');
+  await send('Page.reload');
+  check(await waitFor(async () => (await evalJs("(window.Module&&Module._hn_restore_visible)?Module._hn_restore_visible():-1")) === 1, 60000), 'after a reload the editor offers the unsaved work back');
+  await sleep(800);
+  const rx = await call('hn_restore_btn_x'), ry = await call('hn_restore_btn_y');
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: rx, y: ry }); await sleep(300);
+  await mouseDown('mousePressed', rx, ry); await mouseDown('mouseReleased', rx, ry); await sleep(800);
+  check(await call('hn_all_rooms') === 2 && await call('hn_restore_visible') === 0, 'clicking Restore my work brings back the two-room road and closes the question');
+  // and the other answer: after another reload, Start fresh forgets the copy
+  await send('Page.reload');
+  check(await waitFor(async () => (await evalJs("(window.Module&&Module._hn_restore_visible)?Module._hn_restore_visible():-1")) === 1, 60000), 'it asks again after another reload (nothing was saved to a file)');
+  await sleep(800);
+  const fx = await call('hn_fresh_btn_x'), fy = await call('hn_fresh_btn_y');
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: fx, y: fy }); await sleep(300);
+  await mouseDown('mousePressed', fx, fy); await mouseDown('mouseReleased', fx, fy); await sleep(800);
+  check(await call('hn_all_rooms') === 24 && await evalJs("localStorage.getItem('hn_autosave')") === null, 'Start fresh keeps the new loop and forgets the copy');
+  await send('Page.reload');
+  await sleep(4000);
+  check(await call('hn_restore_visible') === 0, 'and the next reload does not ask again');
+
   // Escape goes back to the Select tool, ready for the drag test below
   await keyEv('rawKeyDown', 'Escape', 'Escape', 27); await keyEv('keyUp', 'Escape', 'Escape', 27);
   await sleep(300);

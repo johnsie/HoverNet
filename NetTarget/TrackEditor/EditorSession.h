@@ -36,6 +36,7 @@ public:
     bool NewLoop(const NewTrackOptions& options);
     bool NewStartRoom(const std::string& name);   // one start room to build the road from
     bool Open(const std::string& filename);
+    bool OpenText(const std::string& text, const std::string& label);   // a track given as text (recovered work): not saved anywhere yet, so it stays marked unsaved
     bool Save();                         // to `path`
     bool SaveAs(const std::string& filename);
     std::string Text() const { return model.ToText(); }

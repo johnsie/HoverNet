@@ -29,6 +29,8 @@
         };
         window.addEventListener('resize', fit);
         fit();
+        // work that was not saved to a file when the page was last closed is offered back
+        try { var kept = localStorage.getItem('hn_autosave'); if (kept && Module._hn_autosave_found) Module.ccall('hn_autosave_found', null, ['string'], [kept]); } catch (e) {}
         // the author name last used here is offered again
         try { var saved = localStorage.getItem('hn_author'); if (saved && Module._hn_author_known) Module.ccall('hn_author_known', null, ['string'], [saved]); } catch (e) {}
       }
