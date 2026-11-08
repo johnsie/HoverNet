@@ -5,8 +5,10 @@
 //   HoverNetTrackSource new ring OUT [--name=N] [--rooms=N] [--radius=M] [--width=M] [--plain]   make a new track from a template (no pickups with --plain)
 //   HoverNetTrackSource new start OUT [--name=N]   one start room with the starts and the finish line, to build the road from
 //   HoverNetTrackSource new rebuilt OUT [ring options]   the loop template, rebuilt room by room with ExtendRoad (a test aid: it must equal the template)
+//   HoverNetTrackSource import FILE.TR OUT   open a HoverCad project and write it as a .track.txt (and list what could not be carried over)
 //   HoverNetTrackSource canonical IN OUT        write the model's canonical text of IN to OUT (scripts/test-track-source-roundtrip.sh compiles both)
 #include "EditorSession.h"
+#include "HoverCadImport.h"
 #include "TrackEdit.h"
 #include "TrackSource.h"
 #include "TrackTemplates.h"
@@ -303,6 +305,20 @@ int main(int argc, char** argv)
         if (!TrackModel::FromText(TrackText::Parse(file), model, error)) { std::fprintf(stderr, "FAIL %s: %s\n", argv[2], error.c_str()); return 1; }
         std::ofstream out(argv[3], std::ios::binary);
         out << model.ToText();
+        return out ? 0 : 2;
+    }
+    if (command == "import" && argc == 4) {
+        std::ifstream in(argv[2], std::ios::binary);
+        if (!in) { std::fprintf(stderr, "cannot read %s\n", argv[2]); return 2; }
+        const std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        TrackModel model;
+        std::string error;
+        std::vector<std::string> notes;
+        if (!ImportHoverCad(bytes, model, error, notes)) { std::fprintf(stderr, "%s: %s\n", argv[2], error.c_str()); return 1; }
+        for (const std::string& n : notes) std::fprintf(stderr, "note: %s\n", n.c_str());
+        std::ofstream out(argv[3], std::ios::binary);
+        out << model.ToText();
+        std::printf("%s: %d rooms, %d features, %zu starts, %zu elements, %zu connections\n", argv[2], model.CountRooms(), model.CountFeatures(), model.starts.size(), model.freeElements.size(), model.connections.size());
         return out ? 0 : 2;
     }
     if (command == "new" && argc >= 4 && (std::string(argv[2]) == "start" || std::string(argv[2]) == "rebuilt")) {

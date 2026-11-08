@@ -1,4 +1,5 @@
 #include "EditorSession.h"
+#include "HoverCadImport.h"
 
 #include "TrackElementCatalogue.h"
 
@@ -65,10 +66,17 @@ bool EditorSession::Open(const std::string& filename)
     const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     TrackModel opened;
     std::string error;
-    if (!TrackModel::FromText(TrackText::Parse(text), opened, error)) { status = filename + ": " + error; return false; }
+    bool imported = false;
+    const std::vector<std::uint8_t> bytes(text.begin(), text.end());
+    if (LooksLikeHoverCad(bytes)) {   // a HoverCad project: converted, and offered for saving under a new name (the original is never overwritten)
+        std::vector<std::string> notes;
+        if (!ImportHoverCad(bytes, opened, error, notes)) { status = filename + ": " + error; return false; }
+        imported = true;
+    }
+    else if (!TrackModel::FromText(TrackText::Parse(text), opened, error)) { status = filename + ": " + error; return false; }
     model = opened;
-    path = filename; dirty = false; selection = Selection(); mUndo.clear(); mRedo.clear(); mDragging = false;
-    status = "Opened " + filename;
+    path = imported ? std::string() : filename; dirty = imported; selection = Selection(); mUndo.clear(); mRedo.clear(); mDragging = false;
+    status = imported ? "Imported HoverCad project " + filename + " (save it as a new track)" : "Opened " + filename;
     Refresh();
     return true;
 }

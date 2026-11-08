@@ -55,7 +55,7 @@ bool MoveSharedCorner(TrackModel& model, int roomIndex, int wallIndex, double x,
 int ExtendRoad(TrackModel& model, int roomIndex, int wallIndex, double length, double turnDegrees, std::string& why);
 // Finds room edges that meet (the same two corners, within `tolerance` metres), makes the corners exactly equal and joins the rooms. Returns how many joins it added.
 int JoinTouchingEdges(TrackModel& model, double tolerance = 0.05);
-// Rooms are numbered 1, 2, 3... in order (the compiler relies on it): renumbers after a room is removed, keeping every reference right.
+// Rooms are kept numbered 1, 2, 3... in order (tidy, and what the editor writes; the compiler itself looks ids up): renumbers after a room is removed, keeping every reference right.
 void RenumberRooms(TrackModel& model);
 // Removes a room and the joins that touch it. Refused while a start or element is inside it, or a feature is in it: move or delete those first.
 bool DeleteRoom(TrackModel& model, int roomIndex, std::string& why);

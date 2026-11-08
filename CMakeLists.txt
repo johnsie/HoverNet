@@ -701,7 +701,7 @@ endif()
 
 # The track editor core: a lossless text layer and a typed model of the .track.txt format, and the templates for new tracks
 # (docs/roadmap-track-editor.md, Phases 1 and 2). Outside the test block: the browser editor builds it too.
-add_library(HoverNetTrackEditorCore STATIC NetTarget/TrackEditor/TrackSource.cpp NetTarget/TrackEditor/TrackTemplates.cpp NetTarget/TrackEditor/TrackEdit.cpp NetTarget/TrackEditor/EditorSession.cpp)
+add_library(HoverNetTrackEditorCore STATIC NetTarget/TrackEditor/TrackSource.cpp NetTarget/TrackEditor/TrackTemplates.cpp NetTarget/TrackEditor/TrackEdit.cpp NetTarget/TrackEditor/EditorSession.cpp NetTarget/TrackEditor/HoverCadImport.cpp)
 target_include_directories(HoverNetTrackEditorCore PUBLIC NetTarget/TrackEditor)
 add_executable(HoverNetTrackSource NetTarget/TrackEditor/TrackSourceTool.cpp)
 # The editor's window (docs/roadmap-track-editor.md, Phase 2): SDL2 + Dear ImGui like the game, over the same core that the tests exercise.
@@ -910,6 +910,9 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetTrackSourceRoundTrip COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-track-source-roundtrip.sh"
              "$<TARGET_FILE:HoverNetTrackSource>" "$<TARGET_FILE:HoverNetMazeCompiler>")
     set_tests_properties(HoverNetTrackSourceRoundTrip PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    # The HoverCad importer: the real HoverCad projects import, compile, and ClassicH drives exactly like the official track.
+    add_test(NAME HoverNetHoverCadImport COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-hovercad-import.sh" "${CMAKE_BINARY_DIR}")
+    set_tests_properties(HoverNetHoverCadImport PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     # A track made from nothing by the editor core compiles, validates, can be driven round and is admissible to the catalogue.
     # The editor's window, headless: it draws tracks, opens the bundled ones, and "compile and check" gives the real verdict with plain reasons.
     add_test(NAME HoverNetTrackEditor COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-track-editor.sh" "${CMAKE_BINARY_DIR}")
