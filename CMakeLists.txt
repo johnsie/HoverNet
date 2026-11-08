@@ -681,6 +681,23 @@ add_executable(HoverNetMazeCompiler
 add_dependencies(HoverNetMazeCompiler HoverNetHeadlessObjFac1)
 target_include_directories(HoverNetMazeCompiler PRIVATE NetTarget/MazeCompiler)
 target_link_libraries(HoverNetMazeCompiler PRIVATE HoverNetModelCore HoverNetResourceCore HoverNetVideoCore HoverNetPortableUtil)
+if(EMSCRIPTEN)
+    # The track editor's browser build compiles with this same compiler code (parity rule 2 in docs/roadmap-track-editor.md). The browser cannot
+    # load ObjFac1.so, so the factory is compiled in and main() is a small wrapper (WasmCompilerMain.cpp). NODERAWFS lets the test run it under Node
+    # on real files; the editor will load it as a fresh module instance per compile because the compiler ends with exit().
+    target_sources(HoverNetMazeCompiler PRIVATE
+        NetTarget/MazeCompiler/WasmCompilerMain.cpp
+        NetTarget/LinuxClient/WebFactory.cpp
+        NetTarget/ObjFac1/LinuxPlugin.cpp
+        NetTarget/ObjFac1/SimElements.cpp
+        NetTarget/ObjFac1/FuelSource.cpp
+        NetTarget/ObjFac1/DoubleSpeedSource.cpp
+        NetTarget/ObjFac1/FinishLine.cpp
+    )
+    target_compile_definitions(HoverNetMazeCompiler PRIVATE main=HoverNetMazeCompilerMain HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    target_link_libraries(HoverNetMazeCompiler PRIVATE HoverNetMainCharacter)
+    target_link_options(HoverNetMazeCompiler PRIVATE -sNODERAWFS=1 -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=node -sSTACK_SIZE=16777216 -sINITIAL_MEMORY=67108864)
+endif()
 
 add_executable(HoverNetTrack3DViewer
     NetTarget/LinuxClient/Track3DViewer.cpp
@@ -844,6 +861,18 @@ if(BUILD_TESTING AND NOT WIN32)
             "${CMAKE_BINARY_DIR}" "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/all-tracks-multiplayer")
     set_tests_properties(HoverNetAllTracksMultiplayer PROPERTIES
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 240)
+    # The track editor's element catalogue must equal what the game's object factory can create (docs/roadmap-track-editor.md, parity rule 1).
+    add_executable(HoverNetTrackElementCatalogue
+        NetTarget/TrackEditor/TrackElementCatalogueSmoke.cpp
+    )
+    add_dependencies(HoverNetTrackElementCatalogue HoverNetHeadlessObjFac1)
+    target_compile_definitions(HoverNetTrackElementCatalogue PRIVATE HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    target_link_libraries(HoverNetTrackElementCatalogue PRIVATE HoverNetSim HoverNetModelCore HoverNetResourceCore HoverNetPortableUtil)
+    add_test(NAME HoverNetTrackElementCatalogue COMMAND HoverNetTrackElementCatalogue)
+    # Every track source compiles to exactly its committed .trk (native); the WebAssembly half is run by scripts/test-compiler-parity.sh with its extra arguments.
+    add_test(NAME HoverNetCompilerParity COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-compiler-parity.sh" "$<TARGET_FILE:HoverNetMazeCompiler>")
+    set_tests_properties(HoverNetCompilerParity PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(HoverNetTrackElementCatalogue PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     add_hovernet_root_test(HoverNetFactorySmoke)
     add_hovernet_root_test(HoverNetResourceSmoke)
     add_hovernet_root_test(HoverNetViewportSmoke)

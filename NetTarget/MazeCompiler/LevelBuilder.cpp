@@ -18,6 +18,8 @@
 // See the License for the specific language governing permissions 
 // and limitations under the License.
 //
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// See repository history for authorship and detailed changes.
 
 #include "StdAfx.h"
 #include "LevelBuilder.h"
@@ -26,6 +28,8 @@
 #include "resource.h"
 
 #include <math.h>
+#include <algorithm>
+#include <vector>
 
 #define new DEBUG_NEW
 
@@ -938,17 +942,16 @@ void MR_LevelBuilder::OrderVisibleSurfaces()
        // Order the surfaces list
        gsCurrentLevelBuilder = this;
 
-       qsort( mRoomList[ lRoomId ].mVisibleFloorList,
-              mRoomList[ lRoomId ].mNbVisibleSurface,
-              sizeof( MR_SectionId ),
-              OrderFloor   
-            );
-  
-      qsort( mRoomList[ lRoomId ].mVisibleCeilingList,
-             mRoomList[ lRoomId ].mNbVisibleSurface,
-             sizeof( MR_SectionId ),
-             OrderCeiling
-           );
+       // HoverNet: a stable sort. The comparators only look at the level, so surfaces with equal levels keep the order they were added in.
+       // qsort left that order to the C library (glibc, musl and the Microsoft runtime differ), which made the same track source compile to
+       // different bytes on different platforms (found by the track editor's WebAssembly parity check, 8 November 2026).
+       std::stable_sort( mRoomList[ lRoomId ].mVisibleFloorList,
+                         mRoomList[ lRoomId ].mVisibleFloorList + mRoomList[ lRoomId ].mNbVisibleSurface,
+                         []( const MR_SectionId& pA, const MR_SectionId& pB ) { return OrderFloor( &pA, &pB ) < 0; } );
+
+       std::stable_sort( mRoomList[ lRoomId ].mVisibleCeilingList,
+                         mRoomList[ lRoomId ].mVisibleCeilingList + mRoomList[ lRoomId ].mNbVisibleSurface,
+                         []( const MR_SectionId& pA, const MR_SectionId& pB ) { return OrderCeiling( &pA, &pB ) < 0; } );
 
 
    }

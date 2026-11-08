@@ -310,7 +310,7 @@ stage makes them durable and makes new ones easy.
 - **Deterministic importers** for classic `.trk` files. The 1,009-track library is the
   conversion test corpus: every track converts, or is listed with the exact reason it
   cannot. *Status: done: `HoverNetTrackPack corpus` imports and verifies all 1,012 tracks, none failed.*
-- A supported **visual editor**: validation as you work, undo and redo, preview, object
+- A supported **visual editor** (detailed plan: [roadmap-track-editor.md](roadmap-track-editor.md); native Windows and Linux plus a web version, always at parity with the game client): validation as you work, undo and redo, preview, object
   placement, checkpoint tooling, and one-click playtesting. Free-play tracks (no finish
   line) become a first-class mode, not an accident of missing objects.
 - Automated checks for topology, collision, checkpoint order, spawn safety, missing assets,
