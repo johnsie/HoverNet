@@ -701,7 +701,7 @@ endif()
 
 # The track editor core: a lossless text layer and a typed model of the .track.txt format, and the templates for new tracks
 # (docs/roadmap-track-editor.md, Phases 1 and 2). Outside the test block: the browser editor builds it too.
-add_library(HoverNetTrackEditorCore STATIC NetTarget/TrackEditor/TrackSource.cpp NetTarget/TrackEditor/TrackTemplates.cpp)
+add_library(HoverNetTrackEditorCore STATIC NetTarget/TrackEditor/TrackSource.cpp NetTarget/TrackEditor/TrackTemplates.cpp NetTarget/TrackEditor/TrackEdit.cpp NetTarget/TrackEditor/EditorSession.cpp)
 target_include_directories(HoverNetTrackEditorCore PUBLIC NetTarget/TrackEditor)
 add_executable(HoverNetTrackSource NetTarget/TrackEditor/TrackSourceTool.cpp)
 target_link_libraries(HoverNetTrackSource PRIVATE HoverNetTrackEditorCore)
