@@ -85,7 +85,9 @@ int Record(const std::string& track, std::uint32_t ticks, const std::string& out
     return 0;
 }
 
-int Verify(const std::string& path)
+// trackFile, when not empty, is the track to check against instead of the path recorded in the replay: a market submission is verified against the file
+// that was submitted (its hash must still equal the one recorded in the replay).
+int Verify(const std::string& path, const std::string& trackFile = std::string())
 {
     std::vector<std::uint8_t> file;
     Replay r;
@@ -96,10 +98,11 @@ int Verify(const std::string& path)
         std::fprintf(stderr, "%s: recorded under simulation rules %u, this build is %u; it cannot be verified\n", path.c_str(), r.rules, kSimulationRules);
         return 1;
     }
-    const std::string sha = Sha256::HashFile(TrackPath(r.track));
+    const std::string trackPath = trackFile.empty() ? TrackPath(r.track) : trackFile;
+    const std::string sha = Sha256::HashFile(trackPath);
     if (sha != r.trackSha256) { std::fprintf(stderr, "%s: the track file differs from the one recorded\n", path.c_str()); return 1; }
     World w;
-    if (!w.Build(TrackPath(r.track), r.track, r.players, r.laps, r.weapons, ReplayFormat::StartTimeMs(r.rules))) { std::fprintf(stderr, "Could not load %s\n", r.track.c_str()); return 1; }
+    if (!w.Build(trackPath, r.track, r.players, r.laps, r.weapons, ReplayFormat::StartTimeMs(r.rules))) { std::fprintf(stderr, "Could not load %s\n", r.track.c_str()); return 1; }
     for (std::uint32_t t = 0; t < r.ticks; ++t) {
         w.Step(&r.inputs[static_cast<std::size_t>(t) * r.players]);
         if ((t + 1) % kCheckpointTicks == 0 && w.Hash() != r.checkpoints[(t + 1) / kCheckpointTicks - 1]) {
@@ -324,7 +327,7 @@ int Info(const std::string& path)
 int main(int argc, char** argv)
 {
     if (argc < 3) {
-        std::fprintf(stderr, "usage: %s record <track> <ticks> <out> [--players=N] | verify <file> | info <file>\n", argv[0]);
+        std::fprintf(stderr, "usage: %s record <track> <ticks> <out> [--players=N] | verify <file> [--track=FILE] | info <file>\n", argv[0]);
         return 2;
     }
     MR_InitTrigoTables();
@@ -339,7 +342,11 @@ int main(int argc, char** argv)
         if (ticks < 1 || ticks > kMaxTicks || players < 1 || players > kMaxPlayers) { std::fprintf(stderr, "bad arguments\n"); return 2; }
         return Record(argv[2], static_cast<std::uint32_t>(ticks), argv[4], players);
     }
-    if (cmd == "verify") return Verify(argv[2]);
+    if (cmd == "verify") {
+        std::string trackFile;
+        for (int i = 3; i < argc; ++i) if (std::string(argv[i]).rfind("--track=", 0) == 0) trackFile = std::string(argv[i]).substr(8);
+        return Verify(argv[2], trackFile);
+    }
     if (cmd == "info") return Info(argv[2]);
     if (cmd == "results") return Results(argv[2]);
     if (cmd == "id") return Id(argv[2]);
