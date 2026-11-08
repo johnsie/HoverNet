@@ -1,6 +1,6 @@
-// RenderGoldenRun -- the classic renderer's output for fixed scenes, as hashes (the "classic preset" reference of docs/render-golden.md).
+// RenderGoldenRun -- the software rasteriser's output for fixed scenes, as hashes (its regression reference, docs/render-golden.md).
 //
-//   HoverNetRenderGolden <track> <scene> [bench <frames>]
+//   HoverNetRenderGolden <track> <scene> [bench <frames> | modern]
 //
 // It plays a scripted two-craft race on the track, stops at a fixed tick, draws the whole race view (3D scene, craft, HUD) the way the game
 // does (MR_Observer::RenderNormalDisplay into the 8-bit framebuffer) and prints one line:
@@ -20,6 +20,7 @@
 #include "../Util/RecordFile.h"
 #include "../Util/WorldCoordinates.h"
 #include "../VideoServices/ColorPalette.h"
+#include "../VideoServices/ModernGraphics.h"
 #include "../VideoServices/VideoBuffer.h"
 
 #include <algorithm>
@@ -30,6 +31,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifdef __EMSCRIPTEN__
@@ -178,6 +180,113 @@ int main(int argc, char** argv)
     for (std::size_t i = 0; i < pixels; ++i) { rgb[i * 3] = palette[frame[i] * 3]; rgb[i * 3 + 1] = palette[frame[i] * 3 + 1]; rgb[i * 3 + 2] = palette[frame[i] * 3 + 2]; }
     std::printf("%s %s %dx%d %016llx rgb=%016llx pixels=%zu\n", trackName.c_str(), scene.c_str(), buffer.GetXRes(), buffer.GetYRes(),
                 static_cast<unsigned long long>(Fnv1a(frame, pixels)), static_cast<unsigned long long>(Fnv1a(rgb.data(), rgb.size())), lit);
+
+    // "modern": the same scene with the modern look (docs/roadmap-3.0.md): craft shadows drawn in the scene, then the picture passes and effects. The
+    // classic line above is printed first and is what the committed goldens check; this line is checked by scripts/test-modern-graphics.sh for
+    // properties (the classic frame is unchanged without the look, the look changes the picture, it is repeatable) -- not against committed hashes,
+    // because its floating-point effects are only promised to repeat on the same machine.
+    if ((argc >= 4 && std::strcmp(argv[3], "modern") == 0) || std::getenv("HOVERNET_RENDER_MODERN") != nullptr) {
+        const char* presetName = std::getenv("HOVERNET_RENDER_PRESET");   // modern (default), high or lite
+        const HoverNetGfx::Preset preset = presetName == nullptr ? HoverNetGfx::Preset::eModern : std::strcmp(presetName, "high") == 0 ? HoverNetGfx::Preset::eModernHigh
+                                           : std::strcmp(presetName, "lite") == 0 ? HoverNetGfx::Preset::eModernLite : HoverNetGfx::Preset::eModern;
+        HoverNetGfx::Options options = HoverNetGfx::OptionsForPreset(preset);
+        if (std::getenv("HOVERNET_RENDER_NOLIGHT") != nullptr) options.lighting = false;   // to time the lighting by itself
+        std::array<std::uint8_t, MR_NB_COLORS * 3> gradedPalette{};   // the client expands the frame through the graded palette (SDL2Graphics.cpp)
+        HoverNetGfx::Presenter::GradePalette(palette.data(), gradedPalette.data(), options.brightness);
+        const std::array<std::uint8_t, MR_NB_COLORS * 3>& usedPalette = options.grade ? gradedPalette : palette;
+        std::uint8_t lut[256];
+        HoverNetGfx::BuildShadowLut(palette.data(), 70, lut);
+        observer->SetModernTextures(options.trueColour ? TRUE : FALSE, usedPalette.data());
+        observer->SetModernLighting(TRUE);
+        observer->SetModernEffects(TRUE, TRUE, TRUE, lut);   // "reduced motion" while measuring the shadows, so the speed-widened view does not count as shadow
+        for (std::uint32_t k = 0; k < 48; ++k) {   // some race time, so the trail has history
+            for (int slot = 0; slot < players; ++slot) craft[static_cast<std::size_t>(slot)]->SetControlState(ScriptedInput(slot, ticks + k), session.GetSimulationTime());
+            session.StepTicks(1, nullptr, nullptr);
+            observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+        }
+        for (int settle = 0; settle < 12; ++settle) observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());   // the smoothed chase camera settles when the time stands still
+        const std::vector<std::uint8_t> withLook(frame, frame + pixels);
+        // The view widens a little with speed unless "Reduced motion" is on: count the 8-bit pixels that differ with it allowed.
+        observer->SetModernEffects(TRUE, TRUE, FALSE, lut);
+        for (int settle = 0; settle < 48; ++settle) observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+        std::size_t widened = 0;
+        for (std::size_t i = 0; i < pixels; ++i) if (frame[i] != withLook[i]) ++widened;
+        observer->SetModernEffects(TRUE, TRUE, TRUE, lut);   // back to the state withLook was drawn in, so the hints (and the depth they point at) match it
+        for (int settle = 0; settle < 48; ++settle) observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+        const HoverNetGfx::FrameHints hints = observer->GetFrameHints();
+        observer->SetModernEffects(FALSE, FALSE, FALSE, nullptr);
+        for (int settle = 0; settle < 12; ++settle) observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+        std::size_t shadowed = 0;
+        for (std::size_t i = 0; i < pixels; ++i) if (frame[i] != withLook[i]) ++shadowed;
+        std::size_t tagCount[8] = {};   // how many pixels the rasteriser tagged as floor / ceiling / wall / object / craft
+        if (hints.tags != nullptr) for (std::size_t i = 0; i < pixels && i < static_cast<std::size_t>(hints.depthWidth) * hints.depthHeight; ++i) if (hints.tags[i] < 8) ++tagCount[hints.tags[i]];
+        std::vector<std::uint8_t> picture(pixels * 3);
+        for (std::size_t i = 0; i < pixels; ++i) for (int c = 0; c < 3; ++c) picture[i * 3 + c] = usedPalette[withLook[i] * 3 + c];
+        // The rasteriser's own true-colour picture (filtered textures), laid over the palette expansion as the client does.
+        const std::size_t trueColourPixels = HoverNetGfx::Presenter::ApplyTrueColour(picture.data(), withLook.data(), buffer.GetXRes(), buffer.GetYRes(), hints);
+        const std::vector<std::uint8_t> plain = picture;
+        HoverNetGfx::Presenter presenter;
+        presenter.Process(picture.data(), buffer.GetXRes(), buffer.GetYRes(), options, hints);
+        std::size_t changed = 0;
+        for (std::size_t i = 0; i < pixels * 3; ++i) if (picture[i] != plain[i]) ++changed;
+        // Repeatable: a second presenter given the same inputs makes the same picture.
+        std::vector<std::uint8_t> again = plain;
+        HoverNetGfx::Presenter second;
+        second.Process(again.data(), buffer.GetXRes(), buffer.GetYRes(), options, hints);
+        std::printf("MODERN %s %s %dx%d rgb=%016llx shadowed=%zu widened=%zu changed=%zu repeat=%s hints=%d craft=%d trail=%d speed=%.2f lights=%d depth=%d tags=%zu/%zu/%zu/%zu/%zu truecolour=%zu\n", trackName.c_str(), scene.c_str(),
+                    buffer.GetXRes(), buffer.GetYRes(), static_cast<unsigned long long>(Fnv1a(picture.data(), picture.size())), shadowed, widened, changed,
+                    again == picture ? "yes" : "NO", hints.valid ? 1 : 0, hints.craftVisible ? 1 : 0, hints.trailCount, hints.speed, hints.lightCount, hints.depth != nullptr ? 1 : 0, tagCount[1], tagCount[2], tagCount[3], tagCount[4], tagCount[5], trueColourPixels);
+        // Cost of the passes: the same frame processed repeatedly (a fresh copy each time; this machine, one thread).
+        const int runs = 20;
+        double total = 0;
+        for (int i = 0; i < runs; ++i) {
+            std::vector<std::uint8_t> copy = plain;
+            const auto a = std::chrono::steady_clock::now();
+            presenter.Process(copy.data(), buffer.GetXRes(), buffer.GetYRes(), options, hints);
+            total += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - a).count();
+        }
+        std::printf("MODERNTIME %s %s %dx%d: mean %.2f ms over %d frames\n", trackName.c_str(), scene.c_str(), buffer.GetXRes(), buffer.GetYRes(), total / runs, runs);
+        // The same, pass by pass (HoverNetGfx::Presenter::SetProfiling): where the time goes.
+        presenter.SetProfiling(true);
+        std::vector<std::pair<std::string, double>> perPass;
+        for (int i = 0; i < runs; ++i) {
+            std::vector<std::uint8_t> copy = plain;
+            presenter.Process(copy.data(), buffer.GetXRes(), buffer.GetYRes(), options, hints);
+            const auto& times = presenter.LastPassTimes();
+            if (perPass.empty()) for (const auto& t : times) perPass.emplace_back(t.name, 0.0);
+            for (std::size_t k = 0; k < times.size() && k < perPass.size(); ++k) perPass[k].second += times[k].milliseconds;
+        }
+        std::printf("MODERNPASSES %s %s %dx%d:", trackName.c_str(), scene.c_str(), buffer.GetXRes(), buffer.GetYRes());
+        for (const auto& p : perPass) std::printf(" %s=%.2fms", p.first.c_str(), p.second / runs);
+        std::printf("\n");
+        // What the true colour costs the rasteriser: the same scene drawn with and without it (this machine, one thread).
+        {
+            const int frames = 30;
+            double textured = 0, plainMs = 0;
+            for (int pass = 0; pass < 2; ++pass) {
+                observer->SetModernTextures(pass == 0 && options.trueColour ? TRUE : FALSE, usedPalette.data());
+                observer->SetModernEffects(TRUE, TRUE, TRUE, lut);
+                observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+                const auto a = std::chrono::steady_clock::now();
+                for (int i = 0; i < frames; ++i) observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+                (pass == 0 ? textured : plainMs) = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - a).count() / frames;
+            }
+            std::printf("MODERNRASTER %s %s %dx%d: true colour with filtered textures %.2f ms, without %.2f ms\n", trackName.c_str(), scene.c_str(), buffer.GetXRes(), buffer.GetYRes(), textured, plainMs);
+        }
+        if (const char* dump = std::getenv("HOVERNET_RENDER_DUMP")) {
+            std::string name = trackName;
+            for (char& ch : name) if (ch == ' ') ch = '_';
+            for (int which = 0; which < 2; ++which) {
+                const std::string path = std::string(dump) + "/" + name + "-" + scene + (which == 0 ? "-plain.ppm" : "-modern.ppm");
+                if (std::FILE* f = std::fopen(path.c_str(), "wb")) {
+                    std::fprintf(f, "P6\n%d %d\n255\n", buffer.GetXRes(), buffer.GetYRes());
+                    const std::vector<std::uint8_t>& image = which == 0 ? plain : picture;
+                    std::fwrite(image.data(), 1, image.size(), f);
+                    std::fclose(f);
+                }
+            }
+        }
+    }
 
     if (const char* dump = std::getenv("HOVERNET_RENDER_DUMP")) {
         std::string name = trackName;

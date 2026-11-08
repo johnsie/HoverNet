@@ -52,6 +52,7 @@
 #include "../Util/WorldCoordinates.h"
 #include "../VideoServices/3DViewport.h"
 #include "../VideoServices/ColorPalette.h"
+#include "../VideoServices/ModernGraphics.h"
 #include "../VideoServices/VideoBuffer.h"
 
 #include <SDL.h>
@@ -1754,6 +1755,94 @@ void SaveShowGhost(bool enabled)
 {
     std::ofstream out(ShowGhostPath());
     out << (enabled ? 1 : 0) << '\n';
+}
+
+// Graphics: "Modern" adds soft craft shadows, de-banded colour and smoothed edges, glow, a tone curve and
+// vignette, and light effects (engine glow, trail, sparks, speed lines, a slightly wider view at speed, light from the craft). Presentation only (see
+// VideoServices/ModernGraphics.h): it never touches the race. "Reduced motion" turns off the speed lines, sparks, impact flash and view change.
+// The look when the player has not chosen: Modern on a desktop, Modern light on a phone or tablet and in the browser (where the picture passes run
+// without SIMD and cost several times as much; docs/render-golden.md). A saved "classic" (from before the Classic look was removed) means this too.
+HoverNetGfx::Preset DefaultGraphicsPreset()
+{
+#ifdef HOVERNET_WEB
+    return HoverNetGfx::Preset::eModernLite;
+#else
+    return HoverNetIsTouchDevice() ? HoverNetGfx::Preset::eModernLite : HoverNetGfx::Preset::eModern;
+#endif
+}
+
+struct GraphicsSettings
+{
+    HoverNetGfx::Preset preset = DefaultGraphicsPreset();
+    bool shadows = true, deband = true, smoothing = true, bloom = true, grade = true, effects = true, lighting = true, textures = true;
+    bool atmosphere = true, occlusion = true, edges = true, craft = true, halos = true, sharpen = true, exposure = true, adaptive = true;
+    float brightness = 1.0f;   // 0.7 .. 1.4
+};
+
+std::string GraphicsSettingsPath()
+{
+    return ConfigDirPath() + "/graphics";
+}
+
+GraphicsSettings LoadGraphicsSettings()
+{
+    GraphicsSettings settings;
+    std::ifstream in(GraphicsSettingsPath());
+    std::string key;
+    std::string value;
+    while (in >> key >> value) {
+        if (key == "preset") {
+            settings.preset = value == "modern" ? HoverNetGfx::Preset::eModern : value == "high" ? HoverNetGfx::Preset::eModernHigh : value == "lite" ? HoverNetGfx::Preset::eModernLite : DefaultGraphicsPreset();
+        }
+        else if (key == "shadows") settings.shadows = value != "0";
+        else if (key == "deband") settings.deband = value != "0";
+        else if (key == "smooth") settings.smoothing = value != "0";
+        else if (key == "bloom") settings.bloom = value != "0";
+        else if (key == "grade") settings.grade = value != "0";
+        else if (key == "effects") settings.effects = value != "0";
+        else if (key == "lighting") settings.lighting = value != "0";
+        else if (key == "textures") settings.textures = value != "0";
+        else if (key == "atmosphere") settings.atmosphere = value != "0";
+        else if (key == "occlusion") settings.occlusion = value != "0";
+        else if (key == "edges") settings.edges = value != "0";
+        else if (key == "craft") settings.craft = value != "0";
+        else if (key == "halos") settings.halos = value != "0";
+        else if (key == "sharpen") settings.sharpen = value != "0";
+        else if (key == "exposure") settings.exposure = value != "0";
+        else if (key == "adaptive") settings.adaptive = value != "0";
+        else if (key == "brightness") { const float b = static_cast<float>(std::atof(value.c_str())); if (b >= 0.7f && b <= 1.4f) settings.brightness = b; }
+    }
+    return settings;
+}
+
+void SaveGraphicsSettings(const GraphicsSettings& settings)
+{
+    std::ofstream out(GraphicsSettingsPath());
+    out << "preset " << (settings.preset == HoverNetGfx::Preset::eModern ? "modern" : settings.preset == HoverNetGfx::Preset::eModernHigh ? "high" : settings.preset == HoverNetGfx::Preset::eModernLite ? "lite" : "modern") << '\n'
+        << "shadows " << settings.shadows << '\n' << "deband " << settings.deband << '\n' << "smooth " << settings.smoothing << '\n' << "bloom " << settings.bloom << '\n'
+        << "grade " << settings.grade << '\n' << "effects " << settings.effects << '\n' << "lighting " << settings.lighting << '\n' << "textures " << settings.textures << '\n' << "atmosphere " << settings.atmosphere << '\n' << "occlusion " << settings.occlusion << '\n' << "edges " << settings.edges << '\n'
+        << "craft " << settings.craft << '\n' << "halos " << settings.halos << '\n' << "sharpen " << settings.sharpen << '\n' << "exposure " << settings.exposure << '\n' << "adaptive " << settings.adaptive << '\n' << "brightness " << settings.brightness << '\n';
+}
+
+HoverNetGfx::Options GraphicsOptionsFor(const GraphicsSettings& settings, bool reducedMotion)
+{
+    HoverNetGfx::Options options = HoverNetGfx::OptionsForPreset(settings.preset);
+    if (options.enabled) {
+        options.shadows = settings.shadows;
+        options.deband = settings.deband;
+        options.smoothing = settings.smoothing;
+        options.bloom = settings.bloom;
+        options.grade = settings.grade;
+        options.effects = settings.effects;
+        options.lighting = settings.lighting;
+        options.trueColour = options.trueColour && settings.textures;
+        options.atmosphere = settings.atmosphere; options.occlusion = settings.occlusion; options.edgeAA = settings.edges;
+        options.craftShading = settings.craft; options.reflections = settings.craft; options.halos = settings.halos;
+        options.sharpen = settings.sharpen; options.exposure = settings.exposure; options.adaptive = settings.adaptive;
+        options.brightness = settings.brightness;
+        options.reducedMotion = reducedMotion;
+    }
+    return options;
 }
 
 #if defined(HOVERNET_AUTH)
@@ -4481,6 +4570,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     bool applyUiScale = false;
     bool largeHudText = LoadLargeHudText();
     RaceView raceView = LoadRaceView();
+    GraphicsSettings graphicsSettings = LoadGraphicsSettings();
     bool showGhost = LoadShowGhost();
     bool reducedMotion = LoadReducedMotion();
     const bool currentHighContrast = LoadHighContrast();
@@ -4723,6 +4813,58 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Separator();
         ImGui::Spacing();
 
+        ImGui::TextUnformatted("Graphics");
+        {
+            static const HoverNetGfx::Preset presets[] = {HoverNetGfx::Preset::eModern, HoverNetGfx::Preset::eModernHigh, HoverNetGfx::Preset::eModernLite};
+            ImGui::PushItemWidth(-1.0f);
+            if (ImGui::BeginCombo("##GraphicsPreset", HoverNetGfx::PresetLabel(graphicsSettings.preset))) {
+                for (const HoverNetGfx::Preset preset : presets) {
+                    if (ImGui::Selectable(HoverNetGfx::PresetLabel(preset), graphicsSettings.preset == preset)) graphicsSettings.preset = preset;
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopItemWidth();
+            {
+                ImGui::Checkbox("Soft craft shadows", &graphicsSettings.shadows);
+                if (graphicsSettings.preset != HoverNetGfx::Preset::eModernLite) {
+                    ImGui::Checkbox("Smooth colour bands", &graphicsSettings.deband);
+                }
+                if (graphicsSettings.preset == HoverNetGfx::Preset::eModernHigh) {
+                    ImGui::Checkbox("Smooth jagged edges", &graphicsSettings.smoothing);
+                    ImGui::Checkbox("Glow around bright lights", &graphicsSettings.bloom);
+                }
+                if (graphicsSettings.preset != HoverNetGfx::Preset::eModernLite) {
+                    ImGui::Checkbox("Smooth textures (true colour)", &graphicsSettings.textures);
+                }
+                ImGui::Checkbox("Light from the craft, and distance haze", &graphicsSettings.lighting);
+                if (graphicsSettings.preset != HoverNetGfx::Preset::eModernLite && ImGui::TreeNode("More graphics options")) {
+                    ImGui::Checkbox("Walls block light", &graphicsSettings.occlusion);
+                    ImGui::Checkbox("Sky-tinted ambient light, mist and horizon glow", &graphicsSettings.atmosphere);
+                    ImGui::Checkbox("Anti-aliased edges", &graphicsSettings.edges);
+                    ImGui::Checkbox("Craft shine, rim light and reflection (high quality)", &graphicsSettings.craft);
+                    ImGui::Checkbox("Glows on missiles, mines and power-ups", &graphicsSettings.halos);
+                    ImGui::Checkbox("Sharper textures (high quality)", &graphicsSettings.sharpen);
+                    ImGui::Checkbox("Automatic exposure", &graphicsSettings.exposure);
+                    ImGui::Checkbox("Lower the quality automatically when it is too slow", &graphicsSettings.adaptive);
+                    ImGui::TreePop();
+                }
+                ImGui::Checkbox("Engine glow, trail, sparks and speed lines", &graphicsSettings.effects);
+                ImGui::Checkbox("Richer colour and vignette", &graphicsSettings.grade);
+            }
+            {
+                ImGui::TextUnformatted("Brightness");
+                float brightnessPercent = graphicsSettings.brightness * 100.0f;
+                ImGui::PushItemWidth(-1.0f);
+                if (MenuSliderFloat("##Brightness", &brightnessPercent, 70.0f, 140.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) graphicsSettings.brightness = brightnessPercent / 100.0f;
+                ImGui::PopItemWidth();
+            }
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("Modern improves how the race looks and never changes how it plays. High quality needs a fast processor; light suits phones, the browser and older machines. "
+                                "\"Reduced motion\" above turns off the speed lines, sparks, impact flash and wider view.");
+            ImGui::PopTextWrapPos();
+            ImGui::Spacing();
+        }
+
         if (!HoverNetIsTouchDevice()) {   // phones and tablets always use a picture shaped like their screen
             ImGui::TextUnformatted("Race view");
             static const char* const raceViewLabels[] = {"Classic (4:3)", "Widescreen (16:9)", "Match my window"};
@@ -4917,7 +5059,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
     }
 
-    if (!cancelled) { SaveRaceView(raceView); SaveShowGhost(showGhost); }
+    if (!cancelled) { SaveRaceView(raceView); SaveShowGhost(showGhost); SaveGraphicsSettings(graphicsSettings); }
 #if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
     if (!cancelled) {
         AuthServerSettings chosen;   // the official server unless an address was typed
@@ -7766,7 +7908,9 @@ void ReplayTickHook(void* pData, unsigned)
 
 int RunClient(int argc, char** argv)
 {
+#ifdef HOVERNET_GAME2_PLAYER   // the playtest path and the argument helper exist only in the player build
     gPlaytestPath = ParseStringArg(argc, argv, "--playtest");
+#endif
 #ifdef HOVERNET_GAME2_PLAYER
     if (HasArgument(argc, argv, "--download-community-tracks")) {
         return RunDownloadCommand(argc, argv);
@@ -7982,6 +8126,31 @@ int RunClient(int argc, char** argv)
     if (!graphics.Initialize(nullptr, kWidth, kHeight)) {
         return FatalClientError(std::string("Could not initialize graphics: ") + SDL_GetError());
     }
+#ifdef HOVERNET_GAME2_PLAYER
+    // The modern look (see GraphicsSettings): re-read twice a second so a change in the options screen shows at once.
+    GraphicsSettings graphicsSettings = LoadGraphicsSettings();
+    bool graphicsReducedMotion = LoadReducedMotion();
+    auto applyGraphics = [&]() {
+        HoverNetGfx::Options options = GraphicsOptionsFor(graphicsSettings, graphicsReducedMotion);
+        if (HoverNetVrActive()) options.enabled = false;   // the headset draws two eyes per frame; it keeps the plain picture
+        static int loggedPreset = -1;
+        if (loggedPreset != static_cast<int>(graphicsSettings.preset) + (options.enabled ? 100 : 0)) {
+            loggedPreset = static_cast<int>(graphicsSettings.preset) + (options.enabled ? 100 : 0);
+            std::printf("Graphics look: %s%s\n", HoverNetGfx::PresetLabel(graphicsSettings.preset), options.enabled ? "" : " (switched off: headset)");
+            std::fflush(stdout);
+        }
+        graphics.SetModernOptions(options);
+#ifdef HOVERNET_GAME2_PLAYER
+        if (observer != nullptr) {
+            observer->SetModernLighting(options.enabled && options.lighting ? TRUE : FALSE);
+            // Filtered true-colour textures cost the rasteriser; when the passes have had to drop to the lowest quality they are switched off too.
+            observer->SetModernTextures(options.enabled && options.trueColour && graphics.GetEffectiveQuality() >= 1 ? TRUE : FALSE, graphics.GetRenderPalette());
+            observer->SetModernEffects(options.enabled ? TRUE : FALSE, options.shadows ? TRUE : FALSE, options.reducedMotion ? TRUE : FALSE, graphics.GetShadowLut());
+        }
+#endif
+    };
+    applyGraphics();
+#endif
 #ifdef HOVERNET_GAME2_PLAYER
     // The renderer's logical size keeps gameplay at its original resolution;
     // the SDL window can therefore restore the player's chosen size without
@@ -10200,6 +10369,14 @@ int RunClient(int argc, char** argv)
                                           SDL_GetTicks(), mainCharacter);
             }
         }
+#ifdef HOVERNET_GAME2_PLAYER
+        if (framesRendered % 30 == 0) {
+            graphicsSettings = LoadGraphicsSettings();
+            graphicsReducedMotion = LoadReducedMotion();
+        }
+        applyGraphics();   // every frame: the shadow table follows the palette, which changes with the track
+        graphics.SetFrameHints(observer != nullptr && !debugView ? observer->GetFrameHints() : HoverNetGfx::FrameHints());
+#endif
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
         ++framesRendered;
 #ifdef HOVERNET_GAME2_PLAYER

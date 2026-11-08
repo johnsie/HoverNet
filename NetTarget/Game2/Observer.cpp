@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-10-18.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
 // See repository history for authorship and detailed changes.
 // Observer.cpp
 //
@@ -95,6 +95,22 @@ MR_Observer::MR_Observer()
    mGhostGapText[0] = 0;
    mNetworkLatencyMs = -2;
    mLargeHudText = FALSE;
+   mModernEffects = FALSE;
+   mModernShadows = FALSE;
+   mModernMotion = FALSE;
+   mShadowLutValid = FALSE;
+   memset( mShadowLut, 0, sizeof( mShadowLut ) );
+   mSceneX0 = 0;
+   mSceneY0 = 0;
+   mModernLighting = FALSE;
+   mModernTextures = FALSE;
+   memset( mPalette, 0, sizeof( mPalette ) );
+   mImpactFlash = 0.0f;
+   mTrailCount = 0;
+   mTrailLastTime = 0;
+   mPreviousSpeed = 0.0;
+   mPreviousSpeedTime = 0;
+   mApertureBoost = 0;
    mFeedbackCharacter = NULL;
    mPreviousFuelLevel = 0.0;
    mPreviousMineCount = 0;
@@ -518,6 +534,254 @@ void MR_Observer::DrawWFSection( const MR_Level* pLevel, const MR_SectionId& pSe
 
 }
 
+void MR_Observer::SetModernTextures( BOOL pEnable, const MR_UInt8* pPalette768 )
+{
+   mModernTextures = pEnable && pPalette768 != NULL;
+   if( pPalette768 != NULL )
+   {
+      for( int lIndex = 0; lIndex < 256; lIndex++ )
+      {
+         mPalette[ lIndex ] = ((MR_UInt32)pPalette768[ lIndex*3 ] << 16) | ((MR_UInt32)pPalette768[ lIndex*3 + 1 ] << 8) | (MR_UInt32)pPalette768[ lIndex*3 + 2 ];
+      }
+   }
+}
+
+void MR_Observer::SetModernEffects( BOOL pEnable, BOOL pShadows, BOOL pReducedMotion, const MR_UInt8* pShadowLut )
+{
+   mModernEffects = pEnable;
+   mModernShadows = pEnable && pShadows && pShadowLut != NULL;
+   mModernMotion  = pEnable && !pReducedMotion;
+   mShadowLutValid = pShadowLut != NULL;
+   if( pShadowLut != NULL )
+   {
+      memcpy( mShadowLut, pShadowLut, sizeof( mShadowLut ) );
+   }
+   if( !pEnable )
+   {
+      mHints = HoverNetGfx::FrameHints();
+      mTrailCount = 0;
+      mApertureBoost = 0;
+   }
+}
+
+// A soft shadow on the floor under a craft: two ellipses darkened through the shadow table, the inner one twice. Drawn after the floor and
+// walls and before the craft, so the craft covers it; the depth test inside ShadeEllipse keeps it from darkening a wall in front of it.
+void MR_Observer::DrawCraftShadow( const MR_MainCharacter* pCraft )
+{
+   if( !mModernShadows || pCraft == NULL )
+   {
+      return;
+   }
+
+   MR_3DCoordinate lGround = pCraft->mPosition;
+   lGround.mZ -= 100;
+
+   int lX, lY, lDepth, lPixelsPerMetre;
+   if( !m3DView.ProjectToScreen( lGround, lX, lY, lDepth, lPixelsPerMetre ) || lPixelsPerMetre < 3 || lPixelsPerMetre > 4000 )
+   {
+      return;
+   }
+
+   const int lRadiusX = lPixelsPerMetre*19/10;   // a craft is about 3 m across; the shadow has to show beyond it
+   const int lRadiusY = lRadiusX*(mCockpitView ? 50 : 42)/100 + 1;
+   // Three rings, each darkening what is inside it again: a soft edge and a dark core, rather than a hard disc.
+   m3DView.ShadeEllipse( lX, lY, lRadiusX,     lRadiusY,     lDepth, 700, mShadowLut );
+   m3DView.ShadeEllipse( lX, lY, lRadiusX*78/100, lRadiusY*78/100, lDepth, 700, mShadowLut );
+   m3DView.ShadeEllipse( lX, lY, lRadiusX*52/100, lRadiusY*52/100, lDepth, 700, mShadowLut );
+}
+
+// A light in camera space for the picture passes (skipped when it is behind the camera or the list is full).
+void MR_Observer::AddLight( const MR_3DCoordinate& pWorld, int pRadiusMm, int pR, int pG, int pB, float pStrength, int pKind, const MR_3DCoordinate* pAimAt, float pConeCos )
+{
+   if( mHints.lightCount >= HoverNetGfx::kMaxLights )
+   {
+      return;
+   }
+
+   int lX, lY, lZ;
+   if( !m3DView.ToCameraSpace( pWorld, lX, lY, lZ ) )
+   {
+      return;
+   }
+
+   HoverNetGfx::Light& lLight = mHints.lights[ mHints.lightCount++ ];
+   lLight.x = (float)lX;
+   lLight.y = (float)lY;
+   lLight.z = (float)lZ;
+   lLight.radius = (float)pRadiusMm;
+   lLight.r = (MR_UInt8)pR;
+   lLight.g = (MR_UInt8)pG;
+   lLight.b = (MR_UInt8)pB;
+   lLight.strength = pStrength;
+   lLight.kind = (MR_UInt8)pKind;
+   if( pAimAt != NULL )
+   {
+      // A spotlight: the direction from the light to the point it aims at, in camera space.
+      int lAX, lAY, lAZ;
+      if( m3DView.ToCameraSpace( *pAimAt, lAX, lAY, lAZ ) )
+      {
+         const float lDX = (float)lAX - lLight.x, lDY = (float)lAY - lLight.y, lDZ = (float)lAZ - lLight.z;
+         const float lLength = sqrtf( lDX*lDX + lDY*lDY + lDZ*lDZ );
+         if( lLength > 1.0f )
+         {
+            lLight.dirx = lDX/lLength; lLight.diry = lDY/lLength; lLight.dirz = lDZ/lLength;
+            lLight.coneCos = pConeCos;
+         }
+      }
+   }
+}
+
+// What the picture passes and effects (VideoServices/ModernGraphics) need to know about the frame just drawn.
+void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, MR_SimulationTime pTime )
+{
+   mHints = HoverNetGfx::FrameHints();
+   if( !mModernEffects || pViewingCharacter == NULL )
+   {
+      return;
+   }
+
+   mHints.valid   = true;
+   mHints.cockpit = mCockpitView != FALSE;
+
+   const double lSpeed = pViewingCharacter->GetAbsoluteSpeed();
+   mHints.speed = (float)( lSpeed < 0.0 ? 0.0 : lSpeed );
+
+   // A collision is a sudden loss of speed between two frames close together in time (not a replay seek or a restart).
+   if( pTime > mPreviousSpeedTime && pTime - mPreviousSpeedTime < 400 )
+   {
+      const double lDrop = mPreviousSpeed - lSpeed;
+      if( lDrop > 0.12 )
+      {
+         mHints.impact = (float)( lDrop*3.0 > 1.0 ? 1.0 : lDrop*3.0 );
+      }
+   }
+   mPreviousSpeed     = lSpeed;
+   mPreviousSpeedTime = pTime;
+
+   // The trail: where the craft was every 48 ms of race time, newest last.
+   if( pTime < mTrailLastTime || pTime - mTrailLastTime > 3000 )
+   {
+      mTrailCount = 0;
+      mTrailLastTime = pTime;
+   }
+   MR_3DCoordinate lCentre = pViewingCharacter->mPosition;
+   lCentre.mZ += 450;
+   if( mTrailCount == 0 || pTime - mTrailLastTime >= 48 )
+   {
+      if( mTrailCount == HoverNetGfx::kMaxTrailPoints - 1 )
+      {
+         memmove( mTrailPos, mTrailPos + 1, sizeof( mTrailPos[0] )*( mTrailCount - 1 ) );
+         mTrailCount--;
+      }
+      mTrailPos[ mTrailCount++ ] = lCentre;
+      mTrailLastTime = pTime;
+   }
+
+   int lX, lY, lDepth, lPixelsPerMetre;
+   if( !mCockpitView && m3DView.ProjectToScreen( lCentre, lX, lY, lDepth, lPixelsPerMetre ) )
+   {
+      mHints.craftVisible = true;
+      mHints.craftX = lX;
+      mHints.craftY = lY;
+      mHints.craftRadius = lPixelsPerMetre*11/10;
+      {
+         MR_3DCoordinate lGroundPoint = pViewingCharacter->mPosition;
+         lGroundPoint.mZ -= 100;
+         int lGX, lGY, lGD, lGP;
+         mHints.craftGroundY = m3DView.ProjectToScreen( lGroundPoint, lGX, lGY, lGD, lGP ) ? lGY : mHints.craftY + mHints.craftRadius;
+      }
+
+      for( int lIndex = 0; lIndex < mTrailCount; lIndex++ )
+      {
+         int lTX, lTY, lTD, lTP;
+         if( m3DView.ProjectToScreen( mTrailPos[ lIndex ], lTX, lTY, lTD, lTP ) )
+         {
+            mHints.trailX[ mHints.trailCount ] = lTX;
+            mHints.trailY[ mHints.trailCount ] = lTY;
+            mHints.trailCount++;
+         }
+      }
+      if( mHints.trailCount < HoverNetGfx::kMaxTrailPoints )
+      {
+         mHints.trailX[ mHints.trailCount ] = lX;
+         mHints.trailY[ mHints.trailCount ] = lY;
+         mHints.trailCount++;
+      }
+   }
+
+   // Light: engine pools under the craft, a headlight ahead of the viewing craft, and a short orange flash when it hits something.
+   if( mModernLighting )
+   {
+      m3DView.GetProjection( mProjKx, mProjKz, mHints.projCenterX, mHints.projCenterY, mSceneX0, mSceneY0 );
+      mHints.projKx = (float)mProjKx;
+      mHints.projKz = (float)mProjKz;
+
+      const float lSpeedFactor = mHints.speed > 1.2f ? 1.2f : mHints.speed;
+      MR_3DCoordinate lEngine = pViewingCharacter->mPosition;
+      lEngine.mZ += 250;
+      AddLight( lEngine, 5500, 90, 170, 255, 0.14f + 0.22f*lSpeedFactor, HoverNetGfx::kLightEngine );
+
+      // The headlight: a soft cone from the nose of the craft, pointing along its heading and down a little onto the track.
+      const MR_Angle lHeading = MR_NORMALIZE_ANGLE( pViewingCharacter->mOrientation );
+      MR_3DCoordinate lNose = pViewingCharacter->mPosition;
+      lNose.mX += 1200*MR_Cos[ lHeading ]/MR_TRIGO_FRACT;
+      lNose.mY += 1200*MR_Sin[ lHeading ]/MR_TRIGO_FRACT;
+      lNose.mZ += 350;
+      MR_3DCoordinate lAim = pViewingCharacter->mPosition;
+      lAim.mX += 9000*MR_Cos[ lHeading ]/MR_TRIGO_FRACT;
+      lAim.mY += 9000*MR_Sin[ lHeading ]/MR_TRIGO_FRACT;
+      AddLight( lNose, 14000, 255, 238, 200, 0.42f, HoverNetGfx::kLightHeadlight, &lAim, 0.88f );
+
+      mImpactFlash = mImpactFlash*0.88f;
+      if( mModernMotion && mHints.impact > mImpactFlash )
+      {
+         mImpactFlash = mHints.impact;
+      }
+      if( mModernMotion && mImpactFlash > 0.06f )
+      {
+         AddLight( lEngine, 9000, 255, 170, 80, 0.8f*mImpactFlash, HoverNetGfx::kLightFlash );
+      }
+
+      for( size_t lIndex = 0; lIndex < mOtherCrafts.size(); lIndex++ )
+      {
+         MR_3DCoordinate lOther = mOtherCrafts[ lIndex ]->mPosition;
+         lOther.mZ += 250;
+         AddLight( lOther, 4000, 90, 170, 255, 0.3f, HoverNetGfx::kLightCraft );
+      }
+      for( size_t lIndex = 0; lIndex < mLitElements.size(); lIndex++ )
+      {
+         MR_3DCoordinate lAt = mLitElements[ lIndex ]->mPosition;
+         const MR_UInt16 lClass = mLitElements[ lIndex ]->GetTypeId().mClassId;
+         if( lClass == 150 )        // a missile: a hot light that travels with it
+         {
+            AddLight( lAt, 4500, 255, 190, 110, 0.5f, HoverNetGfx::kLightMissile );
+         }
+         else if( lClass == 151 )   // a mine: a red light, pulsing unless Reduced motion is on
+         {
+            const float lPulse = mModernMotion ? 0.75f + 0.25f*(float)sin( (double)pTime*0.006 ) : 0.85f;
+            lAt.mZ += 200;
+            AddLight( lAt, 2800, 255, 60, 50, 0.4f*lPulse, HoverNetGfx::kLightMine );
+         }
+         else                       // a power-up: a cool green light
+         {
+            lAt.mZ += 300;
+            AddLight( lAt, 3200, 90, 255, 160, 0.35f, HoverNetGfx::kLightPowerUp );
+         }
+      }
+      if( mGhost != NULL && mGhost != pViewingCharacter )
+      {
+         MR_3DCoordinate lGhost = mGhost->mPosition;
+         lGhost.mZ += 250;
+         AddLight( lGhost, 3500, 170, 200, 255, 0.22f, HoverNetGfx::kLightGhost );
+      }
+   }
+
+   // The view widens a little with speed (up to 8%), eased so it never jumps.
+   const int lTarget = mModernMotion ? (int)( ( lSpeed > 1.15 ? 1.15 : lSpeed )*7.0 ) : 0;
+   if( mApertureBoost < lTarget )       mApertureBoost++;
+   else if( mApertureBoost > lTarget )  mApertureBoost--;
+}
+
 void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainCharacter* pViewingCharacter, MR_SimulationTime pTime, const MR_UInt8* pBackImage )
 {
    // Safe entry guards - check all pointers before proceeding
@@ -547,6 +811,10 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
       m3DView.ClearZ();
       return;
    }
+
+   mHints = HoverNetGfx::FrameHints();
+   mOtherCrafts.clear();
+   mLitElements.clear();
 
    // STAGE 1: Camera Setup - Safe, low-level rendering 
    MR_3DCoordinate lCameraPos;
@@ -637,9 +905,11 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
       for( int lCounter = 0; lCounter < lTotalSections; lCounter++ )
       {
          // Draw the floor
+         m3DView.SetSurfaceTag( HoverNetGfx::kTagFloor );
          RenderFloorOrCeiling( lLevel, lFloorList[ lCounter ], TRUE, pTime );
 
          // Render the ceiling
+         m3DView.SetSurfaceTag( HoverNetGfx::kTagCeiling );
          RenderFloorOrCeiling( lLevel, lCeilingList[ lCounter ], FALSE, pTime );
       }
    }
@@ -648,6 +918,7 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
    }
 
    // STAGE 4: Wall rendering
+   m3DView.SetSurfaceTag( HoverNetGfx::kTagWall );
    __try {
       int lRoomCount;
       const int* lRoomList  = lLevel->GetVisibleZones( lRoom, lRoomCount );
@@ -716,6 +987,24 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
                                      z > -1000000 && z < 1000000);
                
                if(valid_position) {
+                  const MR_MainCharacter* lOtherCraft = dynamic_cast<const MR_MainCharacter*>( lElement );
+                  if( mModernShadows )
+                  {
+                     DrawCraftShadow( lOtherCraft );
+                  }
+                  if( lOtherCraft != NULL && mModernLighting && mOtherCrafts.size() < 5 )
+                  {
+                     mOtherCrafts.push_back( lOtherCraft );
+                  }
+                  else if( lOtherCraft == NULL && mModernLighting && mLitElements.size() < 6 )
+                  {
+                     const MR_UInt16 lClass = lElement->GetTypeId().mClassId;
+                     if( lClass == 150 || lClass == 151 || lClass == 152 )   // missile, mine, power-up (ObjFac1/main.cpp)
+                     {
+                        mLitElements.push_back( lElement );
+                     }
+                  }
+                  m3DView.SetSurfaceTag( lOtherCraft != NULL ? HoverNetGfx::kTagCraft : HoverNetGfx::kTagObject );
                   lElement->Render( &m3DView, pTime );
                }
             }
@@ -726,6 +1015,8 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
          // The ghost is drawn with the craft of the room it is in, so the walls in front of it hide it as they hide any craft.
          if( mGhost != NULL && mGhost != pViewingCharacter && mGhost->mRoom == lRoomId )
          {
+            DrawCraftShadow( mGhost );
+            m3DView.SetSurfaceTag( HoverNetGfx::kTagCraft );
             const_cast<MR_MainCharacter*>(mGhost)->Render( &m3DView, pTime );
          }
       }
@@ -736,12 +1027,67 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
 
    // STAGE 5.5: Render the viewing character (player's hovercraft)
    
+   if( !mCockpitView )
+   {
+      DrawCraftShadow( pViewingCharacter );
+   }
+
    __try {
       // Call the character's render method to draw the player's hovercraft
       // Cast away const since Render() is not const (not ideal, but necessary for rendering)
+      m3DView.SetSurfaceTag( HoverNetGfx::kTagCraft );
       const_cast<MR_MainCharacter*>(pViewingCharacter)->Render( &m3DView, pTime );
    }
    __except(EXCEPTION_EXECUTE_HANDLER) {
+   }
+
+   UpdateModernHints( pViewingCharacter, pTime );
+
+   // Remember the scene as drawn so far; what differs once the HUD is on top is HUD (see the end of RenderNormalDisplay).
+   if( mModernEffects )
+   {
+      const int lW = m3DView.GetXRes();
+      const int lH = m3DView.GetYRes();
+      mSceneCopy.resize( (size_t)lW*lH );
+      mDepthCopy.resize( (size_t)lW*lH );
+      mTagCopy.resize( (size_t)lW*lH );
+      for( int lY = 0; lY < lH; lY++ )
+      {
+         memcpy( &mSceneCopy[ (size_t)lY*lW ], m3DView.GetBuffer() + (size_t)lY*m3DView.GetLineLen(), lW );
+         const MR_UInt8* lTagLine = m3DView.GetTagLine( lY );
+         if( lTagLine != NULL && !mRgbFull.empty() && m3DView.GetColourLine( lY ) != NULL )
+         {
+            // Pixels the rasteriser did not draw (the sky and background): their colour is the palette's.
+            MR_UInt32* lRgbLine = const_cast<MR_UInt32*>( m3DView.GetColourLine( lY ) );
+            const MR_UInt8* lIndexLine = m3DView.GetBuffer() + (size_t)lY*m3DView.GetLineLen();
+            for( int lX = 0; lX < lW; lX++ )
+            {
+               if( lTagLine[ lX ] == 0 )
+               {
+                  lRgbLine[ lX ] = mPalette[ lIndexLine[ lX ] ];
+               }
+            }
+         }
+
+         if( lTagLine != NULL )
+         {
+            memcpy( &mTagCopy[ (size_t)lY*lW ], lTagLine, lW );
+         }
+         else
+         {
+            memset( &mTagCopy[ (size_t)lY*lW ], 0, lW );
+         }
+
+         const MR_UInt16* lDepthLine = m3DView.GetDepthLine( lY );
+         if( lDepthLine != NULL )
+         {
+            memcpy( &mDepthCopy[ (size_t)lY*lW ], lDepthLine, lW*sizeof( MR_UInt16 ) );
+         }
+         else
+         {
+            memset( &mDepthCopy[ (size_t)lY*lW ], 0xFF, lW*sizeof( MR_UInt16 ) );
+         }
+      }
    }
 
    // STAGE 6: Cockpit UI rendering (speed/fuel meters, weapons, map, text)
@@ -1674,8 +2020,11 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
    int lYMargin = lYMargin_1024 * lYRes/1024;
 
    // Wrap Setup in try-catch to prevent crashes
+   mSceneX0 = lXMargin;
+   mSceneY0 = lYOffset+lYMargin;
+
    try {
-      m3DView.Setup( pDest, lXMargin, lYOffset+lYMargin, lXRes-2*lXMargin, lYRes-2*lYMargin, mApperture );
+      m3DView.Setup( pDest, lXMargin, lYOffset+lYMargin, lXRes-2*lXMargin, lYRes-2*lYMargin, mApperture + mApperture*mApertureBoost/100 );
       
       // CRITICAL FIX: Force memory synchronization after Setup to ensure buffer pointers are fresh
       // This prevents stale pointer issues when rendering resumes after menu interactions
@@ -1690,6 +2039,39 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
    }
    catch(...) {
       return;
+   }
+
+   // Surface tags are only asked of the rasteriser when the lighting can use them.
+   const BOOL lTrueColour = mModernEffects && mModernTextures && pDest->GetLineLen() == pDest->GetXRes();
+   if( mModernEffects && ( mModernLighting || lTrueColour ) )
+   {
+      const size_t lTagSize = (size_t)pDest->GetLineLen()*pDest->GetYRes();
+      if( mTagFull.size() != lTagSize )
+      {
+         mTagFull.assign( lTagSize, 0 );
+      }
+      m3DView.SetTagBuffer( &mTagFull[ 0 ] );
+   }
+   else
+   {
+      m3DView.SetTagBuffer( NULL );
+   }
+
+   // True colour: the rasteriser also writes RGB (filtered textures); the pixels it does not draw and the HUD are filled in below.
+   if( lTrueColour )
+   {
+      const size_t lRgbSize = (size_t)pDest->GetLineLen()*pDest->GetYRes();
+      if( mRgbFull.size() != lRgbSize )
+      {
+         mRgbFull.assign( lRgbSize, 0 );
+      }
+      m3DView.SetColourBuffer( &mRgbFull[ 0 ], mPalette );
+      m3DView.SetTextureFiltering( TRUE );
+   }
+   else
+   {
+      m3DView.SetColourBuffer( NULL, NULL );
+      m3DView.SetTextureFiltering( FALSE );
    }
 
    // Clear screen if needed
@@ -2006,6 +2388,64 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
                             MR_Sprite::eLeft, MR_Sprite::eTop, lChatFontScaling );
          lChatYMargin -= lChatLineSpacing;
          ++lChatLineCount;
+      }
+   }
+
+   // Which pixels did the HUD draw? Everything outside the 3D viewport, and every viewport pixel that is not what the scene drew.
+   if( mHints.valid )
+   {
+      const int lFrameW = pDest->GetXRes();
+      const int lFrameH = pDest->GetYRes();
+      const int lSceneW = m3DView.GetXRes();
+      const int lSceneH = m3DView.GetYRes();
+      mHudMask.assign( (size_t)lFrameW*lFrameH, 1 );
+      if( mSceneCopy.size() == (size_t)lSceneW*lSceneH && mSceneX0 >= 0 && mSceneY0 >= 0 && mSceneX0 + lSceneW <= lFrameW && mSceneY0 + lSceneH <= lFrameH )
+      {
+         for( int lY = 0; lY < lSceneH; lY++ )
+         {
+            const MR_UInt8* lNow  = pDest->GetBuffer() + (size_t)(mSceneY0 + lY)*pDest->GetLineLen() + mSceneX0;
+            const MR_UInt8* lThen = &mSceneCopy[ (size_t)lY*lSceneW ];
+            MR_UInt8*       lMask = &mHudMask[ (size_t)(mSceneY0 + lY)*lFrameW + mSceneX0 ];
+            for( int lX = 0; lX < lSceneW; lX++ )
+            {
+               lMask[ lX ] = lNow[ lX ] != lThen[ lX ] ? 1 : 0;
+            }
+         }
+         if( mModernLighting && mDepthCopy.size() == (size_t)lSceneW*lSceneH )
+         {
+            mHints.depth       = mDepthCopy.data();
+            mHints.tags        = m3DView.GetTagLine( 0 ) != NULL && mTagCopy.size() == mDepthCopy.size() ? mTagCopy.data() : NULL;
+            mHints.depthX0     = mSceneX0;
+            mHints.depthY0     = mSceneY0;
+            mHints.depthWidth  = lSceneW;
+            mHints.depthHeight = lSceneH;
+         }
+         if( m3DView.GetColourLine( 0 ) != NULL && mRgbFull.size() == (size_t)lFrameW*lFrameH && pDest->GetLineLen() == lFrameW )
+         {
+            // HUD pixels (and the margins) are 8-bit: their true colour is the palette's. Then the whole frame is true colour.
+            mFinalIndexed.resize( (size_t)lFrameW*lFrameH );
+            for( int lY = 0; lY < lFrameH; lY++ )
+            {
+               const MR_UInt8* lIndexLine = pDest->GetBuffer() + (size_t)lY*pDest->GetLineLen();
+               const MR_UInt8* lMaskLine  = &mHudMask[ (size_t)lY*lFrameW ];
+               MR_UInt32* lRgbLine = &mRgbFull[ (size_t)lY*lFrameW ];
+               memcpy( &mFinalIndexed[ (size_t)lY*lFrameW ], lIndexLine, lFrameW );
+               for( int lX = 0; lX < lFrameW; lX++ )
+               {
+                  if( lMaskLine[ lX ] )
+                  {
+                     lRgbLine[ lX ] = mPalette[ lIndexLine[ lX ] ];
+                  }
+               }
+            }
+            mHints.colour = mRgbFull.data();
+            mHints.finalIndexed = mFinalIndexed.data();
+            mHints.colourWidth = lFrameW;
+            mHints.colourHeight = lFrameH;
+         }
+         mHints.hudMask       = mHudMask.data();
+         mHints.hudMaskWidth  = lFrameW;
+         mHints.hudMaskHeight = lFrameH;
       }
    }
 }

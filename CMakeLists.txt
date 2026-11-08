@@ -264,6 +264,7 @@ add_library(HoverNetVideoCore STATIC
     NetTarget/VideoServices/Bitmap.cpp
     NetTarget/VideoServices/ColorPalette.cpp
     NetTarget/VideoServices/ColorTab.cpp
+    NetTarget/VideoServices/ModernGraphics.cpp
 )
 
 target_link_libraries(HoverNetVideoCore PUBLIC HoverNetPortableUtil)
@@ -434,6 +435,14 @@ else()
 
     add_executable(HoverNetPersonalBestsTest NetTarget/LinuxClient/PersonalBestsTest.cpp)
     add_test(NAME HoverNetPersonalBests COMMAND HoverNetPersonalBestsTest)
+    # The modern look's picture passes and effects, on synthetic frames (docs/render-golden.md, "The modern look").
+    add_executable(HoverNetModernGraphicsTest NetTarget/LinuxClient/ModernGraphicsTest.cpp NetTarget/VideoServices/ModernGraphics.cpp)
+    add_test(NAME HoverNetModernGraphics COMMAND HoverNetModernGraphicsTest)
+    # The SSE2 and the portable (scalar) de-banding must make the same picture: the same test built without SIMD gives the same digests.
+    add_executable(HoverNetModernGraphicsTestScalar NetTarget/LinuxClient/ModernGraphicsTest.cpp NetTarget/VideoServices/ModernGraphics.cpp)
+    target_compile_definitions(HoverNetModernGraphicsTestScalar PRIVATE HOVERNET_GFX_NO_SIMD)
+    add_test(NAME HoverNetModernGraphicsScalarMatches
+        COMMAND sh -c "test \"$($<TARGET_FILE:HoverNetModernGraphicsTest> digest)\" = \"$($<TARGET_FILE:HoverNetModernGraphicsTestScalar> digest)\"")
     add_executable(HoverNetSoftMixerTest NetTarget/LinuxClient/SoftMixerTest.cpp)
     add_test(NAME HoverNetSoftMixer COMMAND HoverNetSoftMixerTest)
     add_executable(HoverNetGhostRunTest NetTarget/LinuxClient/GhostRunTest.cpp)
@@ -570,6 +579,16 @@ add_executable(HoverNetViewportSmoke
 )
 
 target_link_libraries(HoverNetViewportSmoke PRIVATE HoverNetVideoCore HoverNetResourceCore)
+add_executable(HoverNetViewportColourTest NetTarget/LinuxClient/ViewportColourTest.cpp)
+target_link_libraries(HoverNetViewportColourTest PRIVATE HoverNetVideoCore HoverNetResourceCore)
+add_executable(HoverNetViewportThreadsTest NetTarget/LinuxClient/ViewportThreadsTest.cpp)
+target_link_libraries(HoverNetViewportThreadsTest PRIVATE HoverNetVideoCore HoverNetResourceCore)
+if(NOT EMSCRIPTEN)
+    find_package(Threads REQUIRED)
+    target_link_libraries(HoverNetViewportThreadsTest PRIVATE Threads::Threads)
+    add_test(NAME HoverNetViewportThreads COMMAND HoverNetViewportThreadsTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetViewportColour COMMAND HoverNetViewportColourTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+endif()
 
 add_executable(HoverNetActorRenderSmoke
     NetTarget/LinuxClient/ActorRenderSmoke.cpp
@@ -655,6 +674,7 @@ target_link_libraries(HoverNetLobby PRIVATE HoverNetRaceServerClient)
 add_executable(HoverNetLinuxBootstrap
     NetTarget/LinuxClient/main.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
+    NetTarget/VideoServices/ModernGraphics.cpp
 )
 
 target_compile_definitions(HoverNetLinuxBootstrap PRIVATE _HAVE_SDL2)
@@ -663,6 +683,7 @@ target_link_libraries(HoverNetLinuxBootstrap PRIVATE SDL2::SDL2)
 add_executable(HoverNetTrackViewer
     NetTarget/LinuxClient/TrackViewer.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
+    NetTarget/VideoServices/ModernGraphics.cpp
 )
 
 add_dependencies(HoverNetTrackViewer HoverNetHeadlessObjFac1)
@@ -729,6 +750,7 @@ endif()
 add_executable(HoverNetTrack3DViewer
     NetTarget/LinuxClient/Track3DViewer.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
+    NetTarget/VideoServices/ModernGraphics.cpp
 )
 
 add_dependencies(HoverNetTrack3DViewer HoverNetHeadlessObjFac1)
@@ -743,6 +765,7 @@ add_executable(HoverNetGame2Player
     NetTarget/LinuxClient/Sha256.cpp
     NetTarget/Authority/ReplayFormat.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
+    NetTarget/VideoServices/ModernGraphics.cpp
 )
 
 if(NOT EMSCRIPTEN)
@@ -967,6 +990,10 @@ if(BUILD_TESTING AND NOT WIN32)
     # The classic renderer draws fixed scenes to the committed hashes (docs/render-golden.md).
     add_test(NAME HoverNetRenderGolden
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-render-golden.sh $<TARGET_FILE:HoverNetRenderGolden>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    # The modern look on real race frames: the classic frame is untouched without it, the look shows shadows, trail and glow, and repeats.
+    add_test(NAME HoverNetModernGraphicsScenes
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-modern-graphics.sh $<TARGET_FILE:HoverNetRenderGolden>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     # Netcode prototype at the roadmap's two latency targets (120 ms / 2% loss, 250 ms / 5% loss): both clients must
     # converge to the ideal run bit for bit.

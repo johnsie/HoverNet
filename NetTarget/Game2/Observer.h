@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-10-18.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
 // See repository history for authorship and detailed changes.
 // Observer.h// MR_Observer object interface
 //
@@ -26,6 +26,8 @@
 #define OBSERVER_H
 
 #include "../VideoServices/3DViewport.h"
+#include "../VideoServices/ModernGraphics.h"
+#include <vector>
 #include "ClientSession.h"
 #include "../MainCharacter/MainCharacter.h"
 #include "../ObjFacTools/SpriteHandle.h"
@@ -56,6 +58,38 @@ class MR_Observer
       // otherwise the most recent server TCP round-trip in milliseconds.
       int             mNetworkLatencyMs;
       BOOL            mLargeHudText;
+
+      // The optional modern look (docs/roadmap-3.0.md): presentation only, off unless the client asks, so the classic frame is unchanged.
+      BOOL            mModernEffects;        // collect hints, draw craft shadows, widen the view with speed
+      BOOL            mModernShadows;
+      BOOL            mModernMotion;         // false with "Reduced motion": no field-of-view change
+      MR_UInt8        mShadowLut[256];       // palette index -> the nearest palette index at about 55% brightness
+      BOOL            mShadowLutValid;
+      HoverNetGfx::FrameHints mHints;
+      std::vector<MR_UInt8> mSceneCopy;      // the 3D viewport as drawn before the HUD, to find which pixels the HUD drew
+      std::vector<MR_UInt32> mRgbFull;       // the rasteriser's true-colour picture (0x00RRGGBB per pixel), laid out like the video buffer
+      std::vector<MR_UInt8>  mFinalIndexed;  // the 8-bit picture as it was when this observer finished drawing (width*height)
+      MR_UInt32              mPalette[256];  // what the 8-bit colours mean in true colour (0x00RRGGBB)
+      BOOL                   mModernTextures;
+      std::vector<MR_UInt8>  mTagFull;       // surface tags written by the rasteriser, laid out like the video buffer
+      std::vector<MR_UInt8>  mTagCopy;       // the viewport's part of them, copied for the picture passes
+      std::vector<MR_UInt16> mDepthCopy;     // the 3D viewport's depth buffer, for light and haze
+      std::vector<const MR_FreeElement*> mLitElements;     // missiles, mines and power-ups seen this frame, for their lights
+      std::vector<const MR_MainCharacter*> mOtherCrafts;   // craft seen this frame (not the viewing one), for their lights
+      BOOL            mModernLighting;
+      float           mImpactFlash;
+      double          mProjKx, mProjKz;
+      void            AddLight( const MR_3DCoordinate& pWorld, int pRadiusMm, int pR, int pG, int pB, float pStrength, int pKind = 0, const MR_3DCoordinate* pAimAt = NULL, float pConeCos = -1.0f );
+      std::vector<MR_UInt8> mHudMask;        // 1 where the HUD drew (or outside the viewport), for the whole frame
+      int             mSceneX0, mSceneY0;    // the viewport's corner in the frame
+      MR_3DCoordinate mTrailPos[HoverNetGfx::kMaxTrailPoints];
+      int             mTrailCount;
+      MR_SimulationTime mTrailLastTime;
+      double          mPreviousSpeed;
+      MR_SimulationTime mPreviousSpeedTime;
+      int             mApertureBoost;        // percent added to the field of view this frame
+      void            DrawCraftShadow( const MR_MainCharacter* pCraft );
+      void            UpdateModernHints( const MR_MainCharacter* pViewingCharacter, MR_SimulationTime pTime );
 
       // Short, high-visibility gameplay feedback derived from state changes.
       // Kept per observer so local/split views never share stale pickup state.
@@ -127,6 +161,13 @@ class MR_Observer
       void SetCockpitView( BOOL pOn );
       void SetGhost( const MR_MainCharacter* pGhost ) { mGhost = pGhost; }
       void SetGhostGapText( const char* pText );
+      // Modern look. pEnable turns the hints, shadows and speed field-of-view on; pLut maps a palette index to a darker one (256 entries,
+      // copied) for the shadows; pReducedMotion keeps the field of view still.
+      void SetModernEffects( BOOL pEnable, BOOL pShadows, BOOL pReducedMotion, const MR_UInt8* pShadowLut );
+      // True colour with filtered textures (needs SetModernEffects): pPalette768 is the palette the picture is shown through (256 RGB triples, copied).
+      void SetModernTextures( BOOL pEnable, const MR_UInt8* pPalette768 );
+      void SetModernLighting( BOOL pEnable ) { mModernLighting = pEnable; }   // light pools, headlight and haze (needs SetModernEffects)
+      const HoverNetGfx::FrameHints& GetFrameHints() const { return mHints; }
       void SetChaseScale( int pPercent ) { mChaseScale = pPercent < 40 ? 40 : (pPercent > 300 ? 300 : pPercent); }
       void SetNetworkLatency( int pLatencyMs );
       void SetLargeHudText( BOOL pEnabled );

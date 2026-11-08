@@ -90,6 +90,7 @@
     <ClCompile Include="VideoBufferSDL2Integration.cpp" />
     <ClCompile Include="..\GraphicsSDL2\VideoBufferSDL2Adapter.cpp" />
     <ClCompile Include="..\GraphicsSDL2\SDL2Graphics.cpp" />
+    <ClCompile Include="ModernGraphics.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="*.h" />

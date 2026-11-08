@@ -146,6 +146,8 @@ bool SDL2GraphicsBackend::SetPalette(const uint8_t* palette, int paletteSize)
     }
     
     memcpy(m_paletteRGB, palette, 768);
+    m_shadowLutValid = false;
+    m_gradedPaletteValid = false;
     return CreateSDLPalette(); 
 }
 
@@ -161,6 +163,30 @@ bool SDL2GraphicsBackend::ConvertToRGBA(const uint8_t* buffer, int width, int he
         out[i * 4 + 3] = 255;
     }
     return true;
+}
+
+const uint8_t* SDL2GraphicsBackend::GetRenderPalette()
+{
+    if (!m_paletteRGB) return nullptr;
+    if (m_modernOptions.enabled && m_modernOptions.grade) {
+        if (!m_gradedPaletteValid || m_gradedBrightness != m_modernOptions.brightness) {
+            HoverNetGfx::Presenter::GradePalette(m_paletteRGB, m_gradedPalette, m_modernOptions.brightness);
+            m_gradedBrightness = m_modernOptions.brightness;
+            m_gradedPaletteValid = true;
+        }
+        return m_gradedPalette;
+    }
+    return m_paletteRGB;
+}
+
+const uint8_t* SDL2GraphicsBackend::GetShadowLut()
+{
+    if (!m_paletteRGB) return nullptr;
+    if (!m_shadowLutValid) {
+        HoverNetGfx::BuildShadowLut(m_paletteRGB, 70, m_shadowLut);
+        m_shadowLutValid = true;
+    }
+    return m_shadowLut;
 }
 
 bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height)
@@ -179,10 +205,10 @@ bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height)
         m_rgbBuffer.resize(static_cast<size_t>(pitch) * height);
     }
     uint8_t* rgb_buffer = m_rgbBuffer.data();
-    
-    // IMPORTANT: buffer is assumed to have stride == width (linear)
-    // This must match mLineLen from VideoBuffer!
-    
+
+    // The modern look's tone curve and extra colour are applied to the 256 palette colours here, not to every pixel afterwards.
+    const uint8_t* palette = GetRenderPalette();
+
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             uint8_t index = buffer[y * width + x];  // Linear stride = width
@@ -222,12 +248,17 @@ bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height)
             }
             
             int offset = y * pitch + x * 3;
-            rgb_buffer[offset + 0] = m_paletteRGB[index*3 + 0];  // R
-            rgb_buffer[offset + 1] = m_paletteRGB[index*3 + 1];  // G
-            rgb_buffer[offset + 2] = m_paletteRGB[index*3 + 2];  // B
+            rgb_buffer[offset + 0] = palette[index*3 + 0];  // R
+            rgb_buffer[offset + 1] = palette[index*3 + 1];  // G
+            rgb_buffer[offset + 2] = palette[index*3 + 2];  // B
         }
     }
     
+    if (m_modernOptions.enabled) {
+        HoverNetGfx::Presenter::ApplyTrueColour(rgb_buffer, buffer, width, height, m_frameHints);
+        m_presenter.Process(rgb_buffer, width, height, m_modernOptions, m_frameHints);
+    }
+
     SDL_UpdateTexture(m_texture, nullptr, rgb_buffer, pitch);
     
     SDL_RenderClear(m_renderer);

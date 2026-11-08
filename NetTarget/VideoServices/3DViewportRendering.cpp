@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-10-17.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
 // See repository history for authorship and detailed changes.
 // 3DViewportRendering.cpp
 //
@@ -54,6 +54,8 @@ struct MR_ColumnBltParam
    int         mZBufferStep;
    MR_UInt16   mZ;
    MR_UInt8*   mBitmap;
+   MR_UInt8*   mBitmap2;    // the next column of the texture, and how far (0..255) between the two this column is: for filtering
+   int         mFracU;
    int         mPixelStep;
    int         mBitmapColMask;
    MR_UInt8    mLightIntensity;
@@ -102,10 +104,49 @@ struct MR_TriangleDrawInfo
 };
 
 
+// Surface tags (see MR_3DViewPort::SetTagBuffer): set at the start of each Render* call. The tag of a pixel sits at the same offset in the tag
+// buffer as its colour in the video buffer, so each write site only needs the colour pointer.
+// All of the rasteriser's working state is per thread (thread_local): two viewports can be drawn at the same time on different threads. (A
+// single viewport is still drawn by one thread at a time.)
+static thread_local bool      gsTagOn     = false;
+static thread_local ptrdiff_t gsTagOffset = 0;
+static thread_local MR_UInt8  gsTagValue  = 0;
+
+// True-colour output (see MR_3DViewPort::SetColourBuffer): the colour of a pixel goes to the same pixel offset in the RGB buffer.
+static thread_local bool             gsRgbOn     = false;
+static thread_local bool             gsFilter    = false;
+static thread_local MR_UInt32*       gsRgb       = NULL;
+static thread_local const MR_UInt8*  gsVideoBase = NULL;
+static thread_local const MR_UInt32* gsPal       = NULL;
+
+static inline MR_UInt32* RgbAt( const MR_UInt8* pColourPixel ) { return gsRgb + (pColourPixel - gsVideoBase); }
+
+static inline void PutPal( MR_UInt32* pDst, MR_UInt8 pIndex ) { *pDst = gsPal[pIndex]; }
+
+// Blends two colours 0x00RRGGBB, pF (0..256) of the way from a to b, two channels at a time (the red and blue lanes together, green alone).
+static inline MR_UInt32 Lerp32( MR_UInt32 pA, MR_UInt32 pB, MR_UInt32 pF )
+{
+   const MR_UInt32 lRB = ((pA & 0x00FF00FFu)*(256-pF) + (pB & 0x00FF00FFu)*pF) >> 8;
+   const MR_UInt32 lG  = ((pA & 0x0000FF00u)*(256-pF) + (pB & 0x0000FF00u)*pF) >> 8;
+   return (lRB & 0x00FF00FFu) | (lG & 0x0000FF00u);
+}
+
+// Bilinear filtering of four texels: c00 and c10 are neighbours along the first axis (pFu between them, 0..255), c01 and c11 the next row (pFv).
+static inline void PutBilinear( MR_UInt32* pDst, MR_UInt8 c00, MR_UInt8 c10, MR_UInt8 c01, MR_UInt8 c11, int pFu, int pFv )
+{
+   *pDst = Lerp32( Lerp32( gsPal[c00], gsPal[c10], pFu ), Lerp32( gsPal[c01], gsPal[c11], pFu ), pFv );
+}
+
+static inline void PrepareOutputs( const MR_UInt8* pVideoBase, MR_UInt8* pTagBase, MR_UInt8 pTag, MR_UInt32* pRgbBase, const MR_UInt32* pPalette, bool pFilter )
+{
+   gsTagOn = pTagBase != NULL; gsTagOffset = pTagBase != NULL ? pTagBase - pVideoBase : 0; gsTagValue = pTag;
+   gsRgbOn = pRgbBase != NULL && pPalette != NULL; gsRgb = pRgbBase; gsVideoBase = pVideoBase; gsPal = pPalette; gsFilter = pFilter && gsRgbOn;
+}
+
 // Local variables .. for fast rendering speed
-static struct MR_ColumnBltParam   gsColumnBltParam;
-static struct MR_LineBltParam     gsLineBltParam;
-static struct MR_TriangleDrawInfo gsTriangleBltParam;
+static thread_local struct MR_ColumnBltParam   gsColumnBltParam;
+static thread_local struct MR_LineBltParam     gsLineBltParam;
+static thread_local struct MR_TriangleDrawInfo gsTriangleBltParam;
 
 
 // Local functions
@@ -137,7 +178,9 @@ void MR_3DViewPort::RenderWallSurface( const MR_3DCoordinate& pUpperLeft, const 
 }
 
 void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLeft, const MR_3DCoordinate& pLowerRight, MR_Int32 pLen, const MR_Bitmap* pBitmap, const MR_Bitmap* pBitmap2, int pSerialLen, int pSerialStart )
-{       
+{
+   PrepareOutputs( mVideoBuffer->GetBuffer(), mTagBase, mSurfaceTag, mRgbBase, mPalette, mFilter != FALSE );
+       
 
    // DEBUG -- prin bitmap
    /* 
@@ -481,7 +524,10 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
          }
          else
          {
-            int lBitmapColumn = lBitmapXRes_BitmapWidth*lLen_4/(4*MR_PIXEL_FRACT);
+            const int lBitmapColumnRaw = lBitmapXRes_BitmapWidth*lLen_4;
+            int lBitmapColumn = lBitmapColumnRaw/(4*MR_PIXEL_FRACT);
+            // How far this screen column is between its texture column and the next, for filtering (0..255).
+            gsColumnBltParam.mFracU = lBitmapColumnRaw >= 0 ? (lBitmapColumnRaw%(4*MR_PIXEL_FRACT))*256/(4*MR_PIXEL_FRACT) : 0;
 
             lBitmapColumn &= (lBitmapXRes-1); // Fast but work only with pow of 2   
 
@@ -497,14 +543,9 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
 
             lBitmapColumn >>= pBitmap->GetXResShiftFactor( lSelectedBitmap );
 
-            if( pSerialStart == 0 )
-            {
-               gsColumnBltParam.mBitmap         = pBitmap2->GetColumnBuffer( lSelectedBitmap, lBitmapColumn );
-            }
-            else
-            {
-               gsColumnBltParam.mBitmap         = pBitmap->GetColumnBuffer( lSelectedBitmap, lBitmapColumn );
-            }
+            const MR_Bitmap* lColumnSource = pSerialStart == 0 ? pBitmap2 : pBitmap;
+            gsColumnBltParam.mBitmap         = lColumnSource->GetColumnBuffer( lSelectedBitmap, lBitmapColumn );
+            gsColumnBltParam.mBitmap2        = gsFilter ? lColumnSource->GetColumnBuffer( lSelectedBitmap, (lBitmapColumn+1)&(lColumnSource->GetXRes( lSelectedBitmap )-1) ) : NULL;
 
             gsColumnBltParam.mPixelStep      = (WrapMul(lNbBitmapInHeight_BitmapYRes,64)/(WrapSub(lYBottom_4096,lYTop_4096)/64) )>>pBitmap->GetYResShiftFactor( lSelectedBitmap );
             gsColumnBltParam.mBitmapColMask  = pBitmap->GetXRes( lSelectedBitmap)-1;
@@ -567,6 +608,8 @@ void BltPlainColumn()
       {
          *lBuffer  =  lColor;
          *lZBuffer =  gsColumnBltParam.mZ;
+         if( gsTagOn ) lBuffer[ gsTagOffset ] = gsTagValue;
+         if( gsRgbOn ) PutPal( RgbAt( lBuffer ), lColor );
       }
 
       lBuffer  += gsColumnBltParam.mBufferStep;
@@ -617,6 +660,22 @@ void BltColumn()
          //                         [ gsColumnBltParam.mBitmap[ (lBitmapOffset/MR_PIXEL_FRACT)&(gsColumnBltParam.mBitmapColMask) ] ];
          *lBuffer =   gsColumnBltParam.mBitmap[ (lBitmapOffset/MR_PIXEL_FRACT)&(gsColumnBltParam.mBitmapColMask) ];
          *lZBuffer =  gsColumnBltParam.mZ;
+         if( gsTagOn ) lBuffer[ gsTagOffset ] = gsTagValue;
+         if( gsRgbOn )
+         {
+            const int lTexel = (lBitmapOffset/MR_PIXEL_FRACT)&(gsColumnBltParam.mBitmapColMask);
+            if( gsFilter && gsColumnBltParam.mBitmap2 != NULL )
+            {
+               const int lNext = (lTexel+1)&(gsColumnBltParam.mBitmapColMask);
+               const int lFracV = (((lBitmapOffset%MR_PIXEL_FRACT)+MR_PIXEL_FRACT)%MR_PIXEL_FRACT)*256/MR_PIXEL_FRACT;
+               PutBilinear( RgbAt( lBuffer ), gsColumnBltParam.mBitmap[lTexel], gsColumnBltParam.mBitmap2[lTexel], gsColumnBltParam.mBitmap[lNext], gsColumnBltParam.mBitmap2[lNext],
+                            gsColumnBltParam.mFracU, lFracV );
+            }
+            else
+            {
+               PutPal( RgbAt( lBuffer ), gsColumnBltParam.mBitmap[lTexel] );
+            }
+         }
       }
 
       lBuffer  += gsColumnBltParam.mBufferStep;
@@ -634,7 +693,9 @@ void BltColumn()
 
 
 void MR_3DViewPort::RenderHorizontalSurface( int pNbVertex, const MR_2DCoordinate* pVertexList, MR_Int32 pLevel, BOOL pTop, const MR_Bitmap* pBitmap )
-{   
+{
+   PrepareOutputs( mVideoBuffer->GetBuffer(), mTagBase, mSurfaceTag, mRgbBase, mPalette, mFilter != FALSE );
+   
 
    // Algorithme
    // - Verify that we are on the visible side of the plane
@@ -1343,6 +1404,8 @@ void BltPlainLineNoZCheck()
       // memset( gsLineBltParam.mBuffer, MR_ColorTable[ gsLineBltParam.mLightIntensity ][ gsLineBltParam.mColor ], gsLineBltParam.mBltLen );
       
       memset( gsLineBltParam.mBuffer, gsLineBltParam.mColor, gsLineBltParam.mBltLen );
+      if( gsTagOn ) memset( gsLineBltParam.mBuffer + gsTagOffset, gsTagValue, gsLineBltParam.mBltLen );
+      if( gsRgbOn ) for( int lRgbCounter = 0; lRgbCounter < gsLineBltParam.mBltLen; lRgbCounter++ ) PutPal( RgbAt( gsLineBltParam.mBuffer + lRgbCounter ), gsLineBltParam.mColor );
 
       for( int lCounter = 0; lCounter<gsLineBltParam.mBltLen; lCounter++ )
       {
@@ -1370,6 +1433,23 @@ void BltLineNoZCheck()
       //                                 [ (lColumn_4096/4096)&gsLineBltParam.mBitmapColMask ]
       //                                 [ (lRow_4096/4096)&gsLineBltParam.mBitmapRowMask ]      ];
 
+      if( gsTagOn ) lBuffer[ gsTagOffset ] = gsTagValue;
+      if( gsRgbOn )
+      {
+         const MR_UInt32 lCol = (lColumn_4096/4096)&gsLineBltParam.mBitmapColMask;
+         const MR_UInt32 lRow = (lRow_4096/4096)&gsLineBltParam.mBitmapRowMask;
+         if( gsFilter )
+         {
+            const MR_UInt32 lCol1 = (lCol+1)&gsLineBltParam.mBitmapColMask;
+            const MR_UInt32 lRow1 = (lRow+1)&gsLineBltParam.mBitmapRowMask;
+            PutBilinear( RgbAt( lBuffer ), gsLineBltParam.mBitmap[lCol][lRow], gsLineBltParam.mBitmap[lCol1][lRow], gsLineBltParam.mBitmap[lCol][lRow1], gsLineBltParam.mBitmap[lCol1][lRow1],
+                         (lColumn_4096&4095)>>4, (lRow_4096&4095)>>4 );
+         }
+         else
+         {
+            PutPal( RgbAt( lBuffer ), gsLineBltParam.mBitmap[lCol][lRow] );
+         }
+      }
       *(lBuffer++) = gsLineBltParam.mBitmap[ (lColumn_4096/4096)&gsLineBltParam.mBitmapColMask ]
                                            [ (lRow_4096/4096)&gsLineBltParam.mBitmapRowMask ] ;
       *(lZBuffer++) = gsLineBltParam.mZ;
@@ -1479,14 +1559,16 @@ __declspec( naked ) void BltLineNoZCheck()
 #define ON_BACK    32
 
 
-static MR_3DCoordinate gsRotatedPatch    [ MAX_PATCH_RES*MAX_PATCH_RES ];
-static int             gsScreenXPatch    [ MAX_PATCH_RES*MAX_PATCH_RES ];
-static int             gsScreenYPatch    [ MAX_PATCH_RES*MAX_PATCH_RES ];
-static int             gsScreenVisibility[ MAX_PATCH_RES*MAX_PATCH_RES ];
+static thread_local MR_3DCoordinate gsRotatedPatch    [ MAX_PATCH_RES*MAX_PATCH_RES ];
+static thread_local int             gsScreenXPatch    [ MAX_PATCH_RES*MAX_PATCH_RES ];
+static thread_local int             gsScreenYPatch    [ MAX_PATCH_RES*MAX_PATCH_RES ];
+static thread_local int             gsScreenVisibility[ MAX_PATCH_RES*MAX_PATCH_RES ];
 
 
 void MR_3DViewPort::RenderPatch( const MR_Patch& pPatch, const MR_PositionMatrix& pMatrix , const MR_Bitmap* pBitmap )
 {
+   PrepareOutputs( mVideoBuffer->GetBuffer(), mTagBase, mSurfaceTag, mRgbBase, mPalette, mFilter != FALSE );
+
 
    int lCounter;
    int lURes = pPatch.GetURes();
@@ -1980,6 +2062,23 @@ void BltTriangle()
                         //                                                                  [ (lLocalV_4096/4096)&gsTriangleBltParam.mBitmapRowMask ] ];
                         lLineBuffer[ lXLeft ] = gsTriangleBltParam.mBitmap[ (lLocalU_4096/4096)&gsTriangleBltParam.mBitmapColMask ]
                                                                           [ (lLocalV_4096/4096)&gsTriangleBltParam.mBitmapRowMask ];
+                        if( gsTagOn ) lLineBuffer[ lXLeft + gsTagOffset ] = gsTagValue;
+                        if( gsRgbOn )
+                        {
+                           const MR_UInt32 lU = (lLocalU_4096/4096)&gsTriangleBltParam.mBitmapColMask;
+                           const MR_UInt32 lV = (lLocalV_4096/4096)&gsTriangleBltParam.mBitmapRowMask;
+                           if( gsFilter )
+                           {
+                              const MR_UInt32 lU1 = (lU+1)&gsTriangleBltParam.mBitmapColMask;
+                              const MR_UInt32 lV1 = (lV+1)&gsTriangleBltParam.mBitmapRowMask;
+                              PutBilinear( RgbAt( lLineBuffer+lXLeft ), gsTriangleBltParam.mBitmap[lU][lV], gsTriangleBltParam.mBitmap[lU1][lV], gsTriangleBltParam.mBitmap[lU][lV1], gsTriangleBltParam.mBitmap[lU1][lV1],
+                                           (lLocalU_4096&4095)>>4, (lLocalV_4096&4095)>>4 );
+                           }
+                           else
+                           {
+                              PutPal( RgbAt( lLineBuffer+lXLeft ), gsTriangleBltParam.mBitmap[lU][lV] );
+                           }
+                        }
                      }
 
                      lXLeft++;
@@ -2180,6 +2279,23 @@ void BltTriangle()
                   //                                                                  [ (lLocalV_4096/4096)&gsTriangleBltParam.mBitmapRowMask ] ];
                   lLineBuffer[ lXLeft ] = gsTriangleBltParam.mBitmap[ (lLocalU_4096/4096)&gsTriangleBltParam.mBitmapColMask ]
                                                                     [ (lLocalV_4096/4096)&gsTriangleBltParam.mBitmapRowMask ];
+                  if( gsTagOn ) lLineBuffer[ lXLeft + gsTagOffset ] = gsTagValue;
+                  if( gsRgbOn )
+                  {
+                     const MR_UInt32 lU = (lLocalU_4096/4096)&gsTriangleBltParam.mBitmapColMask;
+                     const MR_UInt32 lV = (lLocalV_4096/4096)&gsTriangleBltParam.mBitmapRowMask;
+                     if( gsFilter )
+                     {
+                        const MR_UInt32 lU1 = (lU+1)&gsTriangleBltParam.mBitmapColMask;
+                        const MR_UInt32 lV1 = (lV+1)&gsTriangleBltParam.mBitmapRowMask;
+                        PutBilinear( RgbAt( lLineBuffer+lXLeft ), gsTriangleBltParam.mBitmap[lU][lV], gsTriangleBltParam.mBitmap[lU1][lV], gsTriangleBltParam.mBitmap[lU][lV1], gsTriangleBltParam.mBitmap[lU1][lV1],
+                                     (lLocalU_4096&4095)>>4, (lLocalV_4096&4095)>>4 );
+                     }
+                     else
+                     {
+                        PutPal( RgbAt( lLineBuffer+lXLeft ), gsTriangleBltParam.mBitmap[lU][lV] );
+                     }
+                  }
                }
 
 

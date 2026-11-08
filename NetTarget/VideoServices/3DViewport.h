@@ -1,3 +1,5 @@
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// See repository history for authorship and detailed changes.
 // 3DViewport.h
 //
 // Copyright (c) 1995-1998 - Richard Langlois and Grokksoft Inc.
@@ -74,6 +76,12 @@ class MR_3DViewPort: public MR_2DViewPort
       MR_Int32        mPlanHW;                // Horizontal Half
       MR_Int32        mPlanVW;                // Vertical Half 
 
+      MR_UInt8*       mTagBase;               // optional: a buffer laid out exactly like the video buffer, that gets a surface tag per pixel drawn
+      MR_UInt8        mSurfaceTag;            // the tag the next surfaces drawn are marked with
+      MR_UInt32*       mRgbBase;              // optional true-colour output: one 0x00RRGGBB word per pixel, at the same pixel offsets as the video buffer
+      const MR_UInt32* mPalette;              // 256 words: what a texel's palette index means in true colour
+      BOOL            mFilter;                // filter textures bilinearly (needs the colour buffer)
+
       MR_UInt16*  mZBuffer;
       int         mZLineLen;
 
@@ -115,6 +123,23 @@ class MR_3DViewPort: public MR_2DViewPort
 
       MR_DllDeclare void ClearZ();
 
+      // Surface tags: a second, optional output of the rasteriser. When a tag buffer is set (a byte per pixel, laid out exactly like the video
+      // buffer: the same line length and size), every pixel a wall, floor, ceiling or object is drawn on also gets the current surface tag, under
+      // the same depth test as the colour. ClearZ() clears the tags to 0. Without a tag buffer (the default) nothing extra is done and the
+      // picture is exactly as before. The meaning of a tag is the caller's; HoverNetGfx::SurfaceTag (ModernGraphics.h) names the ones the
+      // observer uses, with 0 meaning nothing was drawn (the sky).
+      MR_DllDeclare void SetTagBuffer( MR_UInt8* pBase );
+      MR_DllDeclare void SetSurfaceTag( MR_UInt8 pTag ) { mSurfaceTag = pTag; }
+      MR_DllDeclare const MR_UInt8* GetTagLine( int pY ) const;
+
+      // True colour: a third, optional output. With a colour buffer set (a 32-bit word 0x00RRGGBB per pixel, at the same pixel offset as in the
+      // video buffer, so the buffer must hold lineLen * height words) every pixel drawn also gets its colour, found through pPalette (256 words). With texture filtering on, magnified textures are filtered bilinearly in true colour instead of picking the nearest texel, which
+      // takes the blockiness out of walls, floors and objects seen close up. The 8-bit picture is written exactly as before either way. Pixels the
+      // rasteriser does not draw (the background) are left alone: the caller fills them. Pass NULL to switch it off (the default).
+      MR_DllDeclare void SetColourBuffer( MR_UInt32* pRgbBase, const MR_UInt32* pPalette256 );
+      MR_DllDeclare void SetTextureFiltering( BOOL pOn ) { mFilter = pOn; }
+      MR_DllDeclare const MR_UInt32* GetColourLine( int pY ) const;   // the colour words of row pY of the viewport, or NULL when there is no colour buffer
+
       MR_DllDeclare BOOL ComputePositionMatrix( MR_PositionMatrix& pMatrix, const MR_3DCoordinate& pPosition, MR_Angle pOrientation, MR_Int32 pMaxObjRay );
 
       // WireFrame services
@@ -131,6 +156,25 @@ class MR_3DViewPort: public MR_2DViewPort
 
 
       MR_DllDeclare void RenderBackground( const MR_UInt8* pBitmap );
+
+      // Presentation helpers for the optional modern look (docs/roadmap-3.0.md); the classic renderer never calls them.
+      // Where a world point lands in the framebuffer (not the viewport), how far it is from the camera in mm, and how many pixels a
+      // metre is across at that distance. FALSE when the point is behind the camera.
+      MR_DllDeclare BOOL ProjectToScreen( const MR_3DCoordinate& pPoint, int& pX, int& pY, int& pDepthMm, int& pPixelsPerMetre ) const;
+
+      // Darkens an ellipse of the picture (a soft shadow): each pixel inside is replaced through pDarkLut. Only pixels at least as far
+      // from the camera as pDepthMm-pMarginMm are touched, so a wall between the camera and the shadow is left alone.
+      // A world point in camera space, in mm: x forward (the depth), y to the left, z up. FALSE when it is behind the camera.
+      MR_DllDeclare BOOL ToCameraSpace( const MR_3DCoordinate& pPoint, int& pX, int& pY, int& pZ ) const;
+
+      // What is needed to turn a pixel and its depth back into camera space (see ModernGraphics.h): mm of sideways / up distance per pixel
+      // per mm of depth, the pixel row of the horizon line, and the viewport's corner in the framebuffer.
+      MR_DllDeclare void GetProjection( double& pKx, double& pKz, int& pCenterX, int& pCenterY, int& pOriginX, int& pOriginY ) const;
+
+      // One row of the depth buffer, in 4 mm units (0xFFFF where nothing was drawn).
+      MR_DllDeclare const MR_UInt16* GetDepthLine( int pY ) const;
+
+      MR_DllDeclare void ShadeEllipse( int pCenterX, int pCenterY, int pRadiusX, int pRadiusY, int pDepthMm, int pMarginMm, const MR_UInt8* pDarkLut );
 };
 
 // Local constants (Used by the cpp of this module)

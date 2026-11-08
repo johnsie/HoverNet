@@ -1,3 +1,5 @@
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// See repository history for authorship and detailed changes.
 // 3DViewport.cpp
 //
 //
@@ -38,6 +40,11 @@ MR_3DViewPort::MR_3DViewPort()
    mBufferLine  = NULL;
    mZBufferLine = NULL;
    mBackgroundConst = NULL;
+   mTagBase     = NULL;
+   mSurfaceTag  = 0;
+   mRgbBase     = NULL;
+   mPalette     = NULL;
+   mFilter      = FALSE;
 
 
 }
@@ -304,6 +311,134 @@ void MR_3DViewPort::ApplyPositionMatrix( const MR_PositionMatrix& pMatrix, const
 }
 
 
+BOOL MR_3DViewPort::ProjectToScreen( const MR_3DCoordinate& pPoint, int& pX, int& pY, int& pDepthMm, int& pPixelsPerMetre ) const
+{
+   if( mVideoBuffer == NULL || mLineLen <= 0 || mPlanHW <= 0 || mPlanVW <= 0 )
+   {
+      return FALSE;
+   }
+
+   MR_3DCoordinate lPos;
+   ApplyRotationMatrix( pPoint, lPos );
+
+   if( lPos.mX < mPlanDist || lPos.mX/MR_ZBUFFER_UNIT > 0xFFFE )
+   {
+      return FALSE;
+   }
+
+   // The viewport's corner in the framebuffer, from where its first pixel sits in the buffer.
+   const MR_Int32 lOffset = (MR_Int32)(mBuffer - mVideoBuffer->GetBuffer());
+   const int lOriginX = lOffset % mLineLen;
+   const int lOriginY = lOffset / mLineLen;
+
+   pX = lOriginX + mXRes/2 + (int)(((double)-lPos.mY * mXRes * mPlanDist) / ((double)lPos.mX * mPlanHW * 2));
+   pY = lOriginY + mYRes/2 + mScroll - (int)(((double)lPos.mZ * mYRes * mPlanDist) / ((double)lPos.mX * mPlanVW * 2));
+   pDepthMm = lPos.mX;
+   pPixelsPerMetre = (int)(((double)1000 * mXRes * mPlanDist) / ((double)lPos.mX * mPlanHW * 2));
+   return TRUE;
+}
+
+BOOL MR_3DViewPort::ToCameraSpace( const MR_3DCoordinate& pPoint, int& pX, int& pY, int& pZ ) const
+{
+   MR_3DCoordinate lPos;
+   ApplyRotationMatrix( pPoint, lPos );
+   if( lPos.mX < mPlanDist )
+   {
+      return FALSE;
+   }
+   pX = lPos.mX;
+   pY = -lPos.mY;   // so that +y is to the left, as on the screen
+   pZ = lPos.mZ;
+   return TRUE;
+}
+
+void MR_3DViewPort::GetProjection( double& pKx, double& pKz, int& pCenterX, int& pCenterY, int& pOriginX, int& pOriginY ) const
+{
+   pKx = mXRes > 0 && mPlanDist > 0 ? (double)(2*mPlanHW)/((double)mXRes*mPlanDist) : 0.0;
+   pKz = mYRes > 0 && mPlanDist > 0 ? (double)(2*mPlanVW)/((double)mYRes*mPlanDist) : 0.0;
+   const MR_Int32 lOffset = mLineLen > 0 ? (MR_Int32)(mBuffer - mVideoBuffer->GetBuffer()) : 0;
+   pOriginX = mLineLen > 0 ? lOffset % mLineLen : 0;
+   pOriginY = mLineLen > 0 ? lOffset / mLineLen : 0;
+   pCenterX = pOriginX + mXRes/2;
+   pCenterY = pOriginY + mYRes/2 + mScroll;
+}
+
+void MR_3DViewPort::SetTagBuffer( MR_UInt8* pBase )
+{
+   mTagBase = pBase;
+}
+
+void MR_3DViewPort::SetColourBuffer( MR_UInt32* pRgbBase, const MR_UInt32* pPalette256 )
+{
+   mRgbBase = pPalette256 != NULL ? pRgbBase : NULL;
+   mPalette = pPalette256;
+}
+
+const MR_UInt32* MR_3DViewPort::GetColourLine( int pY ) const
+{
+   if( mRgbBase == NULL || mVideoBuffer == NULL || pY < 0 || pY >= mYRes || mBufferLine == NULL )
+   {
+      return NULL;
+   }
+   return mRgbBase + ( mBufferLine[ pY ] - mVideoBuffer->GetBuffer() );
+}
+
+const MR_UInt8* MR_3DViewPort::GetTagLine( int pY ) const
+{
+   if( mTagBase == NULL || mVideoBuffer == NULL || pY < 0 || pY >= mYRes || mBufferLine == NULL )
+   {
+      return NULL;
+   }
+   return mBufferLine[ pY ] + ( mTagBase - mVideoBuffer->GetBuffer() );
+}
+
+const MR_UInt16* MR_3DViewPort::GetDepthLine( int pY ) const
+{
+   return pY >= 0 && pY < mYRes && mZBufferLine != NULL ? mZBufferLine[ pY ] : NULL;
+}
+
+void MR_3DViewPort::ShadeEllipse( int pCenterX, int pCenterY, int pRadiusX, int pRadiusY, int pDepthMm, int pMarginMm, const MR_UInt8* pDarkLut )
+{
+   if( pDarkLut == NULL || pRadiusX < 1 || pRadiusY < 1 || mVideoBuffer == NULL || mLineLen <= 0 )
+   {
+      return;
+   }
+
+   // pCenterX/Y are framebuffer coordinates; the line tables are relative to the viewport.
+   const MR_Int32 lOffset = (MR_Int32)(mBuffer - mVideoBuffer->GetBuffer());
+   const int lCenterX = pCenterX - lOffset % mLineLen;
+   const int lCenterY = pCenterY - lOffset / mLineLen;
+   const int lMinZ = (pDepthMm - pMarginMm)/MR_ZBUFFER_UNIT;
+
+   const int lY0 = lCenterY - pRadiusY < 0 ? 0 : lCenterY - pRadiusY;
+   const int lY1 = lCenterY + pRadiusY >= mYRes ? mYRes - 1 : lCenterY + pRadiusY;
+
+   for( int lY = lY0; lY <= lY1; lY++ )
+   {
+      const double lDY = (double)(lY - lCenterY)/pRadiusY;
+      const double lHalf = 1.0 - lDY*lDY;
+      if( lHalf <= 0.0 )
+      {
+         continue;
+      }
+
+      const int lSpan = (int)(pRadiusX*sqrt( lHalf ));
+      const int lX0 = lCenterX - lSpan < 0 ? 0 : lCenterX - lSpan;
+      const int lX1 = lCenterX + lSpan >= mXRes ? mXRes - 1 : lCenterX + lSpan;
+
+      MR_UInt8*  lLine  = mBufferLine[ lY ];
+      MR_UInt16* lZLine = mZBufferLine[ lY ];
+
+      for( int lX = lX0; lX <= lX1; lX++ )
+      {
+         if( (int)lZLine[ lX ] >= lMinZ )
+         {
+            lLine[ lX ] = pDarkLut[ lLine[ lX ] ];
+         }
+      }
+   }
+}
+
 void MR_3DViewPort::ClearZ()
 {
 
@@ -313,6 +448,11 @@ void MR_3DViewPort::ClearZ()
    {
       memset( lZBuffer, -1, 2*mXRes );
       lZBuffer += mZLineLen;
+
+      if( mTagBase != NULL )
+      {
+         memset( mBufferLine[ lCounter ] + ( mTagBase - mVideoBuffer->GetBuffer() ), 0, mXRes );
+      }
    }
 }
 
