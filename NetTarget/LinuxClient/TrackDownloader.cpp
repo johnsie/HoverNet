@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -289,6 +290,34 @@ std::string DefaultTrackDownloadBaseUrl()
 #endif
 }
 
+std::string DefaultMarketDownloadBaseUrl()
+{
+    const char* lOverride = std::getenv("HOVERNET_MARKET_DOWNLOAD_URL");
+    if (lOverride != nullptr && lOverride[0] != '\0') {
+        std::string lBase = lOverride;
+        while (!lBase.empty() && lBase.back() == '/') lBase.pop_back();
+        return lBase;
+    }
+#ifdef __EMSCRIPTEN__
+    return "/market-tracks";
+#else
+    return "https://hovernet.outiva.com/market-tracks";
+#endif
+}
+
+std::string DefaultMarketCatalogueUrl()
+{
+    const char* lOverride = std::getenv("HOVERNET_MARKET_CATALOGUE_URL");
+    if (lOverride != nullptr && lOverride[0] != '\0') {
+        return lOverride;
+    }
+#ifdef __EMSCRIPTEN__
+    return "/market/catalogue.tsv";
+#else
+    return "https://hovernet.outiva.com/market/catalogue.tsv";
+#endif
+}
+
 bool MakeDirectories(const std::string& pPath)
 {
     std::string lPartial;
@@ -331,7 +360,9 @@ bool DownloadTrack(const TrackEntry& pTrack, const TrackDownloadSettings& pSetti
         return false;
     }
 
-    const std::string lUrl = pSettings.mBaseUrl + "/" + pTrack.mShard + "/" + pTrack.mAsset + ".trk.gz";
+    // Market tracks come from the market's own host; everything else from the configured community location.
+    const std::string lBase = pTrack.mMarket ? DefaultMarketDownloadBaseUrl() : pSettings.mBaseUrl;
+    const std::string lUrl = lBase + "/" + pTrack.mShard + "/" + pTrack.mAsset + ".trk.gz";
     const std::string lDownloadPath = pSettings.mDestination + pTrack.mAsset + ".part";
     const std::string lUnpackedPath = pSettings.mDestination + pTrack.mAsset + ".tmp";
     const std::string lFinalPath = pSettings.mDestination + pTrack.mName + ".trk";
@@ -500,4 +531,51 @@ std::vector<std::string> TrackDownloadJob::InstalledNames() const
 {
     std::lock_guard<std::mutex> lLock(mMutex);
     return mInstalled;
+}
+
+bool FetchMarketCatalogue(const std::string& pDestination, std::string& pError)
+{
+    const std::string lUrl = DefaultMarketCatalogueUrl();
+    const std::string lPart = pDestination + ".part";
+    std::remove(lPart.c_str());
+    std::atomic<bool> lNoCancel{false};
+    std::atomic<long long> lBytes{0};
+#ifdef __EMSCRIPTEN__
+    RunResult lResult = DownloadInBrowser(lUrl, lPart, lNoCancel, lBytes);
+#else
+#ifdef _WIN32
+    const std::vector<std::vector<std::string>> lTools = {
+        {"curl.exe", "--fail", "--location", "--silent", "--show-error", "--retry", "1", "--connect-timeout", "10", "--max-time", "30", "--output", lPart, lUrl}};
+#else
+    const std::vector<std::vector<std::string>> lTools = {
+        {"curl", "--fail", "--location", "--silent", "--show-error", "--retry", "1", "--connect-timeout", "10", "--max-time", "30", "--output", lPart, lUrl},
+        {"wget", "--quiet", "--tries=2", "--timeout=20", "--output-document", lPart, lUrl}};
+#endif
+    RunResult lResult = RunResult::eNotFound;
+    for (const std::vector<std::string>& lTool : lTools) {
+        lResult = RunDownloader(lTool, lPart, lNoCancel, lBytes);
+        if (lResult != RunResult::eNotFound) break;
+    }
+#endif
+    if (lResult != RunResult::eOk) {
+        std::remove(lPart.c_str());
+        pError = "the Track Market could not be reached";
+        return false;
+    }
+    // A catalogue is a small text file that says so; anything else (an error page, a captive portal) is not installed over the last good copy.
+    std::ifstream lIn(lPart.c_str(), std::ios::binary);
+    std::string lText((std::istreambuf_iterator<char>(lIn)), std::istreambuf_iterator<char>());
+    lIn.close();
+    if (lText.size() > 4 * 1024 * 1024 || lText.find("# catalogue-version ") == std::string::npos) {
+        std::remove(lPart.c_str());
+        pError = "the Track Market answered with something that is not a catalogue";
+        return false;
+    }
+    std::remove(pDestination.c_str());   // rename does not replace an existing file on Windows
+    if (std::rename(lPart.c_str(), pDestination.c_str()) != 0) {
+        std::remove(lPart.c_str());
+        pError = "the Track Market catalogue could not be saved";
+        return false;
+    }
+    return true;
 }

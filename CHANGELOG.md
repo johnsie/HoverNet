@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **The game lists and downloads Track Market tracks** (desktop and browser, one code base). Tracks published to the market appear under "Track Market (made by players)" right below the official tracks, each credited with its author and licence (what CC-BY asks for), and download from the market's own address with the same size and SHA-256 checks as community tracks. The catalogue is fetched in the background when the main menu opens (never in a test run unless pointed at a test server; `HOVERNET_NO_MARKET=1` turns it off); an answer that is not a catalogue never replaces the last good copy, and a track without an author or licence is not listed. Display and download only: no change to the simulation, replays or golden files. Tested natively (`HoverNetTrackMarketClient`, 16 checks, and the existing catalogue, download and community tests); **the browser build and a real market server were not run yet**. The market service, its server sync and installer (`packaging/web/`) are committed but **not installed anywhere**: see `docs/owner-actions.md`.
+
 ## 2.3.26 - 2026-11-07
 
 ### Fixed

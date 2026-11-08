@@ -31,6 +31,14 @@ struct TrackDownloadSettings
 // The download location used unless HOVERNET_TRACK_DOWNLOAD_URL overrides it.
 std::string DefaultTrackDownloadBaseUrl();
 
+// Track Market (docs/specs/track-market.md): where its tracks (shard "market") are downloaded from, and its catalogue. HOVERNET_MARKET_DOWNLOAD_URL and
+// HOVERNET_MARKET_CATALOGUE_URL override them (tests, or another market). In the browser both are on the page's own origin.
+std::string DefaultMarketDownloadBaseUrl();
+std::string DefaultMarketCatalogueUrl();
+// Fetches the market catalogue into pDestination (atomically: a failed or invalid answer leaves the previous file alone). Blocking; run it on a thread.
+// The answer must look like a catalogue and be small. Returns false with a short reason in pError.
+bool FetchMarketCatalogue(const std::string& pDestination, std::string& pError);
+
 // Creates pPath and any missing parents. Returns true if it exists afterwards.
 bool MakeDirectories(const std::string& pPath);
 

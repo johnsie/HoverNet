@@ -133,6 +133,15 @@ bool TrackCatalog::ParseManifestLine(const std::string& pLine, TrackEntry& pOut)
             pOut.mShard = lShard;
             pOut.mAsset = lAsset;
             pOut.mDownloadBytes = std::strtoll(lFields[9].c_str(), nullptr, 10);
+            if (lShard == "market") {
+                // The market's extra columns: author (10) and licence (11). A market track is only listed with both: attribution is part of the licence.
+                if (lFields.size() < 12 || lFields[10].empty() || lFields[10] == "-" || lFields[11].empty() || lFields[11] == "-") {
+                    return false;
+                }
+                pOut.mMarket = true;
+                pOut.mAuthor = lFields[10].substr(0, 40);
+                pOut.mLicence = lFields[11].substr(0, 20);
+            }
         }
     }
     return true;
@@ -187,7 +196,35 @@ void TrackCatalog::Build(const TrackCatalogOptions& pOptions)
         const std::string lB = Lower(pB.mName);
         return lA != lB ? lA < lB : pA.mName < pB.mName;
     });
-    mEntries.insert(mEntries.end(), lCommunity.begin(), lCommunity.end());
+    // Market tracks can arrive in the community manifest (never, today) or in the market catalogue; either way they form the last group.
+    std::vector<TrackEntry> lKept, lMarket;
+    for (const TrackEntry& lEntry : lCommunity) (lEntry.mMarket ? lMarket : lKept).push_back(lEntry);
+    if (!pOptions.mMarketCataloguePath.empty()) {
+        std::ifstream lCatalogue(pOptions.mMarketCataloguePath.c_str());
+        while (std::getline(lCatalogue, lLine)) {
+            TrackEntry lEntry;
+            if (!ParseManifestLine(lLine, lEntry) || !lEntry.mMarket) {
+                continue;   // comments, revoked rows ("-" name), anything that is not a complete market row
+            }
+            if (!lTaken.insert(Lower(lEntry.mName)).second) {
+                continue;   // a market track never takes the name of an official or community track
+            }
+            lEntry.mPath = FindTrackFile(pOptions.mCommunityDirectories, lEntry.mName);
+            lEntry.mInstalled = !lEntry.mPath.empty();
+            if (!lEntry.mInstalled) {
+                lEntry.mPath = pOptions.mDownloadDirectory + lEntry.mName + ".trk";
+            }
+            lMarket.push_back(lEntry);
+        }
+    }
+    std::sort(lMarket.begin(), lMarket.end(), [](const TrackEntry& pA, const TrackEntry& pB) {
+        const std::string lA = Lower(pA.mName);
+        const std::string lB = Lower(pB.mName);
+        return lA != lB ? lA < lB : pA.mName < pB.mName;
+    });
+    mEntries.insert(mEntries.end(), lKept.begin(), lKept.end());
+    mMarketStart = static_cast<int>(mEntries.size());
+    mEntries.insert(mEntries.end(), lMarket.begin(), lMarket.end());
 }
 
 int TrackCatalog::Find(const std::string& pName) const

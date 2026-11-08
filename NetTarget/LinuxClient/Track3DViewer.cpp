@@ -5,6 +5,8 @@
 
 #include "TrackCatalog.h"
 #include "TrackDownloader.h"
+#include <atomic>
+#include <thread>
 #include "Sha256.h"
 #include "PersonalBests.h"
 #include <functional>
@@ -1007,6 +1009,46 @@ std::string ConfigDirPath()
 // (NetTarget/CommunityTracks) and in the per-user config folder.
 // HOVERNET_COMMUNITY_TRACKS_DIR and HOVERNET_COMMUNITY_MANIFEST can point at any
 // other folder / manifest (used by tests).
+// The Track Market catalogue as last fetched (docs/specs/track-market.md). HOVERNET_MARKET_CATALOGUE names another file (tests).
+std::string MarketCataloguePath()
+{
+    const char* fileOverride = std::getenv("HOVERNET_MARKET_CATALOGUE");
+    if (fileOverride != nullptr && fileOverride[0] != '\0') return fileOverride;
+    return ConfigDirPath() + "/market-catalogue.tsv";
+}
+
+// Set by the refresh thread when a newer catalogue has been saved; applied when the main menu opens, so no track selector is holding an index.
+std::atomic<bool> gMarketCatalogueUpdated{false};
+
+// Once per run: fetch the Track Market catalogue in the background, so players see newly listed tracks without waiting and without a hiccup.
+// Automated runs (a frame limit) do not touch the network unless a test points the catalogue URL at its own server; HOVERNET_NO_MARKET=1 turns it off.
+void StartMarketCatalogueRefresh(bool automated)
+{
+    static bool started = false;
+    if (started) return;
+    started = true;
+    const char* off = std::getenv("HOVERNET_NO_MARKET");
+    if (off != nullptr && off[0] != '\0' && off[0] != '0') return;
+    if (automated && std::getenv("HOVERNET_MARKET_CATALOGUE_URL") == nullptr) return;
+    const std::string destination = MarketCataloguePath();
+    std::thread([destination]() {
+        MakeDirectories(destination.substr(0, destination.find_last_of("/\\") == std::string::npos ? 0 : destination.find_last_of("/\\") + 1));
+        std::string error;
+        if (FetchMarketCatalogue(destination, error)) gMarketCatalogueUpdated = true;
+    }).detach();
+}
+
+TrackCatalog& Tracks();
+
+// Called when the main menu opens: if a newer catalogue arrived, rebuild the list. Market tracks are the last group, so the indexes of official and
+// community tracks do not move.
+void ApplyMarketCatalogueUpdate()
+{
+    if (gMarketCatalogueUpdated.exchange(false)) {
+        Tracks().Rebuild();
+    }
+}
+
 TrackCatalog& Tracks()
 {
     static TrackCatalog catalog;
@@ -1036,6 +1078,7 @@ TrackCatalog& Tracks()
         options.mDownloadDirectory = (extra != nullptr && extra[0] != '\0')
             ? std::string(extra) + "/"
             : ConfigDirPath() + "/CommunityTracks/";
+        options.mMarketCataloguePath = MarketCataloguePath();
         catalog.Build(options);
     }
     return catalog;
@@ -1362,10 +1405,11 @@ bool TrackSelector(const char* id, int slot, int& index)
 
     std::vector<int> official;
     std::vector<int> community;
+    std::vector<int> market;
     for (int i = 0; i < catalog.Count(); ++i) {
         const TrackEntry& entry = catalog.Entries()[static_cast<std::size_t>(i)];
-        if (!ContainsIgnoreCase(entry.mName, search)) continue;
-        (entry.mOfficial ? official : community).push_back(i);
+        if (!ContainsIgnoreCase(entry.mName, search) && !(entry.mMarket && ContainsIgnoreCase(entry.mAuthor, search))) continue;
+        (entry.mOfficial ? official : entry.mMarket ? market : community).push_back(i);
     }
 
     auto drawEntry = [&](int i) {
@@ -1380,7 +1424,8 @@ bool TrackSelector(const char* id, int slot, int& index)
             ImGui::SetItemDefaultFocus();
         }
         std::string tag;
-        if (entry.mFreePlay) tag = "free play";
+        if (entry.mMarket) tag = "by " + entry.mAuthor + " (" + entry.mLicence + ")";   // the credit CC-BY asks for, wherever the track is chosen
+        if (entry.mFreePlay) tag += std::string(tag.empty() ? "" : "  ") + "free play";
         if (!entry.mInstalled) tag += std::string(tag.empty() ? "" : "  ") + "download";
         if (!tag.empty()) {
             const float tagWidth = ImGui::CalcTextSize(tag.c_str()).x;
@@ -1395,6 +1440,12 @@ bool TrackSelector(const char* id, int slot, int& index)
         HoverNetSectionHeading("Official tracks");
         for (int i : official) drawEntry(i);
     }
+    // The market sits right under the official tracks: under a thousand community tracks nobody would find it.
+    if (!market.empty()) {
+        ImGui::Spacing();
+        HoverNetSectionHeading("Track Market (made by players)");
+        for (int i : market) drawEntry(i);
+    }
     if (!community.empty()) {
         ImGui::Spacing();
         HoverNetSectionHeading("Community tracks");
@@ -1406,7 +1457,7 @@ bool TrackSelector(const char* id, int slot, int& index)
             }
         }
     }
-    if (official.empty() && community.empty()) {
+    if (official.empty() && community.empty() && market.empty()) {
         ImGui::TextDisabled("No tracks match \"%s\"", search.c_str());
     }
 
@@ -7007,6 +7058,8 @@ enum class MenuChoice
 MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                        const MR_Sprite& font, int pFrameLimit)
 {
+    StartMarketCatalogueRefresh(pFrameLimit >= 0);   // the Track Market's list of tracks, fetched in the background
+    ApplyMarketCatalogueUpdate();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;

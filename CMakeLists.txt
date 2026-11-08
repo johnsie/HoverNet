@@ -831,6 +831,16 @@ if(BUILD_TESTING AND NOT WIN32)
     )
     target_link_libraries(HoverNetTrackDownloadSmoke PRIVATE Threads::Threads)
     add_hovernet_root_test(HoverNetTrackDownloadSmoke)
+    # The game's side of the Track Market: the catalogue, the track list, fetching and downloading a market track (file:// stands in for the host).
+    add_executable(HoverNetTrackMarketClient
+        NetTarget/LinuxClient/TrackMarketClientSmoke.cpp
+        NetTarget/LinuxClient/TrackDownloader.cpp
+        NetTarget/LinuxClient/TrackCatalog.cpp
+        NetTarget/LinuxClient/Gunzip.cpp
+        NetTarget/LinuxClient/Sha256.cpp
+    )
+    target_link_libraries(HoverNetTrackMarketClient PRIVATE Threads::Threads)
+    add_hovernet_root_test(HoverNetTrackMarketClient)
     add_test(NAME HoverNetRuntimeDependencies
         COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/check-runtime-dependencies.sh"
                 "${CMAKE_BINARY_DIR}" "${CMAKE_SOURCE_DIR}")

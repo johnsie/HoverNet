@@ -34,6 +34,11 @@ struct TrackEntry
     // Download details from the manifest (see TrackDownloader.h). All empty/zero
     // for tracks that cannot be downloaded.
     bool mHasDownload = false;
+    // Track Market tracks (shard "market", docs/specs/track-market.md): published by players. The author and licence are shown wherever the track is chosen,
+    // which is what the CC-BY licences require (docs/adr/0002-content-licence-policy.md).
+    bool mMarket = false;
+    std::string mAuthor;
+    std::string mLicence;
     std::string mShard;         // release the file is hosted in
     std::string mAsset;         // hash-based file name (without .trk.gz)
     std::string mSha256;        // of the decompressed .trk
@@ -46,6 +51,7 @@ struct TrackCatalogOptions
     std::vector<std::string> mOfficialNames;        // fixed display order
     std::vector<std::string> mOfficialDirectories;  // searched in order, each ending in '/'
     std::string mManifestPath;                      // community manifest (may be missing)
+    std::string mMarketCataloguePath;               // the Track Market catalogue as last fetched (may be missing); its tracks follow the community ones
     std::vector<std::string> mCommunityDirectories; // searched in order, each ending in '/'
     // Where downloaded tracks are saved (ending in '/'); also searched for tracks.
     std::string mDownloadDirectory;
@@ -55,10 +61,14 @@ class TrackCatalog
 {
 public:
     void Build(const TrackCatalogOptions& pOptions);
+    // Builds again with the options of the last Build (a newer market catalogue or newly installed tracks).
+    void Rebuild() { Build(TrackCatalogOptions(mOptions)); }
 
     const std::vector<TrackEntry>& Entries() const { return mEntries; }
     int Count() const { return static_cast<int>(mEntries.size()); }
     int OfficialCount() const { return mOfficialCount; }
+    // Index of the first Track Market track (Count() when there are none); the market tracks are the last group.
+    int MarketStart() const { return mMarketStart; }
 
     // Re-checks which tracks are on disk (after a download). Order and indexes do
     // not change.
@@ -84,6 +94,7 @@ public:
 private:
     std::vector<TrackEntry> mEntries;
     int mOfficialCount = 0;
+    int mMarketStart = 0;
     TrackCatalogOptions mOptions;
 };
 
