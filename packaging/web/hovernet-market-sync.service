@@ -1,0 +1,17 @@
+[Unit]
+Description=Copy the Track Market's listed tracks to the race server's community folder (and remove revoked ones)
+After=hovernet-market.service
+
+[Service]
+Type=oneshot
+User=hovernet
+Group=hovernet
+ExecStart=/opt/hovernet-market/packaging/web/sync-market-tracks.sh
+ReadWritePaths=/var/lib/hovernet/community-tracks
+Nice=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectControlGroups=true

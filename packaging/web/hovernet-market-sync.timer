@@ -1,0 +1,10 @@
+[Unit]
+Description=Every ten minutes, bring the race server's community tracks up to date with the Track Market
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

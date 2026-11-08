@@ -891,6 +891,11 @@ if(BUILD_TESTING AND NOT WIN32)
     # The Track Market's submission check accepts a good submission and refuses each kind of bad one (docs/specs/track-market.md).
     add_test(NAME HoverNetTrackSubmissionGate COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-track-submission-gate.sh" "${CMAKE_BINARY_DIR}")
     set_tests_properties(HoverNetTrackSubmissionGate PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 600)
+    # The Track Market submission service: who may publish, review, catalogue, reports, limits, HTTP, and (here) the real checks on a real generated track.
+    add_test(NAME HoverNetMarketSync COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-market-sync.sh")
+    set_tests_properties(HoverNetMarketSync PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    add_test(NAME HoverNetWebMarket COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/scripts/test-web-market.py" "${CMAKE_BINARY_DIR}")
+    set_tests_properties(HoverNetWebMarket PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 600)
     # Every track source compiles to exactly its committed .trk (native); the WebAssembly half is run by scripts/test-compiler-parity.sh with its extra arguments.
     add_test(NAME HoverNetCompilerParity COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-compiler-parity.sh" "$<TARGET_FILE:HoverNetMazeCompiler>")
     set_tests_properties(HoverNetCompilerParity PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

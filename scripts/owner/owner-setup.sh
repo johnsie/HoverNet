@@ -7,17 +7,19 @@
 # overwrites), and saves the public key beside it; (3) packs the legal-review documents into one file with a cover note; (4) shows what is not pushed.
 # Options (all optional):
 #   --backup-to DIR   also copy the secret key to DIR (a USB stick) and check the copy matches
+#   --install-market  also install the Track Market service on the web/race host (packaging/web/install-market.sh; asks for your sudo password there)
 #   --push            then push main to GitLab (deploys the web client) and GitHub, after you type "push" to confirm
 #   --version X.Y.Z   the release to check (default 2.3.26)
 # Environment: HOVERNET_KEYS_DIR (default ~/hovernet-keys), RACE_HOST (default john@192.168.10.181).
 # Safe to run again: each step skips what is already done.
 set -uo pipefail
 cd "$(dirname "$0")/../.."
-backup=""; push=no; version="2.3.26"
+backup=""; push=no; market=no; version="2.3.26"
 while [ $# -gt 0 ]; do
   case "$1" in
     --backup-to) backup="${2:?--backup-to needs a folder}"; shift 2;;
     --push) push=yes; shift;;
+    --install-market) market=yes; shift;;
     --version) version="${2:?}"; shift 2;;
     *) echo "unknown option: $1"; exit 2;;
   esac
@@ -26,10 +28,10 @@ keys="${HOVERNET_KEYS_DIR:-$HOME/hovernet-keys}"; key="$keys/hovernet-catalogue.
 todo=()
 line() { printf '\n==== %s\n' "$*"; }
 
-line "1/4 Is release $version live?"
+line "1/5 Is release $version live?"
 if bash scripts/owner/check-production.sh "$version"; then :; else todo+=("A production check failed: read the FAIL lines above (a GitLab pipeline may still be running: https://gitlab.outiva.com/devteam/hovernet/-/pipelines)"); fi
 
-line "2/4 Signing key"
+line "2/5 Signing key"
 if [ -f "$key" ]; then
   echo "A key already exists at $key: leaving it alone."
   [ -f "$pub" ] || echo "(no public-key file beside it: the public key can be printed with the signing tool's  pubkey  command)"
@@ -53,7 +55,7 @@ if [ -f "$key" ]; then
   todo+=("Send me ONLY the public key (the 64 characters above, or the file $pub). Never the secret key.")
 fi
 
-line "3/4 Legal review pack"
+line "3/5 Legal review pack"
 mkdir -p dist
 pack="dist/hovernet-legal-review-pack"; rm -rf "$pack"; mkdir -p "$pack"
 for d in docs/track-market-terms-draft.md docs/adr/0002-content-licence-policy.md docs/adr/0004-track-marketplace.md docs/account-privacy-policy-draft.md docs/specs/track-market.md; do cp "$d" "$pack/"; done
@@ -73,7 +75,14 @@ tar -C dist -czf dist/hovernet-legal-review-pack.tar.gz hovernet-legal-review-pa
 todo+=("Fill in the [OWNER: ...] placeholders in $pack/COVER-NOTE.txt and docs/track-market-terms-draft.md, then send dist/hovernet-legal-review-pack.tar.gz to your lawyer")
 todo+=("Make the list of Outiva account names you will invite to publish first (one per line) and keep it for me")
 
-line "4/4 Work not pushed yet"
+line "4/5 Track Market service"
+if [ "$market" = yes ]; then
+  bash packaging/web/install-market.sh || todo+=("The Track Market install did not finish: read the messages above and run  bash packaging/web/install-market.sh  again")
+else
+  todo+=("To install the Track Market service on the server (it starts CLOSED): rerun with --install-market, or  bash packaging/web/install-market.sh --dry-run  to see every step first")
+fi
+
+line "5/5 Work not pushed yet"
 git fetch -q origin 2>/dev/null; git fetch -q gitlab 2>/dev/null
 ahead_o="$(git rev-list --count origin/main..main 2>/dev/null || echo '?')"; ahead_g="$(git rev-list --count gitlab/main..main 2>/dev/null || echo '?')"
 echo "main is $ahead_o commit(s) ahead of GitHub and $ahead_g ahead of GitLab."

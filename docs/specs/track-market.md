@@ -1,6 +1,6 @@
 # Track Market: submission and catalogue (specification, draft)
 
-Status: **draft, nothing here is built except the checks** (`scripts/check-track-submission.sh`, which the editor and the service share). Decisions are in [ADR 0004](../adr/0004-track-marketplace.md); this file says exactly what is sent, checked and published so the editor, the service, the clients and the servers can be written against it independently.
+Status: **draft; built and tested on Linux: the checks (`scripts/check-track-submission.sh`, shared by the editor and the service) and the submission service with the live catalogue (`packaging/web/hovernet_market.py`, `scripts/test-web-market.py`, installed by `packaging/web/install-market.sh`); not yet built: the Track Market screen in the game, the Publish button in the editor, the server-side sync of listed tracks.** Decisions are in [ADR 0004](../adr/0004-track-marketplace.md); this file says exactly what is sent, checked and published so the editor, the service, the clients and the servers can be written against it independently.
 
 ## 1. A submission
 

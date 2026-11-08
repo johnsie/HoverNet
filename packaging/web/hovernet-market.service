@@ -1,0 +1,38 @@
+[Unit]
+Description=HoverNet Track Market (submissions and live catalogue; docs/adr/0004-track-marketplace.md)
+After=network-online.target hovernet-account.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hovernet
+Group=hovernet
+EnvironmentFile=-/etc/hovernet/market.env
+Environment=HOVERNET_MARKET_HOST=127.0.0.1
+Environment=HOVERNET_MARKET_PORT=9603
+Environment=HOVERNET_MARKET_STATE_DIR=/var/lib/hovernet-market
+Environment=HOVERNET_MARKET_PUBLIC_DIR=/var/www/hovernet.outiva.com/market-tracks
+Environment=HOVERNET_MARKET_TOOLS_DIR=/opt/hovernet-market/build
+Environment=HOVERNET_MARKET_CHECK_SCRIPT=/opt/hovernet-market/scripts/check-track-submission.sh
+ExecStart=/usr/bin/python3 /usr/lib/hovernet/hovernet_market.py
+StateDirectory=hovernet-market
+StateDirectoryMode=0750
+ReadWritePaths=/var/www/hovernet.outiva.com/market-tracks
+# The checks replay a race and compile nothing, but they take a few CPU-seconds: keep them from competing with the race server on this host.
+Nice=10
+CPUQuota=100%
+MemoryMax=1G
+TasksMax=64
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
