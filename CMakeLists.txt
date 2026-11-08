@@ -704,6 +704,11 @@ endif()
 add_library(HoverNetTrackEditorCore STATIC NetTarget/TrackEditor/TrackSource.cpp NetTarget/TrackEditor/TrackTemplates.cpp NetTarget/TrackEditor/TrackEdit.cpp NetTarget/TrackEditor/EditorSession.cpp)
 target_include_directories(HoverNetTrackEditorCore PUBLIC NetTarget/TrackEditor)
 add_executable(HoverNetTrackSource NetTarget/TrackEditor/TrackSourceTool.cpp)
+# The editor's window (docs/roadmap-track-editor.md, Phase 2): SDL2 + Dear ImGui like the game, over the same core that the tests exercise.
+if(NOT EMSCRIPTEN)
+    add_executable(HoverNetTrackEditor NetTarget/TrackEditor/EditorMain.cpp)
+    target_link_libraries(HoverNetTrackEditor PRIVATE HoverNetTrackEditorCore HoverNetImGui SDL2::SDL2)
+endif()
 target_link_libraries(HoverNetTrackSource PRIVATE HoverNetTrackEditorCore)
 if(EMSCRIPTEN)
     target_link_options(HoverNetTrackSource PRIVATE -sNODERAWFS=1 -sENVIRONMENT=node)   # run under Node on real files, like the compiler
@@ -894,6 +899,9 @@ if(BUILD_TESTING AND NOT WIN32)
              "$<TARGET_FILE:HoverNetTrackSource>" "$<TARGET_FILE:HoverNetMazeCompiler>")
     set_tests_properties(HoverNetTrackSourceRoundTrip PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     # A track made from nothing by the editor core compiles, validates, can be driven round and is admissible to the catalogue.
+    # The editor's window, headless: it draws tracks, opens the bundled ones, and "compile and check" gives the real verdict with plain reasons.
+    add_test(NAME HoverNetTrackEditor COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-track-editor.sh" "${CMAKE_BINARY_DIR}")
+    set_tests_properties(HoverNetTrackEditor PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 300)
     add_test(NAME HoverNetNewTrack COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-new-track.sh" "$<TARGET_FILE:HoverNetTrackSource>"
              "$<TARGET_FILE:HoverNetMazeCompiler>" "$<TARGET_FILE:HoverNetTrackValidator>" "$<TARGET_FILE:HoverNetTrackPack>"
              "$<TARGET_FILE:HoverNetDriver>" "$<TARGET_FILE:HoverNetReplay>")
