@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **Editor autosave in the browser.** The browser editor keeps a copy of the track being edited in the browser a moment after every change and offers it back after a reload ("Restore my work" or "Start fresh"); saving to a file clears it. Tested in headless Chrome with real clicks and reloads (36 checks).
+
 ## 2.3.27 - 2026-11-08
 
 ### Changed
