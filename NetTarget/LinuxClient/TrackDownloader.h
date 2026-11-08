@@ -38,6 +38,11 @@ std::string DefaultMarketCatalogueUrl();
 // Fetches the market catalogue into pDestination (atomically: a failed or invalid answer leaves the previous file alone). Blocking; run it on a thread.
 // The answer must look like a catalogue and be small. Returns false with a short reason in pError.
 bool FetchMarketCatalogue(const std::string& pDestination, std::string& pError);
+// A track the market has REVOKED (a rights complaint or unlawful content, docs/adr/0004-track-marketplace.md decision 4) must also leave the player's own
+// folder, not just the list. Every market track the game installs is recorded in <folder>/.market-installed (name and SHA-256); this removes each
+// recorded track whose hash the catalogue now lists as revoked (only if the file still has that hash) and returns how many were removed. A track its
+// author merely unlisted stays on the machine: players keep what they downloaded.
+int RemoveRevokedMarketTracks(const std::string& pCataloguePath, const std::string& pFolder);
 
 // Creates pPath and any missing parents. Returns true if it exists afterwards.
 bool MakeDirectories(const std::string& pPath);

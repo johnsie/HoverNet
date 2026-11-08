@@ -106,7 +106,20 @@ int main()
     catalog.Refresh();
     Check(catalog.Get(2)->mInstalled && !catalog.Get(3)->mInstalled, "after a download the list shows what is installed");
 
-    system(("rm -rf '" + work + "'").c_str());
+    // ---- a revoked track leaves the machine too; one the author merely unlisted stays
+    Check(Exists(dl + ".market-installed") && ReadAll(dl + ".market-installed").find(Sha256::HashBytes(dataA.data(), dataA.size())) != std::string::npos, "an installed market track is recorded with its hash");
+    WriteAll(dl + "Unlisted One.trk", dataB);
+    { std::ofstream r((dl + ".market-installed").c_str(), std::ios::app); r << "Unlisted One\t" << Sha256::HashBytes(dataB.data(), dataB.size()) << "\n"; }
+    WriteAll(work + "/cat-revoked.tsv", "# HoverNet Track Market catalogue\n# catalogue-version 4\n" + Row("Beta Loop", dataB, "Bob", "CC0-1.0") +
+             "-\t-\t0\t0\t0\t0\t" + Sha256::HashBytes(dataA.data(), dataA.size()) + "\tmarket\t" + Sha256::HashBytes(dataA.data(), dataA.size()) + "\t0\t-\t-\t2026-11-09\t1\trevoked\n");
+    Check(RemoveRevokedMarketTracks(work + "/cat-revoked.tsv", dl) == 1 && !Exists(dl + "Alpha Loop.trk"), "a revoked track is deleted from the player's folder");
+    Check(Exists(dl + "Unlisted One.trk"), "a track that is merely no longer listed stays on the machine");
+    Check(RemoveRevokedMarketTracks(work + "/cat-revoked.tsv", dl) == 0, "revoking twice removes nothing more");
+    WriteAll(dl + "Edited.trk", "the player made their own changes");
+    { std::ofstream r((dl + ".market-installed").c_str(), std::ios::app); r << "Edited\t" << Sha256::HashBytes(dataA.data(), dataA.size()) << "\n"; }
+    Check(RemoveRevokedMarketTracks(work + "/cat-revoked.tsv", dl) == 0 && Exists(dl + "Edited.trk"), "a file whose contents no longer match the revoked hash is not deleted");
+
+    system(("rm -rf '" + work + "\'").c_str());
     if (gFailures == 0) std::puts("Track Market client checks passed");
     return gFailures == 0 ? 0 : 1;
 }

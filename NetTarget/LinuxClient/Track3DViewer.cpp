@@ -1009,6 +1009,8 @@ std::string ConfigDirPath()
 // (NetTarget/CommunityTracks) and in the per-user config folder.
 // HOVERNET_COMMUNITY_TRACKS_DIR and HOVERNET_COMMUNITY_MANIFEST can point at any
 // other folder / manifest (used by tests).
+TrackDownloadSettings CommunityDownloadSettings();
+
 // The Track Market catalogue as last fetched (docs/specs/track-market.md). HOVERNET_MARKET_CATALOGUE names another file (tests).
 std::string MarketCataloguePath()
 {
@@ -1034,7 +1036,10 @@ void StartMarketCatalogueRefresh(bool automated)
     std::thread([destination]() {
         MakeDirectories(destination.substr(0, destination.find_last_of("/\\") == std::string::npos ? 0 : destination.find_last_of("/\\") + 1));
         std::string error;
-        if (FetchMarketCatalogue(destination, error)) gMarketCatalogueUpdated = true;
+        if (FetchMarketCatalogue(destination, error)) {
+            RemoveRevokedMarketTracks(destination, CommunityDownloadSettings().mDestination);   // a revoked track leaves this machine too
+            gMarketCatalogueUpdated = true;
+        }
     }).detach();
 }
 

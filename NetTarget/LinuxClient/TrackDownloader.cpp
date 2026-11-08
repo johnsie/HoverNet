@@ -11,6 +11,9 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <set>
+#include <utility>
+#include <vector>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -442,6 +445,10 @@ bool DownloadTrack(const TrackEntry& pTrack, const TrackDownloadSettings& pSetti
         return false;
     }
     pBytesDone = pTrack.mDownloadBytes > 0 ? pTrack.mDownloadBytes : pBytesDone.load();
+    if (pTrack.mMarket) {   // remember where it came from, so a revocation can reach this machine
+        std::ofstream lRecord((pSettings.mDestination + ".market-installed").c_str(), std::ios::app);
+        lRecord << pTrack.mName << '\t' << pTrack.mSha256 << '\n';
+    }
     return true;
 }
 
@@ -578,4 +585,49 @@ bool FetchMarketCatalogue(const std::string& pDestination, std::string& pError)
         return false;
     }
     return true;
+}
+
+int RemoveRevokedMarketTracks(const std::string& pCataloguePath, const std::string& pFolder)
+{
+    std::set<std::string> lRevoked;
+    {
+        std::ifstream lCatalogue(pCataloguePath.c_str());
+        std::string lLine;
+        while (std::getline(lCatalogue, lLine)) {
+            if (lLine.empty() || lLine[0] == '#') continue;
+            std::vector<std::string> lFields;
+            std::size_t lStart = 0;
+            while (true) {
+                const std::size_t lTab = lLine.find('\t', lStart);
+                lFields.push_back(lLine.substr(lStart, lTab == std::string::npos ? std::string::npos : lTab - lStart));
+                if (lTab == std::string::npos) break;
+                lStart = lTab + 1;
+            }
+            while (!lFields.empty() && !lFields.back().empty() && (lFields.back().back() == '\r')) lFields.back().pop_back();
+            if (lFields.size() >= 15 && lFields[14] == "revoked" && lFields[7] == "market" && IsHex(lFields[6], 64, 64)) lRevoked.insert(lFields[6]);
+        }
+    }
+    const std::string lRecordPath = pFolder + ".market-installed";
+    std::vector<std::pair<std::string, std::string>> lKept;
+    int lRemoved = 0;
+    {
+        std::ifstream lRecord(lRecordPath.c_str());
+        std::string lLine;
+        while (std::getline(lRecord, lLine)) {
+            const std::size_t lTab = lLine.find('\t');
+            if (lTab == std::string::npos) continue;
+            const std::string lName = lLine.substr(0, lTab), lSha = lLine.substr(lTab + 1);
+            if (!TrackCatalog::IsSafeTrackName(lName) || !IsHex(lSha, 64, 64)) continue;
+            if (lRevoked.count(lSha) != 0) {
+                const std::string lFile = pFolder + lName + ".trk";
+                if (Sha256::HashFile(lFile) == lSha && std::remove(lFile.c_str()) == 0) ++lRemoved;
+                continue;   // revoked: forgotten whether or not the file was still there
+            }
+            lKept.emplace_back(lName, lSha);
+        }
+    }
+    if (lRevoked.empty() && lRemoved == 0) return 0;
+    std::ofstream lOut(lRecordPath.c_str(), std::ios::trunc);
+    for (const auto& lPair : lKept) lOut << lPair.first << '\t' << lPair.second << '\n';
+    return lRemoved;
 }
