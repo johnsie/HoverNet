@@ -183,16 +183,18 @@ int Replay_(const std::string& path, long dumpTick, bool trace)
 
 // Replays the inputs through the authoritative race and returns the result table: what a leaderboard or a time trial needs
 // from a replay. The same inputs always give the same table on every platform.
-bool ComputeResults(const std::string& path, Replay& r, std::vector<Authority::PlayerResult>& results, std::uint32_t& ticks, std::vector<Authority::RaceEvent>* events = nullptr)
+bool ComputeResults(const std::string& path, Replay& r, std::vector<Authority::PlayerResult>& results, std::uint32_t& ticks, std::vector<Authority::RaceEvent>* events = nullptr,
+                    const std::string& trackFile = std::string())
 {
     std::vector<std::uint8_t> file;
     std::string error;
     if (!ReadFile(path, file) || !Decode(file, r, error)) { std::fprintf(stderr, "%s: %s\n", path.c_str(), error.empty() ? "unreadable" : error.c_str()); return false; }
     if (!ReplayFormat::RulesSupported(r.rules)) { std::fprintf(stderr, "%s: recorded under simulation rules %u, this build is %u\n", path.c_str(), r.rules, kSimulationRules); return false; }
-    if (Sha256::HashFile(TrackPath(r.track)) != r.trackSha256) { std::fprintf(stderr, "%s: the track file differs from the one recorded\n", path.c_str()); return false; }
+    const std::string trackPath = trackFile.empty() ? TrackPath(r.track) : trackFile;   // a market submission is checked against the file that was submitted
+    if (Sha256::HashFile(trackPath) != r.trackSha256) { std::fprintf(stderr, "%s: the track file differs from the one recorded\n", path.c_str()); return false; }
     Authority::RaceConfig config;
     config.trackName = r.track;
-    config.trackPath = TrackPath(r.track);
+    config.trackPath = trackPath;
     config.players = r.players;
     config.laps = r.laps;
     config.weapons = r.weapons;
@@ -212,13 +214,13 @@ bool ComputeResults(const std::string& path, Replay& r, std::vector<Authority::P
 }
 
 // The timeline of a replay: every lap crossing and finish with its tick and race time (markers for a viewer, and a lap-time table).
-int Events(const std::string& path)
+int Events(const std::string& path, const std::string& trackFile = std::string())
 {
     Replay r;
     std::vector<Authority::PlayerResult> results;
     std::vector<Authority::RaceEvent> events;
     std::uint32_t ticks = 0;
-    if (!ComputeResults(path, r, results, ticks, &events)) return 1;
+    if (!ComputeResults(path, r, results, ticks, &events, trackFile)) return 1;
     std::printf("events for %s after %u ticks: %zu\n", r.track.c_str(), ticks, events.size());
     for (const Authority::RaceEvent& e : events)
         std::printf("tick %u player %d %s %d lap_ms %lld race_ms %lld\n", e.tick, e.player, e.finished ? "finish" : "lap", e.lap, static_cast<long long>(e.lapMs), static_cast<long long>(e.raceMs));
@@ -350,7 +352,11 @@ int main(int argc, char** argv)
     if (cmd == "info") return Info(argv[2]);
     if (cmd == "results") return Results(argv[2]);
     if (cmd == "id") return Id(argv[2]);
-    if (cmd == "events") return Events(argv[2]);
+    if (cmd == "events") {
+        std::string trackFile;
+        for (int i = 3; i < argc; ++i) if (std::string(argv[i]).rfind("--track=", 0) == 0) trackFile = std::string(argv[i]).substr(8);
+        return Events(argv[2], trackFile);
+    }
     if (cmd == "leaderboard") {
         std::vector<std::string> files;
         std::string track;

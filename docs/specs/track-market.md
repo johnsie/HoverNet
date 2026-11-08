@@ -13,6 +13,10 @@ An authenticated author (ADR 0004 decision 2) sends one request with two files a
 | `declaration` | the version number of the author declaration the author accepted (text lives in the terms of use; the service records the version, time and account) |
 | `description` | at most 200 characters, shown in the market (the package manifest's description is used when empty) |
 
+### 1b. Publishing from the editor (`POST /market/submit-source`)
+
+The editor does not make packages or replays. It sends the track source (the `.track.txt`, at most 1 MB) with `name`, `author`, `licence`, `declaration` and `description`. The service compiles it with the real compiler, packs it, finds a finishing run in the real simulation (the game's own driver, tried with several search seeds, at most one track at a time on the host) and then applies the checks of section 2 to the result. A source the compiler refuses, or that no finishing run is found for, is turned down with the reason and counts toward the day's limit. Finding a run is a search: a track it fails on may still be drivable, so the editor's own playtest (a replay of a finishing lap, submitted through `/market/submit`) remains the other way in.
+
 ## 2. The checks (all must pass; the same script runs in the editor and on the server)
 
 `scripts/check-track-submission.sh PACKAGE REPLAY` runs, with the programs in the same release as the game:

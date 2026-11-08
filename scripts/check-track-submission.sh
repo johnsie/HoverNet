@@ -23,5 +23,5 @@ step "track can be unpacked" "$pack" unpack "$package" "$work/track.trk" || exit
 step "strict validator: loads, starts and is a race" bash -c "'$validator' '$work/track.trk' submission | grep -q '^VALID .* mode=race .*warnings=0'"
 step "strict lint: no authoring warnings" "$pack" lint "$work/track.trk" --strict
 step "finishing replay matches this track and re-simulates exactly" "$replaytool" verify "$replay" --track="$work/track.trk"
-step "replay finishes at least one lap" bash -c "'$replaytool' info '$replay' | grep -q 'checkpoints' && '$replaytool' events '$replay' | grep -qi 'finish'"
+step "replay finishes at least one lap" bash -c "'$replaytool' info '$replay' | grep -q 'checkpoints' && '$replaytool' events '$replay' --track='$work/track.trk' | grep -qi 'finish'"
 exit $fail

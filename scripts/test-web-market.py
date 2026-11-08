@@ -28,6 +28,20 @@ class FakeTools:
             return False, ["ok package is well formed", "FAIL %s" % meta["fail"]]
         return True, ["ok all"]
 
+    def build(self, source, name, author, licence, description, work):
+        data = open(source, "rb").read()
+        if data.startswith(b"BAD"):
+            return False, "the compiler refused the track", None
+        path = os.path.join(work, "track.hntp")
+        open(path, "wb").write(pkg(name, author, licence=licence, trk=data.decode()))
+        return True, "", path
+
+    def prove(self, package, replay, work):
+        if b"NOPROOF" in open(package, "rb").read():
+            return False, "no way of driving a lap round this track was found"
+        open(replay, "wb").write(b"r")
+        return True, "found"
+
     def inspect(self, package):
         meta = json.load(open(package))
         trk = meta["trk"].encode()
@@ -52,7 +66,7 @@ def cookie_for(session, sub, name, exp=None, clock=None):
 
 work = tempfile.mkdtemp()
 allow_file, mod_file = os.path.join(work, "allow.txt"), os.path.join(work, "mods.txt")
-open(allow_file, "w").write("# invited\nalice\nbob\ncarol\n")
+open(allow_file, "w").write("# invited\nalice\nbob\ncarol\ndave\nerin\n")
 open(mod_file, "w").write("mod\n")
 clock = Clock()
 session = hm.Session(SECRET, clock=time.time)
@@ -137,6 +151,31 @@ check(not os.path.exists(market.asset_path(sha_two)), "a revoked track's file is
 clock.now += 86400
 check(market.submit(alice, pkg("Loop Two", trk="TRACK-TWO"), b"r", "v1", "")[0] == 422, "a revoked track cannot be submitted again")
 
+# --- publishing from the editor: the track source in, the same decision out
+dave = {"sub": "sub-dave", "preferred_username": "dave"}
+erin = {"sub": "sub-erin", "preferred_username": "erin"}
+src = lambda m, **k: m.submit_source(k.pop("who", dave), k.pop("source", b"TRACK SOURCE ONE"), k.pop("name", "Source Loop"), k.pop("author", "Dave"), k.pop("licence", "CC-BY-4.0"), k.pop("declaration", "v1"), k.pop("description", "from source"))
+check(src(market, who=None)[0] == 401, "publishing from source: a guest cannot")
+check(src(market, who=mallory)[0] == 403, "publishing from source: an account that is not invited cannot")
+check(src(market, declaration="old")[0] == 400, "publishing from source: the current declaration must be accepted")
+check(src(market, source=b"x" * (hm.MAX_SOURCE + 1))[0] == 413 and src(market, source=b"")[0] == 413, "publishing from source: nothing, or too much, is refused")
+check(src(market, licence="CC-BY-NC-4.0")[0] == 400, "publishing from source: a licence the market does not accept is refused before any work is done")
+check(src(market, name="<b>")[0] == 400 and src(market, author="a/b")[0] == 400, "publishing from source: an unsafe name or author is refused before any work is done")
+code, body = src(market)
+check(code == 201 and body["status"] == "waiting for review" and body["name"] == "Source Loop", "a good source is built, proved, checked and waits for review")
+check(len(market.review_queue(mod)[1]["queue"]) >= 1 and any(q["name"] == "Source Loop" and q["author"] == "Dave" and q["licence"] == "CC-BY-4.0" for q in market.review_queue(mod)[1]["queue"]), "it is in the moderator's queue with the author and licence the editor sent")
+code, body = src(market, who=erin, author="Erin", name="Bad Source", source=b"BAD source text")
+check(code == 422 and "compiler refused" in body["reasons"][0], "a source the compiler refuses is turned down with the reason")
+code, body = src(market, who=erin, author="Erin", name="No Proof", source=b"NOPROOF source")
+check(code == 422 and "no way of driving" in body["reasons"][0], "a track that cannot be driven round is turned down, and the reason says what to check")
+check(all(x[0] != "No Proof" and x[0] != "Bad Source" for x in rows()), "turned-down sources never reach the catalogue")
+for i in range(3):
+    src(market, who=erin, author="Erin", name="Retry %d" % i, source=b"BAD again")
+check(src(market, who=erin, author="Erin", name="One Too Many", source=b"BAD again")[0] == 429, "turned-down sources count toward the daily limit (the host's CPU cannot be spent without limit)")
+market.heavy.acquire()
+check(src(market, who=carol if False else {"sub": "sub-carol", "preferred_username": "carol"}, author="Carol", name="Busy One")[0] == 503, "while another track is being checked, a second is asked to try again")
+market.heavy.release()
+
 # --- the catalogue this service writes is what the server sync reads (the whole chain: service -> catalogue and files -> race server folder)
 dest = os.path.join(work, "server-community-tracks")
 sync = [os.path.join(here, "..", "packaging", "web", "sync-market-tracks.sh"), "--catalogue", os.path.join(market.public_dir, "catalogue.tsv"), "--assets", market.public_dir, "--dest", dest]
@@ -209,6 +248,10 @@ status, data = request("GET", "/market/review", headers={"Cookie": cookie_for(se
 check(status == 200 and len(json.loads(data)["queue"]) == 1, "the moderator sees the queue over HTTP")
 check(request("POST", "/market/report", json.dumps({"asset": "0" * 64, "reason": "other"}), {"Origin": ORIGIN})[0] == 404, "reports are open to anyone (no sign-in needed)")
 check(request("POST", "/market/submit", b"not multipart", {"Content-Type": "text/plain", "Origin": ORIGIN, "Cookie": ck})[0] == 400, "a body that is not a form is refused")
+sbody, sctype = multipart({"source": b"HTTP SOURCE", "name": "Http Source", "author": "Alice", "licence": "CC0-1.0", "declaration": "v1", "description": "via http"})
+status, data = request("POST", "/market/submit-source", sbody, {"Content-Type": sctype, "Origin": ORIGIN, "Cookie": cookie_for(session, "sub-bob", "bob")})
+check(status == 422 or status == 201, "the editor's Publish request is accepted by the HTTP layer (status %d)" % status)
+check(request("POST", "/market/submit-source", sbody, {"Content-Type": sctype})[0] == 403, "and refused without the site's Origin header (cross-site)")
 check(request("GET", "/market/other")[0] == 404, "unknown paths are 404")
 server.shutdown()
 
@@ -236,6 +279,11 @@ if build and all(os.path.exists(os.path.join(build, n)) for n in need):
     row = [l.split("\t") for l in open(os.path.join(real.public_dir, "catalogue.tsv")).read().splitlines() if not l.startswith("#")]
     check(len(row) == 1 and row[0][6] == hashlib.sha256(trk).hexdigest() and row[0][10] == "Realauthor", "real tools: listed with the true hash and author")
     check(gzip.decompress(open(real.asset_path(row[0][6]), "rb").read()) == trk, "real tools: the published file is the author's track, byte for byte")
+    ring = open(d + "/t.track.txt", "rb").read()
+    code, body = real.submit_source({"sub": "sub-real3", "preferred_username": "carol"}, ring, "Source Publish", "Carol", "CC-BY-4.0", "v1", "published from source")
+    check(code == 201 and body["status"] == "waiting for review", "real tools: the editor's source is compiled, packed, proved finishable and checked: %s" % body)
+    code, body = real.submit_source({"sub": "sub-real4", "preferred_username": "dave"}, b"this is not a track at all", "Not A Track", "Dave", "CC0-1.0", "v1", "")
+    check(code == 422 and "compiler" in body["reasons"][0].lower(), "real tools: text that is not a track is turned down by the real compiler: %s" % body.get("reasons"))
     code, body = real.submit({"sub": "sub-real2", "preferred_username": "bob"}, open(d + "/t.hntp", "rb").read(), b"garbage replay", "v1", "")
     check(code == 422 and body["status"] == "refused", "real tools: a package with a bad replay is refused")
 else:

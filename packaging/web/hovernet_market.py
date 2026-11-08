@@ -5,6 +5,9 @@ Authors publish from the track editor; every player can browse and download. Thi
 
     GET  /market/catalogue.tsv        the live catalogue (public, no sign-in)
     POST /market/submit               multipart: package (.hntp), replay (.hnr), declaration, description. Signed-in authors only
+    POST /market/submit-source        multipart: source (the editor's .track.txt), name, author, licence, declaration, description. The service compiles it,
+                                      packs it, finds a finishing run in the real simulation, then applies exactly the checks above (this is what the editor's
+                                      Publish button sends, so a browser author needs no command-line tools)
     GET  /market/mine                 the signed-in author's submissions and their state
     POST /market/unlist               {"id": N}: the author takes a track down
     POST /market/report               {"asset": "<sha256>", "reason": "unlawful"|"other", "note": "..."}: anyone may report a listed track
@@ -54,6 +57,7 @@ SESSION_COOKIE = "__Host-hovernet_session"          # the account service's cook
 LICENCES = ("CC0-1.0", "CC-BY-4.0", "CC-BY-SA-4.0")  # docs/adr/0002-content-licence-policy.md
 MAX_PACKAGE = 2 * 1024 * 1024
 MAX_REPLAY = 1024 * 1024
+MAX_SOURCE = 1024 * 1024
 MAX_BODY = MAX_PACKAGE + MAX_REPLAY + 64 * 1024
 MAX_DESCRIPTION = 200
 SUBMISSIONS_PER_DAY = 5
@@ -148,7 +152,7 @@ class Tools:
     """The real checks: the shared script and the package tool. Replaced by a fake in the tests that do not need the C++ programs."""
 
     def __init__(self, tools_dir, check_script, timeout=300):
-        self.tools_dir, self.check_script, self.timeout = tools_dir, check_script, timeout
+        self.tools_dir, self.check_script, self.timeout = os.path.abspath(tools_dir), os.path.abspath(check_script), timeout   # the tools run in a work folder, so paths must not be relative
 
     def check(self, package, replay):
         try:
@@ -157,6 +161,38 @@ class Tools:
             return False, ["FAIL timeout: the checks took too long"]
         lines = [line for line in done.stdout.splitlines() if line.strip()]
         return done.returncode == 0, lines
+
+    def build(self, source, name, author, licence, description, work):
+        """Compile the author's track source with the real compiler and pack it. Returns (ok, reason, package path)."""
+        trk, hntp = os.path.join(work, "track.trk"), os.path.join(work, "track.hntp")
+        try:
+            done = subprocess.run([os.path.join(self.tools_dir, "HoverNetMazeCompiler"), trk, source], capture_output=True, text=True, timeout=90, cwd=work)
+        except subprocess.TimeoutExpired:
+            return False, "the compiler took too long on this track", None
+        if done.returncode != 0 or not os.path.exists(trk):
+            lines = [l.strip() for l in done.stdout.splitlines() if "ERROR" in l or "WARNING" in l]
+            return False, "the compiler refused the track" + (": " + lines[0] if lines else ""), None
+        packed = subprocess.run([os.path.join(self.tools_dir, "HoverNetTrackPack"), "pack", trk, hntp, "--name", name, "--author", author, "--licence", licence,
+                                 "--description", description[:MAX_DESCRIPTION]], capture_output=True, text=True, timeout=60, cwd=work)
+        if packed.returncode != 0 or not os.path.exists(hntp):
+            return False, "the track could not be packed: " + (packed.stdout + packed.stderr).strip().splitlines()[-1][:160] if (packed.stdout + packed.stderr).strip() else "the track could not be packed", None
+        return True, "", hntp
+
+    def prove(self, package, replay, work):
+        """Find a run that finishes a lap in the real simulation (the game's own driver), as the proof the track can be driven round. Returns (ok, note)."""
+        trk = os.path.join(work, "proof.trk")
+        unpack = subprocess.run([os.path.join(self.tools_dir, "HoverNetTrackPack"), "unpack", package, trk], capture_output=True, timeout=60, cwd=work)
+        if unpack.returncode != 0:
+            return False, "the package cannot be read"
+        for seed in (7, 1, 2, 3, 4, 5):
+            try:
+                done = subprocess.run([os.path.join(self.tools_dir, "HoverNetDriver"), trk, replay, "--laps=1", "--seed=%d" % seed, "--width=300"],
+                                      capture_output=True, text=True, timeout=60, cwd=work)
+            except subprocess.TimeoutExpired:
+                continue
+            if "finished 1 lap" in done.stdout and os.path.exists(replay):
+                return True, "found a finishing run (search %d)" % seed
+        return False, "no way of driving a lap round this track was found: check that the road is wide and connected from the start to the finish, and that both checkpoints are on the route"
 
     def inspect(self, package):
         """The manifest of the package and its original track bytes."""
@@ -179,6 +215,7 @@ class Market:
         self.state_dir, self.public_dir, self.tools = state_dir, public_dir, tools
         self.allow, self.moderators, self.declaration, self.clock = allow, moderators, declaration, clock
         self.lock = threading.RLock()
+        self.heavy = threading.Semaphore(1)       # one track is compiled and searched at a time, so the host is never swamped
         os.makedirs(os.path.join(state_dir, "pending"), exist_ok=True)
         os.makedirs(public_dir, exist_ok=True)
         self.path = os.path.join(state_dir, "state.json")
@@ -325,6 +362,55 @@ class Market:
             except OSError:
                 pass
             return 201, {"id": sid, "status": body_status, "name": name, "version": record["version"]}
+
+    def submit_source(self, profile, source, name, author, licence, declaration, description):
+        """Publish from the editor: the author's track source in, the same decision as submit() out. The service compiles and packs it and finds a finishing run
+        itself, with the same tools the checks use, so the browser editor needs nothing but the text."""
+        if not profile:
+            return 401, {"error": "sign in to publish"}
+        if not self.allow.contains(profile):
+            return 403, {"error": "the Track Market is in private beta: publishing is open to invited authors only"}
+        if declaration != self.declaration:
+            return 400, {"error": "accept the current author declaration (version %s)" % self.declaration}
+        if not source or len(source) > MAX_SOURCE:
+            return 413, {"error": "the track source must be at most 1 MB"}
+        if len(description) > MAX_DESCRIPTION or any(ord(c) < 32 for c in description):
+            return 400, {"error": "the description must be plain text of at most %d characters" % MAX_DESCRIPTION}
+        if licence not in LICENCES:
+            return 400, {"error": "choose one of the licences: %s" % ", ".join(LICENCES)}
+        if not NAME.match(name or "") or not BYLINE.match(author or ""):
+            return 400, {"error": "the track name must be 3 to 40 letters, digits and simple punctuation, and the author name 1 to 40 letters, digits, spaces and . _ -"}
+        with self.lock:
+            now = self.clock()
+            recent = [x for x in self.state["subs"].values() if x["sub"] == profile["sub"] and x["submitted_day"] == day(now)]
+            if len(recent) >= SUBMISSIONS_PER_DAY:
+                return 429, {"error": "at most %d submissions a day" % SUBMISSIONS_PER_DAY}
+        if not self.heavy.acquire(blocking=False):
+            return 503, {"error": "the market is checking another track: try again in a minute"}
+        try:
+            with tempfile.TemporaryDirectory(dir=self.state_dir) as work:
+                source_path = os.path.join(work, "track.track.txt")
+                with open(source_path, "wb") as handle:
+                    handle.write(source)
+                ok, reason, package_path = self.tools.build(source_path, name, author, licence, description, work)
+                proof = os.path.join(work, "proof.hnr")
+                if ok:
+                    ok, reason = self.tools.prove(package_path, proof, work)
+                if not ok:
+                    with self.lock:     # a refusal costs one of the day's submissions, so the CPU cannot be spent without limit
+                        sid = self.state["next_id"]
+                        self.state["next_id"] += 1
+                        self.state["subs"][str(sid)] = {"id": sid, "sub": profile["sub"], "submitted": self.clock(), "submitted_day": day(self.clock()), "declaration": declaration,
+                                                          "status": "refused", "reasons": [reason], "description": description, "version": 1, "name": name}
+                        self.save()
+                    return 422, {"id": sid, "status": "refused", "reasons": [reason]}
+                with open(package_path, "rb") as handle:
+                    package = handle.read()
+                with open(proof, "rb") as handle:
+                    replay = handle.read()
+        finally:
+            self.heavy.release()
+        return self.submit(profile, package, replay, declaration, description)
 
     def list_it(self, record, now):
         record["status"], record["listed"] = "listed", day(now)
@@ -496,6 +582,16 @@ def make_handler(market, session, origin):
                     return self.send_json(400, {"error": "send multipart form data"})
                 text = lambda key: fields.get(key, b"").decode("utf-8", "replace").strip()
                 return self.send_json(*market.submit(self.profile(), fields.get("package", b""), fields.get("replay", b""), text("declaration"), text("description")))
+            if self.path == "/market/submit-source":
+                body = self.read_body(MAX_SOURCE + 64 * 1024)
+                if body is None:
+                    return self.send_json(413, {"error": "too large"})
+                try:
+                    fields = parse_multipart(self.headers.get("Content-Type", ""), body)
+                except ValueError:
+                    return self.send_json(400, {"error": "send multipart form data"})
+                text = lambda key: fields.get(key, b"").decode("utf-8", "replace").strip()
+                return self.send_json(*market.submit_source(self.profile(), fields.get("source", b""), text("name"), text("author"), text("licence"), text("declaration"), text("description")))
             body = self.read_body(4096)
             try:
                 data = json.loads(body or b"{}")

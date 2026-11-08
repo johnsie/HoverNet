@@ -52,13 +52,14 @@ restore() { echo "build failed: putting the previous version back"; sudo rm -rf 
 trap 'restore' ERR
 tar xzf /tmp/hn-market-src.tgz -C "$new"
 ( cd "$new" && nice -n 15 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON > build-configure.log 2>&1 \
-  && nice -n 15 cmake --build build -j2 --target HoverNetTrackPack HoverNetTrackValidator HoverNetReplay HoverNetHeadlessObjFac1 2>&1 | tail -3 )
-[ -x "$new/build/HoverNetTrackPack" ] && [ -x "$new/build/HoverNetReplay" ] && [ -x "$new/build/HoverNetTrackValidator" ] && [ -f "$new/build/ObjFac1.so" ] || { echo "the check programs were not built: see $new/build-configure.log"; false; }
+  && nice -n 15 cmake --build build -j2 --target HoverNetTrackPack HoverNetTrackValidator HoverNetReplay HoverNetHeadlessObjFac1 HoverNetMazeCompiler HoverNetDriver 2>&1 | tail -3 )
+[ -x "$new/build/HoverNetTrackPack" ] && [ -x "$new/build/HoverNetReplay" ] && [ -x "$new/build/HoverNetTrackValidator" ] && [ -x "$new/build/HoverNetMazeCompiler" ] && [ -x "$new/build/HoverNetDriver" ] && [ -f "$new/build/ObjFac1.so" ] || { echo "the check programs were not built: see $new/build-configure.log"; false; }
 echo "-- the checks work on this machine"
 sample="$(mktemp -d)"
 "$new/build/HoverNetTrackPack" pack "$new/NetTarget/Tracks/Switchback.trk" "$sample/s.hntp" --name Switchback --author Check --licence CC0-1.0 >/dev/null
 "$new/build/HoverNetTrackPack" verify "$sample/s.hntp" --catalogue >/dev/null && echo "package tool ok"
 "$new/build/HoverNetTrackValidator" "$new/NetTarget/Tracks/Switchback.trk" Switchback | grep -q '^VALID' && echo "validator ok"
+"$new/build/HoverNetMazeCompiler" "$sample/s.trk" "$new/NetTarget/TrackSources/Switchback.track.txt" >/dev/null 2>&1 && cmp -s "$sample/s.trk" "$new/NetTarget/Tracks/Switchback.trk" && echo "compiler ok (a bundled source compiles to its committed track, byte for byte)"
 rm -rf "$sample"
 trap - ERR
 echo "-- installing"
