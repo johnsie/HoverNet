@@ -155,6 +155,12 @@ Presenter::Presenter()
         [this](PassContext& c) { Vignette(c.rgb, c.width, c.height, 0.0f); });   // steady: it does not react to speed
 }
 
+void Presenter::NoteFrameInterval(double milliseconds)
+{
+    if (milliseconds <= 0.0 || milliseconds > 250.0) return;
+    mFrameMs = mFrameMs <= 0.0 ? milliseconds : mFrameMs * 0.9 + milliseconds * 0.1;
+}
+
 void Presenter::AddPass(std::unique_ptr<Pass> pass, const char* before)
 {
     if (!pass) return;
@@ -180,7 +186,7 @@ void Presenter::Process(std::uint8_t* rgb, int width, int height, const Options&
 
     // Adaptive quality: the quality used is the one asked for, lowered while the passes cost more than the budget, and raised again (one step at a
     // time, after a long stretch with room to spare) when they do not.
-    if (requested.quality != mLastRequestedQuality) { mLastRequestedQuality = requested.quality; mQualityCap = requested.quality; mSlowFrames = mFastFrames = 0; }
+    if (requested.quality != mLastRequestedQuality) { mLastRequestedQuality = requested.quality; mQualityCap = requested.quality; mSlowFrames = mFastFrames = 0; mRaiseAfter = 240; }
     Options options = requested;
     if (requested.adaptive) options.quality = std::min(requested.quality, mQualityCap);
     const auto frameStart = std::chrono::steady_clock::now();
@@ -203,9 +209,16 @@ void Presenter::Process(std::uint8_t* rgb, int width, int height, const Options&
     if (requested.adaptive) {
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frameStart).count();
         mCostMs = mFrame <= 1 ? ms : mCostMs * 0.9 + ms * 0.1;
-        if (mCostMs > requested.budgetMs) { ++mSlowFrames; mFastFrames = 0; } else if (mCostMs < requested.budgetMs * 0.45) { ++mFastFrames; mSlowFrames = 0; } else { mSlowFrames = mFastFrames = 0; }
-        if (mSlowFrames >= 45 && mQualityCap > 0) { --mQualityCap; mSlowFrames = 0; mCostMs = requested.budgetMs * 0.8; }
-        else if (mFastFrames >= 240 && mQualityCap < requested.quality) { ++mQualityCap; mFastFrames = 0; mCostMs = requested.budgetMs * 0.6; }
+        const double kFrameBudgetMs = 21.0, kFrameRoomMs = 19.0;   // whole frames: under about 47 a second is too slow; over 52 leaves room
+        const bool frameTooSlow = mFrameMs > kFrameBudgetMs;
+        const bool tooSlow = mCostMs > requested.budgetMs || frameTooSlow;
+        const bool roomToSpare = mCostMs < requested.budgetMs * 0.45 && (mFrameMs <= 0.0 || mFrameMs < kFrameRoomMs);
+        if (tooSlow) { ++mSlowFrames; mFastFrames = 0; } else if (roomToSpare) { ++mFastFrames; mSlowFrames = 0; } else { mSlowFrames = mFastFrames = 0; }
+        if (mSlowFrames >= 45 && mQualityCap > 0) {
+            --mQualityCap; mSlowFrames = 0; mCostMs = requested.budgetMs * 0.8;
+            if (frameTooSlow) { mRaiseAfter = std::min(mRaiseAfter * 2, 4800); mFrameMs = kFrameBudgetMs * 0.9; }   // wait longer each time before trying again
+        }
+        else if (mFastFrames >= mRaiseAfter && mQualityCap < requested.quality) { ++mQualityCap; mFastFrames = 0; mCostMs = requested.budgetMs * 0.6; }
     }
 }
 
@@ -747,23 +760,8 @@ void Presenter::Effects(std::uint8_t* rgb, int width, int height, const Options&
     // (There used to be speed lines here; they were removed with the other effects that follow the speed.)
 
     if (!hints.cockpit && hints.craftVisible) {
-        // Trail: a fading line of light along where the craft just was.
-        if (hints.trailCount >= 2 && hints.speed > 0.15f) {
-            const float base = std::max(2.0f, hints.craftRadius * 0.28f);
-            for (int i = 0; i < hints.trailCount; ++i) {
-                const float t = static_cast<float>(i + 1) / hints.trailCount;   // 0 old .. 1 new
-                const int j = std::min(i + 1, hints.trailCount - 1);
-                for (int sub = 0; sub < 3; ++sub) {   // a few points between neighbours so the line is continuous
-                    const float u = sub / 3.0f;
-                    const float x = hints.trailX[i] + (hints.trailX[j] - hints.trailX[i]) * u, y = hints.trailY[i] + (hints.trailY[j] - hints.trailY[i]) * u;
-                    const float r = base * (0.35f + 0.65f * t);
-                    // Points between the camera and the craft (a chase view looks along the trail) would glow on top of the craft: leave those out.
-                    const float ox = x - hints.craftX, oy = y - hints.craftY, keep = hints.craftRadius * 0.9f;
-                    if (ox * ox + oy * oy < keep * keep) continue;
-                    AddGlow(rgb, width, height, x, y, r, r, 90, 170, 255, 0.28f * t * std::min(1.0f, speed * 1.2f));
-                }
-            }
-        }
+        // (There used to be a glowing trail along where the craft had been, and exhaust and dust streaming behind it. They were removed: a ribbon that
+        // stretches and swings as the craft turns reads as an elastic band attached to it.)
         // Engine glow under the craft, brighter the faster it goes.
         const float flicker = 1.0f;   // steady: a glow that shimmers makes the craft look as if it is vibrating
         const float r = std::max(6.0f, hints.craftRadius * 1.25f);
@@ -1239,8 +1237,7 @@ void Presenter::HudOutline(PassContext& c)
     }
 }
 
-// Things that come off the scene as time passes: exhaust behind the craft, dust and spray kicked up by it, smoke from a missile, sparkles from a
-// power-up. All go through the same particle list as the impact sparks; none when Reduced motion is on.
+// Things that come off the scene as time passes: smoke from a missile, sparkles from a power-up. (Exhaust and dust behind the craft were removed.) All go through the same particle list as the impact sparks; none when Reduced motion is on.
 void Presenter::Emitters(int width, int height, const Options& options, const FrameHints& hints)
 {
     (void)width;
@@ -1254,16 +1251,6 @@ void Presenter::Emitters(int width, int height, const Options& options, const Fr
         mParticles.push_back(p);
     };
     auto jitter = [&]() { return (static_cast<int>(Random() & 1023) - 512) / 512.0f; };   // -1 .. 1
-    if (!hints.cockpit && hints.craftVisible) {
-        const float R = static_cast<float>(hints.craftRadius);
-        if (hints.speed > 0.12f) {   // exhaust: small cool sparks from the engine, thrown back towards the camera
-            for (int i = 0; i < 2; ++i) push(hints.craftX + jitter() * R * 0.22f, hints.craftY + R * 0.5f, jitter() * 30.0f, 55.0f + 70.0f * std::min(hints.speed, 1.2f), 0.28f, 1.7f, 150, 215, 255, 0.85f, 0.0f);
-        }
-        if (hints.speed > 0.3f) {    // dust and spray off the floor, drifting out to the sides
-            const float side = (Random() & 1) ? 1.0f : -1.0f;
-            push(hints.craftX + side * R * 0.9f, static_cast<float>(hints.craftGroundY > 0 ? hints.craftGroundY : hints.craftY + R * 0.7f), side * (25.0f + 30.0f * jitter() * jitter()) , -18.0f, 0.55f, 3.6f, 205, 195, 175, 0.11f, -20.0f);
-        }
-    }
     for (int li = 0; li < hints.lightCount && li < kMaxLights; ++li) {
         const Light& light = hints.lights[li];
         if ((light.kind != kLightMissile && light.kind != kLightPowerUp) || light.x < 500.0f || hints.projKx <= 0.0f || hints.projKz <= 0.0f) continue;

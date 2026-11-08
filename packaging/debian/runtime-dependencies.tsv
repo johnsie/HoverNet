@@ -8,3 +8,5 @@ libm.so.6	libc6	C maths library
 libstdc++.so.6	libstdc++6	C++ runtime
 libgcc_s.so.1	libgcc-s1	compiler runtime (also pulled in by libstdc++6)
 libSDL2-2.0.so.0	libsdl2-2.0-0	window, input, audio and rendering (game client only)
+ld-linux-x86-64.so.2	libc6	the dynamic loader: thread-local variables (the rasteriser keeps its state per thread)
+ld-linux-aarch64.so.1	libc6	the dynamic loader on 64-bit ARM, for the same

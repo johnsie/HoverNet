@@ -298,6 +298,27 @@ int main(int argc, char** argv)
         }
     }
 
+    // "camerarate": the chase camera must follow the craft the same way whatever the frame rate. Two observers watch the same race; one is drawn on every
+    // tick of simulated time (a high frame rate), the other on every fourth (a low one); at the end both draw the same moment. The pictures should match.
+    if ((argc >= 4 && std::strcmp(argv[3], "camerarate") == 0) || std::getenv("HOVERNET_RENDER_CAMERARATE") != nullptr) {
+        MR_Observer* slow = MR_Observer::New();
+        if (slow == nullptr) { std::fprintf(stderr, "Could not create the second observer\n"); return 1; }
+        std::size_t different = 0;
+        const int span = 160;
+        for (int k = 0; k < span; ++k) {
+            for (int slot = 0; slot < players; ++slot) craft[static_cast<std::size_t>(slot)]->SetControlState(ScriptedInput(slot, ticks + static_cast<std::uint32_t>(k)), session.GetSimulationTime());
+            session.StepTicks(1, nullptr, nullptr);
+            observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+            if (k % 4 == 0 && k < span - 1) slow->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+        }
+        observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+        const std::vector<std::uint8_t> fast(frame, frame + pixels);
+        slow->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+        for (std::size_t i = 0; i < pixels; ++i) if (frame[i] != fast[i]) ++different;
+        std::printf("CAMERARATE %s %s %dx%d: %zu of %zu pixels differ between a camera drawn every tick and one drawn every fourth tick\n", trackName.c_str(), scene.c_str(), buffer.GetXRes(), buffer.GetYRes(), different, pixels);
+        slow->Delete();
+    }
+
     if (const char* dump = std::getenv("HOVERNET_RENDER_DUMP")) {
         std::string name = trackName;
         for (char& ch : name) if (ch == ' ') ch = '_';

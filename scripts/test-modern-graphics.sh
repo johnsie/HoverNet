@@ -4,7 +4,7 @@
 # floating-point effects are only promised to repeat on the same machine):
 #   - the rasteriser-only line it prints first is exactly the committed golden (the look is applied after it, and must not change it);
 #   - the look changes the picture, and the same frame processed twice is identical;
-#   - the observer reported a race frame, with the craft on screen and a trail in the chase view, and no craft effects in the cockpit view;
+#   - the observer reported a race frame, with the craft on screen in the chase view and no craft effects in the cockpit view;
 #   - the lighting gets the scene's depth and at least an engine light and a headlight;
 #   - the rasteriser's surface tags are there: floor and wall pixels are tagged (and floor and craft in the chase view);
 #   - shadows are drawn (the 8-bit scene changes) in the chase views;
@@ -46,7 +46,6 @@ for track in "ClassicH" "Steeplechase" "Tidal Causeway"; do
       [ "$craft" = "0" ] && [ "$trail" = "0" ] || { echo "FAIL $track $scene: craft effects in the cockpit view (craft=$craft trail=$trail)"; ok=0; }
     else
       [ "$craft" = "1" ] || { echo "FAIL $track $scene: the craft is not reported on screen"; ok=0; }
-      [ "$trail" -ge 2 ] || { echo "FAIL $track $scene: no trail ($trail points)"; ok=0; }
     fi
     if [ "$scene" != "cockpit640" ] && [ "$shadowed" -le 0 ]; then echo "FAIL $track $scene: no craft shadow was drawn"; ok=0; fi
     [ "$camerad" -eq 0 ] || { echo "FAIL $track $scene: the look changed the camera ($camerad pixels of the 8-bit scene differ)"; ok=0; }

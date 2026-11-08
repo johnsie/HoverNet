@@ -99,6 +99,10 @@ up) darkens a surface by up to 27% where something is nearer by 15 cm to 2.5 m a
 a crease); a far-away edge is a silhouette and is left alone. Sky and HUD pixels are never lit or shaded. The observer also records which pixels the HUD drew (the scene as drawn before the HUD against the frame afterwards), so the de-banding and
 the smoothing leave the HUD exactly as drawn.
 
+### What else was taken out (8 November 2026, later)
+
+The glowing **trail** behind the craft and the **exhaust and dust** streams: they were drawn from where the craft had just been, and when it turned they swung like an elastic band attached to it. Missile smoke and power-up sparkles stay.
+
 ### What was taken out, and why (8 November 2026)
 
 Three effects that followed the speed or the view were removed at the owner's request, after a release: **the view widening with speed**, which changed the camera's field of view so the craft seemed to move away, especially in turns (the camera work before this round of changes was good, and the look must not touch it); **the vignette closing in with speed** and **the automatic exposure**, which made the picture breathe as the view turned and gave it a film-camera feel; and **the speed lines**. What remains of the "film" look is static: the cool-shadow and warm-highlight grade, the soft vignette, the horizon glow and mist, and (high quality) bloom; each of the atmosphere, bloom and grade parts can be switched off in Settings > Graphics.

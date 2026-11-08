@@ -1,4 +1,5 @@
 #include "SDL2Graphics.h"
+#include <chrono>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 // EM_JS compiles these into the page's script. emscripten_run_script*() would eval() a string,
@@ -254,6 +255,12 @@ bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height)
         }
     }
     
+    {   // how long whole frames take, for the adaptive quality
+        const auto now = std::chrono::steady_clock::now();
+        if (m_havePresentTime) m_presenter.NoteFrameInterval(std::chrono::duration<double, std::milli>(now - m_lastPresentTime).count());
+        m_lastPresentTime = now;
+        m_havePresentTime = true;
+    }
     if (m_modernOptions.enabled) {
         HoverNetGfx::Presenter::ApplyTrueColour(rgb_buffer, buffer, width, height, m_frameHints);
         m_presenter.Process(rgb_buffer, width, height, m_modernOptions, m_frameHints);

@@ -229,7 +229,7 @@ int main(int argc, char** argv)
         Presenter p;
         p.Process(f.data(), W, H, options, hints);
         Check(At(f, W, hints.craftX, hints.craftY + 5, 2) > 30 + 20, "the engine glow brightens the craft's place (blue most)");
-        Check(At(f, W, hints.trailX[7], hints.trailY[7], 2) > 30, "the trail lights the places the craft was");
+        Check(At(f, W, hints.craftX, hints.craftY + 45, 2) == 30 && At(f, W, hints.craftX + 60, hints.craftY + 30, 2) == 30, "nothing is drawn along where the craft was (no trail), only the engine glow at the craft");
         bool darker = false;
         for (std::size_t i = 0; i < f.size(); ++i) darker = darker || f[i] < base[i];
         Check(!darker, "light effects only ever add light");
@@ -679,16 +679,13 @@ int main(int argc, char** argv)
             Options o = bare(1); o.effects = true;
             Frame f = Solid(W, H, 60, 60, 60);
             Presenter p; for (int i = 0; i < 6; ++i) p.Process(f.data(), W, H, o, hints);
-            const std::size_t craftParticles = p.ParticleCount();
-            Options still = o; still.reducedMotion = true;
-            Presenter q; for (int i = 0; i < 6; ++i) q.Process(f.data(), W, H, still, hints);
-            Check(craftParticles >= 6 && q.ParticleCount() == 0, "a fast craft leaves exhaust and dust, and none with Reduced motion");
+            Check(p.ParticleCount() == 0, "a fast craft leaves no exhaust or dust behind it");
             FrameHints m = sceneHints(wallDepth, &wallTags);
             m.lightCount = 2;
             m.lights[0].kind = kLightMissile; m.lights[0].x = 10000; m.lights[0].radius = 4500; m.lights[0].strength = 0.5f;
             m.lights[1].kind = kLightPowerUp; m.lights[1].x = 12000; m.lights[1].y = 800; m.lights[1].radius = 3200; m.lights[1].strength = 0.35f;
             Presenter r; for (int i = 0; i < 6; ++i) r.Process(f.data(), W, H, o, m);
-            Check(r.ParticleCount() >= 6, "a missile trails smoke and a power-up sparkles");
+            Check(r.ParticleCount() >= 6, "a missile trails smoke and a power-up sparkles (with Reduced motion off)");
         }
         // Edge anti-aliasing: a staircase edge between two surfaces is softened; the texture inside a surface is not touched.
         {
@@ -764,6 +761,23 @@ int main(int argc, char** argv)
             Options fixed = o; fixed.adaptive = false; fixed.budgetMs = 0.000001f;
             Presenter q; for (int i = 0; i < 160; ++i) q.Process(f.data(), 64, 48, fixed, FrameHints());
             Check(q.EffectiveQuality() == 2, "with adaptive quality off the quality is never lowered");
+        }
+        // Whole-frame time: frames that take too long lower the quality even when the passes themselves are cheap, and it comes back only after a long wait.
+        {
+            Frame f = Solid(64, 48, 90, 90, 90);
+            Options o = Modern(Preset::eModernHigh);
+            o.adaptive = true; o.budgetMs = 1.0e6f;   // the passes are never the problem here
+            Presenter p;
+            for (int i = 0; i < 200; ++i) { p.NoteFrameInterval(40.0); p.Process(f.data(), 64, 48, o, FrameHints()); }
+            Check(p.EffectiveQuality() < 2, "frames that take 40 ms lower the quality even though the passes are cheap");
+            const int lowered = p.EffectiveQuality();
+            for (int i = 0; i < 250; ++i) { p.NoteFrameInterval(10.0); p.Process(f.data(), 64, 48, o, FrameHints()); }
+            Check(p.EffectiveQuality() == lowered, "and it does not come back quickly (it waits longer each time it had to be lowered)");
+            for (int i = 0; i < 6000; ++i) { p.NoteFrameInterval(10.0); p.Process(f.data(), 64, 48, o, FrameHints()); }
+            Check(p.EffectiveQuality() == 2, "but it does come back after a long stretch of fast frames");
+            Presenter q;
+            for (int i = 0; i < 300; ++i) { q.NoteFrameInterval(10.0); q.Process(f.data(), 64, 48, o, FrameHints()); }
+            Check(q.EffectiveQuality() == 2, "fast frames never lower it");
         }
         // True colour: pixels the 8-bit picture still has as the observer left them take the true colour; pixels drawn later do not.
         {

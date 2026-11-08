@@ -582,6 +582,8 @@ add_executable(HoverNetViewportSmoke
 )
 
 target_link_libraries(HoverNetViewportSmoke PRIVATE HoverNetVideoCore HoverNetResourceCore)
+add_executable(HoverNetTextureExport NetTarget/LinuxClient/TextureExport.cpp)
+target_link_libraries(HoverNetTextureExport PRIVATE HoverNetVideoCore HoverNetResourceCore)
 add_executable(HoverNetViewportColourTest NetTarget/LinuxClient/ViewportColourTest.cpp)
 target_link_libraries(HoverNetViewportColourTest PRIVATE HoverNetVideoCore HoverNetResourceCore)
 add_executable(HoverNetViewportThreadsTest NetTarget/LinuxClient/ViewportThreadsTest.cpp)

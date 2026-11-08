@@ -26,12 +26,20 @@
 #include "../VideoServices/TextureEnhance.h"
 
 #include <cstring>
+#include <thread>
 #include <vector>
 
 #define new DEBUG_NEW
 
+static std::mutex&                 RegistryMutex();
+static std::vector<MR_ResBitmap*>& Registry();
+
 MR_ResBitmap::MR_ResBitmap( int pResourceId )
 {
+   {
+      std::lock_guard<std::mutex> lLock( RegistryMutex() );
+      Registry().push_back( this );
+   }
    mColourVersion = -1;
    mResourceId     = pResourceId;
    mWidth          = 1;         
@@ -46,6 +54,18 @@ MR_ResBitmap::MR_ResBitmap( int pResourceId )
 
 MR_ResBitmap::~MR_ResBitmap()
 {
+   {
+      std::lock_guard<std::mutex> lLock( RegistryMutex() );
+      std::vector<MR_ResBitmap*>& lRegistry = Registry();
+      for( size_t lIndex = 0; lIndex < lRegistry.size(); lIndex++ )
+      {
+         if( lRegistry[ lIndex ] == this )
+         {
+            lRegistry.erase( lRegistry.begin() + lIndex );
+            break;
+         }
+      }
+   }
    delete []mSubBitmapList;
 }
 
@@ -184,6 +204,46 @@ MR_ResBitmap::SubBitmap::SubBitmap()
 
 // ---- true colour -------------------------------------------------------------------------------------------------------------------------
 
+// Every bitmap that exists, so that the true-colour copies can all be built in the background when the palette is set, instead of each one the first time
+// it is drawn (a large texture takes tens of milliseconds, which was a visible hitch every time a new one came into view).
+static std::mutex&                     RegistryMutex() { static std::mutex* m = new std::mutex; return *m; }
+static std::vector<MR_ResBitmap*>&     Registry()      { static std::vector<MR_ResBitmap*>* r = new std::vector<MR_ResBitmap*>; return *r; }
+static std::atomic<int>                gsWorkerGeneration( 0 );
+
+struct ColourWorker
+{
+   std::thread mThread;
+   ~ColourWorker() { Stop(); }
+   void Stop()
+   {
+      gsWorkerGeneration++;   // tells a running worker to stop
+      if( mThread.joinable() )
+      {
+         mThread.join();
+      }
+   }
+   void Start()
+   {
+      Stop();
+#ifndef __EMSCRIPTEN__
+      const int lGeneration = gsWorkerGeneration.load();
+      mThread = std::thread( [lGeneration]()
+      {
+         for( size_t lIndex = 0; ; lIndex++ )
+         {
+            std::lock_guard<std::mutex> lLock( RegistryMutex() );
+            if( gsWorkerGeneration.load() != lGeneration || lIndex >= Registry().size() )
+            {
+               break;
+            }
+            Registry()[ lIndex ]->EnsureColour();
+         }
+      } );
+#endif
+   }
+};
+static ColourWorker& Worker() { static ColourWorker w; return w; }
+
 static std::atomic<bool> gsColourOn( false );
 static std::atomic<int>  gsColourVersion( 0 );
 static std::mutex        gsColourPaletteMutex;
@@ -191,18 +251,36 @@ static MR_UInt8          gsColourPalette[ 768 ];
 
 void MR_ResBitmap::SetColourPalette( const MR_UInt8* pPalette768 )
 {
-   std::lock_guard<std::mutex> lLock( gsColourPaletteMutex );
-   if( pPalette768 == NULL )
+   bool lChanged = false;
    {
-      gsColourOn = false;
-      return;
+      std::lock_guard<std::mutex> lLock( gsColourPaletteMutex );
+      if( pPalette768 == NULL )
+      {
+         gsColourOn = false;
+         lChanged = true;
+      }
+      else
+      {
+         if( !gsColourOn || memcmp( gsColourPalette, pPalette768, sizeof( gsColourPalette ) ) != 0 )
+         {
+            memcpy( gsColourPalette, pPalette768, sizeof( gsColourPalette ) );
+            gsColourVersion++;
+            lChanged = true;
+         }
+         gsColourOn = true;
+      }
    }
-   if( !gsColourOn || memcmp( gsColourPalette, pPalette768, sizeof( gsColourPalette ) ) != 0 )
+   if( lChanged )
    {
-      memcpy( gsColourPalette, pPalette768, sizeof( gsColourPalette ) );
-      gsColourVersion++;
+      if( pPalette768 == NULL )
+      {
+         Worker().Stop();
+      }
+      else
+      {
+         Worker().Start();   // build every texture's true-colour copy now, off the drawing thread
+      }
    }
-   gsColourOn = true;
 }
 
 bool MR_ResBitmap::EnsureColour()const

@@ -18,7 +18,8 @@ rm -rf dist/debian/hovernet-editor_* dist/debian/hovernet-game_*
 bash packaging/debian/build-editor-deb.sh 9.9.9 "$b" > "$w/build.txt" 2>&1 && ok "the editor package builds" || { bad "the editor package did not build"; cat "$w/build.txt"; exit 1; }
 bash packaging/debian/build-game-deb.sh 9.9.9 "$b/HoverNetGame2Player" "$b/ObjFac1.so" > "$w/gbuild.txt" 2>&1 && ok "the game package builds (the editor's dependency)" || { bad "the game package did not build"; cat "$w/gbuild.txt"; exit 1; }
 editor="dist/hovernet-editor_9.9.9_$(dpkg --print-architecture).deb"; game="dist/hovernet-game_9.9.9_$(dpkg --print-architecture).deb"
-dpkg-deb -I "$editor" | grep -q "^ Depends: hovernet-game" && ok "the editor package depends on the game package" || bad "the editor package does not depend on the game"
+editor_info="$(dpkg-deb -I "$editor")"   # read it all first: grep -q exits early and, under pipefail, breaks the pipe
+grep -q "^ Depends: hovernet-game" <<< "$editor_info" && ok "the editor package depends on the game package" || bad "the editor package does not depend on the game"
 root="$w/root"; mkdir -p "$root"; dpkg-deb -x "$game" "$root"; dpkg-deb -x "$editor" "$root"
 for f in usr/lib/hovernet/HoverNetTrackEditor usr/lib/hovernet/HoverNetMazeCompiler usr/lib/hovernet/HoverNetTrackValidator usr/lib/hovernet/HoverNetGame2Player usr/lib/hovernet/ObjFac1.so \
          usr/games/hovernet-editor usr/share/games/hovernet/NetTarget/mazes/BG-CITY.pcx "usr/share/games/hovernet/NetTarget/TrackSources/Tidal Causeway.track.txt" usr/share/games/hovernet/NetTarget/LinuxClient/assets/Inter-Variable.ttf; do

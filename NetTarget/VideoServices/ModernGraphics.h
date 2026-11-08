@@ -196,6 +196,12 @@ public:
     // The quality actually used: what the options ask for, lowered while the passes are too slow for options.budgetMs (see Options::adaptive).
     int EffectiveQuality() const { return mQualityCap; }
 
+    // Tells the presenter how long the whole frame took (the time since the previous frame was shown, in ms). A craft that shudders is a craft drawn at an
+    // uneven or slow pace, and the passes are only part of the cost of a frame (the rasteriser and the machine's own load are the rest), so with adaptive
+    // quality on the quality is also lowered when whole frames take more than about 21 ms (under 47 a second), and raised again only after a long stretch
+    // that gets longer every time it had to be lowered. Gaps over a quarter of a second (a menu, a pause) are ignored.
+    void NoteFrameInterval(double milliseconds);
+
     // The size of the blocks that light, contact shading and normals are worked out in, as a shift: 2 (4x4 pixels) up to 959 pixels wide, 3 (8x8) above.
     static int BlockShift(int width);
 
@@ -246,8 +252,8 @@ private:
     int mSkyR = 0, mSkyG = 0, mSkyB = 0;
     bool mSkyKnown = false;
     float mExposure = 1.0f;
-    int mQualityCap = 2, mLastRequestedQuality = 2, mSlowFrames = 0, mFastFrames = 0;
-    double mCostMs = 0.0;
+    int mQualityCap = 2, mLastRequestedQuality = 2, mSlowFrames = 0, mFastFrames = 0, mRaiseAfter = 240;
+    double mCostMs = 0.0, mFrameMs = 0.0;
 };
 }
 

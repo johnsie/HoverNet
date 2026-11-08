@@ -76,6 +76,7 @@ CString gFinalLapStr     = "Race %d:%02d.%02d  FINAL LAP";
 MR_Observer::MR_Observer()
 {
    mLastCameraPosValid = FALSE;
+   mLastCameraTime = 0;
    mEyeOffset = 0;
    mReuseCamera = FALSE;
    mScroll = 0;
@@ -103,9 +104,7 @@ MR_Observer::MR_Observer()
    mSceneX0 = 0;
    mSceneY0 = 0;
    mModernLighting = FALSE;
-   mSmoothGroundZ = 0.0;
-   mGroundKnown = FALSE;
-   mGroundCraft = NULL;
+   mShadowLevel = NULL;
    mModernTextures = FALSE;
    memset( mPalette, 0, sizeof( mPalette ) );
    mImpactFlash = 0.0f;
@@ -565,6 +564,27 @@ void MR_Observer::SetModernEffects( BOOL pEnable, BOOL pShadows, BOOL pReducedMo
    }
 }
 
+// The height of the floor a craft's shadow falls on: the floor of the room it is in. A craft resting on or hovering just above its surface keeps its
+// shadow right under it (within 12 cm of the floor); one that is higher (a jump, a fall) leaves the shadow on the floor, where a real shadow would be.
+// It is read from the level, not averaged over time, so it is right on a slope or in a jump and does not depend on the frame rate.
+MR_Int32 MR_Observer::GroundUnder( const MR_MainCharacter* pCraft ) const
+{
+   MR_Int32 lGround = pCraft->mPosition.mZ - 100;
+   if( mShadowLevel != NULL && pCraft->mRoom >= 0 && pCraft->mRoom < mShadowLevel->GetRoomCount() )
+   {
+      const MR_Int32 lFloor = mShadowLevel->GetRoomBottomLevel( pCraft->mRoom );
+      if( lGround < lFloor )
+      {
+         lGround = lFloor;
+      }
+      else if( lGround > lFloor + 120 )
+      {
+         lGround = lFloor + 120;
+      }
+   }
+   return lGround;
+}
+
 // A soft shadow on the floor under a craft: two ellipses darkened through the shadow table, the inner one twice. Drawn after the floor and
 // walls and before the craft, so the craft covers it; the depth test inside ShadeEllipse keeps it from darkening a wall in front of it.
 void MR_Observer::DrawCraftShadow( const MR_MainCharacter* pCraft )
@@ -575,11 +595,7 @@ void MR_Observer::DrawCraftShadow( const MR_MainCharacter* pCraft )
    }
 
    MR_3DCoordinate lGround = pCraft->mPosition;
-   lGround.mZ -= 100;
-   if( pCraft == mGroundCraft && mGroundKnown )
-   {
-      lGround.mZ = (MR_Int32)mSmoothGroundZ;   // the viewing craft's shadow stays on the floor while the craft bobs above it
-   }
+   lGround.mZ = GroundUnder( pCraft );
 
    int lX, lY, lDepth, lPixelsPerMetre;
    if( !m3DView.ProjectToScreen( lGround, lX, lY, lDepth, lPixelsPerMetre ) || lPixelsPerMetre < 3 || lPixelsPerMetre > 4000 )
@@ -693,7 +709,7 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
       mHints.craftRadius = lPixelsPerMetre*11/10;
       {
          MR_3DCoordinate lGroundPoint = pViewingCharacter->mPosition;
-         lGroundPoint.mZ = mGroundKnown ? (MR_Int32)mSmoothGroundZ : lGroundPoint.mZ - 100;
+         lGroundPoint.mZ = GroundUnder( pViewingCharacter );
          int lGX, lGY, lGD, lGP;
          mHints.craftGroundY = m3DView.ProjectToScreen( lGroundPoint, lGX, lGY, lGD, lGP ) ? lGY : mHints.craftY + mHints.craftRadius;
       }
@@ -785,6 +801,26 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
 
 }
 
+// The chase camera trails the craft a little: each step it moves part of the way to where it should be (three quarters across, and two thirds up
+// and down). That was tuned for one picture per 16 ms tick of the race, and it was done once per picture, so a slower frame rate made the camera
+// trail the craft by more (and a faster one by less): on a bend it did not follow the way it was meant to. It now follows race time: the share of
+// the way left after a step is the same per tick however many pictures are drawn, so it is exactly the old behaviour at one picture per tick and
+// the same at any other rate. A jump in race time (a restart, a seek) puts the camera straight where it should be.
+void MR_Observer::SmoothChaseCamera( MR_3DCoordinate& pTarget, MR_SimulationTime pTime )
+{
+   const double lTicks = (double)( pTime - mLastCameraTime )/16.0;
+   if( lTicks < 0.0 || lTicks > 30.0 )
+   {
+      return;
+   }
+
+   const double lKeepXY = pow( 0.25, lTicks );
+   const double lKeepZ  = pow( 1.0/3.0, lTicks );
+   pTarget.mX = (MR_Int32)floor( pTarget.mX + ( mLastCameraPos.mX - pTarget.mX )*lKeepXY );
+   pTarget.mY = (MR_Int32)floor( pTarget.mY + ( mLastCameraPos.mY - pTarget.mY )*lKeepXY );
+   pTarget.mZ = (MR_Int32)floor( pTarget.mZ + ( mLastCameraPos.mZ - pTarget.mZ )*lKeepZ );
+}
+
 void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainCharacter* pViewingCharacter, MR_SimulationTime pTime, const MR_UInt8* pBackImage )
 {
    // Safe entry guards - check all pointers before proceeding
@@ -793,6 +829,7 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
    }
 
    const MR_Level* lLevel = pSession->GetCurrentLevel();
+   mShadowLevel = lLevel;
    
    // Null level check
    if(lLevel == NULL) {
@@ -854,13 +891,12 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
       }
       else if( mLastCameraPosValid )
       {
-         lCameraPos.mX = (3*lCameraPos.mX + mLastCameraPos.mX )/4;
-         lCameraPos.mY = (3*lCameraPos.mY + mLastCameraPos.mY )/4;
-         lCameraPos.mZ = (2*lCameraPos.mZ + mLastCameraPos.mZ )/3;
+         SmoothChaseCamera( lCameraPos, pTime );
       }
    }
 
    mLastCameraPos = lCameraPos;
+   mLastCameraTime = pTime;
    mLastCameraPosValid = TRUE;
 
    // VR: shift the camera sideways for the left/right eye (not stored, so the smoothed chase
@@ -1030,20 +1066,6 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
 
    // STAGE 5.5: Render the viewing character (player's hovercraft)
    
-   {
-      // The floor under the viewing craft, smoothed: a hovercraft bobs, and a shadow or a reflection glued to its own height would bob with it.
-      const double lGround = pViewingCharacter->mPosition.mZ - 100.0;
-      if( !mGroundKnown || mGroundCraft != pViewingCharacter || lGround - mSmoothGroundZ > 1500.0 || mSmoothGroundZ - lGround > 1500.0 )
-      {
-         mSmoothGroundZ = lGround;
-         mGroundCraft = pViewingCharacter;
-         mGroundKnown = TRUE;
-      }
-      else
-      {
-         mSmoothGroundZ += (lGround - mSmoothGroundZ)*0.06;
-      }
-   }
    if( !mCockpitView )
    {
       DrawCraftShadow( pViewingCharacter );
@@ -1282,13 +1304,12 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
       }
       else if( mLastCameraPosValid )
       {
-         lCameraPos.mX = (3*lCameraPos.mX + mLastCameraPos.mX )/4;
-         lCameraPos.mY = (3*lCameraPos.mY + mLastCameraPos.mY )/4;
-         lCameraPos.mZ = (2*lCameraPos.mZ + mLastCameraPos.mZ )/3;
+         SmoothChaseCamera( lCameraPos, pTime );
       }
    }
 
    mLastCameraPos = lCameraPos;
+   mLastCameraTime = pTime;
    mLastCameraPosValid = TRUE;
 
    // VR: shift the camera sideways for the left/right eye (not stored, so the smoothed chase

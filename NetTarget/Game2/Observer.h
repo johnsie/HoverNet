@@ -47,6 +47,8 @@ class MR_Observer
 
    private:
       MR_3DCoordinate mLastCameraPos;
+      MR_SimulationTime mLastCameraTime;   // the race time the camera was last moved at: the chase smoothing follows race time, not the frame rate
+      void            SmoothChaseCamera( MR_3DCoordinate& pTarget, MR_SimulationTime pTime );
       BOOL            mLastCameraPosValid;
       int             mEyeOffset;   // VR: sideways camera shift in mm (0 = normal view)
       BOOL            mReuseCamera; // VR second eye: reuse the first eye's smoothed camera
@@ -77,9 +79,8 @@ class MR_Observer
       std::vector<const MR_FreeElement*> mLitElements;     // missiles, mines and power-ups seen this frame, for their lights
       std::vector<const MR_MainCharacter*> mOtherCrafts;   // craft seen this frame (not the viewing one), for their lights
       BOOL            mModernLighting;
-      double          mSmoothGroundZ;        // the floor under the viewing craft, low-pass filtered so what is drawn on the floor does not bob with the craft
-      BOOL            mGroundKnown;
-      const MR_MainCharacter* mGroundCraft;
+      const MR_Level* mShadowLevel;         // the level being drawn, to find the floor under a craft
+      MR_Int32        GroundUnder( const MR_MainCharacter* pCraft ) const;   // the height of the floor a craft's shadow falls on
       float           mImpactFlash;
       double          mProjKx, mProjKz;
       void            AddLight( const MR_3DCoordinate& pWorld, int pRadiusMm, int pR, int pG, int pB, float pStrength, int pKind = 0, const MR_3DCoordinate* pAimAt = NULL, float pConeCos = -1.0f );

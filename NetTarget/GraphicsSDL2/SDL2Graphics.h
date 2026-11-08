@@ -16,6 +16,7 @@
     typedef void* SDL_Color;
 #endif
 
+#include <chrono>
 #include <cstdint>
 #include <vector>
 
@@ -84,6 +85,8 @@ private:
     bool m_shadowLutValid = false;
     uint8_t m_gradedPalette[768];
     bool m_gradedPaletteValid = false;
+    std::chrono::steady_clock::time_point m_lastPresentTime;
+    bool m_havePresentTime = false;
     float m_gradedBrightness = 1.0f;
     HoverNetGfx::Presenter m_presenter;
     HoverNetGfx::Options m_modernOptions;

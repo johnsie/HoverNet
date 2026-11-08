@@ -81,6 +81,7 @@ class MR_ResBitmap: public MR_Bitmap
       mutable std::atomic<int> mColourVersion;
       mutable std::mutex       mColourMutex;
       bool EnsureColour()const;
+      friend struct ColourWorker;
 
 
 
