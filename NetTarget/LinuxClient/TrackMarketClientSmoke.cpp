@@ -59,7 +59,7 @@ int main()
     Check(!TrackCatalog::ParseManifestLine("-\t-\t0\t0\t0\t0\t" + std::string(64, 'a') + "\tmarket\t" + std::string(64, 'a') + "\t0\t-\t-\t2026-11-08\t1\trevoked\n", e), "a revoked row is never listed");
     Check(TrackCatalog::ParseManifestLine("Old One\trace\t8\t24\t0\t10\t" + std::string(64, 'b') + "\tcommunity-tracks-1\t" + std::string(64, 'b') + "\t5\n", e) && !e.mMarket, "an ordinary community line is unchanged");
 
-    // ---- the track list: official, community, then the market
+    // ---- the track list: official, then ONE community list that includes the tracks players published
     WriteAll(work + "/CommunityTracks.tsv", "Old One\trace\t8\t24\t0\t10\t" + std::string(64, 'b') + "\tcommunity-tracks-1\t" + std::string(64, 'b') + "\t5\n");
     WriteAll(work + "/catalogue.tsv",
              "# HoverNet Track Market catalogue\n# catalogue-version 3\n" + Row("Beta Loop", dataB, "Bob", "CC0-1.0") + Row("Alpha Loop", dataA, "Alice", "CC-BY-4.0") +
@@ -73,11 +73,11 @@ int main()
     options.mMarketCataloguePath = work + "/catalogue.tsv";
     TrackCatalog catalog;
     catalog.Build(options);
-    Check(catalog.Count() == 4 && catalog.MarketStart() == 2, "the list is: 1 official, 1 community, then 2 market tracks");
-    Check(catalog.Get(2) && catalog.Get(2)->mName == "Alpha Loop" && catalog.Get(3) && catalog.Get(3)->mName == "Beta Loop", "market tracks are sorted by name");
-    Check(catalog.Find("Old One") == 1 && !catalog.Get(1)->mMarket, "a market track cannot take a community track's name");
+    Check(catalog.Count() == 4 && catalog.OfficialCount() == 1, "the list is 1 official track and 3 community tracks (inherited and player-made together)");
+    Check(catalog.Get(1) && catalog.Get(1)->mName == "Alpha Loop" && catalog.Get(2)->mName == "Beta Loop" && catalog.Get(3)->mName == "Old One", "community tracks are one list sorted by name, whoever made them");
+    Check(catalog.Find("Old One") == 3 && !catalog.Get(3)->mMarket, "a published track cannot take a community track's name");
     Check(catalog.Find("Gone") == -1, "a revoked track is not in the list");
-    Check(catalog.Get(2)->mAuthor == "Alice" && !catalog.Get(2)->mInstalled, "a market track is listed as one to download, with its author");
+    Check(catalog.Get(1)->mAuthor == "Alice" && !catalog.Get(1)->mInstalled && catalog.Get(3)->mAuthor.empty(), "a player-made track is listed as one to download, with its author; an inherited one has none");
 
     // ---- fetch the catalogue (file:// stands in for the web host)
     const std::string cache = work + "/cache.tsv";
@@ -99,12 +99,12 @@ int main()
     settings.mDestination = dl;
     std::atomic<bool> noCancel{false};
     std::atomic<long long> bytes{0};
-    Check(DownloadTrack(*catalog.Get(2), settings, noCancel, bytes, error) && ReadAll(dl + "Alpha Loop.trk") == dataA, "a market track downloads from the market's address and is installed under its name");
+    Check(DownloadTrack(*catalog.Get(1), settings, noCancel, bytes, error) && ReadAll(dl + "Alpha Loop.trk") == dataA, "a market track downloads from the market's address and is installed under its name");
     // a file that does not match the catalogue is refused
     system(("printf '%s' 'SOMETHING ELSE ENTIRELY' | gzip -9n > '" + pub + "/market/" + Sha256::HashBytes(dataB.data(), dataB.size()) + ".trk.gz'").c_str());
-    Check(!DownloadTrack(*catalog.Get(3), settings, noCancel, bytes, error) && !Exists(dl + "Beta Loop.trk"), "a download that does not match the catalogue is refused and nothing is installed");
+    Check(!DownloadTrack(*catalog.Get(2), settings, noCancel, bytes, error) && !Exists(dl + "Beta Loop.trk"), "a download that does not match the catalogue is refused and nothing is installed");
     catalog.Refresh();
-    Check(catalog.Get(2)->mInstalled && !catalog.Get(3)->mInstalled, "after a download the list shows what is installed");
+    Check(catalog.Get(1)->mInstalled && !catalog.Get(2)->mInstalled, "after a download the list shows what is installed");
 
     // ---- a revoked track leaves the machine too; one the author merely unlisted stays
     Check(Exists(dl + ".market-installed") && ReadAll(dl + ".market-installed").find(Sha256::HashBytes(dataA.data(), dataA.size())) != std::string::npos, "an installed market track is recorded with its hash");

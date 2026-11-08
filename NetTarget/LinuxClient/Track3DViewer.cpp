@@ -1410,11 +1410,10 @@ bool TrackSelector(const char* id, int slot, int& index)
 
     std::vector<int> official;
     std::vector<int> community;
-    std::vector<int> market;
     for (int i = 0; i < catalog.Count(); ++i) {
         const TrackEntry& entry = catalog.Entries()[static_cast<std::size_t>(i)];
         if (!ContainsIgnoreCase(entry.mName, search) && !(entry.mMarket && ContainsIgnoreCase(entry.mAuthor, search))) continue;
-        (entry.mOfficial ? official : entry.mMarket ? market : community).push_back(i);
+        (entry.mOfficial ? official : community).push_back(i);   // tracks players published are community tracks too
     }
 
     auto drawEntry = [&](int i) {
@@ -1445,12 +1444,6 @@ bool TrackSelector(const char* id, int slot, int& index)
         HoverNetSectionHeading("Official tracks");
         for (int i : official) drawEntry(i);
     }
-    // The market sits right under the official tracks: under a thousand community tracks nobody would find it.
-    if (!market.empty()) {
-        ImGui::Spacing();
-        HoverNetSectionHeading("Track Market (made by players)");
-        for (int i : market) drawEntry(i);
-    }
     if (!community.empty()) {
         ImGui::Spacing();
         HoverNetSectionHeading("Community tracks");
@@ -1462,7 +1455,7 @@ bool TrackSelector(const char* id, int slot, int& index)
             }
         }
     }
-    if (official.empty() && community.empty() && market.empty()) {
+    if (official.empty() && community.empty()) {
         ImGui::TextDisabled("No tracks match \"%s\"", search.c_str());
     }
 

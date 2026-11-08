@@ -196,9 +196,8 @@ void TrackCatalog::Build(const TrackCatalogOptions& pOptions)
         const std::string lB = Lower(pB.mName);
         return lA != lB ? lA < lB : pA.mName < pB.mName;
     });
-    // Market tracks can arrive in the community manifest (never, today) or in the market catalogue; either way they form the last group.
-    std::vector<TrackEntry> lKept, lMarket;
-    for (const TrackEntry& lEntry : lCommunity) (lEntry.mMarket ? lMarket : lKept).push_back(lEntry);
+    // Tracks players publish through the Track Market are community tracks like the inherited library: one list, sorted together. They differ only in
+    // where they download from and in carrying an author and licence (shown wherever the track is chosen).
     if (!pOptions.mMarketCataloguePath.empty()) {
         std::ifstream lCatalogue(pOptions.mMarketCataloguePath.c_str());
         while (std::getline(lCatalogue, lLine)) {
@@ -207,24 +206,22 @@ void TrackCatalog::Build(const TrackCatalogOptions& pOptions)
                 continue;   // comments, revoked rows ("-" name), anything that is not a complete market row
             }
             if (!lTaken.insert(Lower(lEntry.mName)).second) {
-                continue;   // a market track never takes the name of an official or community track
+                continue;   // a published track never takes the name of an official or earlier community track
             }
             lEntry.mPath = FindTrackFile(pOptions.mCommunityDirectories, lEntry.mName);
             lEntry.mInstalled = !lEntry.mPath.empty();
             if (!lEntry.mInstalled) {
                 lEntry.mPath = pOptions.mDownloadDirectory + lEntry.mName + ".trk";
             }
-            lMarket.push_back(lEntry);
+            lCommunity.push_back(lEntry);
         }
     }
-    std::sort(lMarket.begin(), lMarket.end(), [](const TrackEntry& pA, const TrackEntry& pB) {
+    std::sort(lCommunity.begin(), lCommunity.end(), [](const TrackEntry& pA, const TrackEntry& pB) {
         const std::string lA = Lower(pA.mName);
         const std::string lB = Lower(pB.mName);
         return lA != lB ? lA < lB : pA.mName < pB.mName;
     });
-    mEntries.insert(mEntries.end(), lKept.begin(), lKept.end());
-    mMarketStart = static_cast<int>(mEntries.size());
-    mEntries.insert(mEntries.end(), lMarket.begin(), lMarket.end());
+    mEntries.insert(mEntries.end(), lCommunity.begin(), lCommunity.end());
 }
 
 int TrackCatalog::Find(const std::string& pName) const

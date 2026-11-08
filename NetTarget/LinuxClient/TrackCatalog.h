@@ -51,7 +51,7 @@ struct TrackCatalogOptions
     std::vector<std::string> mOfficialNames;        // fixed display order
     std::vector<std::string> mOfficialDirectories;  // searched in order, each ending in '/'
     std::string mManifestPath;                      // community manifest (may be missing)
-    std::string mMarketCataloguePath;               // the Track Market catalogue as last fetched (may be missing); its tracks follow the community ones
+    std::string mMarketCataloguePath;               // the Track Market catalogue as last fetched (may be missing); its tracks are community tracks too
     std::vector<std::string> mCommunityDirectories; // searched in order, each ending in '/'
     // Where downloaded tracks are saved (ending in '/'); also searched for tracks.
     std::string mDownloadDirectory;
@@ -67,8 +67,6 @@ public:
     const std::vector<TrackEntry>& Entries() const { return mEntries; }
     int Count() const { return static_cast<int>(mEntries.size()); }
     int OfficialCount() const { return mOfficialCount; }
-    // Index of the first Track Market track (Count() when there are none); the market tracks are the last group.
-    int MarketStart() const { return mMarketStart; }
 
     // Re-checks which tracks are on disk (after a download). Order and indexes do
     // not change.
@@ -94,7 +92,6 @@ public:
 private:
     std::vector<TrackEntry> mEntries;
     int mOfficialCount = 0;
-    int mMarketStart = 0;
     TrackCatalogOptions mOptions;
 };
 

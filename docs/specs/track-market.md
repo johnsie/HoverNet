@@ -50,7 +50,7 @@ A `revoked` line keeps `sha256` and `asset` and drops everything else that ident
 
 ## 5. What a client and a server do with it
 
-- **Client** (desktop and browser, one code base): fetch the catalogue when the Track Market screen opens; show name, author, licence and description; download `<base>/<shard>/<asset>.trk.gz`, unpack, check size and SHA-256, and only then install (exactly as community tracks are installed today); show attribution in the track selector and on the results screen; a Report button sends the track's hash and a reason to the service.
+- **Client** (desktop and browser, one code base): fetch the catalogue when the main menu opens and merge its tracks into the one Community tracks list (they are community tracks); show name, author, licence and description; download `<base>/<shard>/<asset>.trk.gz`, unpack, check size and SHA-256, and only then install (exactly as community tracks are installed today); show attribution in the track selector and on the results screen; a Report button sends the track's hash and a reason to the service.
 - **Official race server:** sync every `listed` track and remove every `revoked` one on a schedule; a track it does not have is "cannot be hosted here", as today.
 - **Private servers:** unchanged (`--community-dir`); they may run the same sync.
 
