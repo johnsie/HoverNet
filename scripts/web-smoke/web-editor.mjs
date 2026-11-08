@@ -59,6 +59,8 @@ try {
   const evalJs = async (e) => (await send('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result?.value;
   const call = (fn, ...a) => evalJs(`Module.ccall('${fn}','number',[${a.map(() => "'number'").join(',')}],[${a.join(',')}])`);
   await send('Runtime.enable'); await send('Page.enable');
+  // the editor asks before a page with unsaved work is left (a reload too): the test, like a person, says "leave"
+  ws.addEventListener('message', (m) => { const d = JSON.parse(m.data); if (d.method === 'Page.javascriptDialogOpening') send('Page.handleJavaScriptDialog', { accept: true }); });
   await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
   await send('Page.navigate', { url: base });
   const waitFor = async (fn, ms) => { for (const end = Date.now() + ms; Date.now() < end;) { if (await fn()) return true; await sleep(300); } return false; };
@@ -110,9 +112,13 @@ try {
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: fx, y: fy }); await sleep(300);
   await mouseDown('mousePressed', fx, fy); await mouseDown('mouseReleased', fx, fy); await sleep(800);
   check(await call('hn_all_rooms') === 24 && await evalJs("localStorage.getItem('hn_autosave')") === null, 'Start fresh keeps the new loop and forgets the copy');
+  await evalJs('window.__beforeReload = 1');
   await send('Page.reload');
-  await sleep(4000);
-  check(await call('hn_restore_visible') === 0, 'and the next reload does not ask again');
+  // wait for the NEW page: the old one is still answering until the reload takes over
+  check(await waitFor(async () => (await evalJs("(!window.__beforeReload && window.Module && Module._hn_rooms) ? Module._hn_rooms() : -1")) >= 0, 60000), 'the editor starts again after the next reload');
+  await sleep(3000);   // long enough for a copy to be offered if there were one
+  const askedAgain = await call('hn_restore_visible'), leftover = await evalJs("localStorage.getItem('hn_autosave')");
+  check(askedAgain === 0 && leftover === null, `and it does not ask again (there is no copy left): asked=${askedAgain}, copy=${leftover === null ? 'none' : (leftover || '').length + ' characters, ' + ((leftover || '').match(/^\\[Room\\]/gm) || []).length + ' rooms'}`);
 
   // Escape goes back to the Select tool, ready for the drag test below
   await keyEv('rawKeyDown', 'Escape', 'Escape', 27); await keyEv('keyUp', 'Escape', 'Escape', 27);
