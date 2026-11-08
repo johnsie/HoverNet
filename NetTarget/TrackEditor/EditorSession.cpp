@@ -73,6 +73,18 @@ bool EditorSession::Open(const std::string& filename)
     return true;
 }
 
+bool EditorSession::OpenText(const std::string& text, const std::string& label)
+{
+    TrackModel opened;
+    std::string error;
+    if (!TrackModel::FromText(TrackText::Parse(text), opened, error) || opened.rooms.empty()) { status = "that is not a track I can read" + (error.empty() ? std::string() : ": " + error); return false; }
+    model = opened;
+    path.clear(); dirty = true; selection = Selection(); mUndo.clear(); mRedo.clear(); mDragging = false;
+    status = label;
+    Refresh();
+    return true;
+}
+
 bool EditorSession::SaveAs(const std::string& filename)
 {
     std::ofstream out(filename.c_str(), std::ios::binary | std::ios::trunc);
