@@ -255,12 +255,13 @@ void Fit(App& a, const ImVec2& size)
     if (!b.valid) return;
     a.view.cx = (b.minX + b.maxX) / 2; a.view.cy = (b.minY + b.maxY) / 2;
     const double w = std::max(1.0, b.maxX - b.minX), h = std::max(1.0, b.maxY - b.minY);
-    a.view.scale = std::max(0.2, std::min((size.x - 40) / w, (size.y - 40) / h));
+    a.view.scale = std::max(0.2, std::min((size.x - 120) / w, (size.y - 120) / h));   // a comfortable margin, so the end of a road is never at the edge
 }
 
 std::vector<ImVec2> gElementScreen;
 ImVec2 gMenuTrack(-1, -1), gMenuPublish(-1, -1);   // where the Track menu and its Publish item were last drawn (the browser test clicks there)
-bool gPublishVisible = false;   // where each element was last drawn (the browser test clicks there)
+bool gPublishVisible = false;
+ImVec2 gCanvasOrigin(0, 0), gCanvasSize(0, 0);      // the plan's last position on screen (the browser test works out where to click)   // where each element was last drawn (the browser test clicks there)
 
 struct ElementLook { ImU32 colour; const char* letter; };
 ElementLook LookOf(int type)
@@ -683,6 +684,7 @@ void Frame(App& a, int width, int height)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::Begin("Plan", nullptr, fixed | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBringToFrontOnFocus);
     ImGui::PopStyleVar();
+    gCanvasOrigin = canvasOrigin; gCanvasSize = canvasSize;
     if (a.fitPending) { Fit(a, canvasSize); a.fitPending = false; }
     DrawPlan(a, canvasOrigin, canvasSize);
     ImGui::SetCursorScreenPos(canvasOrigin);
@@ -710,7 +712,16 @@ void Frame(App& a, int width, int height)
         } else a.panning = false;
     }
     else if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        if (a.tool == Tool::ExtendRoad) a.ed.ExtendRoadAt(wx, wy, hit * 1.6, a.extendLength, a.extendTurn);
+        if (a.tool == Tool::ExtendRoad) {
+            if (a.ed.ExtendRoadAt(wx, wy, hit * 1.6, a.extendLength, a.extendTurn)) {
+                // keep building: if the new room runs off the edge of the plan, bring the whole road back into view
+                const TrackRoom& added = a.ed.model.rooms[static_cast<std::size_t>(a.ed.selection.index)];
+                for (const WallPoint& w : added.walls) {
+                    const ImVec2 p = ToScreen(a.view, canvasOrigin, canvasSize, w.x, w.y);
+                    if (p.x < canvasOrigin.x + 30 || p.y < canvasOrigin.y + 30 || p.x > canvasOrigin.x + canvasSize.x - 30 || p.y > canvasOrigin.y + canvasSize.y - 30) a.fitPending = true;
+                }
+            }
+        }
         else if (a.tool == Tool::Select) a.ed.BeginDrag(wx, wy, hit);
         else if (a.tool == Tool::PlaceElement) a.ed.PlaceElement(a.placeType, wx, wy);
         else if (a.tool == Tool::PlaceStart) a.ed.PlaceStart(wx, wy);
@@ -788,6 +799,12 @@ EMSCRIPTEN_KEEPALIVE int hn_menu_track_y() { return static_cast<int>(gMenuTrack.
 EMSCRIPTEN_KEEPALIVE int hn_menu_publish_x() { return static_cast<int>(gMenuPublish.x); }
 EMSCRIPTEN_KEEPALIVE int hn_menu_publish_y() { return static_cast<int>(gMenuPublish.y); }
 EMSCRIPTEN_KEEPALIVE int hn_publish_visible() { return gPublishVisible ? 1 : 0; }
+EMSCRIPTEN_KEEPALIVE void hn_test_new_start_room() { if (gApp) { gApp->ed.NewStartRoom("Road test"); gApp->fitPending = true; gApp->tool = Tool::Select; } }
+EMSCRIPTEN_KEEPALIVE void hn_test_tool_extend() { if (gApp) { gApp->tool = Tool::ExtendRoad; gApp->extendLength = 30.0f; gApp->extendTurn = 0.0f; } }
+// where the open end of the last room is on screen (the middle of its far edge), so a test can click it with a real mouse
+EMSCRIPTEN_KEEPALIVE int hn_open_end_px() { if (!gApp || gApp->ed.model.rooms.empty()) return -1; const TrackRoom& r = gApp->ed.model.rooms.back(); return static_cast<int>(ToScreen(gApp->view, gCanvasOrigin, gCanvasSize, (r.walls[1].x + r.walls[2].x) / 2, (r.walls[1].y + r.walls[2].y) / 2).x); }
+EMSCRIPTEN_KEEPALIVE int hn_open_end_py() { if (!gApp || gApp->ed.model.rooms.empty()) return -1; const TrackRoom& r = gApp->ed.model.rooms.back(); return static_cast<int>(ToScreen(gApp->view, gCanvasOrigin, gCanvasSize, (r.walls[1].x + r.walls[2].x) / 2, (r.walls[1].y + r.walls[2].y) / 2).y); }
+EMSCRIPTEN_KEEPALIVE int hn_all_rooms() { return gApp ? static_cast<int>(gApp->ed.model.rooms.size()) : -1; }
 EMSCRIPTEN_KEEPALIVE int hn_dirty() { return gApp && gApp->ed.dirty ? 1 : 0; }
 EMSCRIPTEN_KEEPALIVE int hn_problems() { return gApp ? static_cast<int>(gApp->ed.problems.size()) : -1; }
 EMSCRIPTEN_KEEPALIVE int hn_element_px(int i) { return i >= 0 && i < static_cast<int>(gElementScreen.size()) ? static_cast<int>(gElementScreen[static_cast<std::size_t>(i)].x) : -1; }

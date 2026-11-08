@@ -70,6 +70,31 @@ try {
   await sleep(1000);
   check(await shot('start.png') > 25000, 'the plan is drawn (the picture is not blank)');
 
+  // build a road with the real mouse: a start room, then the Extend tool clicked on its open end
+  const mouseDown = (type, x, y) => send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 });
+  await evalJs("Module.ccall('hn_test_new_start_room',null,[],[])");
+  await sleep(500);
+  await evalJs("Module.ccall('hn_test_tool_extend',null,[],[])");
+  await sleep(500);
+  const ex = await call('hn_open_end_px'), ey = await call('hn_open_end_py');
+  check(await call('hn_all_rooms') === 1 && ex > 0 && ey > 0, `a start room is one room, with its open end drawn at (${ex},${ey})`);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: ex, y: ey }); await sleep(300);
+  await mouseDown('mousePressed', ex, ey); await mouseDown('mouseReleased', ex, ey); await sleep(600);
+  check(await waitFor(async () => (await call('hn_all_rooms')) === 2, 5000), 'a real click on the open end of the road with the Extend tool adds the next room');
+  await sleep(500);   // the view follows the road when a new room runs off the edge
+  const ex2 = await call('hn_open_end_px'), ey2 = await call('hn_open_end_py');
+  check(ex2 > 0 && ex2 < 935 && ey2 > 30 && ey2 < 640, `the new room's open end is in view (${ex2},${ey2}): the editor followed the road`);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: ex2, y: ey2 }); await sleep(300);
+  await mouseDown('mousePressed', ex2, ey2); await mouseDown('mouseReleased', ex2, ey2); await sleep(600);
+  check(await waitFor(async () => (await call('hn_all_rooms')) === 3, 5000), 'and another beyond that (three rooms, each joined to the last)');
+  const keyEv = (type, key, code, vk, modifiers = 0) => send('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode: vk, modifiers });
+  await keyEv('rawKeyDown', 'Control', 'ControlLeft', 17, 2); await keyEv('rawKeyDown', 'z', 'KeyZ', 90, 2); await keyEv('keyUp', 'z', 'KeyZ', 90, 2); await keyEv('keyUp', 'Control', 'ControlLeft', 17);
+  check(await waitFor(async () => (await call('hn_all_rooms')) === 2, 5000), 'Ctrl+Z takes the last room off again');
+
+  // Escape goes back to the Select tool, ready for the drag test below
+  await keyEv('rawKeyDown', 'Escape', 'Escape', 27); await keyEv('keyUp', 'Escape', 'Escape', 27);
+  await sleep(300);
+
   // open a track through the same route the file picker uses
   await evalJs(`fetch('/sample.track.txt').then(r=>r.arrayBuffer()).then(b=>{FS.writeFile('/upload.track.txt',new Uint8Array(b));Module.ccall('hn_file_ready',null,['string'],['Tidal Causeway.track.txt']);return 1})`);
   check(await waitFor(async () => (await call('hn_rooms')) === 39, 15000), 'a track opened through the file route becomes the track being edited (39 rooms)');

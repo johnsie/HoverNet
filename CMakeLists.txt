@@ -714,7 +714,7 @@ if(EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH=1
         -sASYNCIFY=1
         -sFORCE_FILESYSTEM=1
-        "-sEXPORTED_FUNCTIONS=_main,_hn_file_ready,_hn_resize,_hn_rooms,_hn_elements,_hn_dirty,_hn_problems,_hn_element_px,_hn_element_py,_hn_element_section,_hn_info_done,_hn_publish_done,_hn_author_known,_hn_publish_test,_hn_publish_http,_hn_publish_working,_hn_menu_track_x,_hn_menu_track_y,_hn_menu_publish_x,_hn_menu_publish_y,_hn_publish_visible"
+        "-sEXPORTED_FUNCTIONS=_main,_hn_file_ready,_hn_resize,_hn_rooms,_hn_elements,_hn_dirty,_hn_problems,_hn_element_px,_hn_element_py,_hn_element_section,_hn_info_done,_hn_publish_done,_hn_author_known,_hn_publish_test,_hn_publish_http,_hn_publish_working,_hn_menu_track_x,_hn_menu_track_y,_hn_menu_publish_x,_hn_menu_publish_y,_hn_publish_visible,_hn_test_new_start_room,_hn_test_tool_extend,_hn_open_end_px,_hn_open_end_py,_hn_all_rooms"
         "-sEXPORTED_RUNTIME_METHODS=ccall,FS"
         --shell-file "${CMAKE_SOURCE_DIR}/packaging/web/editor-shell.html"
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/LinuxClient/assets/Inter-Variable.ttf@/assets/Inter-Variable.ttf"
