@@ -1019,6 +1019,9 @@ std::string ConfigDirPath()
 // other folder / manifest (used by tests).
 TrackDownloadSettings CommunityDownloadSettings();
 
+// --playtest FILE.trk (the track editor's Playtest): a compiled track to race on at once, listed as "Playtest" and started without the menus.
+std::string gPlaytestPath;
+
 // The Track Market catalogue as last fetched (docs/specs/track-market.md). HOVERNET_MARKET_CATALOGUE names another file (tests).
 std::string MarketCataloguePath()
 {
@@ -1092,6 +1095,7 @@ TrackCatalog& Tracks()
             ? std::string(extra) + "/"
             : ConfigDirPath() + "/CommunityTracks/";
         options.mMarketCataloguePath = MarketCataloguePath();
+        options.mPlaytestPath = gPlaytestPath;
         catalog.Build(options);
     }
     return catalog;
@@ -7761,6 +7765,7 @@ void ReplayTickHook(void* pData, unsigned)
 
 int RunClient(int argc, char** argv)
 {
+    gPlaytestPath = ParseStringArg(argc, argv, "--playtest");
 #ifdef HOVERNET_GAME2_PLAYER
     if (HasArgument(argc, argv, "--download-community-tracks")) {
         return RunDownloadCommand(argc, argv);
@@ -8428,8 +8433,19 @@ int RunClient(int argc, char** argv)
     // The main menu and what it leads to (a local race, the online lobby, Watch a Replay, settings, controls, how to play). Returns true when a race
     // or replay is set up, false when the player quit (or loading failed: mainMenuFailed). Used at start-up and whenever a menu says "main menu".
     bool mainMenuFailed = false;
+    bool playtestPending = !gPlaytestPath.empty();
     auto showMainMenu = [&]() -> bool {
         replay.active = false;
+        if (playtestPending) {
+            // the editor's Playtest: no menus the first time, straight into a race on the track just compiled (--laps N, weapons on); the menus follow afterwards
+            playtestPending = false;
+            const std::string lapsText = ParseStringArg(argc, argv, "--laps");
+            const int playtestLaps = std::max(1, std::min(10, lapsText.empty() ? 1 : std::atoi(lapsText.c_str())));
+            if (!loadLocalRace("Playtest", playtestLaps, true)) { std::fprintf(stderr, "Could not load the track to playtest: %s\n", gPlaytestPath.c_str()); mainMenuFailed = true; return false; }
+            session.SetSimulationTime(0);
+            startingPlayerPosition = mainCharacter->mPosition;
+            return true;
+        }
     bool pickingMode = true;
         while (pickingMode) {
             pickingMode = false;

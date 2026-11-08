@@ -7,6 +7,7 @@ and how to roll one back.
 ## Unreleased
 
 ### Added
+- **Playtest from the editor.** *Track > Playtest in the game* compiles the track being edited with the real compiler and opens the game straight onto it (`HoverNetGame2Player --playtest FILE.trk`, listed as "Playtest", no menus, then the usual pause and results screens). A track with a fault the editor can see (for example a surface the game does not have) is refused first, with the reason; advice such as "no checkpoints yet, so it plays as free play" does not stop you driving it. Desktop only for now (the browser editor says so). The game and the editor must sit side by side (the editor looks for the game next to itself). Tested on Linux, headless: the bundled tracks and tracks made in the editor.
 - **Editor autosave in the browser.** The browser editor keeps a copy of the track being edited in the browser a moment after every change and offers it back after a reload ("Restore my work" or "Start fresh"); saving to a file clears it. Tested in headless Chrome with real clicks and reloads (36 checks).
 
 ## 2.3.27 - 2026-11-08

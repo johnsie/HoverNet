@@ -169,6 +169,16 @@ void TrackCatalog::Build(const TrackCatalogOptions& pOptions)
     mOfficialCount = static_cast<int>(mEntries.size());
 
     std::vector<TrackEntry> lCommunity;
+    if (!pOptions.mPlaytestPath.empty()) {
+        // the track being tested, from a file the editor just compiled: it is listed under the name "Playtest" and takes that name before any other track can
+        TrackEntry lPlaytest;
+        lPlaytest.mName = "Playtest";
+        lPlaytest.mOfficial = false;
+        lPlaytest.mPath = pOptions.mPlaytestPath;
+        lPlaytest.mInstalled = true;
+        lTaken.insert(Lower(lPlaytest.mName));
+        lCommunity.push_back(lPlaytest);
+    }
     std::ifstream lManifest(pOptions.mManifestPath.c_str());
     std::string lLine;
     while (std::getline(lManifest, lLine)) {

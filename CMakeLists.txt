@@ -914,6 +914,9 @@ if(BUILD_TESTING AND NOT WIN32)
     # The editor's window, headless: it draws tracks, opens the bundled ones, and "compile and check" gives the real verdict with plain reasons.
     add_test(NAME HoverNetTrackEditor COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-track-editor.sh" "${CMAKE_BINARY_DIR}")
     set_tests_properties(HoverNetTrackEditor PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 300)
+    # Playtest: the editor compiles the track and the game races on it (the game's --playtest, the editor's --playtest).
+    add_test(NAME HoverNetPlaytest COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-playtest.sh" "${CMAKE_BINARY_DIR}")
+    set_tests_properties(HoverNetPlaytest PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 600)
     add_test(NAME HoverNetNewTrack COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-new-track.sh" "$<TARGET_FILE:HoverNetTrackSource>"
              "$<TARGET_FILE:HoverNetMazeCompiler>" "$<TARGET_FILE:HoverNetTrackValidator>" "$<TARGET_FILE:HoverNetTrackPack>"
              "$<TARGET_FILE:HoverNetDriver>" "$<TARGET_FILE:HoverNetReplay>")

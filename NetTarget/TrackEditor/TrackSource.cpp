@@ -348,7 +348,7 @@ int TrackModel::CountFeatures() const
     return n;
 }
 
-std::vector<std::string> TrackModel::Problems() const
+std::vector<std::string> TrackModel::Problems(bool includeGuidance) const
 {
     std::vector<std::string> problems;
     std::set<int> roomIds, featureIds;
@@ -383,7 +383,7 @@ std::vector<std::string> TrackModel::Problems() const
     // guidance the validator and the lint also give: without a finish line and both checkpoints a track plays as free play; the grid has eight places
     int finishes = 0, check1 = 0, check2 = 0;
     for (const TrackFreeElement& e : freeElements) if (e.factory == 1) { finishes += e.elementType == 202; check1 += e.elementType == 203; check2 += e.elementType == 204; }
-    if (!freeElements.empty() || !starts.empty() || !rooms.empty()) {
+    if (includeGuidance && (!freeElements.empty() || !starts.empty() || !rooms.empty())) {
         if (finishes == 0 || check1 == 0 || check2 == 0) problems.push_back("it plays as free play until it has a finish line and both checkpoints (it has " + Int(finishes) + " finish line, " + Int(check1) + " first checkpoint and " + Int(check2) + " second checkpoint)");
         if (finishes > 1) problems.push_back(Int(finishes) + " finish lines: check that both are meant to be on the lap route");
         if (starts.size() < 8) problems.push_back("only " + Int(static_cast<int>(starts.size())) + " start(s): with more players some share a start (8 are recommended)");

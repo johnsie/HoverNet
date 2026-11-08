@@ -4,7 +4,7 @@
 //
 //   HoverNetTrackEditor [FILE.track.txt] [--new-loop] [--size WxH] [--tools DIR] [--frames N] [--capture OUT.bmp] [--check]
 //   --demo-road builds a short winding road from a start room (with the Extend tool's preview showing at its open end), for the picture tests.
-//   --frames N and --capture are for tests: draw N frames, save the last as a picture, and leave. --check compiles FILE with the real compiler and validator
+//   --frames N and --capture are for tests: draw N frames, save the last as a picture, and leave. --playtest FILE compiles it and races on it in the game (waits for the game to close). --check compiles FILE with the real compiler and validator
 //   (the same as Track > Compile and check), prints the answer and leaves; the exit status is 0 only for a track the strict validator calls VALID.
 #include "EditorSession.h"
 #include "TrackElementCatalogue.h"
@@ -14,6 +14,11 @@
 #include "../ThirdParty/imgui/backends/imgui_impl_sdlrenderer2.h"
 
 #include <SDL.h>
+
+#ifdef _WIN32
+#define popen _popen
+#define pclose _pclose
+#endif
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -380,6 +385,69 @@ void DrawPlan(App& a, const ImVec2& origin, const ImVec2& size)
     d->PopClipRect();
 }
 
+// Runs a command and returns what it printed (and its exit status in `code`).
+std::string RunCommand(const std::string& command, int& code)
+{
+    std::string text;
+#ifdef __EMSCRIPTEN__
+    code = -1;
+    (void)command;
+#else
+    FILE* pipe = popen((command + " 2>&1").c_str(), "r");
+    if (!pipe) { code = -1; return "could not start " + command; }
+    char buffer[512];
+    while (std::fgets(buffer, sizeof(buffer), pipe)) text += buffer;
+    code = pclose(pipe);
+#endif
+    return text;
+}
+
+// Playtest: compile the track being edited with the real compiler and race on it in the real game (HoverNetGame2Player --playtest). `wait` makes the editor wait
+// for the game to close (for scripts and tests); from the menu the game opens beside the editor. Returns an empty string, or what went wrong in plain words.
+std::string Playtest(App& a, bool wait)
+{
+#ifdef __EMSCRIPTEN__
+    (void)a; (void)wait;
+    return "Playtest works in the desktop editor (it starts the game on your track). In the browser, save the track and race it from the desktop game.";
+#else
+    const std::string q = "\"";
+    const char* tmpEnv = std::getenv("TMPDIR");
+    if (!tmpEnv) tmpEnv = std::getenv("TEMP");
+    const std::string tmp = std::string(tmpEnv ? tmpEnv : "/tmp") + "/";
+    const std::string src = tmp + "hovernet-playtest.track.txt", trk = tmp + "hovernet-playtest.trk";
+    const std::string compiler = a.toolsDir + "HoverNetMazeCompiler", game = a.toolsDir + "HoverNetGame2Player";
+    const std::vector<std::string> faults = a.ed.model.Problems(false);
+    if (!faults.empty()) return "The game cannot play this track yet: " + faults[0] + (faults.size() > 1 ? " (and " + std::to_string(faults.size() - 1) + " more: see the list below the plan)" : std::string());
+    for (const std::string& need : {compiler, game}) {
+        FILE* f = std::fopen(need.c_str(), "rb");
+        if (!f) return need.substr(need.find_last_of("/\\") == std::string::npos ? 0 : need.find_last_of("/\\") + 1) + " was not found next to the editor (" + a.toolsDir + ")";
+        std::fclose(f);
+    }
+    std::remove(trk.c_str());
+    { FILE* f = std::fopen(src.c_str(), "wb"); if (!f) return "cannot write " + src; const std::string text = a.ed.Text(); std::fwrite(text.data(), 1, text.size(), f); std::fclose(f); }
+    int code = 0;
+    const std::string compiled = RunCommand(q + compiler + q + " " + q + trk + q + " " + q + src + q, code);
+    FILE* made = std::fopen(trk.c_str(), "rb");
+    if (!made) {
+        std::string why;
+        std::string line;
+        for (char c : compiled) { if (c == '\n') { if (line.find("ERROR") != std::string::npos) why += (why.empty() ? "" : "; ") + line; line.clear(); } else line += c; }
+        return "The compiler refused the track" + (why.empty() ? std::string(".") : ": " + why) + (a.ed.problems.empty() ? std::string() : " The editor sees: " + a.ed.problems[0]);
+    }
+    std::fclose(made);
+    const char* extra = std::getenv("HOVERNET_PLAYTEST_EXTRA");   // tests: more arguments for the game (for example --frames 60)
+    std::string command = q + game + q + " --play --playtest " + q + trk + q + " --laps 1" + (extra ? std::string(" ") + extra : std::string());
+    if (wait) { int c2 = 0; const std::string out = RunCommand(command, c2); std::printf("%s", out.c_str()); return c2 == 0 ? std::string() : "The game stopped with an error (status " + std::to_string(c2) + ")."; }
+#ifdef _WIN32
+    command = "start \"\" " + command;
+#else
+    command += " > /dev/null 2>&1 &";
+#endif
+    std::system(command.c_str());
+    return std::string();
+#endif
+}
+
 void RunCheck(App& a)
 {
     a.checkOutput.clear();
@@ -467,6 +535,7 @@ void Menus(App& a)
         { const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax(); gMenuTrack = ImVec2((lo.x + hi.x) / 2, (lo.y + hi.y) / 2); }
         if (trackMenuOpen) {
             if (ImGui::MenuItem("Compile and check...")) RunCheck(a);
+            if (ImGui::MenuItem("Playtest in the game")) { const std::string problem = Playtest(a, false); a.ed.status = problem.empty() ? "The game is open on your track: drive it, then close the game to come back here." : problem; }
             if (ImGui::MenuItem("Publish to the community...")) a.openPublish = true;
             { const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax(); gMenuPublish = ImVec2((lo.x + hi.x) / 2, (lo.y + hi.y) / 2); }
             ImGui::EndMenu();
@@ -856,18 +925,29 @@ int main(int argc, char** argv)
     gApp = &app;
     int width = 1280, height = 800, frames = -1;
     std::string capture, openFile;
-    bool newLoop = false, checkOnly = false, demoRoad = false;
+    bool newLoop = false, checkOnly = false, demoRoad = false, playtestOnly = false;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--new-loop") newLoop = true;
         else if (arg == "--check") checkOnly = true;
         else if (arg == "--demo-road") demoRoad = true;
+        else if (arg == "--playtest") playtestOnly = true;
         else if (arg == "--frames" && i + 1 < argc) frames = std::atoi(argv[++i]);
         else if (arg == "--capture" && i + 1 < argc) capture = argv[++i];
         else if (arg == "--tools" && i + 1 < argc) { app.toolsDir = argv[++i]; if (!app.toolsDir.empty() && app.toolsDir.back() != '/') app.toolsDir += '/'; }
         else if (arg == "--size" && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &width, &height);
         else if (arg.rfind("--", 0) != 0) openFile = arg;
         else { std::fprintf(stderr, "unknown option %s\nusage: %s [FILE.track.txt] [--new-loop] [--size WxH] [--tools DIR] [--frames N] [--capture OUT.bmp]\n", arg.c_str(), argv[0]); return 2; }
+    }
+    if (playtestOnly) {
+        // no editor window: compile the file and race on it, waiting for the game to close (for scripts and tests)
+        if (openFile.empty()) { std::fprintf(stderr, "--playtest needs a track file\n"); return 2; }
+        if (SDL_Init(0) != 0) return 1;
+        if (app.toolsDir.empty()) { char* base = SDL_GetBasePath(); if (base) { app.toolsDir = base; SDL_free(base); } }
+        if (!app.ed.Open(openFile)) { std::fprintf(stderr, "%s\n", app.ed.status.c_str()); return 1; }
+        const std::string problem = Playtest(app, true);
+        if (!problem.empty()) { std::fprintf(stderr, "%s\n", problem.c_str()); return 1; }
+        return 0;
     }
     if (checkOnly) {
         // no window: the same compile-and-check as the menu, for scripts and tests

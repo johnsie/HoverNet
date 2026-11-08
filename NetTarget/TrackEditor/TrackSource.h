@@ -123,6 +123,8 @@ struct TrackModel
     // Things the editor can see without compiling: ids the game does not know (TrackElementCatalogue.h), a feature whose parent room is missing,
     // a start or element in a missing section, a connection to a missing room, duplicate ids. These are warnings for the Problems panel; the
     // compiler and the validator remain the authority on whether a track builds and plays.
-    std::vector<std::string> Problems() const;
+    // includeGuidance false leaves out the advice (free play without a finish line and checkpoints, fewer than eight starts, two finish lines) and returns
+    // only faults: things that stop the game loading or playing the track.
+    std::vector<std::string> Problems(bool includeGuidance = true) const;
 };
 }  // namespace HoverNet

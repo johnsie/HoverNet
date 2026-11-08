@@ -51,6 +51,7 @@ struct TrackCatalogOptions
     std::vector<std::string> mOfficialNames;        // fixed display order
     std::vector<std::string> mOfficialDirectories;  // searched in order, each ending in '/'
     std::string mManifestPath;                      // community manifest (may be missing)
+    std::string mPlaytestPath;                      // a track file to race on at once (the editor's Playtest): listed as "Playtest"
     std::string mMarketCataloguePath;               // the Track Market catalogue as last fetched (may be missing); its tracks are community tracks too
     std::vector<std::string> mCommunityDirectories; // searched in order, each ending in '/'
     // Where downloaded tracks are saved (ending in '/'); also searched for tracks.
