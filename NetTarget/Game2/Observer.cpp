@@ -103,6 +103,9 @@ MR_Observer::MR_Observer()
    mSceneX0 = 0;
    mSceneY0 = 0;
    mModernLighting = FALSE;
+   mSmoothGroundZ = 0.0;
+   mGroundKnown = FALSE;
+   mGroundCraft = NULL;
    mModernTextures = FALSE;
    memset( mPalette, 0, sizeof( mPalette ) );
    mImpactFlash = 0.0f;
@@ -110,7 +113,6 @@ MR_Observer::MR_Observer()
    mTrailLastTime = 0;
    mPreviousSpeed = 0.0;
    mPreviousSpeedTime = 0;
-   mApertureBoost = 0;
    mFeedbackCharacter = NULL;
    mPreviousFuelLevel = 0.0;
    mPreviousMineCount = 0;
@@ -560,7 +562,6 @@ void MR_Observer::SetModernEffects( BOOL pEnable, BOOL pShadows, BOOL pReducedMo
    {
       mHints = HoverNetGfx::FrameHints();
       mTrailCount = 0;
-      mApertureBoost = 0;
    }
 }
 
@@ -575,6 +576,10 @@ void MR_Observer::DrawCraftShadow( const MR_MainCharacter* pCraft )
 
    MR_3DCoordinate lGround = pCraft->mPosition;
    lGround.mZ -= 100;
+   if( pCraft == mGroundCraft && mGroundKnown )
+   {
+      lGround.mZ = (MR_Int32)mSmoothGroundZ;   // the viewing craft's shadow stays on the floor while the craft bobs above it
+   }
 
    int lX, lY, lDepth, lPixelsPerMetre;
    if( !m3DView.ProjectToScreen( lGround, lX, lY, lDepth, lPixelsPerMetre ) || lPixelsPerMetre < 3 || lPixelsPerMetre > 4000 )
@@ -584,10 +589,12 @@ void MR_Observer::DrawCraftShadow( const MR_MainCharacter* pCraft )
 
    const int lRadiusX = lPixelsPerMetre*19/10;   // a craft is about 3 m across; the shadow has to show beyond it
    const int lRadiusY = lRadiusX*(mCockpitView ? 50 : 42)/100 + 1;
-   // Three rings, each darkening what is inside it again: a soft edge and a dark core, rather than a hard disc.
-   m3DView.ShadeEllipse( lX, lY, lRadiusX,     lRadiusY,     lDepth, 700, mShadowLut );
-   m3DView.ShadeEllipse( lX, lY, lRadiusX*78/100, lRadiusY*78/100, lDepth, 700, mShadowLut );
-   m3DView.ShadeEllipse( lX, lY, lRadiusX*52/100, lRadiusY*52/100, lDepth, 700, mShadowLut );
+   // Five rings, each darkening what is inside it again: a soft edge and a dark core, rather than a hard disc.
+   static const int kRings[5] = { 100, 84, 68, 52, 36 };
+   for( int lRing = 0; lRing < 5; lRing++ )
+   {
+      m3DView.ShadeEllipse( lX, lY, lRadiusX*kRings[ lRing ]/100, lRadiusY*kRings[ lRing ]/100, lDepth, 700, mShadowLut );
+   }
 }
 
 // A light in camera space for the picture passes (skipped when it is behind the camera or the list is full).
@@ -686,7 +693,7 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
       mHints.craftRadius = lPixelsPerMetre*11/10;
       {
          MR_3DCoordinate lGroundPoint = pViewingCharacter->mPosition;
-         lGroundPoint.mZ -= 100;
+         lGroundPoint.mZ = mGroundKnown ? (MR_Int32)mSmoothGroundZ : lGroundPoint.mZ - 100;
          int lGX, lGY, lGD, lGP;
          mHints.craftGroundY = m3DView.ProjectToScreen( lGroundPoint, lGX, lGY, lGD, lGP ) ? lGY : mHints.craftY + mHints.craftRadius;
       }
@@ -776,10 +783,6 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
       }
    }
 
-   // The view widens a little with speed (up to 8%), eased so it never jumps.
-   const int lTarget = mModernMotion ? (int)( ( lSpeed > 1.15 ? 1.15 : lSpeed )*7.0 ) : 0;
-   if( mApertureBoost < lTarget )       mApertureBoost++;
-   else if( mApertureBoost > lTarget )  mApertureBoost--;
 }
 
 void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainCharacter* pViewingCharacter, MR_SimulationTime pTime, const MR_UInt8* pBackImage )
@@ -1027,6 +1030,20 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
 
    // STAGE 5.5: Render the viewing character (player's hovercraft)
    
+   {
+      // The floor under the viewing craft, smoothed: a hovercraft bobs, and a shadow or a reflection glued to its own height would bob with it.
+      const double lGround = pViewingCharacter->mPosition.mZ - 100.0;
+      if( !mGroundKnown || mGroundCraft != pViewingCharacter || lGround - mSmoothGroundZ > 1500.0 || mSmoothGroundZ - lGround > 1500.0 )
+      {
+         mSmoothGroundZ = lGround;
+         mGroundCraft = pViewingCharacter;
+         mGroundKnown = TRUE;
+      }
+      else
+      {
+         mSmoothGroundZ += (lGround - mSmoothGroundZ)*0.06;
+      }
+   }
    if( !mCockpitView )
    {
       DrawCraftShadow( pViewingCharacter );
@@ -2024,7 +2041,7 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
    mSceneY0 = lYOffset+lYMargin;
 
    try {
-      m3DView.Setup( pDest, lXMargin, lYOffset+lYMargin, lXRes-2*lXMargin, lYRes-2*lYMargin, mApperture + mApperture*mApertureBoost/100 );
+      m3DView.Setup( pDest, lXMargin, lYOffset+lYMargin, lXRes-2*lXMargin, lYRes-2*lYMargin, mApperture );
       
       // CRITICAL FIX: Force memory synchronization after Setup to ensure buffer pointers are fresh
       // This prevents stale pointer issues when rendering resumes after menu interactions

@@ -81,7 +81,7 @@ void BuildShadowLut(const std::uint8_t* palette, int percent, std::uint8_t lut[2
 {
     for (int i = 0; i < 256; ++i) {
         // Real shadows are lit by the sky, so they are cooler than the surface: the target loses a little red and green.
-        const int tr = palette[i * 3] * percent / 100 * 90 / 100, tg = palette[i * 3 + 1] * percent / 100 * 95 / 100, tb = palette[i * 3 + 2] * percent / 100;
+        const int tr = palette[i * 3] * percent / 100 * 97 / 100, tg = palette[i * 3 + 1] * percent / 100 * 99 / 100, tb = palette[i * 3 + 2] * percent / 100;   // only a hint of cool: a strong tint turns a shadow into a blue puddle
         int best = i, bestDistance = 1 << 30;
         for (int j = 0; j < 256; ++j) {
             const int dr = palette[j * 3] - tr, dg = palette[j * 3 + 1] - tg, db = palette[j * 3 + 2] - tb;
@@ -152,7 +152,7 @@ Presenter::Presenter()
     add("hud-outline",[](const Options& o, const FrameHints& h) { return h.valid && o.hudOutline; },                      [this](PassContext& c) { HudOutline(c); });
     add("vignette",
         [](const Options& o, const FrameHints&) { return o.grade; },
-        [this](PassContext& c) { Vignette(c.rgb, c.width, c.height, c.options.reducedMotion || !c.hints.valid ? 0.0f : c.hints.speed); });
+        [this](PassContext& c) { Vignette(c.rgb, c.width, c.height, 0.0f); });   // steady: it does not react to speed
 }
 
 void Presenter::AddPass(std::unique_ptr<Pass> pass, const char* before)
@@ -744,23 +744,7 @@ void Presenter::Effects(std::uint8_t* rgb, int width, int height, const Options&
     const float speed = std::min(hints.speed, 1.3f);
     const bool still = options.reducedMotion;
 
-    // Speed streaks: faint light lines flying outwards at the sides of the picture, only when fast.
-    if (!still && hints.speed > 0.75f) {
-        const float strength = std::min(1.0f, (hints.speed - 0.75f) / 0.5f) * 0.35f;
-        for (int i = 0; i < 14; ++i) {
-            const float angle = ((Random() & 1023) / 1023.0f - 0.5f) * 1.9f + ((Random() & 1) ? 0.0f : 3.14159265f);   // mostly sideways
-            const float start = 0.45f + (Random() & 255) / 255.0f * 0.3f, length = 0.08f + (Random() & 255) / 255.0f * 0.14f;
-            const float cx = width * 0.5f, cy = height * 0.5f, ca = std::cos(angle), sa = std::sin(angle);
-            const int steps = 14;
-            for (int s = 0; s < steps; ++s) {
-                const float t = start + length * s / steps;
-                const int x = static_cast<int>(cx + ca * t * cx * 1.1f), y = static_cast<int>(cy + sa * t * cy * 0.9f);
-                if (x < 0 || y < 0 || x >= width || y >= height) break;
-                const int v = static_cast<int>(255 * strength * (1.0f - static_cast<float>(s) / steps));
-                AddPixel(rgb + (static_cast<std::size_t>(y) * width + x) * 3, v, v, v);
-            }
-        }
-    }
+    // (There used to be speed lines here; they were removed with the other effects that follow the speed.)
 
     if (!hints.cockpit && hints.craftVisible) {
         // Trail: a fading line of light along where the craft just was.
@@ -781,8 +765,7 @@ void Presenter::Effects(std::uint8_t* rgb, int width, int height, const Options&
             }
         }
         // Engine glow under the craft, brighter the faster it goes.
-        float flicker = 1.0f;
-        if (!still) flicker = 0.92f + 0.08f * ((Random() & 255) / 255.0f);
+        const float flicker = 1.0f;   // steady: a glow that shimmers makes the craft look as if it is vibrating
         const float r = std::max(6.0f, hints.craftRadius * 1.25f);
         AddGlow(rgb, width, height, static_cast<float>(hints.craftX), hints.craftY + hints.craftRadius * 0.35f, r, r * 0.6f, 80, 160, 255, (0.22f + 0.5f * speed) * flicker);
     }
@@ -827,16 +810,16 @@ void Presenter::GradePalette(const std::uint8_t* in768, std::uint8_t* out768, fl
         for (int k = 0; k < 3; ++k) {
             float x = in768[i * 3 + k] / 255.0f;
             x = std::pow(x, inverseGamma);
-            const float sm = x * x * (3.0f - 2.0f * x);   // a gentle S-curve: 35% of the way to smoothstep
-            c[k] = Clamp255(static_cast<int>((x * 0.65f + sm * 0.35f) * 255.0f + 0.5f));
+            const float sm = x * x * (3.0f - 2.0f * x);   // a very gentle S-curve: 18% of the way to smoothstep (a stronger one is what makes a picture look cartoon-contrasty)
+            c[k] = Clamp255(static_cast<int>((x * 0.82f + sm * 0.18f) * 255.0f + 0.5f));
         }
         const int l = Luma(c[0], c[1], c[2]);
-        for (int k = 0; k < 3; ++k) c[k] = Clamp255(l + (((c[k] - l) * 288) >> 8));   // saturation x 1.125
-        // Split toning: a touch of cool in the shadows and of warmth in the highlights, the way film grades do (at most +-6 levels).
+        for (int k = 0; k < 3; ++k) c[k] = Clamp255(l + (((c[k] - l) * 214) >> 8));   // saturation x 0.84: under the palette's, natural rather than cartoon-bright
+        // Split toning: the faintest cool in the shadows and warmth in the highlights (at most +-3 levels); stronger looks like a film grade.
         const float shadow = std::min(l / 24.0f, 1.0f) * std::max(0.0f, 1.0f - l / 110.0f), highlight = std::max(0.0f, (l - 150) / 105.0f);   // pure black stays black
-        c[0] = Clamp255(c[0] + static_cast<int>(6.0f * highlight - 3.0f * shadow));
-        c[1] = Clamp255(c[1] + static_cast<int>(1.0f * highlight));
-        c[2] = Clamp255(c[2] + static_cast<int>(5.0f * shadow - 4.0f * highlight));
+        c[0] = Clamp255(c[0] + static_cast<int>(3.0f * highlight - 1.5f * shadow));
+        c[1] = Clamp255(c[1] + static_cast<int>(0.5f * highlight));
+        c[2] = Clamp255(c[2] + static_cast<int>(2.5f * shadow - 2.0f * highlight));
         for (int k = 0; k < 3; ++k) out768[i * 3 + k] = static_cast<std::uint8_t>(c[k]);
     }
 }
@@ -864,7 +847,7 @@ void Presenter::Vignette(std::uint8_t* rgb, int width, int height, float speed)
         mVignetteWidth = width;
         mVignetteHeight = height;
     }
-    // The vignette closes in a little when the craft is fast (up to +40%), a slow change that follows the speed.
+    // (speed is kept as a parameter but the pass is called with 0: the vignette is steady and does not follow the speed.)
     const int scale = 256 + static_cast<int>(std::min(std::max(speed, 0.0f), 1.3f) * 80.0f);
     const std::ptrdiff_t stride = static_cast<std::ptrdiff_t>(width) * 3;
     for (int y = 0; y < height; ++y) {
@@ -1209,26 +1192,12 @@ void Presenter::Sharpen(PassContext& c)
     }
 }
 
-// Exposure: the eye adapts slowly to a dark or bright view (the gain follows the picture's average brightness, within -15% to +18%, a few percent a
-// frame), and the brightest highlights roll off softly instead of clipping. With Reduced motion the gain stays at 1 (no adaptation) but the roll-off remains.
+// Exposure: the brightest highlights roll off softly instead of clipping. (There used to be an adaptation of the gain to the picture's average
+// brightness; it was removed because the picture brightened and dimmed as the view turned, which felt like a film camera.)
 void Presenter::Exposure(PassContext& c)
 {
     const std::ptrdiff_t stride = static_cast<std::ptrdiff_t>(c.width) * 3;
-    long total = 0, samples = 0;
-    for (int y = 4; y < c.height - 4; y += 8) {
-        const std::uint8_t* maskRow = c.hudMask != nullptr ? c.hudMask + static_cast<std::size_t>(y) * c.width : nullptr;
-        for (int x = 4; x < c.width - 4; x += 8) {
-            if (maskRow != nullptr && maskRow[x]) continue;
-            const std::uint8_t* p = c.rgb + y * stride + x * 3;
-            total += Luma(p[0], p[1], p[2]); ++samples;
-        }
-    }
-    if (c.options.reducedMotion) mExposure = 1.0f;
-    else if (samples > 100) {
-        const float average = static_cast<float>(total) / samples + 1.0f;
-        const float target = std::min(1.18f, std::max(0.85f, 124.0f / average));
-        mExposure += (target - mExposure) * 0.03f;
-    }
+    mExposure = 1.0f;   // the eye does not adapt: the brightness of the picture must not change as the view turns; only the highlights roll off
     std::uint8_t lut[256];
     for (int v = 0; v < 256; ++v) {
         const float x = v / 255.0f * mExposure;

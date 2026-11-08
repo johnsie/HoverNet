@@ -1,3 +1,5 @@
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// See repository history for authorship and detailed changes.
 // DllObjectFactory.h
 //
 //
@@ -118,6 +120,10 @@ namespace MR_DllObjectFactory
                                                    public:
                                                       ~MR_DllObjectFactoryCleanup() { MR_DllObjectFactory::Clean( FALSE ); }
                                                 };
+
+   // True-colour textures: tells every loaded object library (a separate shared library has its own copy of the bitmap code) what palette indices mean,
+   // 256 RGB triples; NULL switches true-colour textures off. A library without the entry point is skipped.
+   MR_DllDeclare void SetTexturePalette( const MR_UInt8* pPalette768 );
 
    // Fast Object Creation function
    MR_DllDeclare MR_ObjectFromFactory* CreateObject( const MR_ObjectFromFactoryId& pId );

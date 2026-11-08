@@ -16,6 +16,7 @@
 #include "../Game2/ClientSession.h"
 #include "../Game2/Observer.h"
 #include "../MainCharacter/MainCharacter.h"
+#include "../ObjFacTools/ResBitmap.h"
 #include "../Util/DllObjectFactory.h"
 #include "../Util/RecordFile.h"
 #include "../Util/WorldCoordinates.h"
@@ -195,10 +196,14 @@ int main(int argc, char** argv)
         HoverNetGfx::Presenter::GradePalette(palette.data(), gradedPalette.data(), options.brightness);
         const std::array<std::uint8_t, MR_NB_COLORS * 3>& usedPalette = options.grade ? gradedPalette : palette;
         std::uint8_t lut[256];
-        HoverNetGfx::BuildShadowLut(palette.data(), 70, lut);
+        HoverNetGfx::BuildShadowLut(palette.data(), 87, lut);
         observer->SetModernTextures(options.trueColour ? TRUE : FALSE, usedPalette.data());
+        if (options.trueColour && std::getenv("HOVERNET_RENDER_NOTEXTURES") == nullptr) {   // true-colour textures, in this program and in the object library
+            MR_ResBitmap::SetColourPalette(usedPalette.data());
+            MR_DllObjectFactory::SetTexturePalette(usedPalette.data());
+        }
         observer->SetModernLighting(TRUE);
-        observer->SetModernEffects(TRUE, TRUE, TRUE, lut);   // "reduced motion" while measuring the shadows, so the speed-widened view does not count as shadow
+        observer->SetModernEffects(TRUE, TRUE, FALSE, lut);
         for (std::uint32_t k = 0; k < 48; ++k) {   // some race time, so the trail has history
             for (int slot = 0; slot < players; ++slot) craft[static_cast<std::size_t>(slot)]->SetControlState(ScriptedInput(slot, ticks + k), session.GetSimulationTime());
             session.StepTicks(1, nullptr, nullptr);
@@ -206,11 +211,6 @@ int main(int argc, char** argv)
         }
         for (int settle = 0; settle < 12; ++settle) observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());   // the smoothed chase camera settles when the time stands still
         const std::vector<std::uint8_t> withLook(frame, frame + pixels);
-        // The view widens a little with speed unless "Reduced motion" is on: count the 8-bit pixels that differ with it allowed.
-        observer->SetModernEffects(TRUE, TRUE, FALSE, lut);
-        for (int settle = 0; settle < 48; ++settle) observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
-        std::size_t widened = 0;
-        for (std::size_t i = 0; i < pixels; ++i) if (frame[i] != withLook[i]) ++widened;
         observer->SetModernEffects(TRUE, TRUE, TRUE, lut);   // back to the state withLook was drawn in, so the hints (and the depth they point at) match it
         for (int settle = 0; settle < 48; ++settle) observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
         const HoverNetGfx::FrameHints hints = observer->GetFrameHints();
@@ -218,6 +218,16 @@ int main(int argc, char** argv)
         for (int settle = 0; settle < 12; ++settle) observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
         std::size_t shadowed = 0;
         for (std::size_t i = 0; i < pixels; ++i) if (frame[i] != withLook[i]) ++shadowed;
+        // The camera is never changed by the look: with the shadows off too, the 8-bit scene must be exactly the one drawn without the look.
+        observer->SetModernEffects(TRUE, FALSE, FALSE, lut);
+        for (int settle = 0; settle < 12; ++settle) observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+        std::size_t cameraDiff = 0;
+        {
+            const std::vector<std::uint8_t> noShadows(frame, frame + pixels);
+            observer->SetModernEffects(FALSE, FALSE, FALSE, nullptr);
+            for (int settle = 0; settle < 12; ++settle) observer->RenderNormalDisplay(&buffer, &session, craft[0], session.GetSimulationTime(), session.GetBackImage());
+            for (std::size_t i = 0; i < pixels; ++i) if (frame[i] != noShadows[i]) ++cameraDiff;
+        }
         std::size_t tagCount[8] = {};   // how many pixels the rasteriser tagged as floor / ceiling / wall / object / craft
         if (hints.tags != nullptr) for (std::size_t i = 0; i < pixels && i < static_cast<std::size_t>(hints.depthWidth) * hints.depthHeight; ++i) if (hints.tags[i] < 8) ++tagCount[hints.tags[i]];
         std::vector<std::uint8_t> picture(pixels * 3);
@@ -233,8 +243,8 @@ int main(int argc, char** argv)
         std::vector<std::uint8_t> again = plain;
         HoverNetGfx::Presenter second;
         second.Process(again.data(), buffer.GetXRes(), buffer.GetYRes(), options, hints);
-        std::printf("MODERN %s %s %dx%d rgb=%016llx shadowed=%zu widened=%zu changed=%zu repeat=%s hints=%d craft=%d trail=%d speed=%.2f lights=%d depth=%d tags=%zu/%zu/%zu/%zu/%zu truecolour=%zu\n", trackName.c_str(), scene.c_str(),
-                    buffer.GetXRes(), buffer.GetYRes(), static_cast<unsigned long long>(Fnv1a(picture.data(), picture.size())), shadowed, widened, changed,
+        std::printf("MODERN %s %s %dx%d rgb=%016llx shadowed=%zu cameradiff=%zu changed=%zu repeat=%s hints=%d craft=%d trail=%d speed=%.2f lights=%d depth=%d tags=%zu/%zu/%zu/%zu/%zu truecolour=%zu\n", trackName.c_str(), scene.c_str(),
+                    buffer.GetXRes(), buffer.GetYRes(), static_cast<unsigned long long>(Fnv1a(picture.data(), picture.size())), shadowed, cameraDiff, changed,
                     again == picture ? "yes" : "NO", hints.valid ? 1 : 0, hints.craftVisible ? 1 : 0, hints.trailCount, hints.speed, hints.lightCount, hints.depth != nullptr ? 1 : 0, tagCount[1], tagCount[2], tagCount[3], tagCount[4], tagCount[5], trueColourPixels);
         // Cost of the passes: the same frame processed repeatedly (a fresh copy each time; this machine, one thread).
         const int runs = 20;

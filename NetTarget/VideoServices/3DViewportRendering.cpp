@@ -55,6 +55,9 @@ struct MR_ColumnBltParam
    MR_UInt16   mZ;
    MR_UInt8*   mBitmap;
    MR_UInt8*   mBitmap2;    // the next column of the texture, and how far (0..255) between the two this column is: for filtering
+   const MR_UInt32* mColour;   // the same two columns in true colour, when the texture has it (else NULL)
+   const MR_UInt32* mColour2;
+   int         mFracColour;   // how far between mColour and mColour2 (0..255)
    int         mFracU;
    int         mPixelStep;
    int         mBitmapColMask;
@@ -69,6 +72,7 @@ struct MR_LineBltParam
    MR_UInt16* mZBuffer;
    MR_UInt16  mZ;
    MR_UInt8** mBitmap;
+   const MR_UInt32* const* mColour;   // the texture in true colour, when it has it (else NULL)
    MR_UInt32  mBitmapColMask;
    MR_UInt32  mBitmapRowMask;
    MR_UInt32  mBitmapCol_4096;
@@ -96,6 +100,7 @@ struct MR_TriangleDrawInfo
    MR_Int32    mBitmapCol_4096[3];
 
    MR_UInt8**  mBitmap;
+   const MR_UInt32* const* mColour;   // the texture in true colour, when it has it (else NULL)
    MR_UInt32   mBitmapColMask;
    MR_UInt32   mBitmapRowMask;
 
@@ -135,6 +140,12 @@ static inline MR_UInt32 Lerp32( MR_UInt32 pA, MR_UInt32 pB, MR_UInt32 pF )
 static inline void PutBilinear( MR_UInt32* pDst, MR_UInt8 c00, MR_UInt8 c10, MR_UInt8 c01, MR_UInt8 c11, int pFu, int pFv )
 {
    *pDst = Lerp32( Lerp32( gsPal[c00], gsPal[c10], pFu ), Lerp32( gsPal[c01], gsPal[c11], pFu ), pFv );
+}
+
+// The same on true-colour texels (words 0x00RRGGBB).
+static inline void PutBilinearWords( MR_UInt32* pDst, MR_UInt32 c00, MR_UInt32 c10, MR_UInt32 c01, MR_UInt32 c11, int pFu, int pFv )
+{
+   *pDst = Lerp32( Lerp32( c00, c10, pFu ), Lerp32( c01, c11, pFu ), pFv );
 }
 
 static inline void PrepareOutputs( const MR_UInt8* pVideoBase, MR_UInt8* pTagBase, MR_UInt8 pTag, MR_UInt32* pRgbBase, const MR_UInt32* pPalette, bool pFilter )
@@ -544,6 +555,13 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
             lBitmapColumn >>= pBitmap->GetXResShiftFactor( lSelectedBitmap );
 
             const MR_Bitmap* lColumnSource = pSerialStart == 0 ? pBitmap2 : pBitmap;
+            {
+               // The true-colour copy has twice the columns: the fraction between this column and the next says which half, and what is left.
+               const int lColourColumn = lBitmapColumn*2 + (gsColumnBltParam.mFracU >> 7);
+               gsColumnBltParam.mColour         = gsRgbOn ? lColumnSource->GetColourColumnBuffer( lSelectedBitmap, lColourColumn ) : NULL;
+               gsColumnBltParam.mColour2        = gsRgbOn && gsFilter && gsColumnBltParam.mColour != NULL ? lColumnSource->GetColourColumnBuffer( lSelectedBitmap, (lColourColumn+1)&(lColumnSource->GetXRes( lSelectedBitmap )*2-1) ) : NULL;
+               gsColumnBltParam.mFracColour     = (gsColumnBltParam.mFracU << 1) & 255;
+            }
             gsColumnBltParam.mBitmap         = lColumnSource->GetColumnBuffer( lSelectedBitmap, lBitmapColumn );
             gsColumnBltParam.mBitmap2        = gsFilter ? lColumnSource->GetColumnBuffer( lSelectedBitmap, (lBitmapColumn+1)&(lColumnSource->GetXRes( lSelectedBitmap )-1) ) : NULL;
 
@@ -664,7 +682,24 @@ void BltColumn()
          if( gsRgbOn )
          {
             const int lTexel = (lBitmapOffset/MR_PIXEL_FRACT)&(gsColumnBltParam.mBitmapColMask);
-            if( gsFilter && gsColumnBltParam.mBitmap2 != NULL )
+            if( gsColumnBltParam.mColour != NULL )
+            {
+               // The texture has a true-colour copy at twice the resolution: texel lTexel is covered by words 2*lTexel and 2*lTexel+1.
+               const int lFracV8 = (((lBitmapOffset%MR_PIXEL_FRACT)+MR_PIXEL_FRACT)%MR_PIXEL_FRACT)*256/MR_PIXEL_FRACT;
+               const int lMask2 = (gsColumnBltParam.mBitmapColMask+1)*2-1;
+               const int lWord = lTexel*2 + (lFracV8 >> 7);
+               if( gsFilter && gsColumnBltParam.mColour2 != NULL )
+               {
+                  const int lNext = (lWord+1)&lMask2;
+                  PutBilinearWords( RgbAt( lBuffer ), gsColumnBltParam.mColour[lWord], gsColumnBltParam.mColour2[lWord], gsColumnBltParam.mColour[lNext], gsColumnBltParam.mColour2[lNext],
+                                    gsColumnBltParam.mFracColour, (lFracV8 << 1) & 255 );
+               }
+               else
+               {
+                  *RgbAt( lBuffer ) = gsColumnBltParam.mColour[lWord];
+               }
+            }
+            else if( gsFilter && gsColumnBltParam.mBitmap2 != NULL )
             {
                const int lNext = (lTexel+1)&(gsColumnBltParam.mBitmapColMask);
                const int lFracV = (((lBitmapOffset%MR_PIXEL_FRACT)+MR_PIXEL_FRACT)%MR_PIXEL_FRACT)*256/MR_PIXEL_FRACT;
@@ -1331,6 +1366,7 @@ void MR_3DViewPort::RenderHorizontalSurface( int pNbVertex, const MR_2DCoordinat
                         int lRowShift = pBitmap->GetYResShiftFactor( lSelectedBitmap );
 
                         gsLineBltParam.mBitmap          = pBitmap->GetColumnBufferTable( lSelectedBitmap );
+                        gsLineBltParam.mColour          = gsRgbOn ? pBitmap->GetColourColumnBufferTable( lSelectedBitmap ) : NULL;
                         gsLineBltParam.mBitmapColMask   = pBitmap->GetXRes( lSelectedBitmap )-1;
                         gsLineBltParam.mBitmapRowMask   = pBitmap->GetYRes( lSelectedBitmap )-1;
 
@@ -1438,7 +1474,24 @@ void BltLineNoZCheck()
       {
          const MR_UInt32 lCol = (lColumn_4096/4096)&gsLineBltParam.mBitmapColMask;
          const MR_UInt32 lRow = (lRow_4096/4096)&gsLineBltParam.mBitmapRowMask;
-         if( gsFilter )
+         if( gsLineBltParam.mColour != NULL )
+         {
+            // The true-colour copy has twice the texels each way: the coordinates are doubled.
+            const MR_UInt32 lU2 = lColumn_4096*2, lV2 = lRow_4096*2;
+            const MR_UInt32 lCol2 = (lU2/4096)&(gsLineBltParam.mBitmapColMask*2+1), lRow2 = (lV2/4096)&(gsLineBltParam.mBitmapRowMask*2+1);
+            if( gsFilter )
+            {
+               const MR_UInt32 lCol3 = (lCol2+1)&(gsLineBltParam.mBitmapColMask*2+1);
+               const MR_UInt32 lRow3 = (lRow2+1)&(gsLineBltParam.mBitmapRowMask*2+1);
+               PutBilinearWords( RgbAt( lBuffer ), gsLineBltParam.mColour[lCol2][lRow2], gsLineBltParam.mColour[lCol3][lRow2], gsLineBltParam.mColour[lCol2][lRow3], gsLineBltParam.mColour[lCol3][lRow3],
+                                 (lU2&4095)>>4, (lV2&4095)>>4 );
+            }
+            else
+            {
+               *RgbAt( lBuffer ) = gsLineBltParam.mColour[lCol2][lRow2];
+            }
+         }
+         else if( gsFilter )
          {
             const MR_UInt32 lCol1 = (lCol+1)&gsLineBltParam.mBitmapColMask;
             const MR_UInt32 lRow1 = (lRow+1)&gsLineBltParam.mBitmapRowMask;
@@ -1625,6 +1678,7 @@ void MR_3DViewPort::RenderPatch( const MR_Patch& pPatch, const MR_PositionMatrix
    lBitmapYRes = pBitmap->GetYRes( lSelectedBitmap );
 
    gsTriangleBltParam.mBitmap         = pBitmap->GetColumnBufferTable( lSelectedBitmap );
+   gsTriangleBltParam.mColour         = gsRgbOn ? pBitmap->GetColourColumnBufferTable( lSelectedBitmap ) : NULL;
    gsTriangleBltParam.mBitmapColMask  = lBitmapXRes-1;
    gsTriangleBltParam.mBitmapRowMask  = lBitmapYRes-1;
 
@@ -2067,7 +2121,24 @@ void BltTriangle()
                         {
                            const MR_UInt32 lU = (lLocalU_4096/4096)&gsTriangleBltParam.mBitmapColMask;
                            const MR_UInt32 lV = (lLocalV_4096/4096)&gsTriangleBltParam.mBitmapRowMask;
-                           if( gsFilter )
+                           if( gsTriangleBltParam.mColour != NULL )
+                           {
+                              // The true-colour copy has twice the texels each way: the coordinates are doubled.
+                              const MR_UInt32 lU2 = (MR_UInt32)lLocalU_4096*2, lV2 = (MR_UInt32)lLocalV_4096*2;
+                              const MR_UInt32 lU3 = (lU2/4096)&(gsTriangleBltParam.mBitmapColMask*2+1), lV3 = (lV2/4096)&(gsTriangleBltParam.mBitmapRowMask*2+1);
+                              if( gsFilter )
+                              {
+                                 const MR_UInt32 lU4 = (lU3+1)&(gsTriangleBltParam.mBitmapColMask*2+1);
+                                 const MR_UInt32 lV4 = (lV3+1)&(gsTriangleBltParam.mBitmapRowMask*2+1);
+                                 PutBilinearWords( RgbAt( lLineBuffer+lXLeft ), gsTriangleBltParam.mColour[lU3][lV3], gsTriangleBltParam.mColour[lU4][lV3], gsTriangleBltParam.mColour[lU3][lV4], gsTriangleBltParam.mColour[lU4][lV4],
+                                                   (lU2&4095)>>4, (lV2&4095)>>4 );
+                              }
+                              else
+                              {
+                                 *RgbAt( lLineBuffer+lXLeft ) = gsTriangleBltParam.mColour[lU3][lV3];
+                              }
+                           }
+                           else if( gsFilter )
                            {
                               const MR_UInt32 lU1 = (lU+1)&gsTriangleBltParam.mBitmapColMask;
                               const MR_UInt32 lV1 = (lV+1)&gsTriangleBltParam.mBitmapRowMask;
@@ -2284,7 +2355,24 @@ void BltTriangle()
                   {
                      const MR_UInt32 lU = (lLocalU_4096/4096)&gsTriangleBltParam.mBitmapColMask;
                      const MR_UInt32 lV = (lLocalV_4096/4096)&gsTriangleBltParam.mBitmapRowMask;
-                     if( gsFilter )
+                     if( gsTriangleBltParam.mColour != NULL )
+                     {
+                        // The true-colour copy has twice the texels each way: the coordinates are doubled.
+                        const MR_UInt32 lU2 = (MR_UInt32)lLocalU_4096*2, lV2 = (MR_UInt32)lLocalV_4096*2;
+                        const MR_UInt32 lU3 = (lU2/4096)&(gsTriangleBltParam.mBitmapColMask*2+1), lV3 = (lV2/4096)&(gsTriangleBltParam.mBitmapRowMask*2+1);
+                        if( gsFilter )
+                        {
+                           const MR_UInt32 lU4 = (lU3+1)&(gsTriangleBltParam.mBitmapColMask*2+1);
+                           const MR_UInt32 lV4 = (lV3+1)&(gsTriangleBltParam.mBitmapRowMask*2+1);
+                           PutBilinearWords( RgbAt( lLineBuffer+lXLeft ), gsTriangleBltParam.mColour[lU3][lV3], gsTriangleBltParam.mColour[lU4][lV3], gsTriangleBltParam.mColour[lU3][lV4], gsTriangleBltParam.mColour[lU4][lV4],
+                                             (lU2&4095)>>4, (lV2&4095)>>4 );
+                        }
+                        else
+                        {
+                           *RgbAt( lLineBuffer+lXLeft ) = gsTriangleBltParam.mColour[lU3][lV3];
+                        }
+                     }
+                     else if( gsFilter )
                      {
                         const MR_UInt32 lU1 = (lU+1)&gsTriangleBltParam.mBitmapColMask;
                         const MR_UInt32 lV1 = (lV+1)&gsTriangleBltParam.mBitmapRowMask;

@@ -55,9 +55,28 @@ cannot hold more than 256 colours or be replaced by a higher-resolution one with
 point** (changing it would change every pixel and mean regenerating the golden frames, and is a rewrite of the inner loops rather than an edit); and it
 draws walls, floors and patches only (no general triangles or transparency). Lifting those is the GPU renderer in the roadmap.
 
+## Textures
+
+Every texture in the game is a grid of palette indices with a few smaller copies. With true colour on, each one also gets a **true-colour copy** (built lazily, the first
+time it is drawn, by `MR_ResBitmap`; `VideoServices/TextureEnhance.*`): the largest level is rebuilt from the palette with the dither and banding smoothed
+away by an edge-preserving filter (a bilateral filter, so a gentle dither is averaged out and a real edge is not blurred) and sharpened a little; the
+smaller levels are made from it by averaging in linear light (so a distant wall keeps its brightness and does not shimmer); and every level is doubled in
+size in both directions by an edge-directed upscale (the diagonal staircases of an edge become staircases of half-texels; flat areas and gradients are copied).
+The rasteriser samples that copy, bilinearly, instead of the 8-bit texel and the palette (`GetColourColumnBuffer`). The copy is rebuilt when the palette
+changes (a new track, a change of brightness) and costs four times the memory of the 8-bit level while it exists; it exists only for the textures drawn.
+
+The largest level also gets a trace of surface variation (`detail`, about +-3% brightness, stronger on flat fields and absent at edges, from the texel position only so it is repeatable and tiles; the mips average it out so it does not shimmer). It and the grade's lower saturation are the "less cartoony" changes.
+
+What this is and is not: the colours are a better reconstruction of what the artist drew from what survived in 8 bits (the 8-bit data is still the only source), and the
+doubled resolution makes edges finer, but it adds no detail that was not in the original. Replacing a texture with a real higher-resolution image would be a content job
+and needs a loader for it. Checked by `HoverNetTextureEnhance` (the filter, the mips and the upscale on synthetic textures) and `HoverNetViewportColour` (the rasteriser:
+the 8-bit picture is unchanged, and the picture has more colours than the palette has entries). Seen on a frame of the game (Tidal Causeway, ClassicH): floor tile
+lines and wall edges are crisp where the palette version has stair-steps and banding. Cost: the rasteriser takes about as long with these textures as with the palette
+ones (the true-colour path was already being paid for); not measured on an idle machine.
+
 ## What a pass can use
 
-The built-in passes, in order: **filter** (de-banding with an 8x8 dither; edge smoothing at high quality), **edge-aa** (anti-aliases the edges of surfaces and objects from the rasteriser's tags and depth, leaving texture alone), **atmosphere** (sky-tinted ambient light by surface direction, mist on the floor, colours fading with distance, a horizon glow), **lighting** (haze, contact shading, lights with diffuse, glint, a spotlight cone for the headlight, light blocked by walls, and at high quality blending in linear space), **craft** (rim light, sky sheen and glints on craft; high quality), **reflection** (the craft mirrored in the floor), **sharpen** (high quality), **bloom** (high quality), **effects** (engine glow, trail, sparks, speed lines, and the emitters: exhaust, dust, missile smoke, power-up sparkle), **halos** (glows on missiles, mines, power-ups and other craft), **exposure** (slow eye adaptation and a soft highlight roll-off), **hud-outline** (a dark edge beside HUD text) and **vignette** (closes in with speed).
+The built-in passes, in order: **filter** (de-banding with an 8x8 dither; edge smoothing at high quality), **edge-aa** (anti-aliases the edges of surfaces and objects from the rasteriser's tags and depth, leaving texture alone), **atmosphere** (sky-tinted ambient light by surface direction, mist on the floor, colours fading with distance, a horizon glow), **lighting** (haze, contact shading, lights with diffuse, glint, a spotlight cone for the headlight, light blocked by walls, and at high quality blending in linear space), **craft** (rim light, sky sheen and glints on craft; high quality), **reflection** (the craft mirrored in the floor), **sharpen** (high quality), **bloom** (high quality), **effects** (engine glow, trail, sparks, and the emitters: exhaust, dust, missile smoke, power-up sparkle), **halos** (glows on missiles, mines, power-ups and other craft), **exposure** (a soft highlight roll-off; it does not adapt to the view), **hud-outline** (a dark edge beside HUD text) and **vignette** (steady).
 
 A pass receives a `PassContext` (`VideoServices/ModernGraphics.h`):
 

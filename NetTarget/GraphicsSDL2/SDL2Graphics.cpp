@@ -183,7 +183,7 @@ const uint8_t* SDL2GraphicsBackend::GetShadowLut()
 {
     if (!m_paletteRGB) return nullptr;
     if (!m_shadowLutValid) {
-        HoverNetGfx::BuildShadowLut(m_paletteRGB, 70, m_shadowLut);
+        HoverNetGfx::BuildShadowLut(m_paletteRGB, 87, m_shadowLut);   // each of the shadow's five rings darkens by this much, so the core is about half as bright
         m_shadowLutValid = true;
     }
     return m_shadowLut;

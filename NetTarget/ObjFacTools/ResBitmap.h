@@ -1,3 +1,5 @@
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// See repository history for authorship and detailed changes.
 // ResBitmap.h
 //
 //
@@ -27,6 +29,9 @@
 
 #include "../VideoServices/Bitmap.h"
 
+#include <atomic>
+#include <mutex>
+
 #if defined(_WIN32) && !defined(HOVERNET_STATIC)
 #ifdef MR_OBJ_FAC_TOOLS
    #define MR_DllDeclare   __declspec( dllexport )
@@ -51,6 +56,8 @@ class MR_ResBitmap: public MR_Bitmap
 
         MR_UInt8*      mBuffer;
         MR_UInt8**     mColumnPtr;
+        MR_UInt32*     mColour;          // optional true-colour copy of mBuffer (see MR_Bitmap::GetColourColumnBuffer)
+        MR_UInt32**    mColourColumnPtr;
 
         MR_DllDeclare SubBitmap();
         MR_DllDeclare ~SubBitmap();
@@ -68,6 +75,12 @@ class MR_ResBitmap: public MR_Bitmap
       MR_UInt8      mPlainColor;     // 0 mean transparent
 
       SubBitmap*    mSubBitmapList;
+
+      // The true-colour copy is built the first time it is wanted after SetColourPalette: the largest level from the palette indices (with the dither
+      // and banding smoothed, see VideoServices/TextureEnhance.h), the smaller ones by averaging it in linear light.
+      mutable std::atomic<int> mColourVersion;
+      mutable std::mutex       mColourMutex;
+      bool EnsureColour()const;
 
 
 
@@ -95,6 +108,12 @@ class MR_ResBitmap: public MR_Bitmap
       MR_DllDeclare MR_UInt8*  GetBuffer( int pSubBitmap )const;
       MR_DllDeclare MR_UInt8*  GetColumnBuffer( int pSubBitmap, int pColumn )const;
       MR_DllDeclare MR_UInt8** GetColumnBufferTable( int pSubBitmap )const;
+      MR_DllDeclare const MR_UInt32*  GetColourColumnBuffer( int pSubBitmap, int pColumn )const;
+      MR_DllDeclare const MR_UInt32* const* GetColourColumnBufferTable( int pSubBitmap )const;
+
+      // True-colour textures for every bitmap in this program: pPalette768 is what the palette indices mean (256 RGB triples, copied; NULL switches
+      // true-colour textures off). Safe to call from any thread; textures are rebuilt lazily, one at a time, when next used.
+      MR_DllDeclare static void SetColourPalette( const MR_UInt8* pPalette768 );
 
 };
 

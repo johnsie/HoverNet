@@ -1758,8 +1758,8 @@ void SaveShowGhost(bool enabled)
 }
 
 // Graphics: "Modern" adds soft craft shadows, de-banded colour and smoothed edges, glow, a tone curve and
-// vignette, and light effects (engine glow, trail, sparks, speed lines, a slightly wider view at speed, light from the craft). Presentation only (see
-// VideoServices/ModernGraphics.h): it never touches the race. "Reduced motion" turns off the speed lines, sparks, impact flash and view change.
+// vignette, and light effects (engine glow, trail, sparks, light from the craft). Presentation only (see
+// VideoServices/ModernGraphics.h): it never touches the race. "Reduced motion" turns off the sparks, exhaust, dust, smoke and the impact flash.
 // The look when the player has not chosen: Modern on a desktop, Modern light on a phone or tablet and in the browser (where the picture passes run
 // without SIMD and cost several times as much; docs/render-golden.md). A saved "classic" (from before the Classic look was removed) means this too.
 HoverNetGfx::Preset DefaultGraphicsPreset()
@@ -4848,7 +4848,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                     ImGui::Checkbox("Lower the quality automatically when it is too slow", &graphicsSettings.adaptive);
                     ImGui::TreePop();
                 }
-                ImGui::Checkbox("Engine glow, trail, sparks and speed lines", &graphicsSettings.effects);
+                ImGui::Checkbox("Engine glow, trail, sparks, exhaust and dust", &graphicsSettings.effects);
                 ImGui::Checkbox("Richer colour and vignette", &graphicsSettings.grade);
             }
             {
@@ -4860,7 +4860,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             }
             ImGui::PushTextWrapPos(0.0f);
             ImGui::TextDisabled("Modern improves how the race looks and never changes how it plays. High quality needs a fast processor; light suits phones, the browser and older machines. "
-                                "\"Reduced motion\" above turns off the speed lines, sparks, impact flash and wider view.");
+                                "\"Reduced motion\" above turns off the sparks, exhaust, dust, smoke and the impact flash.");
             ImGui::PopTextWrapPos();
             ImGui::Spacing();
         }
@@ -8144,7 +8144,26 @@ int RunClient(int argc, char** argv)
         if (observer != nullptr) {
             observer->SetModernLighting(options.enabled && options.lighting ? TRUE : FALSE);
             // Filtered true-colour textures cost the rasteriser; when the passes have had to drop to the lowest quality they are switched off too.
-            observer->SetModernTextures(options.enabled && options.trueColour && graphics.GetEffectiveQuality() >= 1 ? TRUE : FALSE, graphics.GetRenderPalette());
+            const bool trueColourNow = options.enabled && options.trueColour && graphics.GetEffectiveQuality() >= 1;
+            observer->SetModernTextures(trueColourNow ? TRUE : FALSE, graphics.GetRenderPalette());
+            {   // Textures in true colour, with the dither and banding of the palette smoothed away: told to this program and to the object library.
+                static std::uint8_t lastTexturePalette[768];
+                static bool texturesOn = false;
+                const std::uint8_t* palette = graphics.GetRenderPalette();
+                if (trueColourNow && palette != nullptr) {
+                    if (!texturesOn || std::memcmp(lastTexturePalette, palette, sizeof lastTexturePalette) != 0) {
+                        std::memcpy(lastTexturePalette, palette, sizeof lastTexturePalette);
+                        MR_ResBitmap::SetColourPalette(palette);
+                        MR_DllObjectFactory::SetTexturePalette(palette);
+                        texturesOn = true;
+                    }
+                }
+                else if (texturesOn) {
+                    MR_ResBitmap::SetColourPalette(nullptr);
+                    MR_DllObjectFactory::SetTexturePalette(nullptr);
+                    texturesOn = false;
+                }
+            }
             observer->SetModernEffects(options.enabled ? TRUE : FALSE, options.shadows ? TRUE : FALSE, options.reducedMotion ? TRUE : FALSE, graphics.GetShadowLut());
         }
 #endif

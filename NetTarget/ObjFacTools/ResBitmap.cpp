@@ -1,3 +1,5 @@
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// See repository history for authorship and detailed changes.
 // ResBitmap.cpp
 //
 // Copyright (c) 1995-1998 - Richard Langlois and Grokksoft Inc.
@@ -21,11 +23,16 @@
 
 #include "StdAfx.h"
 #include "ResBitmap.h"
+#include "../VideoServices/TextureEnhance.h"
+
+#include <cstring>
+#include <vector>
 
 #define new DEBUG_NEW
 
 MR_ResBitmap::MR_ResBitmap( int pResourceId )
 {
+   mColourVersion = -1;
    mResourceId     = pResourceId;
    mWidth          = 1;         
    mHeight         = 1;        
@@ -77,6 +84,7 @@ void MR_ResBitmap::Serialize( CArchive& pArchive )
       if( mSubBitmapCount > 0 )
       {
          mSubBitmapList = new SubBitmap[ mSubBitmapCount ];
+         mColourVersion = -1;
       }
 
    }
@@ -170,12 +178,117 @@ MR_ResBitmap::SubBitmap::SubBitmap()
 {
    mBuffer    = NULL;
    mColumnPtr = NULL;
+   mColour    = NULL;
+   mColourColumnPtr = NULL;
+}
+
+// ---- true colour -------------------------------------------------------------------------------------------------------------------------
+
+static std::atomic<bool> gsColourOn( false );
+static std::atomic<int>  gsColourVersion( 0 );
+static std::mutex        gsColourPaletteMutex;
+static MR_UInt8          gsColourPalette[ 768 ];
+
+void MR_ResBitmap::SetColourPalette( const MR_UInt8* pPalette768 )
+{
+   std::lock_guard<std::mutex> lLock( gsColourPaletteMutex );
+   if( pPalette768 == NULL )
+   {
+      gsColourOn = false;
+      return;
+   }
+   if( !gsColourOn || memcmp( gsColourPalette, pPalette768, sizeof( gsColourPalette ) ) != 0 )
+   {
+      memcpy( gsColourPalette, pPalette768, sizeof( gsColourPalette ) );
+      gsColourVersion++;
+   }
+   gsColourOn = true;
+}
+
+bool MR_ResBitmap::EnsureColour()const
+{
+   if( !gsColourOn.load() || mSubBitmapCount <= 0 )
+   {
+      return false;
+   }
+   if( mColourVersion.load( std::memory_order_acquire ) == gsColourVersion.load() )
+   {
+      return true;
+   }
+
+   std::lock_guard<std::mutex> lLock( mColourMutex );
+   MR_UInt8 lPalette[ 768 ];
+   int      lVersion;
+   {
+      std::lock_guard<std::mutex> lPaletteLock( gsColourPaletteMutex );
+      memcpy( lPalette, gsColourPalette, sizeof( lPalette ) );
+      lVersion = gsColourVersion.load();
+   }
+   if( mColourVersion.load() == lVersion )
+   {
+      return true;
+   }
+
+   // The largest level is the source of all the others.
+   int lTop = 0;
+   for( int lIndex = 1; lIndex < mSubBitmapCount; lIndex++ )
+   {
+      if( mSubBitmapList[ lIndex ].mXRes*mSubBitmapList[ lIndex ].mYRes > mSubBitmapList[ lTop ].mXRes*mSubBitmapList[ lTop ].mYRes )
+      {
+         lTop = lIndex;
+      }
+   }
+   // The true-colour copy of each level is twice the size of the 8-bit one in both directions (see MR_Bitmap::GetColourColumnBuffer).
+   for( int lIndex = 0; lIndex < mSubBitmapCount; lIndex++ )
+   {
+      SubBitmap& lSub = mSubBitmapList[ lIndex ];
+      if( lSub.mColour == NULL )
+      {
+         lSub.mColour = new MR_UInt32[ 4*lSub.mXRes*lSub.mYRes ];
+         lSub.mColourColumnPtr = new MR_UInt32*[ 2*lSub.mXRes ];
+         for( int lColumn = 0; lColumn < 2*lSub.mXRes; lColumn++ )
+         {
+            lSub.mColourColumnPtr[ lColumn ] = lSub.mColour + lColumn*2*lSub.mYRes;
+         }
+      }
+   }
+   const SubBitmap& lBase = mSubBitmapList[ lTop ];
+   std::vector<MR_UInt32> lTopColour( (size_t)lBase.mXRes*lBase.mYRes );
+   HoverNetTex::EnhanceBase( lBase.mBuffer, lBase.mXRes, lBase.mYRes, lPalette, lTopColour.data(), true, 1 );
+   for( int lIndex = 0; lIndex < mSubBitmapCount; lIndex++ )
+   {
+      SubBitmap& lSub = mSubBitmapList[ lIndex ];
+      std::vector<MR_UInt32> lLevel( (size_t)lSub.mXRes*lSub.mYRes );
+      if( lIndex == lTop )
+      {
+         lLevel = lTopColour;
+      }
+      else if( !HoverNetTex::Downsample( lTopColour.data(), lBase.mXRes, lBase.mYRes, lLevel.data(), lSub.mXRes, lSub.mYRes ) )
+      {
+         HoverNetTex::EnhanceBase( lSub.mBuffer, lSub.mXRes, lSub.mYRes, lPalette, lLevel.data(), false );   // a size that does not divide: the palette's colours
+      }
+      HoverNetTex::Upscale2x( lLevel.data(), lSub.mXRes, lSub.mYRes, lSub.mColour );
+   }
+   mColourVersion.store( lVersion, std::memory_order_release );
+   return true;
+}
+
+const MR_UInt32* MR_ResBitmap::GetColourColumnBuffer( int pSubBitmap, int pColumn )const
+{
+   return EnsureColour() ? mSubBitmapList[ pSubBitmap ].mColourColumnPtr[ pColumn ] : NULL;
+}
+
+const MR_UInt32* const* MR_ResBitmap::GetColourColumnBufferTable( int pSubBitmap )const
+{
+   return EnsureColour() ? mSubBitmapList[ pSubBitmap ].mColourColumnPtr : NULL;
 }
 
 MR_ResBitmap::SubBitmap::~SubBitmap()
 {
    delete []mBuffer;
    delete []mColumnPtr;
+   delete []mColour;
+   delete []mColourColumnPtr;
 }
 
 void MR_ResBitmap::SubBitmap::Serialize( CArchive& pArchive )

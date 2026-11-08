@@ -1,3 +1,5 @@
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// See repository history for authorship and detailed changes.
 // DllObjectFactory.cpp
 //
 // Copyright (c) 1995-1998 - Richard Langlois and Grokksoft Inc.
@@ -57,6 +59,7 @@ class MR_FactoryDll
       CString               (*mGetObjectFamily)( MR_UInt16 pClassId );
       CString               (*mGetObjectDescription)( MR_UInt16 pClassId );
       MR_ObjectFromFactory* (*mGetObject)( MR_UInt16 pClassId );
+      void                  (*mSetTexturePalette)( const MR_UInt8* pPalette768 );   // optional
 
 
       // Initialisation
@@ -131,6 +134,24 @@ void MR_DllObjectFactory::RegisterLocalDll( MR_UInt16 pDllId, MR_ObjectFromFacto
       
 }
 
+
+void MR_DllObjectFactory::SetTexturePalette( const MR_UInt8* pPalette768 )
+{
+   POSITION lNextPos = gsDllList.GetStartPosition();
+
+   while( lNextPos != NULL )
+   {
+      MR_UInt16      lDllId;
+      MR_FactoryDll* lDllPtr;
+
+      gsDllList.GetNextAssoc( lNextPos, lDllId, lDllPtr );
+
+      if( lDllPtr != NULL && lDllPtr->mSetTexturePalette != NULL )
+      {
+         lDllPtr->mSetTexturePalette( pPalette768 );
+      }
+   }
+}
 
 void MR_DllObjectFactory::IncrementReferenceCount( MR_UInt16 pDllId )
 {
@@ -369,6 +390,7 @@ MR_FactoryDll::MR_FactoryDll()
    mGetObjectFamily      = NULL;
    mGetObjectDescription = NULL;
    mGetObject            = NULL;
+   mSetTexturePalette    = NULL;
 
 
 }
@@ -449,6 +471,10 @@ BOOL MR_FactoryDll::Open( MR_UInt16 pDllId )
       mGetObject            = ( MR_ObjectFromFactory* (*)( MR_UInt16 ))
                               GetProcAddress( mHandle,
                                               "MR_GetObject" );
+
+      mSetTexturePalette    = ( void (*)( const MR_UInt8* ))
+                              GetProcAddress( mHandle,
+                                              "MR_SetTexturePalette" );
 
       if( mInitModule == NULL || mCleanModule == NULL ||
           mGetObjectTypeCount == NULL || mGetObjectFamily == NULL ||

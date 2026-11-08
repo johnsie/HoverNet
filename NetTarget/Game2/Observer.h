@@ -60,9 +60,9 @@ class MR_Observer
       BOOL            mLargeHudText;
 
       // The optional modern look (docs/roadmap-3.0.md): presentation only, off unless the client asks, so the classic frame is unchanged.
-      BOOL            mModernEffects;        // collect hints, draw craft shadows, widen the view with speed
+      BOOL            mModernEffects;        // collect hints and draw craft shadows (the camera is never changed)
       BOOL            mModernShadows;
-      BOOL            mModernMotion;         // false with "Reduced motion": no field-of-view change
+      BOOL            mModernMotion;         // false with "Reduced motion": no impact flash, no pulsing mine light
       MR_UInt8        mShadowLut[256];       // palette index -> the nearest palette index at about 55% brightness
       BOOL            mShadowLutValid;
       HoverNetGfx::FrameHints mHints;
@@ -77,6 +77,9 @@ class MR_Observer
       std::vector<const MR_FreeElement*> mLitElements;     // missiles, mines and power-ups seen this frame, for their lights
       std::vector<const MR_MainCharacter*> mOtherCrafts;   // craft seen this frame (not the viewing one), for their lights
       BOOL            mModernLighting;
+      double          mSmoothGroundZ;        // the floor under the viewing craft, low-pass filtered so what is drawn on the floor does not bob with the craft
+      BOOL            mGroundKnown;
+      const MR_MainCharacter* mGroundCraft;
       float           mImpactFlash;
       double          mProjKx, mProjKz;
       void            AddLight( const MR_3DCoordinate& pWorld, int pRadiusMm, int pR, int pG, int pB, float pStrength, int pKind = 0, const MR_3DCoordinate* pAimAt = NULL, float pConeCos = -1.0f );
@@ -87,7 +90,6 @@ class MR_Observer
       MR_SimulationTime mTrailLastTime;
       double          mPreviousSpeed;
       MR_SimulationTime mPreviousSpeedTime;
-      int             mApertureBoost;        // percent added to the field of view this frame
       void            DrawCraftShadow( const MR_MainCharacter* pCraft );
       void            UpdateModernHints( const MR_MainCharacter* pViewingCharacter, MR_SimulationTime pTime );
 
@@ -161,8 +163,8 @@ class MR_Observer
       void SetCockpitView( BOOL pOn );
       void SetGhost( const MR_MainCharacter* pGhost ) { mGhost = pGhost; }
       void SetGhostGapText( const char* pText );
-      // Modern look. pEnable turns the hints, shadows and speed field-of-view on; pLut maps a palette index to a darker one (256 entries,
-      // copied) for the shadows; pReducedMotion keeps the field of view still.
+      // Modern look. pEnable turns the hints and shadows on (the camera and the field of view are never touched); pLut maps a palette index to a darker one (256 entries,
+      // copied) for the shadows; pReducedMotion keeps the impact flash and the mine's pulse still.
       void SetModernEffects( BOOL pEnable, BOOL pShadows, BOOL pReducedMotion, const MR_UInt8* pShadowLut );
       // True colour with filtered textures (needs SetModernEffects): pPalette768 is the palette the picture is shown through (256 RGB triples, copied).
       void SetModernTextures( BOOL pEnable, const MR_UInt8* pPalette768 );

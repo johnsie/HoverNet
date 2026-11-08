@@ -442,6 +442,12 @@ MR_ObjectFromFactory* CreateSurface(const MR_ObjectFromFactoryId& id)
 
 extern "C"
 {
+// True-colour textures: what the palette indices of every bitmap in this library mean (NULL switches them off); see MR_ResBitmap::SetColourPalette.
+HOVERNET_PLUGIN_EXPORT void MR_SetTexturePalette(const MR_UInt8* palette768)
+{
+    MR_ResBitmap::SetColourPalette(palette768);
+}
+
 HOVERNET_PLUGIN_EXPORT void MR_InitModule(HMODULE module)
 {
     MR_InitTrigoTables();

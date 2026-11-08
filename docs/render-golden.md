@@ -82,13 +82,13 @@ presentation only: it never touches the simulation.
 There is no speed blur: it was tried and removed (it smeared the scenery and, at first, the HUD, and the owner did not like it).
 
 Each part can also be switched off in the options screen. **Reduced motion** (Settings) switches off every moving effect: the speed
-lines, the sparks, the impact flash, the wider view at speed and the engine flicker; the steady parts remain. The headset (VR) gets the plain picture (the look is switched off there, because every frame is drawn twice).
+the sparks, the exhaust, dust and smoke, the impact flash and the engine flicker; the steady parts remain. The headset (VR) gets the plain picture (the look is switched off there, because every frame is drawn twice).
 
 How it works: the observer (`MR_Observer`) draws the craft shadows into the 8-bit scene (a soft ellipse darkened through a palette table, before
 the craft, with the depth buffer so a wall in front is left alone) and reports a few hints for the frame (where the craft is on screen, its speed,
 a sudden loss of speed, where it was a moment ago). The graphics backend expands the frame through a palette that already has the tone curve and
 extra colour applied, and `HoverNetGfx::Presenter` (`NetTarget/VideoServices/ModernGraphics.*`, no SDL, shared by the desktop, browser and tests)
-adds the rest. The view widens by up to 8% with speed (an observer setting, not a post effect).
+adds the rest. The look never changes the camera: the field of view, the camera's position and its smoothing are exactly the game's own (checked by `HoverNetModernGraphicsScenes`: the 8-bit scene drawn with the look, without its shadows, is identical to the scene drawn without it).
 
 **Lighting** is worked out in true colour from the renderer's own depth buffer, which the observer copies each frame together with the camera's projection
 and a list of lights in camera space (an engine light under the viewing craft that brightens with speed, a warm headlight ahead of it, an orange
@@ -98,6 +98,10 @@ applied. The lights follow the surface: a surface turned towards a light gets al
 up) darkens a surface by up to 27% where something is nearer by 15 cm to 2.5 m a few pixels away (a wall beside the floor, the ground around a craft,
 a crease); a far-away edge is a silhouette and is left alone. Sky and HUD pixels are never lit or shaded. The observer also records which pixels the HUD drew (the scene as drawn before the HUD against the frame afterwards), so the de-banding and
 the smoothing leave the HUD exactly as drawn.
+
+### What was taken out, and why (8 November 2026)
+
+Three effects that followed the speed or the view were removed at the owner's request, after a release: **the view widening with speed**, which changed the camera's field of view so the craft seemed to move away, especially in turns (the camera work before this round of changes was good, and the look must not touch it); **the vignette closing in with speed** and **the automatic exposure**, which made the picture breathe as the view turned and gave it a film-camera feel; and **the speed lines**. What remains of the "film" look is static: the cool-shadow and warm-highlight grade, the soft vignette, the horizon glow and mist, and (high quality) bloom; each of the atmosphere, bloom and grade parts can be switched off in Settings > Graphics.
 
 ### The second round (30 improvements, 8 November 2026)
 
@@ -111,17 +115,18 @@ Added in one go at the owner's request, each with its own check in `HoverNetMode
 | 5, 6, 24 | craft: rim light, glints from the engine, headlight and flash, sky sheen on the hull | - | - | yes |
 | 7 | a soft roll-off of the brightest highlights, so lights do not clip | - | yes | yes |
 | 8 | split-toned grade (cool shadows, warm highlights) | yes | yes | yes |
-| 9 | automatic exposure: slow eye adaptation to a dark or bright view | - | yes | yes |
+| 9 | a soft roll-off of the brightest highlights (the exposure used to adapt to the view; removed, see below) | - | yes | yes |
 | 10, 26 | mist on the far floor; colours fade with distance | - | yes | yes |
 | 11 | a glow along the horizon | - | yes | yes |
 | 12 | glows on missiles, mines, power-ups and other craft (hidden when something is in front) | yes | yes | yes |
 | 13, 14, 15, 27 | exhaust behind the craft, dust and spray, missile smoke, power-up sparkle (none with Reduced motion) | yes | yes | yes |
+| - | ~~speed lines~~, ~~the view widening with speed~~, ~~automatic exposure~~: removed (see below) | - | - | - |
 | 16 | a finer 8x8 dither | - | yes | yes |
 | 17 | anti-aliased edges of surfaces and objects, from the rasteriser's tags and depth (texture untouched) | - | yes | yes |
 | 18 | a dark edge beside HUD text and meters | yes | yes | yes |
 | 19 | adaptive quality: lowers itself when too slow, comes back with room to spare | yes | yes | yes |
 | 20 | sharper textures | - | - | yes |
-| 21 | the vignette closes in with speed | yes | yes | yes |
+| 21 | ~~the vignette closes in with speed~~ removed: the vignette is steady | - | - | - |
 | 22 | a softer, three-ring shadow | yes | yes | yes |
 | 23 | the headlight is a cone from the nose, not a ball | yes | yes | yes |
 | 25 | the craft reflected in the floor under it | - | yes | yes |
@@ -144,7 +149,7 @@ magnified texture is smoother: in the test the colour steps between neighbouring
 - `HoverNetModernGraphicsScalarMatches` (ctest): the same test built without SIMD gives the same digests as the SSE2 build.
 - `HoverNetModernGraphicsScenes` (ctest, `scripts/test-modern-graphics.sh`): three bundled tracks in the chase and cockpit views, by property:
   the rasteriser-only frame it prints first equals the committed golden, the look changes the picture and repeats, the craft and a trail are reported in the chase view and
-  not the cockpit view, shadows are drawn, and the view widens with speed (and does not when the craft is slow).
+  not the cockpit view, shadows are drawn, and the camera is unchanged by the look.
 - Not checked by committed hashes: the sparks and glow use floating point, which is only promised to repeat on the same machine. Looking at the
   picture is still a manual step (`HOVERNET_RENDER_DUMP=<dir> HoverNetRenderGolden <track> <scene> modern` writes the plain and the modern frame
   as PPM files).
@@ -155,7 +160,7 @@ magnified texture is smoother: in the test the colour steps between neighbouring
   clean under AddressSanitizer and UndefinedBehaviorSanitizer, in both the SSE2 and the scalar build (not the whole client under the sanitizers).
   The full ctest suite result is given under "Full suite" below.
 - WebAssembly under Node (Emscripten, the project's `.tools/emsdk`): the 28 golden frames still match the committed hashes, and the scene checks
-  pass; the shadow and widening pixel counts are identical to native. The browser itself was not run, and nobody has looked at the Modern picture
+  pass; the shadow pixel counts are identical to native. The browser itself was not run, and nobody has looked at the Modern picture
   in a browser or on a phone.
 - Not run: Windows (the new code is portable and builds in the same CMake targets, but it was not built or run there), Win32, the legacy Game2.exe
   (it does not have the look), a headset, the sanitizers on the whole client.

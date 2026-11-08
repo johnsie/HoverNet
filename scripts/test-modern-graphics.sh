@@ -7,8 +7,8 @@
 #   - the observer reported a race frame, with the craft on screen and a trail in the chase view, and no craft effects in the cockpit view;
 #   - the lighting gets the scene's depth and at least an engine light and a headlight;
 #   - the rasteriser's surface tags are there: floor and wall pixels are tagged (and floor and craft in the chase view);
-#   - shadows are drawn (the 8-bit scene changes) in the chase views, with the view-widening switched off so only the shadows count;
-#   - the view widens with speed (the scene differs with motion allowed) once the craft is fast enough, and does not when it is not.
+#   - shadows are drawn (the 8-bit scene changes) in the chase views;
+#   - the camera is never changed by the look: with the shadows off too, the 8-bit scene is exactly the one drawn without the look.
 # Run from the repository root:   scripts/test-modern-graphics.sh build/HoverNetRenderGolden
 set -uo pipefail
 cmd="${1:?usage: $0 <HoverNetRenderGolden command>}"
@@ -24,7 +24,7 @@ for track in "ClassicH" "Steeplechase" "Tidal Causeway"; do
     if [ "$classic" != "$want" ]; then echo "FAIL $track $scene: the rasteriser's own frame differs from the committed golden"; fail=1; continue; fi
     changed="$(echo "$modern" | sed -E 's/.* changed=([0-9]+).*/\1/')"
     shadowed="$(echo "$modern" | sed -E 's/.* shadowed=([0-9]+).*/\1/')"
-    widened="$(echo "$modern" | sed -E 's/.* widened=([0-9]+).*/\1/')"
+    camerad="$(echo "$modern" | sed -E 's/.* cameradiff=([0-9]+).*/\1/')"
     speed="$(echo "$modern" | sed -E 's/.* speed=([0-9.]+).*/\1/')"
     lights="$(echo "$modern" | sed -E 's/.* lights=([0-9]+).*/\1/')"
     depth="$(echo "$modern" | sed -E 's/.* depth=([0-9]+).*/\1/')"
@@ -49,12 +49,8 @@ for track in "ClassicH" "Steeplechase" "Tidal Causeway"; do
       [ "$trail" -ge 2 ] || { echo "FAIL $track $scene: no trail ($trail points)"; ok=0; }
     fi
     if [ "$scene" != "cockpit640" ] && [ "$shadowed" -le 0 ]; then echo "FAIL $track $scene: no craft shadow was drawn"; ok=0; fi
-    if awk -v s="$speed" 'BEGIN { exit !(s >= 0.15) }'; then
-      [ "$widened" -gt 0 ] || { echo "FAIL $track $scene: speed $speed but the view did not widen"; ok=0; }
-    else
-      [ "$widened" -eq 0 ] || { echo "FAIL $track $scene: speed $speed but the view widened ($widened)"; ok=0; }
-    fi
-    if [ "$ok" = 1 ]; then echo "ok   $track $scene (shadow pixels $shadowed, widened-view pixels $widened at speed $speed, changed values $changed, trail $trail, lights $lights)"; else fail=1; fi
+    [ "$camerad" -eq 0 ] || { echo "FAIL $track $scene: the look changed the camera ($camerad pixels of the 8-bit scene differ)"; ok=0; }
+    if [ "$ok" = 1 ]; then echo "ok   $track $scene (shadow pixels $shadowed, camera pixels changed $camerad, changed values $changed, trail $trail, lights $lights)"; else fail=1; fi
   done
 done
 if [ "$fail" = 0 ]; then echo "modern graphics scenes: all checks passed"; exit 0; fi

@@ -265,6 +265,7 @@ add_library(HoverNetVideoCore STATIC
     NetTarget/VideoServices/ColorPalette.cpp
     NetTarget/VideoServices/ColorTab.cpp
     NetTarget/VideoServices/ModernGraphics.cpp
+    NetTarget/VideoServices/TextureEnhance.cpp
 )
 
 target_link_libraries(HoverNetVideoCore PUBLIC HoverNetPortableUtil)
@@ -443,6 +444,8 @@ else()
     target_compile_definitions(HoverNetModernGraphicsTestScalar PRIVATE HOVERNET_GFX_NO_SIMD)
     add_test(NAME HoverNetModernGraphicsScalarMatches
         COMMAND sh -c "test \"$($<TARGET_FILE:HoverNetModernGraphicsTest> digest)\" = \"$($<TARGET_FILE:HoverNetModernGraphicsTestScalar> digest)\"")
+    add_executable(HoverNetTextureEnhanceTest NetTarget/LinuxClient/TextureEnhanceTest.cpp NetTarget/VideoServices/TextureEnhance.cpp)
+    add_test(NAME HoverNetTextureEnhance COMMAND HoverNetTextureEnhanceTest)
     add_executable(HoverNetSoftMixerTest NetTarget/LinuxClient/SoftMixerTest.cpp)
     add_test(NAME HoverNetSoftMixer COMMAND HoverNetSoftMixerTest)
     add_executable(HoverNetGhostRunTest NetTarget/LinuxClient/GhostRunTest.cpp)

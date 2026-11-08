@@ -7,6 +7,8 @@
 //  4. Walls, floors and a view from close to and from far from the surface are all covered; the colour output draws on the same pixels in
 //     both modes.
 // Run from the repository root (it loads NetTarget/ObjFac1.dat).
+#include "../MainCharacter/StdAfx.h"   // first: on Windows it brings the MFC compatibility layer the headers below use
+#include "../ObjFacTools/ResBitmap.h"
 #include "../ObjFacTools/ResourceLib.h"
 #include "../Util/WorldCoordinates.h"
 #include "../VideoServices/3DViewport.h"
@@ -15,6 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <set>
 #include <vector>
 
 namespace
@@ -123,6 +126,31 @@ int main()
             Check(after < before, label);
         }
     }
+    // 5. True-colour textures: with a palette set, every bitmap gets a smoothed true-colour copy and the rasteriser samples that instead of the palette.
+    {
+        const int view[3] = {3300, 1000, 0};
+        const Picture before = Render(bitmap, true, false, view[0], view[1], view[2]);   // the palette's colours, unfiltered
+        MR_ResBitmap::SetColourPalette(palette);
+        const Picture textured = Render(bitmap, true, false, view[0], view[1], view[2]);
+        const Picture texturedFiltered = Render(bitmap, true, true, view[0], view[1], view[2]);
+        MR_ResBitmap::SetColourPalette(nullptr);
+        const Picture off = Render(bitmap, true, false, view[0], view[1], view[2]);
+        std::set<std::uint32_t> paletteColours, textureColours, filteredColours;
+        std::set<MR_UInt8> indices;
+        for (std::size_t i = 0; i < before.index.size(); ++i) {
+            if (before.index[i] == 255) continue;
+            paletteColours.insert(before.word[i]); textureColours.insert(textured.word[i]); filteredColours.insert(texturedFiltered.word[i]); indices.insert(before.index[i]);
+        }
+        char label[200];
+        Check(before.index == textured.index && before.index == texturedFiltered.index, "true-colour textures leave the 8-bit picture identical");
+        Check(textured.word != before.word, "with a true-colour texture the picture is not just the palette's colours");
+        std::snprintf(label, sizeof label, "the picture has more colours than the palette entries it uses (%zu colours from %zu entries, unfiltered)", textureColours.size(), indices.size());
+        Check(textureColours.size() > indices.size() * 2, label);
+        std::snprintf(label, sizeof label, "and many more again when filtered (%zu colours)", filteredColours.size());
+        Check(filteredColours.size() > textureColours.size(), label);
+        Check(off.word == before.word, "switching true-colour textures off gives exactly the palette's colours again");
+    }
+
     std::printf("%s\n", gFailures == 0 ? "viewport colour: all checks passed" : "viewport colour: FAILED");
     return gFailures == 0 ? 0 : 1;
 }

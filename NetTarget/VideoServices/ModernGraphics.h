@@ -2,7 +2,7 @@
 //
 // The software rasteriser draws an 8-bit picture. This module turns that picture, after the palette has been applied, into a nicer one:
 // de-banded colour ramps, edge smoothing, bloom, a tone curve and vignette, and effects drawn over the scene (engine glow, a
-// trail behind the craft, impact sparks, speed streaks). It is pure presentation: it reads the finished frame and a few hints from the
+// trail behind the craft, impact sparks). It is pure presentation: it reads the finished frame and a few hints from the
 // observer, never touches the simulation, and with Preset::eOff it is skipped entirely (the headset, and the rasteriser's regression tool). It has no SDL and no platform code, so the same source runs natively, in the browser and in the headless tests.
 #ifndef HOVERNET_MODERN_GRAPHICS_H
 #define HOVERNET_MODERN_GRAPHICS_H
@@ -41,7 +41,7 @@ struct Options
     bool smoothing = true;        // edge smoothing (the sub-pixel part of FXAA)
     bool bloom = true;            // glow around bright areas
     bool grade = true;            // tone curve and a little more colour (through the palette, see Presenter::GradePalette), and a vignette
-    bool effects = true;          // engine glow, trail, sparks, speed streaks
+    bool effects = true;          // engine glow, trail, sparks, exhaust, dust, smoke
     bool lighting = true;         // light pools from the craft and a headlight on the scene, and (medium quality and up) depth haze
     bool shadows = true;          // a soft shadow under craft (drawn by the observer, in the scene)
     bool atmosphere = true;       // sky-tinted ambient light by surface direction, floor mist, colour fading with distance, a glow on the horizon (medium quality up)
@@ -52,13 +52,13 @@ struct Options
     bool edgeAA = true;           // anti-aliasing of the edges of surfaces and objects, using what the rasteriser drew (medium quality up)
     bool hudOutline = true;       // a dark edge on the scene beside HUD text and meters, so they read against any background
     bool sharpen = true;          // restores the crispness of textures (high quality only)
-    bool exposure = true;         // slow eye adaptation to a dark or bright view, and a soft roll-off of the brightest highlights (medium quality up)
+    bool exposure = true;         // a soft roll-off of the brightest highlights (medium quality up); it does not adapt to the view
     bool linearLight = true;      // lights add up as light does (in linear space) rather than as numbers: no washed-out look (high quality only)
     bool trueColour = true;       // the rasteriser draws in true colour with filtered textures (see MR_3DViewPort::SetColourBuffer) instead of 8-bit nearest-texel
     bool adaptive = true;         // lowers the quality when the passes cost more than budgetMs per frame, and raises it again when there is room
     float budgetMs = 12.0f;
     float brightness = 1.0f;      // 0.7 .. 1.4: the player's brightness setting, applied through the palette
-    bool reducedMotion = false;   // no speed lines or sparks, no field-of-view change, no impact flash, steady glow: the player's "Reduced motion" setting
+    bool reducedMotion = false;   // no sparks, exhaust, dust or smoke, no impact flash, steady glow: the player's "Reduced motion" setting
     int quality = 2;              // 0 low (grade and effects only), 1 medium (adds de-banding and depth haze), 2 high (adds edge smoothing and bloom)
 
     bool operator==(const Options& o) const
@@ -172,7 +172,7 @@ class Presenter
 {
 public:
     Presenter();   // with the built-in passes, in order: "filter" (de-banding, edge smoothing), "lighting" (haze, contact shading, lights),
-                   // "bloom", "effects" (engine glow, trail, sparks, speed lines), "vignette"
+                   // "bloom", "effects" (engine glow, trail, sparks, exhaust, dust, smoke), "vignette"
 
     // Improves a finished RGB24 frame in place (width*height*3 bytes, no padding). With options.enabled false it does nothing.
     void Process(std::uint8_t* rgb, int width, int height, const Options& options, const FrameHints& hints);
