@@ -119,4 +119,34 @@ bool MakeRingTrack(const NewTrackOptions& o, TrackModel& model, std::string& err
     }
     return true;
 }
+
+bool MakeStartRoomTrack(const std::string& name, TrackModel& model, std::string& error)
+{
+    model = TrackModel();
+    error.clear();
+    model.hasHeader = true;
+    model.description = "Level: Easy\\nLength: 0.0 km\\n" + name + ": a road built room by room\\n";
+    model.background = "NetTarget/mazes/BG-CITY.pcx";
+    TrackRoom room;
+    room.id = 1;
+    room.floor.height = 0.0; room.floor.surface = 51;
+    room.ceiling.height = 12.0; room.ceiling.surface = 50;
+    const double corners[4][2] = {{0.0, 14.0}, {40.0, 14.0}, {40.0, -14.0}, {0.0, -14.0}};   // left start, left end, right end, right start (facing +x)
+    const int surfaces[4] = {52, 52, 53, 53};
+    for (int i = 0; i < 4; ++i) { WallPoint w; w.x = corners[i][0]; w.y = corners[i][1]; w.factory = 1; w.surface = surfaces[i]; room.walls.push_back(w); }
+    model.rooms.push_back(room);
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 2; ++col) {
+            TrackStart s;
+            s.section = 1; s.x = Millimetres(4.0 + 5.0 * row + (col == 1 ? 2.5 : 0.0)); s.y = col == 0 ? 5.0 : -5.0; s.z = 0.0;
+            s.orientation = 0.0; s.team = 1 + row * 2 + col;
+            model.starts.push_back(s);
+        }
+    }
+    TrackFreeElement finish;
+    finish.section = 1; finish.x = 34.0; finish.y = 0.0; finish.z = 0.0; finish.orientation = 0.0; finish.factory = 1; finish.elementType = kFinish;
+    model.freeElements.push_back(finish);
+    model.hasConnectionList = true;
+    return true;
+}
 }  // namespace HoverNet

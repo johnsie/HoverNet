@@ -3,6 +3,7 @@
 // the game client (docs/adr/0003-track-editor.md).
 //
 //   HoverNetTrackEditor [FILE.track.txt] [--new-loop] [--size WxH] [--tools DIR] [--frames N] [--capture OUT.bmp] [--check]
+//   --demo-road builds a short winding road from a start room (with the Extend tool's preview showing at its open end), for the picture tests.
 //   --frames N and --capture are for tests: draw N frames, save the last as a picture, and leave. --check compiles FILE with the real compiler and validator
 //   (the same as Track > Compile and check), prints the answer and leaves; the exit status is 0 only for a track the strict validator calls VALID.
 #include "EditorSession.h"
@@ -30,7 +31,7 @@ using namespace HoverNet;
 
 namespace
 {
-enum class Tool { Select, PlaceElement, PlaceStart };
+enum class Tool { Select, PlaceElement, PlaceStart, ExtendRoad };
 
 struct View
 {
@@ -44,6 +45,12 @@ struct App
     View view;
     Tool tool = Tool::Select;
     int placeType = 152;       // the element the Place tool puts down
+    float extendLength = 30.0f, extendTurn = 0.0f;   // what the Extend the road tool adds
+    std::vector<WallPoint> ghost;        // the room the Extend tool would add under the pointer (empty when there is none)
+    int ghostRoom = -1, ghostWall = -1;  // and the edge it grows from
+    std::string ghostWhy;                // why nothing would be added there
+    bool forcePointer = false; double forceX = 0, forceY = 0;   // tests: pretend the pointer is here (plan coordinates)
+    int newTemplate = 0;       // the New dialog: 0 a loop, 1 a start room to build from
     bool panning = false;
     ImVec2 panStart;
     View panView;
@@ -348,6 +355,17 @@ void DrawPlan(App& a, const ImVec2& origin, const ImVec2& size)
         d->AddCircle(p, 8.0f, picked ? Col(255, 120, 130) : look.colour, 0, picked ? 3.0f : 2.0f);
         d->AddText(ImVec2(p.x - 3.5f, p.y - 7), look.colour, look.letter);
     }
+    // the room the Extend tool would add, and the edge it grows from
+    if (a.tool == Tool::ExtendRoad && !a.ghost.empty()) {
+        std::vector<ImVec2> pts;
+        for (const WallPoint& w : a.ghost) pts.push_back(ToScreen(v, origin, size, w.x, w.y));
+        d->AddConvexPolyFilled(pts.data(), static_cast<int>(pts.size()), Col(70, 210, 140, 70));
+        for (std::size_t k = 0; k < pts.size(); ++k) d->AddLine(pts[k], pts[(k + 1) % pts.size()], Col(110, 235, 165), 2.0f);
+        if (a.ghostRoom >= 0 && a.ghostRoom < static_cast<int>(ed.model.rooms.size()) && a.ghost.size() >= 4) {
+            const WallPoint& p = a.ghost[0]; const WallPoint& q = a.ghost[3];   // the shared edge
+            d->AddLine(ToScreen(v, origin, size, p.x, p.y), ToScreen(v, origin, size, q.x, q.y), Col(255, 230, 120), 4.0f);
+        }
+    }
     d->PopClipRect();
 }
 
@@ -449,12 +467,21 @@ void Menus(App& a)
 void Inspector(App& a)
 {
     EditorSession& ed = a.ed;
+    ImGui::PushTextWrapPos(0.0f);        // hints wrap inside the panel instead of running off its edge
+    ImGui::PushItemWidth(170.0f);        // and a slider leaves room for its label
     Heading("Tool");
     int tool = static_cast<int>(a.tool);
     ImGui::RadioButton("Select / move", &tool, 0);
     ImGui::RadioButton("Place an element", &tool, 1);
     ImGui::RadioButton("Place a start", &tool, 2);
+    ImGui::RadioButton("Extend the road", &tool, 3);
     a.tool = static_cast<Tool>(tool);
+    if (a.tool == Tool::ExtendRoad) {
+        ImGui::SliderFloat("Length (m)", &a.extendLength, 12.0f, 120.0f, "%.0f");
+        ImGui::SliderFloat("Turn (degrees)", &a.extendTurn, -90.0f, 90.0f, "%.0f");
+        ImGui::TextDisabled("Point at the open end of a room: the new room (green) is joined to it. Left turns are positive.");
+        if (!a.ghostWhy.empty()) ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1), "%s", a.ghostWhy.c_str());
+    }
     if (a.tool == Tool::PlaceElement) {
         if (ImGui::BeginCombo("##placetype", ElementName(a.placeType).c_str())) {
             for (std::size_t i = 0; i < kTrackElementCatalogueSize; ++i) {
@@ -492,6 +519,7 @@ void Inspector(App& a)
         surfaceCombo("Ceiling", SurfaceSlot::Ceiling, r.ceiling.surface);
         surfaceCombo("All walls", SurfaceSlot::Wall, r.walls.empty() ? 52 : r.walls[0].surface);
         ImGui::TextDisabled("Drag a yellow corner to reshape; rooms that share it follow.");
+        if (QuietButton("Delete this room")) ed.DeleteSelected();
     }
     else if (s.kind == Selection::Start && s.index >= 0 && s.index < static_cast<int>(ed.model.starts.size())) {
         const TrackStart& st = ed.model.starts[static_cast<std::size_t>(s.index)];
@@ -517,6 +545,8 @@ void Inspector(App& a)
         ImGui::Spacing();
         ImGui::TextWrapped("Click a room, a start or an element to change it. Drag starts and elements to move them. Right-drag or hold Space to move the view; the wheel zooms.");
     }
+    ImGui::PopItemWidth();
+    ImGui::PopTextWrapPos();
 }
 
 void Dialogs(App& a)
@@ -526,15 +556,20 @@ void Dialogs(App& a)
     ImGui::SetNextWindowSizeConstraints(ImVec2(420, 0), ImVec2(620, std::max(200.0f, ImGui::GetIO().DisplaySize.y - 40.0f)));
     if (ImGui::BeginPopupModal("New loop", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::InputText("Name", a.newName, sizeof(a.newName));
+        ImGui::RadioButton("A loop, ready to race", &a.newTemplate, 0);
+        ImGui::RadioButton("A start room: I will build the road myself", &a.newTemplate, 1);
+        if (a.newTemplate == 1) ImGui::TextDisabled("One room with the eight starts and the finish line. Extend the road from its open end.");
+        ImGui::BeginDisabled(a.newTemplate == 1);
         ImGui::SliderInt("Rooms", &a.newOptions.rooms, 8, 96);
         float radius = static_cast<float>(a.newOptions.radius), width = static_cast<float>(a.newOptions.halfWidth * 2.0);
         if (ImGui::SliderFloat("Radius (m)", &radius, 40.0f, 600.0f)) a.newOptions.radius = radius;
         if (ImGui::SliderFloat("Road width (m)", &width, 12.0f, 80.0f)) a.newOptions.halfWidth = width / 2.0;
         ImGui::Checkbox("With pickups, fuel and a speed pad", &a.newOptions.pickups);
-        ImGui::TextDisabled("Makes a complete track: eight starts, the finish line and both checkpoints.");
+        ImGui::EndDisabled();
+        ImGui::TextDisabled(a.newTemplate == 0 ? "Makes a complete track: eight starts, the finish line and both checkpoints." : "It plays as free play until you place both checkpoints.");
         if (PrimaryButton("Make it")) {
             a.newOptions.name = a.newName;
-            if (a.ed.NewLoop(a.newOptions)) { a.fitPending = true; ImGui::CloseCurrentPopup(); }
+            if (a.newTemplate == 1 ? a.ed.NewStartRoom(a.newName) : a.ed.NewLoop(a.newOptions)) { a.fitPending = true; ImGui::CloseCurrentPopup(); }
         }
         ImGui::SameLine();
         if (QuietButton("Cancel")) ImGui::CloseCurrentPopup();
@@ -675,9 +710,16 @@ void Frame(App& a, int width, int height)
         } else a.panning = false;
     }
     else if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        if (a.tool == Tool::Select) a.ed.BeginDrag(wx, wy, hit);
+        if (a.tool == Tool::ExtendRoad) a.ed.ExtendRoadAt(wx, wy, hit * 1.6, a.extendLength, a.extendTurn);
+        else if (a.tool == Tool::Select) a.ed.BeginDrag(wx, wy, hit);
         else if (a.tool == Tool::PlaceElement) a.ed.PlaceElement(a.placeType, wx, wy);
         else if (a.tool == Tool::PlaceStart) a.ed.PlaceStart(wx, wy);
+    }
+    // the ghost of the room the Extend tool would add under the pointer
+    a.ghost.clear(); a.ghostWhy.clear(); a.ghostRoom = a.ghostWall = -1;
+    if (a.tool == Tool::ExtendRoad && (hovered || a.forcePointer)) {
+        const double px = a.forcePointer ? a.forceX : wx, py = a.forcePointer ? a.forceY : wy;
+        a.ed.PreviewExtend(px, py, hit * 1.6, a.extendLength, a.extendTurn, a.ghost, a.ghostRoom, a.ghostWall, a.ghostWhy);
     }
     if (a.ed.Dragging()) {
         if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) a.ed.Drag(wx, wy);
@@ -760,11 +802,12 @@ int main(int argc, char** argv)
     gApp = &app;
     int width = 1280, height = 800, frames = -1;
     std::string capture, openFile;
-    bool newLoop = false, checkOnly = false;
+    bool newLoop = false, checkOnly = false, demoRoad = false;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--new-loop") newLoop = true;
         else if (arg == "--check") checkOnly = true;
+        else if (arg == "--demo-road") demoRoad = true;
         else if (arg == "--frames" && i + 1 < argc) frames = std::atoi(argv[++i]);
         else if (arg == "--capture" && i + 1 < argc) capture = argv[++i];
         else if (arg == "--tools" && i + 1 < argc) { app.toolsDir = argv[++i]; if (!app.toolsDir.empty() && app.toolsDir.back() != '/') app.toolsDir += '/'; }
@@ -800,7 +843,19 @@ int main(int argc, char** argv)
     ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer2_Init(renderer);
 
-    if (!openFile.empty()) app.ed.Open(openFile);
+    if (demoRoad) {
+        app.ed.NewStartRoom("Demo road");
+        const double turns[] = {0, 22, 22, -25, -25, 20};
+        int from = 0;
+        for (double t : turns) { std::string why; from = ExtendRoad(app.ed.model, from, 1, 32.0, t, why); if (from < 0) break; }
+        app.ed.Refresh();
+        app.tool = Tool::ExtendRoad; app.extendLength = 32.0f; app.extendTurn = 20.0f;
+        if (from >= 0) {   // the pointer rests on the open end of the last room
+            const TrackRoom& last = app.ed.model.rooms.back();
+            app.forcePointer = true; app.forceX = (last.walls[1].x + last.walls[2].x) / 2; app.forceY = (last.walls[1].y + last.walls[2].y) / 2;
+        }
+    }
+    else if (!openFile.empty()) app.ed.Open(openFile);
     else if (newLoop || true) { app.newOptions.name = "My New Track"; if (!app.ed.NewLoop(app.newOptions)) std::fprintf(stderr, "%s\n", app.ed.status.c_str()); }
 
     int drawn = 0;

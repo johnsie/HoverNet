@@ -29,6 +29,19 @@ PY
 read -r colours background width height < <(look "$w/loop.bmp")
 if [ "${colours:-0}" -ge 12 ] && python3 -c "import sys; sys.exit(0 if float('$background') < 0.8 else 1)"; then ok "a new loop is drawn ($colours colours, ${width}x$height, the plain background is $background of it)"; else bad "the new loop's picture looks blank ($colours colours, background $background)"; fi
 
+# the Extend the road tool: a road built from a start room, with the preview of the next room showing (its green)
+"$b/HoverNetTrackEditor" --demo-road --frames 5 --capture "$w/road.bmp" --size 1280x800 || bad "the demo road did not draw"
+if python3 -I - "$w/road.bmp" <<'PY'
+import struct, sys
+d = open(sys.argv[1], "rb").read()
+off = struct.unpack_from("<I", d, 10)[0]; w, h = struct.unpack_from("<ii", d, 18)
+px = d[off:off + abs(h) * w * 4]
+green = sum(1 for i in range(0, len(px), 4) if px[i + 2] > 90 and px[i + 1] > 190 and px[i] < 190 and px[i + 2] < 140)   # the preview's edge, in BGRA
+yellow = sum(1 for i in range(0, len(px), 4) if px[i + 2] > 240 and px[i + 1] > 215 and px[i] < 140)                      # the highlighted open edge
+sys.exit(0 if green > 100 and yellow > 100 else 1)
+PY
+then ok "a road built room by room is drawn with the preview of the next room and the highlighted open edge"; else bad "the extend preview is not drawn"; fi
+
 for src in NetTarget/TrackSources/*.track.txt; do
   name="$(basename "$src" .track.txt)"
   "$b/HoverNetTrackEditor" "$src" --frames 4 --capture "$w/o.bmp" --size 1024x700 && read -r colours background _ < <(look "$w/o.bmp")

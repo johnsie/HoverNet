@@ -20,4 +20,8 @@ struct NewTrackOptions
 // A closed loop of rooms with the eight starts, the finish line and both checkpoints in place, travelling anticlockwise.
 // Returns false and sets error when the options cannot make a track (too few rooms, a road wider than the loop, ...).
 bool MakeRingTrack(const NewTrackOptions& options, TrackModel& model, std::string& error);
+
+// One straight start room (40 m long, 28 m wide) with the eight starts and the finish line in it, for building the rest of the road yourself: extend it
+// room by room, then place the two checkpoints. It plays as free play until the checkpoints are in.
+bool MakeStartRoomTrack(const std::string& name, TrackModel& model, std::string& error);
 }  // namespace HoverNet

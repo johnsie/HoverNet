@@ -48,4 +48,19 @@ bool SetRoomSurface(TrackModel& model, int roomIndex, SurfaceSlot slot, int surf
 bool MoveWallPoint(TrackModel& model, int roomIndex, int wallIndex, double x, double y, std::string& why);
 // Moves a corner together with every other room's corner that sits on the same point, so rooms that share an edge stay joined. All or nothing.
 bool MoveSharedCorner(TrackModel& model, int roomIndex, int wallIndex, double x, double y, std::string& why);
+
+// ---- building a road room by room (docs/roadmap-track-editor.md, Phase 2)
+// Adds a new room beyond one edge of a room: the shared edge is the new room's entry (its wall 3), and its far edge is `length` metres away, turned by
+// `turnDegrees` (positive turns left). Joins the two rooms. Returns the new room's index, or -1 with `why` set. The edge must not already lead to another room.
+int ExtendRoad(TrackModel& model, int roomIndex, int wallIndex, double length, double turnDegrees, std::string& why);
+// Finds room edges that meet (the same two corners, within `tolerance` metres), makes the corners exactly equal and joins the rooms. Returns how many joins it added.
+int JoinTouchingEdges(TrackModel& model, double tolerance = 0.05);
+// Rooms are numbered 1, 2, 3... in order (the compiler relies on it): renumbers after a room is removed, keeping every reference right.
+void RenumberRooms(TrackModel& model);
+// Removes a room and the joins that touch it. Refused while a start or element is inside it, or a feature is in it: move or delete those first.
+bool DeleteRoom(TrackModel& model, int roomIndex, std::string& why);
+// The nearest room edge to a point within `radius` metres (preferring edges that do not yet lead anywhere); false when none is near.
+bool NearestEdge(const TrackModel& model, double x, double y, double radius, int& roomIndex, int& wallIndex);
+// True when this edge of the room is already joined to another room.
+bool EdgeIsJoined(const TrackModel& model, int roomIndex, int wallIndex);
 }  // namespace HoverNet

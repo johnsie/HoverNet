@@ -34,6 +34,7 @@ public:
 
     // files
     bool NewLoop(const NewTrackOptions& options);
+    bool NewStartRoom(const std::string& name);   // one start room to build the road from
     bool Open(const std::string& filename);
     bool Save();                         // to `path`
     bool SaveAs(const std::string& filename);
@@ -56,7 +57,11 @@ public:
     // placing and removing
     bool PlaceElement(int elementType, double x, double y);
     bool PlaceStart(double x, double y);
-    bool DeleteSelected();
+    bool DeleteSelected();                // an element, a start, or a room (rooms with starts or elements in them are refused, with the reason)
+    // building the road: add a room beyond the nearest edge to the point (within `radius` metres), `length` long and turned `turn` degrees (left is positive)
+    bool ExtendRoadAt(double x, double y, double radius, double length, double turn);
+    // the polygon ExtendRoadAt would add there, for drawing a ghost; false when nothing could be added (why is in `reason`)
+    bool PreviewExtend(double x, double y, double radius, double length, double turn, std::vector<WallPoint>& polygon, int& roomIndex, int& wallIndex, std::string& reason) const;
 
     // property edits on the selection (each one undo step)
     bool SetHeight(SurfaceSlot slot, double height);

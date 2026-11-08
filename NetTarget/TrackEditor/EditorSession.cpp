@@ -46,6 +46,18 @@ bool EditorSession::NewLoop(const NewTrackOptions& options)
     return true;
 }
 
+bool EditorSession::NewStartRoom(const std::string& name)
+{
+    TrackModel fresh;
+    std::string error;
+    if (!MakeStartRoomTrack(name, fresh, error)) { status = error; return false; }
+    model = fresh;
+    path.clear(); dirty = true; selection = Selection(); mUndo.clear(); mRedo.clear(); mDragging = false;
+    status = "A start room for " + name + ". Use the Extend the road tool to build on from its open end, then place the two checkpoints.";
+    Refresh();
+    return true;
+}
+
 bool EditorSession::Open(const std::string& filename)
 {
     std::ifstream in(filename.c_str(), std::ios::binary);
@@ -192,7 +204,8 @@ bool EditorSession::DeleteSelected()
     bool ok = false;
     if (selection.kind == Selection::Element) ok = DeleteElement(model, selection.index, why);
     else if (selection.kind == Selection::Start) ok = DeleteStart(model, selection.index, why);
-    else { status = "select an element or a start to delete (rooms are changed, not deleted, for now)"; return false; }
+    else if (selection.kind == Selection::Room || selection.kind == Selection::Corner) ok = DeleteRoom(model, selection.index, why);
+    else { status = "select something to delete: an element, a start or a room"; return false; }
     if (!ok) { status = why; return false; }
     mUndo.push_back(keep); mRedo.clear();
     selection = Selection();
@@ -230,6 +243,30 @@ bool EditorSession::SetOrientationOfSelected(double degrees)
     if (!SetOrientation(model, selection.kind == Selection::Start, selection.index, degrees, why)) { status = why; return false; }
     mUndo.push_back(keep); mRedo.clear();
     Changed("Turned");
+    return true;
+}
+
+bool EditorSession::ExtendRoadAt(double x, double y, double radius, double length, double turn)
+{
+    int room = -1, wall = -1;
+    if (!NearestEdge(model, x, y, radius, room, wall)) { status = "click close to an edge of a room to build the road from it"; return false; }
+    std::string why;
+    TrackModel keep = model;
+    const int created = ExtendRoad(model, room, wall, length, turn, why);
+    if (created < 0) { model = keep; status = why; return false; }
+    mUndo.push_back(keep); mRedo.clear();
+    selection = Selection{Selection::Room, created, -1};
+    Changed("Added room " + std::to_string(model.rooms[static_cast<std::size_t>(created)].id) + " to the road");
+    return true;
+}
+
+bool EditorSession::PreviewExtend(double x, double y, double radius, double length, double turn, std::vector<WallPoint>& polygon, int& roomIndex, int& wallIndex, std::string& reason) const
+{
+    if (!NearestEdge(model, x, y, radius, roomIndex, wallIndex)) { reason.clear(); return false; }
+    TrackModel scratch = model;
+    const int created = ExtendRoad(scratch, roomIndex, wallIndex, length, turn, reason);
+    if (created < 0) return false;
+    polygon = scratch.rooms[static_cast<std::size_t>(created)].walls;
     return true;
 }
 }  // namespace HoverNet

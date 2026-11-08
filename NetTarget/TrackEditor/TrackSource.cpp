@@ -380,6 +380,14 @@ std::vector<std::string> TrackModel::Problems() const
         if (info == nullptr) problems.push_back(name + ": element " + Int(e.factory) + ", " + Int(e.elementType) + " is not one the game knows");
         else if (info->kind != TrackElementKind::PlacedElement) problems.push_back(name + ": " + Int(e.elementType) + " (" + info->name + ") cannot be placed in a track");
     }
+    // guidance the validator and the lint also give: without a finish line and both checkpoints a track plays as free play; the grid has eight places
+    int finishes = 0, check1 = 0, check2 = 0;
+    for (const TrackFreeElement& e : freeElements) if (e.factory == 1) { finishes += e.elementType == 202; check1 += e.elementType == 203; check2 += e.elementType == 204; }
+    if (!freeElements.empty() || !starts.empty() || !rooms.empty()) {
+        if (finishes == 0 || check1 == 0 || check2 == 0) problems.push_back("it plays as free play until it has a finish line and both checkpoints (it has " + Int(finishes) + " finish line, " + Int(check1) + " first checkpoint and " + Int(check2) + " second checkpoint)");
+        if (finishes > 1) problems.push_back(Int(finishes) + " finish lines: check that both are meant to be on the lap route");
+        if (starts.size() < 8) problems.push_back("only " + Int(static_cast<int>(starts.size())) + " start(s): with more players some share a start (8 are recommended)");
+    }
     for (std::size_t i = 0; i < connections.size(); ++i) {
         if (roomIds.count(connections[i].room1) == 0 || roomIds.count(connections[i].room2) == 0)
             problems.push_back("connection " + Int(static_cast<int>(i) + 1) + ": joins a room that does not exist");

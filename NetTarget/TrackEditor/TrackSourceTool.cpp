@@ -3,6 +3,8 @@
 //   HoverNetTrackSource check FILE [--strict]   FILE must survive Parse/Write unchanged and read into the model; prints what it found
 //                                               (--strict also fails when the model reports problems)
 //   HoverNetTrackSource new ring OUT [--name=N] [--rooms=N] [--radius=M] [--width=M] [--plain]   make a new track from a template (no pickups with --plain)
+//   HoverNetTrackSource new start OUT [--name=N]   one start room with the starts and the finish line, to build the road from
+//   HoverNetTrackSource new rebuilt OUT [ring options]   the loop template, rebuilt room by room with ExtendRoad (a test aid: it must equal the template)
 //   HoverNetTrackSource canonical IN OUT        write the model's canonical text of IN to OUT (scripts/test-track-source-roundtrip.sh compiles both)
 #include "EditorSession.h"
 #include "TrackEdit.h"
@@ -27,6 +29,14 @@ bool ReadFile(const std::string& path, std::string& out)
     if (!in) return false;
     out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
     return true;
+}
+
+// The editor also gives guidance (free play until the gates are in, fewer than eight starts); tests of real faults leave it out.
+std::size_t Faults(const std::vector<std::string>& problems)
+{
+    std::size_t n = 0;
+    for (const std::string& p : problems) if (p.rfind("it plays as free play", 0) != 0 && p.rfind("only ", 0) != 0 && p.find("finish lines") == std::string::npos) ++n;
+    return n;
 }
 
 int failures = 0;
@@ -61,7 +71,7 @@ int SelfTest()
     Expect(model.description == "Level: Easy\\nShort", "the description keeps its backslash-n as written");
     Expect(model.rooms[0].other.size() == 1 && model.rooms[0].other[0].first == "note", "an attribute the model does not know is kept");
     Expect(model.unknownSections.size() == 1, "the [Editor] section is kept");
-    Expect(model.Problems().empty(), "the sample has no problems");
+    Expect(Faults(model.Problems()) == 0, "the sample has no faults (only the guidance that it is free play with one start)");
     const std::string canonical = model.ToText();
     TrackModel again;
     Expect(TrackModel::FromText(TrackText::Parse(canonical), again, error) && again.ToText() == canonical, "the canonical text reads back and writes the same");
@@ -80,7 +90,7 @@ int SelfTest()
     bad.freeElements[0].elementType = 150;   // a missile: the game creates it, a track cannot place it
     bad.connections[0].room2 = 9;
     const std::vector<std::string> problems = bad.Problems();
-    Expect(problems.size() == 5, "five planted problems are found");
+    Expect(Faults(problems) == 5, "five planted problems are found");
     for (const std::string& p : problems) std::printf("  (planted) %s\n", p.c_str());
 
     // Editing operations (TrackEdit.h): what the editor does, tested here without a window.
@@ -122,6 +132,67 @@ int SelfTest()
         // and the edited track is still a track the compiler reads
         TrackModel again;
         Expect(TrackModel::FromText(TrackText::Parse(ring.ToText()), again, e2) && again.rooms.size() == ring.rooms.size() && again.freeElements.size() == ring.freeElements.size(), "an edited track writes and reads back");
+    }
+
+    // Building a road room by room (ExtendRoad and friends).
+    {
+        std::string why;
+        TrackModel start;
+        Expect(MakeStartRoomTrack("Built", start, why) && start.rooms.size() == 1 && start.starts.size() == 8 && start.freeElements.size() == 1, "the start-room template is one room with eight starts and the finish line");
+        Expect(start.Problems().size() == 1 && start.Problems()[0].find("free play") != std::string::npos, "and the editor says it is free play until both checkpoints are placed");
+        // extend from the end edge (edge 1): the new room is joined, entered by its edge 3, and faces on
+        const int r2 = ExtendRoad(start, 0, 1, 30.0, 0.0, why);
+        Expect(r2 == 1 && start.rooms[1].id == 2 && start.connections.size() == 1, "extending the road adds a joined room");
+        Expect(start.rooms[1].walls[3].x == start.rooms[0].walls[2].x && start.rooms[1].walls[3].y == start.rooms[0].walls[2].y && start.rooms[1].walls[0].x == start.rooms[0].walls[1].x, "the new room's entry edge is exactly the old room's end edge");
+        Expect(std::fabs(RoomHeading(start.rooms[1]) - 0.0) < 0.5 && std::fabs(start.rooms[1].walls[1].x - 70.0) < 0.01, "a straight extension continues 30 metres on");
+        Expect(ExtendRoad(start, 0, 1, 30.0, 0.0, why) < 0 && why.find("already leads") != std::string::npos, "an edge that already leads to a room cannot be extended again");
+        const int r3 = ExtendRoad(start, 1, 1, 30.0, 30.0, why);
+        Expect(r3 == 2 && RoomHeading(start.rooms[2]) > 10.0 && RoomHeading(start.rooms[2]) < 30.0, "a turn of 30 degrees turns the road to the left");
+        const int r4 = ExtendRoad(start, 2, 1, 30.0, -30.0, why);
+        Expect(r4 == 3, "and a negative turn turns it right");
+        Expect(ExtendRoad(start, 0, 0, 5.0, 0.0, why) < 0 && ExtendRoad(start, 0, 0, 30.0, 120.0, why) < 0, "a room that is too short, or turns too sharply, is refused");
+        // the side edges can be extended too, outward
+        const int side = ExtendRoad(start, 0, 0, 20.0, 0.0, why);
+        Expect(side == 4 && start.rooms[4].walls[1].y > 14.0 && start.rooms[4].walls[2].y > 14.0, "a side edge builds outward, away from the room");
+        std::string tmp;
+        Expect(!DeleteRoom(start, 0, tmp) && tmp.find("start(s) or element(s)") != std::string::npos, "a room with starts in it cannot be deleted");
+        Expect(DeleteRoom(start, 4, tmp) && start.rooms.size() == 4, "an empty room can be deleted");
+        // delete a middle room: ids stay 1..n, joins to it go, and what was after it renumbers
+        TrackModel chain;
+        MakeStartRoomTrack("Chain", chain, why);
+        for (int i = 0; i < 4; ++i) ExtendRoad(chain, i, 1, 25.0, 0.0, why);
+        Expect(chain.rooms.size() == 5 && chain.connections.size() == 4, "a chain of five rooms has four joins");
+        Expect(DeleteRoom(chain, 2, why) && chain.rooms.size() == 4 && chain.rooms[2].id == 3 && chain.connections.size() == 2, "deleting a middle room removes its joins and renumbers the rest");
+        const std::vector<std::string> prob = chain.Problems();
+        bool hasRoomProblem = false; for (const std::string& pp : prob) if (pp.find("does not exist") != std::string::npos) hasRoomProblem = true;
+        Expect(!hasRoomProblem, "and nothing refers to a room that is gone");
+        // a loop rebuilt from one room must equal the template
+        NewTrackOptions options;
+        options.rooms = 16; options.radius = 120.0; options.halfWidth = 14.0;
+        TrackModel ring, rebuilt;
+        MakeRingTrack(options, ring, why);
+        rebuilt = ring;
+        rebuilt.rooms.resize(1);
+        rebuilt.connections.clear();
+        const double length = 2.0 * options.radius * std::sin(3.14159265358979323846 / options.rooms), turn = 360.0 / options.rooms;
+        int from = 0;
+        bool built = true;
+        for (int i = 1; i < options.rooms; ++i) { from = ExtendRoad(rebuilt, from, 1, length, turn, why); built = built && from >= 0; }
+        Expect(built && rebuilt.rooms.size() == 16, "sixteen rooms are built one after another from the first");
+        JoinTouchingEdges(rebuilt);
+        double worst = 0.0;
+        for (std::size_t i = 0; i < ring.rooms.size() && i < rebuilt.rooms.size(); ++i)
+            for (std::size_t k = 0; k < 4; ++k) worst = std::max(worst, std::hypot(ring.rooms[i].walls[k].x - rebuilt.rooms[i].walls[k].x, ring.rooms[i].walls[k].y - rebuilt.rooms[i].walls[k].y));
+        Expect(worst < 0.02, "the rebuilt loop's corners match the template's to within 2 centimetres");
+        Expect(rebuilt.connections.size() == ring.connections.size(), "and it has the same joins, including the last room back to the first (closed by JoinTouchingEdges)");
+        // two rooms that touch are joined automatically
+        TrackModel two;
+        MakeStartRoomTrack("Touch", two, why);
+        TrackRoom extra = two.rooms[0];
+        extra.id = 2;
+        for (WallPoint& w : extra.walls) w.x += 40.0;   // a second room right where the first one ends: the right-hand edge meets the left-hand edge
+        two.rooms.push_back(extra);
+        Expect(JoinTouchingEdges(two) == 1 && two.connections.size() == 1 && two.connections[0].wall1 == 1 && two.connections[0].wall2 == 3, "rooms whose edges meet are joined, end edge to entry edge");
     }
 
     // The editor's session (EditorSession.h): the same steps a person takes with the mouse, without a window.
@@ -172,6 +243,22 @@ int SelfTest()
         Expect(ed.Drag(corner.x + 2.0, corner.y), "a corner can be dragged");
         ed.EndDrag();
         Expect(ed.model.rooms[5].walls[0].x == ed.model.rooms[4].walls[1].x && ed.model.rooms[5].walls[0].y == ed.model.rooms[4].walls[1].y, "the neighbouring room's corner moved with it, so the rooms stay joined");
+        // building the road with the pointer
+        EditorSession builder;
+        TrackModel startModel; std::string w2;
+        MakeStartRoomTrack("Pointer", startModel, w2);
+        builder.model = startModel; builder.Refresh();
+        Expect(builder.ExtendRoadAt(41.0, 0.0, 3.0, 30.0, 0.0) && builder.model.rooms.size() == 2 && builder.selection.kind == Selection::Room && builder.selection.index == 1, "clicking the end edge of the start room adds the next room and selects it");
+        std::vector<WallPoint> ghost; int gr = -1, gw = -1; std::string reason;
+        Expect(builder.PreviewExtend(71.0, 0.0, 3.0, 30.0, 15.0, ghost, gr, gw, reason) && ghost.size() == 4 && gr == 1, "hovering over the road's open end previews the room that would be added");
+        Expect(!builder.PreviewExtend(41.0, 0.0, 3.0, 30.0, 0.0, ghost, gr, gw, reason) && !reason.empty(), "hovering over a joined edge previews nothing, and says why");
+        Expect(!builder.ExtendRoadAt(500.0, 500.0, 3.0, 30.0, 0.0) && builder.status.find("close to an edge") != std::string::npos, "clicking away from every edge is refused with a hint");
+        Expect(builder.Undo() && builder.model.rooms.size() == 1 && builder.Redo() && builder.model.rooms.size() == 2, "adding a room is one undo step");
+        builder.Select(Selection{Selection::Room, 1, -1});
+        Expect(builder.DeleteSelected() && builder.model.rooms.size() == 1, "the selected room can be deleted");
+        builder.Select(Selection{Selection::Room, 0, -1});
+        Expect(!builder.DeleteSelected() && builder.status.find("start(s) or element(s)") != std::string::npos, "a room with starts in it is refused, and the reason is plain");
+
         // save and open
         const std::string file = "/tmp/hovernet-editor-selftest.track.txt";
         Expect(ed.SaveAs(file) && !ed.dirty && ed.path == file, "saving clears the unsaved mark");
@@ -214,6 +301,43 @@ int main(int argc, char** argv)
         TrackModel model;
         std::string error;
         if (!TrackModel::FromText(TrackText::Parse(file), model, error)) { std::fprintf(stderr, "FAIL %s: %s\n", argv[2], error.c_str()); return 1; }
+        std::ofstream out(argv[3], std::ios::binary);
+        out << model.ToText();
+        return out ? 0 : 2;
+    }
+    if (command == "new" && argc >= 4 && (std::string(argv[2]) == "start" || std::string(argv[2]) == "rebuilt")) {
+        NewTrackOptions options;
+        for (int i = 4; i < argc; ++i) {
+            const std::string a = argv[i];
+            if (a.rfind("--name=", 0) == 0) options.name = a.substr(7);
+            else if (a.rfind("--rooms=", 0) == 0) options.rooms = std::atoi(a.c_str() + 8);
+            else if (a.rfind("--radius=", 0) == 0) options.radius = std::atof(a.c_str() + 9);
+            else if (a.rfind("--width=", 0) == 0) options.halfWidth = std::atof(a.c_str() + 8) / 2.0;
+            else if (a == "--plain") options.pickups = false;
+            else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
+        }
+        TrackModel model;
+        std::string error;
+        if (std::string(argv[2]) == "start") {
+            if (!MakeStartRoomTrack(options.name, model, error)) { std::fprintf(stderr, "cannot make the track: %s\n", error.c_str()); return 1; }
+        }
+        else {
+            // keep only the first room of the loop, then build the other rooms again, one at a time, from its end edge
+            TrackModel ring;
+            if (!MakeRingTrack(options, ring, error)) { std::fprintf(stderr, "cannot make the track: %s\n", error.c_str()); return 1; }
+            model = ring;
+            model.rooms.resize(1);
+            model.connections.clear();
+            const double centre = options.radius, delta = 2.0 * 3.14159265358979323846 / options.rooms;
+            const double length = 2.0 * centre * std::sin(delta / 2.0), turn = 360.0 / options.rooms;
+            std::string why;
+            int from = 0;
+            for (int i = 1; i < options.rooms; ++i) {
+                from = ExtendRoad(model, from, 1, length, turn, why);
+                if (from < 0) { std::fprintf(stderr, "room %d could not be added: %s\n", i + 1, why.c_str()); return 1; }
+            }
+            JoinTouchingEdges(model);
+        }
         std::ofstream out(argv[3], std::ios::binary);
         out << model.ToText();
         return out ? 0 : 2;
