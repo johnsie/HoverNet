@@ -699,6 +699,16 @@ if(EMSCRIPTEN)
     target_link_options(HoverNetMazeCompiler PRIVATE -sNODERAWFS=1 -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=node -sSTACK_SIZE=16777216 -sINITIAL_MEMORY=67108864)
 endif()
 
+# The track editor core: a lossless text layer and a typed model of the .track.txt format, and the templates for new tracks
+# (docs/roadmap-track-editor.md, Phases 1 and 2). Outside the test block: the browser editor builds it too.
+add_library(HoverNetTrackEditorCore STATIC NetTarget/TrackEditor/TrackSource.cpp NetTarget/TrackEditor/TrackTemplates.cpp)
+target_include_directories(HoverNetTrackEditorCore PUBLIC NetTarget/TrackEditor)
+add_executable(HoverNetTrackSource NetTarget/TrackEditor/TrackSourceTool.cpp)
+target_link_libraries(HoverNetTrackSource PRIVATE HoverNetTrackEditorCore)
+if(EMSCRIPTEN)
+    target_link_options(HoverNetTrackSource PRIVATE -sNODERAWFS=1 -sENVIRONMENT=node)   # run under Node on real files, like the compiler
+endif()
+
 add_executable(HoverNetTrack3DViewer
     NetTarget/LinuxClient/Track3DViewer.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
@@ -869,6 +879,15 @@ if(BUILD_TESTING AND NOT WIN32)
     target_compile_definitions(HoverNetTrackElementCatalogue PRIVATE HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     target_link_libraries(HoverNetTrackElementCatalogue PRIVATE HoverNetSim HoverNetModelCore HoverNetResourceCore HoverNetPortableUtil)
     add_test(NAME HoverNetTrackElementCatalogue COMMAND HoverNetTrackElementCatalogue)
+    add_test(NAME HoverNetTrackSource COMMAND HoverNetTrackSource)
+    add_test(NAME HoverNetTrackSourceRoundTrip COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-track-source-roundtrip.sh"
+             "$<TARGET_FILE:HoverNetTrackSource>" "$<TARGET_FILE:HoverNetMazeCompiler>")
+    set_tests_properties(HoverNetTrackSourceRoundTrip PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    # A track made from nothing by the editor core compiles, validates, can be driven round and is admissible to the catalogue.
+    add_test(NAME HoverNetNewTrack COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-new-track.sh" "$<TARGET_FILE:HoverNetTrackSource>"
+             "$<TARGET_FILE:HoverNetMazeCompiler>" "$<TARGET_FILE:HoverNetTrackValidator>" "$<TARGET_FILE:HoverNetTrackPack>"
+             "$<TARGET_FILE:HoverNetDriver>" "$<TARGET_FILE:HoverNetReplay>")
+    set_tests_properties(HoverNetNewTrack PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 600)
     # Every track source compiles to exactly its committed .trk (native); the WebAssembly half is run by scripts/test-compiler-parity.sh with its extra arguments.
     add_test(NAME HoverNetCompilerParity COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-compiler-parity.sh" "$<TARGET_FILE:HoverNetMazeCompiler>")
     set_tests_properties(HoverNetCompilerParity PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

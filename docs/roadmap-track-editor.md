@@ -1,12 +1,14 @@
 # HoverNet track editor roadmap (the HoverCad replacement)
 
-*Draft for review, 8 November 2026. Nothing in this roadmap is built yet; the "Where we start" section says what exists today and how it was checked.*
+*Draft, 8 November 2026. Decisions made by the owner's delegation are recorded as ADRs 0003 and 0004. The Progress table says what is built; the "Where we start" section says what existed before.*
 
 HoverCad is the 1990s Windows-only (MFC) track designer that came with HoverRace. HoverNet needs a supported replacement that:
 
 1. runs **natively on Windows and on Linux**,
 2. runs **in the browser** at hovernet.outiva.com, and
-3. **always stays at parity with the game client**: whatever the game can load, show and play, the editor can create, show and test, on every platform, in the same release.
+3. **always stays at parity with the game client**: whatever the game can load, show and play, the editor can create, show and test, on every platform, in the same release,
+
+and it is for **making new tracks, not only opening old ones**, and for **sharing them**: a finished track is published from the editor to one **Track Market** that every player can browse and download from, in the desktop and browser clients alike ([ADR 0004](adr/0004-track-marketplace.md)).
 
 This is the "visual editor" and "HoverCad successor" of [Stage 4 of the 3.0 roadmap](roadmap-3.0.md#stage-4-content-pipeline-and-the-hovercad-successor); this document is the detailed plan for it. The working name is **HoverNet Track Editor**.
 
@@ -21,7 +23,10 @@ This is the "visual editor" and "HoverCad successor" of [Stage 4 of the 3.0 road
 | Compiler ignores an `[Editor]` section | Verified on Linux (start and end of file, byte-identical output). Windows and WebAssembly not run |
 | Compiler in the browser, same bytes as native (rule 2) | Done on Linux and under Node: the compiler builds as WebAssembly (16 MB stack) and compiles all three bundled sources to the committed `.trk` bytes. Found and fixed a real cross-platform difference (two `qsort` calls, unstable on equal levels; now a stable sort, committed tracks unchanged). `scripts/test-compiler-parity.sh`, ctest `HoverNetCompilerParity` (native half; the WebAssembly half is run by hand and **not yet in CI**). Windows not run. Validator and linter in WebAssembly not started |
 | HoverCad feature inventory, `.TR` format spec, `.trk` to source spike | Not started |
-| Phases 1 to 6 | Not started |
+| Track source core: lossless text layer, typed model, canonical writer, problems list (Phase 1) | Done on Linux: `HoverNetTrackSource`, ctests `HoverNetTrackSource` (self-test) and `HoverNetTrackSourceRoundTrip` (all three bundled sources read, written back identically, and compile to the same bytes). In WebAssembly (under Node) the self-test passes and the canonical text of all three sources is identical to native. Windows not run |
+| New tracks from nothing (Phase 2 "New track") | Started on Linux: `MakeRingTrack` makes a loop track with eight starts, finish and checkpoints; ctest `HoverNetNewTrack` shows it compiles, passes the strict validator and lint, is finished by the game's driver (replay verifies), and is admissible to the catalogue. In WebAssembly the template writes the identical file and it compiles to identical bytes (`scripts/test-editor-wasm-parity.sh`, run by hand, **not yet in CI**); that check found and fixed coordinates that differed in the 17th digit between C libraries (now whole millimetres). More templates and the New Track dialog are not started |
+| Marketplace design | [ADR 0004](adr/0004-track-marketplace.md) accepted by delegation. Nothing built: no submission service, live catalogue, Track Market screen or Publish button. Launch gates only the owner can clear: the signing key and the legal review of the terms |
+| Phases 2 (UI) to 6 | Not started |
 
 ## Where we start
 
@@ -52,7 +57,7 @@ Each needs an owner decision (an ADR in `docs/adr/`) before Phase 1 code. Recomm
 3. **Licence handling.** Is the new editor written clean (from the documented formats and the game's code) or may it reuse HoverCad's algorithms? Anything derived from HoverCad carries the modification notice and licence conditions ([licence-compliance.md](licence-compliance.md)). *Recommended: write the editor new, use HoverCad only as a behaviour reference and for the `.TR` reader, and record the provenance of each file.* New third-party libraries (a file dialog helper, for example) go in `THIRD_PARTY_NOTICES.md` before use.
 4. **Editing the existing library.** Most of the 1,009 community tracks exist only as compiled `.trk` files. Editing one needs a `.trk` to source reader. *Recommended: a 2-week spike in Phase 0* to see whether geometry, starts and elements can be recovered exactly; if not, "open a community track" is read-only (view, playtest, copy elements) and the roadmap says so.
 5. **Browser limits.** *Recommended: desktop browsers first (Chrome, Edge, Firefox); tablets best effort; phones out of scope for editing* (the game plays on phones; a track editor needs a pointer and a keyboard). Saving uses the browser's file picker or a download, with an autosave to IndexedDB so a closed tab loses nothing.
-6. **Where sharing goes.** Publishing a finished track to the community library needs an upload route and moderation that do not exist yet ([community-tracks.md](community-tracks.md), 3.0 Stage 4's signed catalogue). *Recommended: Phases 1 to 4 export a package file only; one-click publishing waits for the catalogue.*
+6. **Where sharing goes.** Decided: [ADR 0004](adr/0004-track-marketplace.md). Authors publish from the editor to a shared Track Market (a live catalogue, one Track Market screen in the game for desktop and browser, official servers sync listed tracks). A submission is a package plus a finishing replay; a signed-in author submits; a moderator reviews an author's first track; the market is a private beta for invited authors until the terms have had legal review and the production signing key exists.
 
 ## Phases
 
@@ -85,18 +90,20 @@ Durations are rough, for a small team, and not commitments. Phases 1 and 2 can o
 The first thing a person can use. The SDL2 + ImGui editor program, built for Windows x64, Linux and WebAssembly from one source.
 
 - Plan view: pan, zoom, grid and snap, select, move, scale, rotate; draw and split rooms and walls; connect rooms; set heights and textures; place starts, gates, pickups, jumps and other elements from the catalogue; attribute panel; the description and background.
-- File: new, open, save, import `.TR`, export `.trk`; recent files; the browser's picker, download and IndexedDB autosave; keyboard shortcuts and a gamepad-free UI usable with a mouse and keyboard.
+- **New track:** File > New starts from a template (the loop from the editor core's `MakeRingTrack` first; figure-of-eight, out-and-back, and a blank canvas next) or from nothing, with the eight starts, the finish line and both checkpoints already in place so a new track is a race from the first save; changing the template's size, width and room count is a dialog.
+- File: open, save, import `.TR`, export `.trk`; recent files; the browser's picker, download and IndexedDB autosave; keyboard shortcuts and a gamepad-free UI usable with a mouse and keyboard.
 - Problems panel: validation messages that jump to the element.
 - Settings shared with the game where they overlap (UI scale, high contrast, reduced motion, language when it exists).
 - Editor parity matrix v1 published, every row marked verified or not verified per platform.
 - Scripted UI tests: native with the dummy video driver (as the game's menu tests do), browser in headless Chrome (as `scripts/test-web-client.sh` does).
 
-**Exit gate:** a creator can build `Tidal Causeway`-class track from nothing on each platform and compile it; the matrix has no unexplained gaps for Phase 2 features.
+**Exit gate:** a creator can start a new track from a template, or from nothing, and build a `Tidal Causeway`-class track on each platform and compile it; the matrix has no unexplained gaps for Phase 2 features.
 
 ### Phase 3: Preview and playtest (about 5 weeks)
 
 - 3D preview with the game's renderer, free camera, and a switch to any room's view.
 - **One-click playtest:** a local race on the track as it is now, starting from the selected start position, weapons on or off, then back to the editor with the validator's and the race's findings. Online playtest with a private race code once the 3.0 server flow allows it.
+- **The playtest records a replay.** When the player finishes a lap in a playtest, the editor keeps the finishing replay: it is the proof of playability that Publish sends (ADR 0004 decision 1).
 - Preview-versus-game render test (rule 3); the editor's frame time is measured and recorded like the game's.
 
 **Exit gate:** the same track playtested from the editor and from the game's local race gives identical simulation hashes (the determinism tools already compare these) on all three platforms.
@@ -110,14 +117,25 @@ The first thing a person can use. The SDL2 + ImGui editor program, built for Win
 
 **Exit gate:** the checks run in both editor and CI with one implementation; a usability session with at least three people who have not used HoverCad produces a finished playable track.
 
-### Phase 5: Packaging and sharing (about 4 weeks, partly blocked on 3.0 Stage 4)
+### Phase 5: Publish and the Track Market (about 10 weeks; the private beta needs no key or legal review, the public launch does)
 
-- Export a package (`HoverNetTrackPack pack`) from the editor with author and licence required ([adr/0002-content-licence-policy.md](adr/0002-content-licence-policy.md)), `verify --catalogue` run for you, and the lint at the strict level shown before sharing.
-- Open any track from the community library to view and playtest, and to edit when decision 4 allows.
-- One-click publish only when the signed catalogue exists.
+The design is [ADR 0004](adr/0004-track-marketplace.md). Three parts, in this order:
+
+**5a. Package and check locally (about 2 weeks).**
+- Export a package (`HoverNetTrackPack pack`) from the editor with author and licence required ([ADR 0002](adr/0002-content-licence-policy.md); CC-BY-4.0 offered first), `verify --catalogue`, the strict validator and the strict lint run for the author with the messages in plain words, and the finishing replay from the playtest attached.
+- A publish checklist the author sees before sending: what passed, what is missing (no finishing lap yet, no author name, a lint warning).
+
+**5b. The submission service and the live catalogue (about 4 weeks).**
+- A service beside `hovernet_account.py` (no containers): sign-in required, allow-list for the private beta, rate and size limits, the same checks re-run on the server, a review queue (first track per author), listing, the live catalogue and revocations, per-track reports in the moderator console, unlist and takedown, an audit log.
+- Official race servers sync listed tracks and drop revoked ones.
+- Signed catalogue once the owner has made the production key; clients pin the public key. Until then it is served over TLS, hash-checked, and called unsigned.
+
+**5c. The Track Market in the game and the editor (about 4 weeks).**
+- A Track Market screen in the shared client (desktop and browser from one code base): browse, search, author and licence shown, download and play or host, report; attribution in the track selector and on the results screen. Open any listed track in the editor to view and playtest, and to edit when ADR 0003's reader allows it (licence permitting: CC-BY-SA tracks stay share-alike).
+- Publish, update (a new version) and unlist from the editor, with the state shown (checking, waiting for review, listed, refused and why).
 - Authoring documentation and an example track under a clear licence (rewrite [track-authoring.md](track-authoring.md) around the editor).
 
-**Exit gate:** a creator goes from empty editor to a verified package that another player downloads and races, without touching the source tree.
+**Exit gate:** a creator goes from an empty editor to a track that another player, on another platform and another network, finds in the Track Market, downloads, races, and credits to its author, without touching the source tree; a reported track can be unlisted and a revocation reaches clients and servers; the checks on the server are the same code as the ones in the editor. **Public launch** (any signed-in author) additionally needs the legal review of the terms, the final privacy policy and the signed catalogue.
 
 ### Phase 6: Parity hardening and retiring HoverCad (about 4 weeks)
 
@@ -143,6 +161,7 @@ All of these, on all three platforms:
 - A playtest from the editor and a normal local race of the same track give identical simulation hashes.
 - Undo and redo never corrupt a project (property tests), and a closed or crashed browser tab loses at most the last few seconds of work.
 - The editor parity matrix has no unexplained gaps.
+- A creator can make a new track from a template or from nothing, publish it, and another player can get it from the Track Market on every platform; reported or revoked tracks stop being offered.
 - The editor is in the signed installers and packages and in the web deploy; HoverCad is no longer shipped.
 - Provenance and licences recorded: every file derived from HoverCad has its notice, every new dependency is in `THIRD_PARTY_NOTICES.md`.
 
@@ -155,7 +174,9 @@ All of these, on all three platforms:
 | ImGui is awkward for a precise CAD-style tool (text entry, dense property panels, high-DPI) | A prototype of the plan view in Phase 0; budget for custom widgets; native file dialogs behind one interface |
 | The editor falls behind the game over time | The rule 4 CI checks above; the matrix reviewed each release; the proposed CLAUDE.md rule |
 | Browser file access and storage differ between browsers | The save/open interface has a download and picker fallback; Firefox and Safari run for real in Phase 6 |
-| Publishing needs server, moderation and signing work that is not started | Kept out of Phases 1 to 4; Phase 5's publish step waits for the catalogue |
+| The market needs server, moderation and signing work that is not started, and two things only the owner can do (the signing key, the legal review of the terms) | Phase 5 is split so the private beta (invited authors, unsigned but hash-checked catalogue) can run first; the public launch is gated on the key and the review (ADR 0004) |
+| Unlawful or abusive content in a track's name or description, or a rights claim on a track | First-track review, report button, immediate unlisting while a report is examined, revocation list, the 14-day takedown of ADR 0002; no uploaded pictures or code |
+| A published track cannot actually be finished | A finishing replay is part of every submission and is re-verified on the server |
 | Licence questions about HoverCad-derived code | Decision 3 first; provenance recorded per file; the notice format in `docs/licence-compliance.md` |
 
 ## Not in this roadmap
