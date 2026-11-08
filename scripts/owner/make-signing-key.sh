@@ -8,6 +8,10 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 key="${1:-$HOME/hovernet-keys/hovernet-catalogue.key}"
 if [ -n "${CI:-}" ] || [ -n "${GITLAB_CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then echo "STOP: this looks like a CI runner. Run it on your own machine."; exit 1; fi
+# A machine that runs CI jobs (a GitLab runner, such as the race-server host 192.168.10.181) is not a safe place for this key: anyone who can run a job there can read it.
+if systemctl is-active --quiet gitlab-runner 2>/dev/null || pgrep -x gitlab-runner >/dev/null 2>&1 || [ "$(hostname 2>/dev/null)" = "jm-home-st07" ]; then
+  echo "STOP: this machine runs a GitLab runner (or is the race-server host). Make the key on your own computer instead."; exit 1
+fi
 [ ! -e "$key" ] || { echo "STOP: $key already exists. I will not overwrite a key. Move it away first if you really mean to replace it."; exit 1; }
 src="$here/signing-src"; [ -d "$src" ] || src="$here/../../NetTarget"   # the kit carries a copy of the two source files with the same folder layout
 tool_src="$src/LinuxClient/SignTool.cpp"; ed_src="$src/Authority/Ed25519.cpp"

@@ -18,12 +18,15 @@ mkdir -p dist
 tar -C "$stage" -czf "dist/$name.tar.gz" "$name"
 ( cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256" )
 echo "Built dist/$name.tar.gz ($(du -h "dist/$name.tar.gz" | cut -f1)); sha256 in dist/$name.tar.gz.sha256"
+dest="${OWNER_MACHINE:-USER@YOUR-OWN-COMPUTER}"
 cat <<EOF
 
-Copy it to the machine you will use (replace USER@HOST), check it arrived intact, and unpack it:
+The kit is meant for YOUR OWN trusted computer, not the race-server host (192.168.10.181 runs a GitLab runner, so the signing key must never be made there).
+If you are already working on that computer, just unpack it there: tar xzf dist/$name.tar.gz
+To copy it to another machine (set OWNER_MACHINE=user@host to fill the commands in), check it arrived intact, and unpack it:
 
-  scp dist/$name.tar.gz dist/$name.tar.gz.sha256 USER@HOST:~/
-  ssh USER@HOST 'cd ~ && sha256sum -c $name.tar.gz.sha256 && tar xzf $name.tar.gz && cd $name && ls'
+  scp dist/$name.tar.gz dist/$name.tar.gz.sha256 $dest:~/
+  ssh $dest 'cd ~ && sha256sum -c $name.tar.gz.sha256 && tar xzf $name.tar.gz && cd $name && ls'
 
 Then follow README-OWNER.md inside (the same text as docs/owner-actions.md).
 EOF

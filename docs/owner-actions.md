@@ -8,16 +8,24 @@ Written 8 November 2026. Everything below is a job nobody else can do for the pr
 
 It writes `dist/hovernet-owner-kit-YYYYMMDD.tar.gz` (the scripts, a copy of the signing tool's source, and these documents) and prints:
 
-    scp dist/hovernet-owner-kit-YYYYMMDD.tar.gz dist/hovernet-owner-kit-YYYYMMDD.tar.gz.sha256 USER@HOST:~/
-    ssh USER@HOST 'cd ~ && sha256sum -c hovernet-owner-kit-YYYYMMDD.tar.gz.sha256 && tar xzf hovernet-owner-kit-YYYYMMDD.tar.gz && cd hovernet-owner-kit-YYYYMMDD && ls'
+    scp dist/hovernet-owner-kit-YYYYMMDD.tar.gz dist/hovernet-owner-kit-YYYYMMDD.tar.gz.sha256 USER@YOUR-OWN-COMPUTER:~/
+    ssh USER@YOUR-OWN-COMPUTER 'cd ~ && sha256sum -c hovernet-owner-kit-YYYYMMDD.tar.gz.sha256 && tar xzf hovernet-owner-kit-YYYYMMDD.tar.gz && cd hovernet-owner-kit-YYYYMMDD && ls'
 
 Nothing in the kit is a prebuilt program, so it runs on any Linux machine that has `g++` (your race server's older system libraries are not a problem).
+
+## Where to run what
+
+| Job | Where | Why |
+| --- | --- | --- |
+| `check-production.sh` | your own computer (it reaches the server with `ssh john@192.168.10.181`, read-only) | it only looks |
+| `make-signing-key.sh`, `sign-file.sh` | **your own trusted computer, never `192.168.10.181`** | that host runs a GitLab runner (`gitlab-runner.service` is active there, next to the race, account and web-gateway services); anyone who can run a CI job on it could read the key. The script refuses to run there |
+| everything the Track Market service needs later (the service, the catalogue folder) | `192.168.10.181`, installed by a script I will give you then, with `scp` + `ssh` | it needs the public key only, never the secret one |
 
 ## 1. Check the release is live (2 minutes, read-only)
 
     bash check-production.sh 2.3.26
 
-Checks the GitHub release and its eight files, that hovernet.outiva.com answers, and over ssh that the race server package is that version, the service is active and port 9600 is listening. Set `RACE_HOST=user@host` if the race server is not `john@192.168.10.181`. I ran it on 8 November 2026: the release has all eight files, the site answers, the race server is `2.3.26`, active, listening. What it cannot tell you is whether the GitLab pipeline for the tag is green: look at https://gitlab.outiva.com/devteam/hovernet/-/pipelines, and open https://hovernet.outiva.com to see the new hovercraft picture and `v2.3.26` in the corner.
+Checks the GitHub release and its eight files, that hovernet.outiva.com answers, and over ssh that the race server package is that version, the service is active and port 9600 is listening. The race server is `john@192.168.10.181` by default; set `RACE_HOST=user@host` to change it. I ran it on 8 November 2026: the release has all eight files, the site answers, the race server is `2.3.26`, active, listening. What it cannot tell you is whether the GitLab pipeline for the tag is green: look at https://gitlab.outiva.com/devteam/hovernet/-/pipelines, and open https://hovernet.outiva.com to see the new hovercraft picture and `v2.3.26` in the corner.
 
 ## 2. Make the production signing key (10 minutes, on a machine you trust, not a build server)
 
