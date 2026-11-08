@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Starts the track editor on the installed data (the same HOVERNET_DATA_DIR the game's launcher sets). Files named on the command line keep their meaning:
+# they are made absolute here, before the editor runs the compiler from the data folder.
+set -e
+export HOVERNET_DATA_DIR=/usr/share/games/hovernet
+args=()
+for a in "$@"; do
+  if [ -e "$a" ]; then a="$(realpath "$a")"; fi
+  args+=("$a")
+done
+exec /usr/lib/hovernet/HoverNetTrackEditor "${args[@]}"

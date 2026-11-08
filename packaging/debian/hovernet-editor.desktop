@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=HoverNet Track Editor
+Comment=Make and edit HoverNet tracks
+Exec=hovernet-editor
+Terminal=false
+Categories=Game;Development;

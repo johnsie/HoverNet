@@ -1,0 +1,11 @@
+Package: hovernet-editor
+Version: 0.0.0
+Section: games
+Priority: optional
+Architecture: amd64
+Maintainer: HoverNet Team <devteam@outiva.com>
+Depends: hovernet-game, libc6, libstdc++6, libsdl2-2.0-0
+Description: HoverNet track editor
+ Make and edit HoverNet tracks: build a road room by room, check it with the real
+ compiler and validator, and race on it in the game. Needs the hovernet-game
+ package (the game, its object plug-in and the fonts).

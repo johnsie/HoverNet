@@ -18,6 +18,8 @@
 #ifdef _WIN32
 #define popen _popen
 #define pclose _pclose
+#else
+#include <unistd.h>
 #endif
 
 #ifdef __EMSCRIPTEN__
@@ -25,6 +27,7 @@
 #endif
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -168,12 +171,56 @@ EMSCRIPTEN_KEEPALIVE void hn_resize(int w, int h) { gResizeW = w; gResizeH = h; 
 ImFont* gDisplayFont = nullptr;
 const ImVec4 kRed(0.86f, 0.20f, 0.27f, 1.0f), kRedHover(0.95f, 0.32f, 0.38f, 1.0f), kRedActive(0.70f, 0.12f, 0.18f, 1.0f), kCoral(0.98f, 0.45f, 0.48f, 1.0f);
 
+// The folder that holds the game's data (NetTarget/...): where an installed copy keeps it (HOVERNET_DATA_DIR, as the game's launcher sets), else the checkout this
+// program was built in. The compiler is run from there too, because a track source names its background picture relative to it (NetTarget/mazes/BG-CITY.pcx).
+std::string DataDir()
+{
+    const char* env = std::getenv("HOVERNET_DATA_DIR");
+    if (env && env[0]) return env;
+    return HOVERNET_SOURCE_DIR;
+}
+
 std::string AssetPath(const char* name)
 {
 #ifdef __EMSCRIPTEN__
     return std::string("/assets/") + name;
 #else
-    return std::string(HOVERNET_SOURCE_DIR "/NetTarget/LinuxClient/assets/") + name;
+    return DataDir() + "/NetTarget/LinuxClient/assets/" + name;
+#endif
+}
+
+// A path that still means the same thing after the compiler has been started from the data folder.
+std::string Absolute(const std::string& path)
+{
+#ifndef __EMSCRIPTEN__
+#ifdef _WIN32
+    char full[1024];
+    if (_fullpath(full, path.c_str(), sizeof(full))) return full;
+#else
+    char full[4096];
+    if (realpath(path.c_str(), full)) return full;
+    // a file that does not exist yet (the compiler's output): make it absolute from where this program is running
+    if (!path.empty() && path[0] != '/' && getcwd(full, sizeof(full))) return std::string(full) + "/" + path;
+#endif
+#endif
+    return path;
+}
+
+// The folder holding the compiler, validator and game, as an absolute path ending in a separator.
+std::string ToolsFolder(const std::string& toolsDir)
+{
+    std::string folder = Absolute(toolsDir);
+    if (!folder.empty() && folder.back() != '/' && folder.back() != '\\') folder += '/';
+    return folder;
+}
+
+// Start a command from the data folder (see DataDir).
+std::string FromDataDir(const std::string& command)
+{
+#ifdef _WIN32
+    return "cd /d \"" + DataDir() + "\" && " + command;
+#else
+    return "cd \"" + DataDir() + "\" && " + command;
 #endif
 }
 
@@ -182,7 +229,7 @@ void ApplyTheme(ImGuiIO& io)
     ImFontConfig body;
     body.SizePixels = 17.0f; body.OversampleH = 2; body.OversampleV = 2; body.RasterizerMultiply = 1.08f;
     ImFont* bodyFont = io.Fonts->AddFontFromFileTTF(AssetPath("Inter-Variable.ttf").c_str(), body.SizePixels, &body);
-    if (!bodyFont) io.Fonts->AddFontDefault();
+    if (!bodyFont) { std::fprintf(stderr, "warning: the font %s was not found: using the plain default font\n", AssetPath("Inter-Variable.ttf").c_str()); io.Fonts->AddFontDefault(); }
     ImFontConfig display;
     display.SizePixels = 21.0f; display.OversampleH = 2; display.OversampleV = 2; display.RasterizerMultiply = 1.1f;
     gDisplayFont = io.Fonts->AddFontFromFileTTF(AssetPath("Oxanium-Variable.ttf").c_str(), display.SizePixels, &display);
@@ -415,7 +462,7 @@ std::string Playtest(App& a, bool wait)
     if (!tmpEnv) tmpEnv = std::getenv("TEMP");
     const std::string tmp = std::string(tmpEnv ? tmpEnv : "/tmp") + "/";
     const std::string src = tmp + "hovernet-playtest.track.txt", trk = tmp + "hovernet-playtest.trk";
-    const std::string compiler = a.toolsDir + "HoverNetMazeCompiler", game = a.toolsDir + "HoverNetGame2Player";
+    const std::string compiler = ToolsFolder(a.toolsDir) + "HoverNetMazeCompiler", game = ToolsFolder(a.toolsDir) + "HoverNetGame2Player";
     const std::vector<std::string> faults = a.ed.model.Problems(false);
     if (!faults.empty()) return "The game cannot play this track yet: " + faults[0] + (faults.size() > 1 ? " (and " + std::to_string(faults.size() - 1) + " more: see the list below the plan)" : std::string());
     for (const std::string& need : {compiler, game}) {
@@ -426,7 +473,7 @@ std::string Playtest(App& a, bool wait)
     std::remove(trk.c_str());
     { FILE* f = std::fopen(src.c_str(), "wb"); if (!f) return "cannot write " + src; const std::string text = a.ed.Text(); std::fwrite(text.data(), 1, text.size(), f); std::fclose(f); }
     int code = 0;
-    const std::string compiled = RunCommand(q + compiler + q + " " + q + trk + q + " " + q + src + q, code);
+    const std::string compiled = RunCommand(FromDataDir(q + compiler + q + " " + q + trk + q + " " + q + src + q), code);
     FILE* made = std::fopen(trk.c_str(), "rb");
     if (!made) {
         std::string why;
@@ -466,7 +513,7 @@ void RunCheck(App& a)
         return text + (code == 0 ? "" : "\n(exit status " + std::to_string(code) + ")");
     };
     const std::string q = "\"";
-    const std::string compile = run(q + a.toolsDir + "HoverNetMazeCompiler" + q + " " + q + out + q + " " + q + a.ed.path + q);
+    const std::string compile = run(FromDataDir(q + ToolsFolder(a.toolsDir) + "HoverNetMazeCompiler" + q + " " + q + Absolute(out) + q + " " + q + Absolute(a.ed.path) + q));
     std::string text = "Compiler:\n";
     // the compiler prints a lot of resource noise; keep the lines that matter
     std::string line;
@@ -475,7 +522,7 @@ void RunCheck(App& a)
     if (!f) { a.checkOutput = text + "  no track was made: the compiler refused it.\n"; return; }
     std::fclose(f);
     text += "  compiled.\n\nValidator (strict):\n  ";
-    text += run(q + a.toolsDir + "HoverNetTrackValidator" + q + " " + q + out + q + " check");
+    text += run(FromDataDir(q + ToolsFolder(a.toolsDir) + "HoverNetTrackValidator" + q + " " + q + Absolute(out) + q + " check"));
     std::remove(out.c_str());
     a.checkOutput = text;
     if (!a.ed.problems.empty()) {   // the compiler's "cannot load" says little: the editor can say what it sees

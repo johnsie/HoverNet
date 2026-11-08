@@ -917,6 +917,9 @@ if(BUILD_TESTING AND NOT WIN32)
     # Playtest: the editor compiles the track and the game races on it (the game's --playtest, the editor's --playtest).
     add_test(NAME HoverNetPlaytest COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-playtest.sh" "${CMAKE_BINARY_DIR}")
     set_tests_properties(HoverNetPlaytest PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 600)
+    # The hovernet-editor Debian package works when installed: fonts, backgrounds, compile and check, playtest in the installed game (skipped without dpkg-deb).
+    add_test(NAME HoverNetEditorPackage COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-editor-package.sh" "${CMAKE_BINARY_DIR}")
+    set_tests_properties(HoverNetEditorPackage PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 300 SKIP_RETURN_CODE 77)
     add_test(NAME HoverNetNewTrack COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/test-new-track.sh" "$<TARGET_FILE:HoverNetTrackSource>"
              "$<TARGET_FILE:HoverNetMazeCompiler>" "$<TARGET_FILE:HoverNetTrackValidator>" "$<TARGET_FILE:HoverNetTrackPack>"
              "$<TARGET_FILE:HoverNetDriver>" "$<TARGET_FILE:HoverNetReplay>")

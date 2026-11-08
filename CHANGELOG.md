@@ -6,7 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+### Changed
+- **The pause menu, the results screen and the end-of-replay screen have one red button.** The first choice (Resume, Keep driving, Watch again) is red and the others are quiet outlined buttons, so a player sees at once what carries on. Display only. Checked in a headless screenshot of the results screen.
+
 ### Added
+- **The track editor as a Debian package, `hovernet-editor`** (it needs the `hovernet-game` package, which holds the game, the object plug-in and the fonts). It installs the editor, the compiler and validator it runs, the track background pictures the compiler reads, the bundled track sources as examples, a `hovernet-editor` launcher and a menu entry. Checked by unpacking the package into a folder and running it from there the way an installed copy runs: it finds its fonts, compiles and strictly checks an example with its background picture, playtests it in the installed game, and the launcher takes file names relative to where you are (`scripts/test-editor-package.sh`). The CI package step now builds it; **never installed with `dpkg -i`, and there is no Windows installer for the editor yet.**
 - **Playtest from the editor.** *Track > Playtest in the game* compiles the track being edited with the real compiler and opens the game straight onto it (`HoverNetGame2Player --playtest FILE.trk`, listed as "Playtest", no menus, then the usual pause and results screens). A track with a fault the editor can see (for example a surface the game does not have) is refused first, with the reason; advice such as "no checkpoints yet, so it plays as free play" does not stop you driving it. Desktop only for now (the browser editor says so). The game and the editor must sit side by side (the editor looks for the game next to itself). Tested on Linux, headless: the bundled tracks and tracks made in the editor.
 - **Editor autosave in the browser.** The browser editor keeps a copy of the track being edited in the browser a moment after every change and offers it back after a reload ("Restore my work" or "Start fresh"); saving to a file clears it. Tested in headless Chrome with real clicks and reloads (36 checks).
 

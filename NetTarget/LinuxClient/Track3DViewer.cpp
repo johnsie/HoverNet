@@ -3784,7 +3784,8 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         }
         for (int index = 0; index < optionCount; ++index) {
             const float height = index < primaryCount ? 54.0f : 42.0f;
-            if (HoverNetButton(options[index].label, ImVec2(-FLT_MIN, height))) {
+            // the first (Resume) is the one red button; the other choices are quiet, so a player sees at once what carries on the race
+            if ((index == 0 ? HoverNetButton(options[index].label, ImVec2(-FLT_MIN, height)) : HoverNetQuietButton(options[index].label, ImVec2(-FLT_MIN, height)))) {
                 choice = options[index].choice;
                 running = false;
             }
@@ -3918,7 +3919,7 @@ ReplayEndChoice RunReplayEndScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer
 #endif
         for (std::size_t i = 0; i < actions.size(); ++i) {
             if (focusFirst) { ImGui::SetKeyboardFocusHere(); focusFirst = false; }
-            if (HoverNetButton(actions[i].label, ImVec2(-FLT_MIN, i == 0 ? 54.0f : 44.0f))) { choice = actions[i].choice; running = false; }
+            if ((i == 0 ? HoverNetButton(actions[i].label, ImVec2(-FLT_MIN, 54.0f)) : HoverNetQuietButton(actions[i].label, ImVec2(-FLT_MIN, 44.0f)))) { choice = actions[i].choice; running = false; }
             ImGui::Spacing();
         }
         HoverNetHint("Esc / B: stay and look around (Left or Home rewinds)");
@@ -4127,7 +4128,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         actions.push_back({"QUIT HOVERNET", PostRaceChoice::eQuit});
 #endif
         for (std::size_t index = 0; index < actions.size(); ++index) {
-            if (HoverNetButton(actions[index].label, ImVec2(-FLT_MIN, index == 0 ? 54.0f : 44.0f))) {
+            if ((index == 0 ? HoverNetButton(actions[index].label, ImVec2(-FLT_MIN, 54.0f)) : HoverNetQuietButton(actions[index].label, ImVec2(-FLT_MIN, 44.0f)))) {
                 choice = actions[index].choice;
                 running = false;
             }

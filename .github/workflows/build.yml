@@ -79,8 +79,9 @@ jobs:
 
       - name: Build Debian packages
         run: |
-          chmod +x packaging/debian/build-game-deb.sh packaging/debian/build-raceserver-deb.sh packaging/debian/build-authserver-deb.sh
+          chmod +x packaging/debian/build-game-deb.sh packaging/debian/build-raceserver-deb.sh packaging/debian/build-authserver-deb.sh packaging/debian/build-editor-deb.sh
           packaging/debian/build-game-deb.sh "$PACKAGE_VERSION" build/linux/HoverNetGame2Player build/linux/ObjFac1.so
+          packaging/debian/build-editor-deb.sh "$PACKAGE_VERSION" build/linux
           packaging/debian/build-raceserver-deb.sh "$PACKAGE_VERSION" build/linux/RaceServer
           packaging/debian/build-authserver-deb.sh "$PACKAGE_VERSION" build/linux
 
