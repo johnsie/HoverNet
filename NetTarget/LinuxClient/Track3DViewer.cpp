@@ -1264,6 +1264,8 @@ void SaveLocalRacePrefs(const HostPrefs& prefs)
 // Screens fade in from black: the first frames of a screen that is not the one drawn just before it are covered by a dark layer that clears in about a quarter of a
 // second (it never blocks input and never touches the race picture). Each screen loop calls this once per frame with its own key (HN_SCREEN_FADE). Off for the
 // screenshot hooks and with HOVERNET_NO_FADE, so the regression captures stay what they were.
+bool LoadReducedMotion();   // defined with the other settings below
+
 void ScreenFadeFrame(const void* pKey)
 {
     static const void* lastKey = nullptr;
@@ -1274,11 +1276,26 @@ void ScreenFadeFrame(const void* pKey)
                   std::getenv("HOVERNET_CAPTURE_HUB") == nullptr && std::getenv("HOVERNET_CAPTURE_MENU") == nullptr && std::getenv("HOVERNET_CAPTURE_SERVERS") == nullptr ? 1 : 0;
     }
     const Uint32 now = SDL_GetTicks();
-    if (pKey != lastKey) { lastKey = pKey; enteredAt = now; }
+    static bool slide = false;
+    if (pKey != lastKey) { lastKey = pKey; enteredAt = now; slide = enabled != 0 && !LoadReducedMotion(); }
     if (enabled == 0) return;
     const float age = static_cast<float>(now - enteredAt);
     if (age >= 260.0f) return;
     const float t = 1.0f - age / 260.0f;
+    if (slide) {
+        // The screen also eases up into place: everything the windows have drawn this frame moves down by a few pixels that shrink to nothing (ease out). Only what is
+        // drawn moves, so the hit areas are a few pixels off for a quarter of a second at most; the fade layer below is added after and does not move. Not with Reduced motion.
+        const float shift = 26.0f * t * t * t;
+        ImGuiContext& g = *ImGui::GetCurrentContext();
+        std::vector<ImDrawList*> done;
+        for (ImGuiWindow* window : g.Windows) {
+            ImDrawList* list = window->DrawList;
+            if (list == nullptr || !window->WasActive || std::find(done.begin(), done.end(), list) != done.end()) continue;
+            done.push_back(list);
+            for (int i = 0; i < list->VtxBuffer.Size; ++i) list->VtxBuffer.Data[i].pos.y += shift;
+            for (int i = 0; i < list->CmdBuffer.Size; ++i) { list->CmdBuffer.Data[i].ClipRect.y += shift; list->CmdBuffer.Data[i].ClipRect.w += shift; }
+        }
+    }
     const int alpha = static_cast<int>(255.0f * 0.92f * t * t);
     ImGui::GetForegroundDrawList()->AddRectFilled(ImVec2(0, 0), ImGui::GetIO().DisplaySize, IM_COL32(10, 11, 16, alpha));
 }
