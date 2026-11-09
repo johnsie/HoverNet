@@ -40,7 +40,7 @@ h1 { font-family: Oxanium; font-size: 46dp; font-weight: bold; margin: 0; }
 	position: absolute;
 	right: 4%;
 	top: 50%;
-	margin-top: -250dp;
+	margin-top: -200dp;
 	width: 420dp;
 	padding: 24dp 26dp;
 	background-color: #13131ae8;

@@ -8,7 +8,6 @@
 	<div id="brand">
 		<h1>HOVERNET</h1>
 		<p class="coral">HIGH-SPEED COMBAT RACING</p>
-		<p class="dim">FAST, FUN, FREE!</p>
 		<div id="level">
 			<p id="leveltext" class="coral"></p>
 			<div class="bar"><div id="barfill"></div></div>
@@ -16,10 +15,9 @@
 	</div>
 	<div id="panel">
 		<p class="coral">READY TO RACE?</p>
-		<p class="dim">Choose your mode</p>
 		<hr/>
 		<button id="online" class="primary">RACE ONLINE</button>
-		<p class="pitch">Race real players, climb the leaderboards, and show off your craft.</p>
+		<p class="pitch">Race real players. Climb the ranks.</p>
 		<button id="offline" class="quiet primary">PRACTICE OFFLINE</button>
 		<div class="grid">
 			<button id="leaderboards">Leaderboards</button>
@@ -27,8 +25,7 @@
 			<button id="tutorial">Tutorial</button>
 			<button id="settings" class="quiet">Settings</button>
 		</div>
-		<p class="dim hint">Navigate with arrow keys or D-pad. Select with Enter or A.</p>
 	</div>
-	<p id="footer"><span id="version"></span>   |   ESC / B: quit</p>
+	<p id="footer"><span id="version"></span></p>
 </body>
 </rml>

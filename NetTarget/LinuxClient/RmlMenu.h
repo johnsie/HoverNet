@@ -7,6 +7,8 @@
 
 #include <functional>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace HoverNetRml
 {
@@ -29,4 +31,26 @@ enum class Choice { eNone, eOnline, eOffline, eLeaderboards, eGarage, eTutorial,
 // Shows the menu until a door is chosen (or, with frameLimit >= 0, for that many frames and then eNone). The caller keeps its own event loop out of the way:
 // this one polls SDL events itself. The renderer's logical size is set to the window's own while it runs and put back to restoreW x restoreH.
 Choice RunMainMenu(SDL_Window* window, SDL_Renderer* renderer, const MainMenuInfo& info, int frameLimit, int restoreW, int restoreH);
+
+// The results screen after a race: the card eases in and its parts appear one after another, the XP counts up and the level bar fills.
+struct ResultsInfo
+{
+    std::string assetDir;
+    std::string heading, subtitle;                        // VICTORY! / PODIUM FINISH / RACE COMPLETE, and the line under it
+    bool victory = false;
+    std::string position, finishTime, bestLap;            // the three numbers
+    std::vector<std::pair<std::string, bool>> bests;      // the player's records on this track; true = a new one (drawn hot)
+    bool hasReward = false;
+    int xp = 0;
+    std::string breakdown, levelLine, opened, unlocked;   // the XP line, "Level 3 - Title", what the level opened in the Garage, the achievements earned
+    bool levelUp = false;
+    float levelProgress = 0.0f;                           // 0..1 on the level bar
+    bool online = false;                                  // offers RETURN TO LOBBY as well
+    bool reducedMotion = false;
+};
+
+enum class ResultsChoice { eNone, eLobby, eMainMenu, eQuitRequested };
+
+// Runs until a door is chosen (or, with frameLimit >= 0, for that many frames, all parts shown at once). Same event and logical-size rules as RunMainMenu.
+ResultsChoice RunResults(SDL_Window* window, SDL_Renderer* renderer, const ResultsInfo& info, int frameLimit, int restoreW, int restoreH);
 }

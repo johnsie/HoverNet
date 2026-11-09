@@ -17,5 +17,8 @@ check "down,enter" offline "Down, Enter"
 check "down,down,enter" leaderboards "Down, Down, Enter"
 check "up,enter" settings "Up from the first button wraps to the last"
 for id in online offline leaderboards garage tutorial settings; do check "click:$id" "$id" "a real mouse click on $id"; done
-[ $fail -eq 0 ] && echo "RmlUi main menu: keyboard and mouse reach every door"
+# The results screen after a race (the real client, an autoplay race that finishes): Down then Enter chooses the one button an offline race offers, MAIN MENU.
+got=$(HOVERNET_TEST_FINISH=1 HOVERNET_TEST_RML="down,enter" timeout -s KILL 60 "$client" --play --track "The River" --autoplay --frames 100000 2>&1 | grep -a -m1 "^RMLTEST results chose" | sed 's/^RMLTEST results chose //')
+if [ "$got" = "menu" ]; then echo "ok   the results screen opens after a race and its button works: menu"; else echo "FAIL: results screen: wanted 'menu', got '${got:-nothing}'"; fail=1; fi
+[ $fail -eq 0 ] && echo "RmlUi main menu and results screen: keyboard and mouse reach every door"
 exit $fail

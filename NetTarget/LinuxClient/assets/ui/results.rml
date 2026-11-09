@@ -1,0 +1,31 @@
+<rml>
+<head>
+	<title>HoverNet results</title>
+	<link type="text/rcss" href="results.rcss"/>
+</head>
+<body>
+	<div id="card">
+		<h1 id="heading">RACE COMPLETE</h1>
+		<p id="subtitle" class="coral">Finish line crossed.</p>
+		<hr/>
+		<div id="stats">
+			<div class="stat reveal"><p class="label">POSITION</p><p id="position" class="value">1 / 1</p></div>
+			<div class="stat reveal"><p class="label">FINISH TIME</p><p id="finish" class="value">0:00.00</p></div>
+			<div class="stat reveal"><p class="label">BEST LAP</p><p id="bestlap" class="value">0:00.00</p></div>
+		</div>
+		<div id="bests" class="reveal"></div>
+		<div id="reward" class="reveal">
+			<hr/>
+			<p><span id="xp" class="xp">+0 XP</span></p>
+			<p id="level" class="level">Level 1</p>
+			<p id="opened" class="gold"></p>
+			<div class="bar"><div id="barfill"></div></div>
+			<p id="unlocked" class="gold"></p>
+		</div>
+		<div id="actions" class="reveal">
+			<button id="lobby" class="primary">RETURN TO LOBBY</button>
+			<button id="menu" class="quiet">MAIN MENU</button>
+		</div>
+	</div>
+</body>
+</rml>

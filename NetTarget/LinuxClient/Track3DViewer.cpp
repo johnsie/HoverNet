@@ -4341,6 +4341,64 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                                  const PersonalBests::Outcome* pBests, bool pWasOnline)
 {
     if (std::getenv("HOVERNET_TEST_FINISH") != nullptr) { std::printf("FINISHTEST results screen opened\n"); std::fflush(stdout); }
+#ifdef HOVERNET_HAVE_RMLUI
+    if (std::getenv("HOVERNET_RML_MENU") != nullptr) {   // the RmlUi version of this screen (docs/rmlui.md)
+        HoverNetRml::ResultsInfo info;
+        info.assetDir = SourcePath("NetTarget/LinuxClient/assets");
+        const bool podium = pRank >= 2 && pRank <= 3 && pPlayerCount >= 3;
+        info.victory = pRank == 1;
+        info.heading = pRank == 1 ? "VICTORY!" : podium ? "PODIUM FINISH" : "RACE COMPLETE";
+        info.subtitle = pRank == 1 ? "You owned the track." : podium ? "On the podium. Now go and win it." : "Finish line crossed.";
+        char finishText[32], bestLapText[32], previousText[32], lineText[160];
+        FormatRaceTime(pFinishTime, finishText, sizeof(finishText));
+        FormatRaceTime(pBestLap, bestLapText, sizeof(bestLapText));
+        info.finishTime = finishText;
+        info.bestLap = bestLapText;
+        info.position = std::to_string(pRank) + " / " + std::to_string(std::max(1, pPlayerCount));
+        if (pBests != nullptr && pBests->Any()) {
+            if (pBests->newRaceBest) {
+                if (pBests->hadRaceBest) { FormatRaceTime(static_cast<MR_SimulationTime>(pBests->previousRace), previousText, sizeof(previousText)); std::snprintf(lineText, sizeof(lineText), "NEW PERSONAL BEST!  (was %s)", previousText); }
+                else std::snprintf(lineText, sizeof(lineText), "NEW PERSONAL BEST!  (your first finish on this track)");
+                info.bests.push_back({lineText, true});
+            }
+            else if (pBests->raceBest > 0) { FormatRaceTime(static_cast<MR_SimulationTime>(pBests->raceBest), previousText, sizeof(previousText)); std::snprintf(lineText, sizeof(lineText), "Your best finish here: %s", previousText); info.bests.push_back({lineText, false}); }
+            if (pBests->newLapBest) {
+                if (pBests->hadLapBest) { FormatRaceTime(static_cast<MR_SimulationTime>(pBests->previousLap), previousText, sizeof(previousText)); std::snprintf(lineText, sizeof(lineText), "New best lap!  (was %s)", previousText); }
+                else std::snprintf(lineText, sizeof(lineText), "New best lap!");
+                info.bests.push_back({lineText, true});
+            }
+            else if (pBests->lapBest > 0) { FormatRaceTime(static_cast<MR_SimulationTime>(pBests->lapBest), previousText, sizeof(previousText)); std::snprintf(lineText, sizeof(lineText), "Your best lap here: %s", previousText); info.bests.push_back({lineText, false}); }
+        }
+        if (gRewardView.valid && gRewardView.reward.xp > 0) {
+            const HoverNetProfile::Reward& reward = gRewardView.reward;
+            info.hasReward = true;
+            info.xp = reward.xp;
+            info.breakdown = reward.breakdown;
+            info.levelUp = reward.levelAfter > reward.levelBefore;
+            info.levelLine = std::string(info.levelUp ? "LEVEL UP!  Level " : "Level ") + std::to_string(reward.levelAfter) + "  -  " + HoverNetCraft::LevelTitle(reward.levelAfter);
+            if (info.levelUp) {
+                std::string opened;
+                for (int lv = reward.levelBefore + 1; lv <= reward.levelAfter; ++lv) { const std::string here = HoverNetCraft::UnlockedAtLevel(lv); if (!here.empty()) opened += (opened.empty() ? "" : ", ") + here; }
+                if (!opened.empty()) info.opened = "New in the Garage: " + opened;
+            }
+            info.levelProgress = gRewardView.profile.LevelProgress();
+            std::string names;
+            for (int achievement : reward.unlocked) names += (names.empty() ? "" : ", ") + std::string(HoverNetProfile::AchievementName(achievement));
+            if (!names.empty()) info.unlocked = "Unlocked: " + names;
+        }
+        info.online = pWasOnline;
+        info.reducedMotion = LoadReducedMotion();
+        const char* testPick = std::getenv("HOVERNET_TEST_RESULTS_CHOICE");
+        if (testPick != nullptr && std::string(testPick) == "main") return PostRaceChoice::eMainMenu;
+        const HoverNetRml::ResultsChoice picked = HoverNetRml::RunResults(graphics.GetWindow(), graphics.GetRenderer(), info, std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit, kWidth, kHeight);   // the scripted-input test lets the screen run until its script has acted
+        switch (picked) {
+        case HoverNetRml::ResultsChoice::eLobby: return PostRaceChoice::eOnlineLobby;
+        case HoverNetRml::ResultsChoice::eMainMenu: return PostRaceChoice::eMainMenu;
+        case HoverNetRml::ResultsChoice::eQuitRequested: if (ConfirmQuit(graphics, buffer, viewport, font)) return PostRaceChoice::eQuit; break;   // changed their mind: the ImGui screen below
+        case HoverNetRml::ResultsChoice::eNone: if (pFrameLimit >= 0) return PostRaceChoice::eMainMenu; break;
+        }
+    }
+#endif
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
     if (ownsImGuiContext) {
         ImGui::CreateContext();
