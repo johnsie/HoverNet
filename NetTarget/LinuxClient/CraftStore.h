@@ -1,7 +1,6 @@
 // CraftStore.h -- where a player's craft designs are kept on this device: <config>/craft/ with up to kSavedDesigns designs and the one in use.
-// On the web client the config folder is the browser's IndexedDB-backed folder, so "kept in the browser" is this same code. The optional signed-in
-// account service has a separate craft-design API; the Garage does not currently synchronize with it (see docs/craft-designer.md). Nothing here is
-// ever read by the simulation.
+// On the web client the config folder is the browser's IndexedDB-backed folder, so "kept in the browser" is this same code. The Garage can explicitly
+// save to or restore from the optional signed-in account service (see docs/craft-designer.md). Nothing here is ever read by the simulation.
 #ifndef HOVERNET_CRAFT_STORE_H
 #define HOVERNET_CRAFT_STORE_H
 

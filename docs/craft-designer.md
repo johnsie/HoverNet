@@ -33,10 +33,12 @@ The optional Outiva account service also provides authenticated `GET` and `PUT`
 designs and an active slot in `/var/lib/hovernet-account/craft.json` by the
 account's immutable OIDC subject. The service validates every design against
 the same HCD1 layout and checksum as the game, and creates the file with mode
-0600. A missing account service does not affect guest play.
-
-The Garage currently saves to the local configuration directory; it does not
-automatically synchronize those files with `/account/craft`.
+0600. In the browser Garage, **Save local slots to account** uploads all eight
+slots; **Restore account slots (replaces local)** downloads the account copy
+and replaces the local slots. These actions are explicit, so local work is not
+silently overwritten. If the account service is missing, ordinary local and
+guest play are unaffected. Desktop clients use local storage and do not have
+account controls.
 
 ## Format and tests
 

@@ -112,6 +112,18 @@ EM_JS(int, hovernet_js_default_server_url, (char* out, int cap), {
     var url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/auth/';
     return stringToUTF8(url, out, cap);
 });
+EM_JS(void, hovernet_js_account_craft_save, (), {
+    if (window.hoverNetSaveCraftAccount) window.hoverNetSaveCraftAccount();
+});
+EM_JS(void, hovernet_js_account_craft_load, (), {
+    if (window.hoverNetLoadCraftAccount) window.hoverNetLoadCraftAccount();
+});
+EM_JS(void, hovernet_js_account_craft_status, (char* out, int cap), {
+    stringToUTF8(window.hoverNetCraftStatus || '', out, cap);
+});
+EM_JS(int, hovernet_js_account_craft_revision, (), {
+    return window.hoverNetCraftRevision | 0;
+});
 EM_JS(int, hovernet_js_is_touch, (), {
     return (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 1 : 0;
 });
@@ -5699,6 +5711,9 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
     int slot = store.Active();
     if (slot < 0) slot = 0;
     if (!store.Load(slot, design)) design = CraftDesign();
+#ifdef HOVERNET_WEB
+    int accountCraftRevision = hovernet_js_account_craft_revision();
+#endif
     if (std::getenv("HOVERNET_GARAGE_DEMO") != nullptr) {   // test hook: a sample design, to look at the screen
         design.length = 8; design.taper = 10; design.body = {{200, 25, 30}}; design.bodyStrength = 200; design.accent = {{30, 170, 70}}; design.accentStrength = 255; design.name = "Demo";
         for (int y = 0; y < Authority::kPaintSize; ++y) for (int x = 12; x < 16; ++x) design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x] = 5;
@@ -5746,6 +5761,18 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         const Uint32 now = SDL_GetTicks();
         if (spin) yaw = std::fmod(yaw + 30.0f * static_cast<float>(now - lastTick) / 1000.0f, 360.0f);
         lastTick = now;
+#ifdef HOVERNET_WEB
+        const int newAccountCraftRevision = hovernet_js_account_craft_revision();
+        if (newAccountCraftRevision != accountCraftRevision) {
+            accountCraftRevision = newAccountCraftRevision;
+            slot = store.Active();
+            if (slot < 0) slot = 0;
+            if (!store.Load(slot, design)) design = CraftDesign();
+            undo.clear();
+            status = "Restored account designs to this browser.";
+            shownHash = 0;
+        }
+#endif
 
         SDL_Renderer* renderer = graphics.GetRenderer();
         SDL_RenderSetLogicalSize(renderer, 0, 0);
@@ -5884,6 +5911,14 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
             }
             if (HoverNetQuietButton("Race with the standard paint (stock craft)", ImVec2(-FLT_MIN, 32))) { store.SetActive(-1); status = "Your races use the stock craft."; }
             if (HoverNetQuietButton("Delete this slot", ImVec2(-FLT_MIN, 32))) { store.Delete(slot); design = CraftDesign(); undo.clear(); status = "Deleted."; }
+#ifdef HOVERNET_WEB
+            HoverNetSectionHeading("OUTIVA ACCOUNT");
+            if (HoverNetButton("Save local slots to account", ImVec2(-FLT_MIN, 36))) hovernet_js_account_craft_save();
+            if (HoverNetQuietButton("Restore account slots (replaces local)", ImVec2(-FLT_MIN, 32))) hovernet_js_account_craft_load();
+            char accountStatus[160] = {};
+            hovernet_js_account_craft_status(accountStatus, sizeof accountStatus);
+            if (accountStatus[0] != '\0') HoverNetHint(accountStatus);
+#endif
         }
         if (!status.empty()) ImGui::TextColored(ImVec4(0.55f, 0.95f, 0.65f, 1.0f), "%s", status.c_str());
         if (twoColumns) ImGui::EndTable();

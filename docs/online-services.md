@@ -70,11 +70,10 @@ through `/account/login`, so the framed game already has its session.
 
 What it stores: per account (the immutable OIDC `sub`), the display name the player chose, in `/var/lib/hovernet-account/callsigns.json`
 (mode 0600), and up to eight craft designs in `/var/lib/hovernet-account/craft.json` (mode 0600). The profile in the cookie is name, username
-and email, signed, kept 8 hours, never written to disk. The craft-design API validates every saved design, but the Garage currently saves to
-the browser's local IndexedDB-backed configuration directory and does not synchronize with that API. **What it does not do:** the race
-servers never see the account, so a signed-in name is not verified in a race, and the desktop clients have no sign-in. Deleting an account's
-saved name or designs means removing its entry from the corresponding file (the account itself is Outiva's, in Keycloak). Tests:
-`scripts/test-web-account.py`.
+and email, signed, kept 8 hours, never written to disk. The browser Garage can explicitly upload its local craft slots or replace them with the
+account copy; desktop clients remain local-only. **What it does not do:** the race servers never see the account, so a signed-in name is not
+verified in a race, and the desktop clients have no sign-in. Deleting an account's saved name or designs means removing its entry from the
+corresponding file (the account itself is Outiva's, in Keycloak). Tests: `scripts/test-web-account.py`.
 
 ## Tests
 
