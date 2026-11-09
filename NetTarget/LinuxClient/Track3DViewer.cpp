@@ -5721,8 +5721,8 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         if (from == to) return;
         std::vector<std::pair<int, int>> stack{{sx, sy}};
         while (!stack.empty()) {
-            const auto cell = stack.back(); stack.pop_back();
-            const int x = cell.first, y = cell.second;
+            const auto point = stack.back(); stack.pop_back();
+            const int x = point.first, y = point.second;
             if (x < 0 || y < 0 || x >= Authority::kPaintSize || y >= Authority::kPaintSize) continue;
             std::uint8_t& cell = p[static_cast<size_t>(y) * Authority::kPaintSize + x];
             if (cell != from) continue;
