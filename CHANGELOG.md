@@ -4,7 +4,7 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## Unreleased
+## 2.3.32 - 2026-11-09
 
 ### Changed
 - **A simpler main menu with no scrollbars.** Play Offline, Race Online, Leaderboards, Garage, and a Settings button. Everything else (game settings, controls, watch a replay, tutorial) is in a new Settings hub. The buttons are sized from the room the panel has, so the menu fits any window from 640x480 up without scrolling.
