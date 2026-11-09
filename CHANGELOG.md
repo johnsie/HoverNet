@@ -4,6 +4,11 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.30 - 2026-11-09
+
+### Fixed
+- The WebAssembly determinism, physics and render checks no longer overflow the default 64 KB stack (they crashed in 2.3.29, failing its GitLab web job). No change to the game itself.
+
 ## 2.3.29 - 2026-11-09
 
 ### Changed
