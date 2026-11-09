@@ -597,6 +597,8 @@ target_link_libraries(HoverNetTutorialTest PRIVATE HoverNetSim)
 add_executable(HoverNetMusicTest NetTarget/LinuxClient/MusicTest.cpp)
 target_link_libraries(HoverNetMusicTest PRIVATE HoverNetResourceCore)
 add_executable(HoverNetProfileTest NetTarget/LinuxClient/ProfileTest.cpp NetTarget/LinuxClient/Profile.cpp)
+add_executable(HoverNetGpuFinishTest NetTarget/LinuxClient/GpuFinishTest.cpp NetTarget/VideoServices/GpuFinisher.cpp NetTarget/VideoServices/ModernGraphics.cpp NetTarget/VideoServices/ColourGrade.cpp)
+target_link_libraries(HoverNetGpuFinishTest PRIVATE SDL2::SDL2)
 add_executable(HoverNetCraftDesignTest NetTarget/LinuxClient/CraftDesignTest.cpp)
 target_link_libraries(HoverNetCraftDesignTest PRIVATE HoverNetSim)
 add_executable(HoverNetCraftLookTest NetTarget/LinuxClient/CraftLookTest.cpp NetTarget/LinuxClient/CraftPreview.cpp)
@@ -614,6 +616,8 @@ if(NOT EMSCRIPTEN)
     add_test(NAME HoverNetViewportColour COMMAND HoverNetViewportColourTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetMusic COMMAND HoverNetMusicTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetProfile COMMAND HoverNetProfileTest)
+    add_test(NAME HoverNetGpuFinish COMMAND HoverNetGpuFinishTest)
+    set_tests_properties(HoverNetGpuFinish PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME HoverNetTutorial COMMAND HoverNetTutorialTest)
     add_test(NAME HoverNetCraftDesign COMMAND HoverNetCraftDesignTest)
     add_test(NAME HoverNetCraftLook COMMAND HoverNetCraftLookTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
@@ -705,6 +709,7 @@ target_link_libraries(HoverNetLobby PRIVATE HoverNetRaceServerClient)
 add_executable(HoverNetLinuxBootstrap
     NetTarget/LinuxClient/main.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
+    NetTarget/VideoServices/GpuFinisher.cpp
     NetTarget/VideoServices/ModernGraphics.cpp
     NetTarget/VideoServices/ColourGrade.cpp
 )
@@ -715,6 +720,7 @@ target_link_libraries(HoverNetLinuxBootstrap PRIVATE SDL2::SDL2)
 add_executable(HoverNetTrackViewer
     NetTarget/LinuxClient/TrackViewer.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
+    NetTarget/VideoServices/GpuFinisher.cpp
     NetTarget/VideoServices/ModernGraphics.cpp
     NetTarget/VideoServices/ColourGrade.cpp
 )
@@ -787,6 +793,7 @@ add_executable(HoverNetTrack3DViewer
     NetTarget/LinuxClient/CraftStore.cpp
     NetTarget/LinuxClient/CraftPreview.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
+    NetTarget/VideoServices/GpuFinisher.cpp
     NetTarget/VideoServices/ModernGraphics.cpp
     NetTarget/VideoServices/ColourGrade.cpp
 )
@@ -807,6 +814,7 @@ add_executable(HoverNetGame2Player
     NetTarget/LinuxClient/Sha256.cpp
     NetTarget/Authority/ReplayFormat.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
+    NetTarget/VideoServices/GpuFinisher.cpp
     NetTarget/VideoServices/ModernGraphics.cpp
     NetTarget/VideoServices/ColourGrade.cpp
 )

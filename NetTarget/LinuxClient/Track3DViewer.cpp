@@ -1851,6 +1851,7 @@ struct GraphicsSettings
     // Off by default (2026-11-09, the owner's choice): soft craft shadows, light from the craft and haze, engine/trail/spark effects, richer colour and vignette.
     bool shadows = false, deband = true, smoothing = true, bloom = true, grade = false, effects = false, lighting = false, textures = true;
     bool atmosphere = true, occlusion = true, edges = true, craft = true, halos = true, sharpen = true, exposure = true, adaptive = true;
+    bool gpu = true;   // the finishing passes on the graphics card, when there is one (see VideoServices/GpuFinisher.h)
     float brightness = 1.0f;   // 0.7 .. 1.4
 };
 
@@ -1887,6 +1888,7 @@ GraphicsSettings LoadGraphicsSettings()
         else if (key == "sharpen") settings.sharpen = value != "0";
         else if (key == "exposure") settings.exposure = value != "0";
         else if (key == "adaptive") settings.adaptive = value != "0";
+        else if (key == "gpu") settings.gpu = value != "0";
         else if (key == "brightness") { const float b = static_cast<float>(std::atof(value.c_str())); if (b >= 0.7f && b <= 1.4f) settings.brightness = b; }
     }
     if (defaultsVersion < 2) {   // a file from before the four extras went off by default: they start off for everyone, and stay as chosen after that
@@ -1901,7 +1903,7 @@ void SaveGraphicsSettings(const GraphicsSettings& settings)
     out << "defaults 2\n" << "preset " << (settings.preset == HoverNetGfx::Preset::eModern ? "modern" : settings.preset == HoverNetGfx::Preset::eModernHigh ? "high" : settings.preset == HoverNetGfx::Preset::eModernLite ? "lite" : "modern") << '\n'
         << "shadows " << settings.shadows << '\n' << "deband " << settings.deband << '\n' << "smooth " << settings.smoothing << '\n' << "bloom " << settings.bloom << '\n'
         << "grade " << settings.grade << '\n' << "effects " << settings.effects << '\n' << "lighting " << settings.lighting << '\n' << "textures " << settings.textures << '\n' << "atmosphere " << settings.atmosphere << '\n' << "occlusion " << settings.occlusion << '\n' << "edges " << settings.edges << '\n'
-        << "craft " << settings.craft << '\n' << "halos " << settings.halos << '\n' << "sharpen " << settings.sharpen << '\n' << "exposure " << settings.exposure << '\n' << "adaptive " << settings.adaptive << '\n' << "brightness " << settings.brightness << '\n';
+        << "craft " << settings.craft << '\n' << "halos " << settings.halos << '\n' << "sharpen " << settings.sharpen << '\n' << "exposure " << settings.exposure << '\n' << "adaptive " << settings.adaptive << '\n' << "gpu " << settings.gpu << '\n' << "brightness " << settings.brightness << '\n';
 }
 
 HoverNetGfx::Options GraphicsOptionsFor(const GraphicsSettings& settings, bool reducedMotion)
@@ -5028,6 +5030,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             }
             ImGui::PopItemWidth();
             {
+                ImGui::Checkbox("Use my graphics card for the picture passes", &graphicsSettings.gpu);
                 ImGui::Checkbox("Soft craft shadows", &graphicsSettings.shadows);
                 if (graphicsSettings.preset != HoverNetGfx::Preset::eModernLite) {
                     ImGui::Checkbox("Smooth colour bands", &graphicsSettings.deband);
@@ -9062,6 +9065,7 @@ int RunClient(int argc, char** argv)
             std::fflush(stdout);
         }
         graphics.SetModernOptions(options);
+        graphics.SetGpuAllowed(graphicsSettings.gpu);
 #ifdef HOVERNET_GAME2_PLAYER
         if (observer != nullptr) {
             observer->SetModernLighting(options.enabled && options.lighting ? TRUE : FALSE);

@@ -1,4 +1,6 @@
 #include "SDL2Graphics.h"
+#include <cstdio>
+#include <cstdlib>
 #include <chrono>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -263,7 +265,24 @@ bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height)
     }
     if (m_modernOptions.enabled) {
         HoverNetGfx::Presenter::ApplyTrueColour(rgb_buffer, buffer, width, height, m_frameHints);
-        m_presenter.Process(rgb_buffer, width, height, m_modernOptions, m_frameHints);
+        if (!m_gpuTried) {
+            // The graphics card does the picture passes when it can (a hidden OpenGL context of its own: the renderer and the menus are not touched).
+            m_gpuTried = true;
+            const char* choice = std::getenv("HOVERNET_GPU");
+            if (choice == nullptr || std::strcmp(choice, "0") != 0) {
+                m_gpu.reset(new HoverNetGfx::GpuFinisher);
+                if (m_gpu->Init()) {
+                    HoverNetGfx::GpuFinisher* gpu = m_gpu.get();
+                    m_presenter.SetFinisher([gpu](std::uint8_t* rgb, int w, int h, const HoverNetGfx::Options& o, const HoverNetGfx::FrameHints& hints, const std::uint8_t* mask) { return gpu->Process(rgb, w, h, o, hints, mask); });
+                    std::printf("Picture passes on the graphics card: %s\n", m_gpu->Renderer().c_str());
+                }
+                else std::printf("Picture passes on the processor (%s)\n", m_gpu->Error().c_str());
+                std::fflush(stdout);
+            }
+        }
+        HoverNetGfx::Options frameOptions = m_modernOptions;
+        frameOptions.gpuFinish = m_gpuAllowed && m_presenter.FinisherActive();
+        m_presenter.Process(rgb_buffer, width, height, frameOptions, m_frameHints);
     }
 
     SDL_UpdateTexture(m_texture, nullptr, rgb_buffer, pitch);

@@ -55,6 +55,7 @@ struct Options
     bool exposure = true;         // a soft roll-off of the brightest highlights (medium quality up); it does not adapt to the view
     bool linearLight = true;      // lights add up as light does (in linear space) rather than as numbers: no washed-out look (high quality only)
     bool trueColour = true;       // the rasteriser draws in true colour with filtered textures (see MR_3DViewPort::SetColourBuffer) instead of 8-bit nearest-texel
+    bool gpuFinish = false;       // set by the caller when a finisher is installed: the picture passes (de-banding, smoothing, sharpening, bloom, highlight roll-off, HUD edge, vignette) are done there, not on the CPU
     bool adaptive = true;         // lowers the quality when the passes cost more than budgetMs per frame, and raises it again when there is room
     float budgetMs = 12.0f;
     float brightness = 1.0f;      // 0.7 .. 1.4: the player's brightness setting, applied through the palette
@@ -177,6 +178,12 @@ public:
     // Improves a finished RGB24 frame in place (width*height*3 bytes, no padding). With options.enabled false it does nothing.
     void Process(std::uint8_t* rgb, int width, int height, const Options& options, const FrameHints& hints);
 
+    // A finisher takes over the picture passes (see Options::gpuFinish): after the scene passes it is called with the frame, the options, the hints and the HUD mask and
+    // returns false if it could not (then the CPU passes run for that frame and the finisher is not used again until SetFinisher is called).
+    typedef std::function<bool(std::uint8_t*, int, int, const Options&, const FrameHints&, const std::uint8_t*)> Finisher;
+    void SetFinisher(Finisher finisher) { mFinisher = std::move(finisher); mFinisherBroken = false; }
+    bool FinisherActive() const { return static_cast<bool>(mFinisher) && !mFinisherBroken; }
+
     // Adds a pass: before the built-in pass called `before`, or at the end when that is null or not found.
     void AddPass(std::unique_ptr<Pass> pass, const char* before = nullptr);
 
@@ -245,6 +252,8 @@ private:
     std::uint32_t mRandom = 0x2545F491u;
     std::uint32_t mFrame = 0;
     std::vector<std::unique_ptr<Pass>> mPasses;
+    Finisher mFinisher;
+    bool mFinisherBroken = false;
     std::vector<PassTime> mPassTimes;
     bool mProfiling = false;
     bool mNormalsReady = false;

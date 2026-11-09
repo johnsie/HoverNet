@@ -194,15 +194,32 @@ void Presenter::Process(std::uint8_t* rgb, int width, int height, const Options&
 
     const std::uint8_t* mask = hints.hudMask != nullptr && hints.hudMaskWidth == width && hints.hudMaskHeight == height ? hints.hudMask : nullptr;
     PassContext context{rgb, width, height, options, hints, mask, *this};
-    for (const std::unique_ptr<Pass>& pass : mPasses) {
-        if (!pass->Wanted(options, hints)) continue;
+    // The picture passes a finisher can take over (names of built-in passes); the others need the scene's depth and stay here.
+    auto isFinishingPass = [](const char* name) {
+        return std::strcmp(name, "filter") == 0 || std::strcmp(name, "sharpen") == 0 || std::strcmp(name, "bloom") == 0 || std::strcmp(name, "exposure") == 0 ||
+               std::strcmp(name, "hud-outline") == 0 || std::strcmp(name, "vignette") == 0;
+    };
+    const bool useFinisher = options.gpuFinish && FinisherActive();
+    auto run = [&](Pass& pass) {
         if (mProfiling) {
             const auto start = std::chrono::steady_clock::now();
-            pass->Run(context);
-            mPassTimes.push_back({pass->Name(), std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count()});
+            pass.Run(context);
+            mPassTimes.push_back({pass.Name(), std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count()});
         }
-        else {
-            pass->Run(context);
+        else pass.Run(context);
+    };
+    for (const std::unique_ptr<Pass>& pass : mPasses) {
+        if (!pass->Wanted(options, hints)) continue;
+        if (useFinisher && isFinishingPass(pass->Name())) continue;
+        run(*pass);
+    }
+    if (useFinisher) {
+        const auto start = std::chrono::steady_clock::now();
+        const bool done = mFinisher(rgb, width, height, options, hints, mask);
+        if (mProfiling) mPassTimes.push_back({"gpu-finish", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count()});
+        if (!done) {   // it could not: this frame gets the CPU passes, and the finisher is not asked again
+            mFinisherBroken = true;
+            for (const std::unique_ptr<Pass>& pass : mPasses) if (pass->Wanted(options, hints) && isFinishingPass(pass->Name())) run(*pass);
         }
     }
     if (!(hints.valid && options.effects)) mParticles.clear();

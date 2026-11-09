@@ -22,6 +22,8 @@
 #include <vector>
 
 #include "../VideoServices/ModernGraphics.h"
+#include "../VideoServices/GpuFinisher.h"
+#include <memory>
 
 class SDL2GraphicsBackend
 {
@@ -58,6 +60,11 @@ public:
     const uint8_t* GetRenderPalette();
     // The quality the picture passes are really running at (lower than the setting while they are too slow for their time budget).
     int GetEffectiveQuality() const { return m_presenter.EffectiveQuality(); }
+    // True while the picture passes run on the graphics card; the card's name, and how long the last frame took there (ms).
+    bool GpuActive() const { return m_gpuAllowed && m_presenter.FinisherActive(); }
+    void SetGpuAllowed(bool allowed) { m_gpuAllowed = allowed; }   // the player's choice (Settings > Graphics); the CPU passes run when it is off
+    const char* GpuName() const { return m_gpu ? m_gpu->Renderer().c_str() : ""; }
+    double GpuMilliseconds() const { return m_gpu ? m_gpu->LastMilliseconds() : 0.0; }
 
     // Palette-expand an indexed frame to RGBA (VR eye images); out must hold width*height*4 bytes.
     bool ConvertToRGBA(const uint8_t* buffer, int width, int height, uint8_t* out) const;
@@ -94,6 +101,9 @@ private:
     bool m_havePresentTime = false;
     float m_gradedBrightness = 1.0f;
     HoverNetGfx::Presenter m_presenter;
+    std::unique_ptr<HoverNetGfx::GpuFinisher> m_gpu;   // the finishing passes on the graphics card, when this machine has one (HOVERNET_GPU=0 turns it off)
+    bool m_gpuTried = false;
+    bool m_gpuAllowed = true;
     HoverNetGfx::Options m_modernOptions;
     HoverNetGfx::FrameHints m_frameHints;
     

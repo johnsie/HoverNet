@@ -4,6 +4,11 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## Unreleased
+
+### Added
+- **The picture passes run on the graphics card** (first stage of the GPU renderer): de-banding with dither, edge smoothing, sharpening, bloom, the highlight roll-off, the dark edge beside the HUD and the vignette are shaders now (OpenGL 3.3 or ES 3.0 through SDL, its own hidden context), with the HUD's pixels untouched. Each pass matches the processor's within 0.6 levels (test `HoverNetGpuFinish`, skipped where no OpenGL context can be made); 7 ms against 12 ms at 640x480 on an Intel Iris Xe. Without a card, in the browser or with `HOVERNET_GPU=0` (or Settings > Graphics > "Use my graphics card") the processor passes run as before.
+
 ## 2.3.35 - 2026-11-09
 
 ### Added
