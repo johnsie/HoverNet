@@ -51,9 +51,10 @@ turns it off). Without it the text and edges looked rough, because SDL's rendere
 
 * Rounded corners: SDL's **software** renderer leaves ragged dark lines along the top of rounded boxes, so buttons and cards are square. This was not seen on a GPU renderer
   because none was available where this was built; rounded corners may be fine there and could be restored.
-* The screens do not scale with the window or with the UI scale setting; text is the size it was designed at (1024x768). High contrast is not applied.
-* Compared against the older screens by screenshots at 1024x768 only. Not checked: large windows, phones and touch, a real controller, a real download, choosing a track
-  from the list in the local setup, the browser and Windows builds of the form screens (the Windows and browser builds compiled and the main menu ran; see CHANGELOG).
+* The screens follow the UI Scale setting but do not scale with the window size; text is the size it was designed at (1024x768) times that. High contrast is not applied.
+* Compared against the older screens by screenshots at 1024x768 only. Run on Windows x64 headless (the Settings form, the local race setup and a Controls remap, 2026-11-09) and
+  the main menu in headless Chrome. Not checked: large windows, phones and touch, a real controller, a real download, choosing a track from the list in the local setup, the browser
+  build of the form screens, a real (not headless) window on Windows.
 * The craft is a small preview picture (560x420) stretched, so it looks blocky next to a vector UI.
 
 ## If it goes on
