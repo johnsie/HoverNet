@@ -199,8 +199,8 @@ int main(int argc, char** argv)
         HoverNetGfx::BuildShadowLut(palette.data(), 87, lut);
         observer->SetModernTextures(options.trueColour ? TRUE : FALSE, usedPalette.data());
         if (options.trueColour && std::getenv("HOVERNET_RENDER_NOTEXTURES") == nullptr) {   // true-colour textures, in this program and in the object library
-            MR_ResBitmap::SetColourPalette(usedPalette.data());
-            MR_DllObjectFactory::SetTexturePalette(usedPalette.data());
+            MR_ResBitmap::SetColourPalette(usedPalette.data(), options.brightness, options.grade);
+            MR_DllObjectFactory::SetTexturePalette(usedPalette.data(), options.brightness, options.grade);
         }
         observer->SetModernLighting(TRUE);
         observer->SetModernEffects(TRUE, TRUE, FALSE, lut);

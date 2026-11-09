@@ -4,12 +4,16 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## Unreleased
+## 2.3.29 - 2026-11-09
+
+### Changed
+- **Camera restored.** At the owner's request the chase camera follows the craft exactly as it did before 2026-11-08 (smoothed once per drawn picture). `docs/camera.md`, `scripts/test-camera-rule.sh` updated with it.
 
 ### Changed
 - **A less cartoony picture.** The colour grade no longer boosts saturation (colours are now a little under the palette's, where they were 12% over), its contrast curve is much gentler, and the cool and warm toning is half as strong; textures get a trace of surface variation (about +-3% brightness, on flat areas only, never on edges, the same every time and tiling seamlessly) so flat colour fields look like surfaces rather than paint. The game's own art is stylised and stays so.
 
 ### Added
+- **AI-enhanced textures.** `NetTarget/ObjFac1.textures` (14.2 MB, 66 textures at 4x, true colour) is loaded beside `ObjFac1.dat`; `HOVERNET_NO_AI_TEXTURES=1` turns it off. New test `HoverNetTexturePack`; method and costs in `docs/texture-pipeline.md`. Linux only checked; the web build does not ship it.
 - **Better textures (Settings > Graphics > Smooth textures).** Every texture gets a true-colour copy: the palette's dither and banding smoothed away without blurring edges, smaller levels made by averaging in linear light (no shimmer in the distance), and every level at twice the resolution with an edge-directed upscale, so walls, floors and craft are crisp close up instead of blocky or blurred. Built on first use; switches off with the adaptive quality. See `docs/graphics-engine.md` ("Textures") for what it can and cannot do.
 
 ### Fixed

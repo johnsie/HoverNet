@@ -23,6 +23,11 @@
 #include "StdAfx.h"
 
 #include "ResourceLib.h"
+#include "TexturePack.h"
+
+#include <cstdlib>
+#include <string>
+#include <vector>
 
 #define new DEBUG_NEW
 
@@ -64,6 +69,23 @@ MR_ResourceLib::MR_ResourceLib( const char* pResFile )
             t1 = GetTickCount();
             LoadSounds( lArchive );
             t2 = GetTickCount();
+
+            // The AI-enhanced images for some of the textures, from the pack that sits beside this file (ObjFac1.textures); optional.
+            if( getenv( "HOVERNET_NO_AI_TEXTURES" ) == NULL )
+            {
+               std::vector<HoverNetTex::PackImage> lImages;
+               if( HoverNetTex::LoadTexturePack( HoverNetTex::TexturePackPathFor( pResFile ).c_str(), lImages ) )
+               {
+                  for( size_t lIndex = 0; lIndex < lImages.size(); lIndex++ )
+                  {
+                     MR_ResBitmap* lBitmap = GetBitmap( lImages[ lIndex ].id );
+                     if( lBitmap != NULL )
+                     {
+                        lBitmap->SetEnhancedImage( lImages[ lIndex ].width, lImages[ lIndex ].height, lImages[ lIndex ].words );
+                     }
+                  }
+               }
+            }
 
          }
          else

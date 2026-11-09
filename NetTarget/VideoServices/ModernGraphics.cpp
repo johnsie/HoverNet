@@ -1,5 +1,6 @@
 // ModernGraphics.cpp -- see ModernGraphics.h.
 #include "ModernGraphics.h"
+#include "ColourGrade.h"
 
 #include <algorithm>
 #include <chrono>
@@ -802,23 +803,11 @@ void Presenter::Effects(std::uint8_t* rgb, int width, int height, const Options&
 // colours once, instead of to every pixel of every frame.
 void Presenter::GradePalette(const std::uint8_t* in768, std::uint8_t* out768, float brightness)
 {
-    const float inverseGamma = 1.0f / std::min(1.6f, std::max(0.6f, brightness));   // brightness above 1 lifts the middle tones
+    const ColourGrade grade(brightness);   // the same grade the true-colour textures go through
     for (int i = 0; i < 256; ++i) {
-        int c[3];
-        for (int k = 0; k < 3; ++k) {
-            float x = in768[i * 3 + k] / 255.0f;
-            x = std::pow(x, inverseGamma);
-            const float sm = x * x * (3.0f - 2.0f * x);   // a very gentle S-curve: 18% of the way to smoothstep (a stronger one is what makes a picture look cartoon-contrasty)
-            c[k] = Clamp255(static_cast<int>((x * 0.82f + sm * 0.18f) * 255.0f + 0.5f));
-        }
-        const int l = Luma(c[0], c[1], c[2]);
-        for (int k = 0; k < 3; ++k) c[k] = Clamp255(l + (((c[k] - l) * 214) >> 8));   // saturation x 0.84: under the palette's, natural rather than cartoon-bright
-        // Split toning: the faintest cool in the shadows and warmth in the highlights (at most +-3 levels); stronger looks like a film grade.
-        const float shadow = std::min(l / 24.0f, 1.0f) * std::max(0.0f, 1.0f - l / 110.0f), highlight = std::max(0.0f, (l - 150) / 105.0f);   // pure black stays black
-        c[0] = Clamp255(c[0] + static_cast<int>(3.0f * highlight - 1.5f * shadow));
-        c[1] = Clamp255(c[1] + static_cast<int>(0.5f * highlight));
-        c[2] = Clamp255(c[2] + static_cast<int>(2.5f * shadow - 2.0f * highlight));
-        for (int k = 0; k < 3; ++k) out768[i * 3 + k] = static_cast<std::uint8_t>(c[k]);
+        int r, g, b;
+        grade.Apply(in768[i * 3], in768[i * 3 + 1], in768[i * 3 + 2], r, g, b);
+        out768[i * 3] = static_cast<std::uint8_t>(r); out768[i * 3 + 1] = static_cast<std::uint8_t>(g); out768[i * 3 + 2] = static_cast<std::uint8_t>(b);
     }
 }
 

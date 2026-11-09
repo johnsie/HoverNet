@@ -808,17 +808,10 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
 // the same at any other rate. A jump in race time (a restart, a seek) puts the camera straight where it should be.
 void MR_Observer::SmoothChaseCamera( MR_3DCoordinate& pTarget, MR_SimulationTime pTime )
 {
-   const double lTicks = (double)( pTime - mLastCameraTime )/16.0;
-   if( lTicks < 0.0 || lTicks > 30.0 )
-   {
-      return;
-   }
-
-   const double lKeepXY = pow( 0.25, lTicks );
-   const double lKeepZ  = pow( 1.0/3.0, lTicks );
-   pTarget.mX = (MR_Int32)floor( pTarget.mX + ( mLastCameraPos.mX - pTarget.mX )*lKeepXY );
-   pTarget.mY = (MR_Int32)floor( pTarget.mY + ( mLastCameraPos.mY - pTarget.mY )*lKeepXY );
-   pTarget.mZ = (MR_Int32)floor( pTarget.mZ + ( mLastCameraPos.mZ - pTarget.mZ )*lKeepZ );
+   // The original chase smoothing, restored at the owner's request (2026-11-09): once per drawn picture, not by race time.
+   pTarget.mX = (3*pTarget.mX + mLastCameraPos.mX )/4;
+   pTarget.mY = (3*pTarget.mY + mLastCameraPos.mY )/4;
+   pTarget.mZ = (2*pTarget.mZ + mLastCameraPos.mZ )/3;
 }
 
 void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainCharacter* pViewingCharacter, MR_SimulationTime pTime, const MR_UInt8* pBackImage )

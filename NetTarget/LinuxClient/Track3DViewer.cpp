@@ -8151,10 +8151,13 @@ int RunClient(int argc, char** argv)
                 static bool texturesOn = false;
                 const std::uint8_t* palette = graphics.GetRenderPalette();
                 if (trueColourNow && palette != nullptr) {
-                    if (!texturesOn || std::memcmp(lastTexturePalette, palette, sizeof lastTexturePalette) != 0) {
+                    static float lastBrightness = -1.0f;
+                    static bool lastGrade = false;
+                    if (!texturesOn || lastBrightness != options.brightness || lastGrade != options.grade || std::memcmp(lastTexturePalette, palette, sizeof lastTexturePalette) != 0) {
+                        lastBrightness = options.brightness; lastGrade = options.grade;
                         std::memcpy(lastTexturePalette, palette, sizeof lastTexturePalette);
-                        MR_ResBitmap::SetColourPalette(palette);
-                        MR_DllObjectFactory::SetTexturePalette(palette);
+                        MR_ResBitmap::SetColourPalette(palette, options.brightness, options.grade);
+                        MR_DllObjectFactory::SetTexturePalette(palette, options.brightness, options.grade);
                         texturesOn = true;
                     }
                 }

@@ -59,7 +59,7 @@ class MR_FactoryDll
       CString               (*mGetObjectFamily)( MR_UInt16 pClassId );
       CString               (*mGetObjectDescription)( MR_UInt16 pClassId );
       MR_ObjectFromFactory* (*mGetObject)( MR_UInt16 pClassId );
-      void                  (*mSetTexturePalette)( const MR_UInt8* pPalette768 );   // optional
+      void                  (*mSetTexturePalette)( const MR_UInt8* pPalette768, float pBrightness, int pGradeAiImages );   // optional
 
 
       // Initialisation
@@ -135,7 +135,7 @@ void MR_DllObjectFactory::RegisterLocalDll( MR_UInt16 pDllId, MR_ObjectFromFacto
 }
 
 
-void MR_DllObjectFactory::SetTexturePalette( const MR_UInt8* pPalette768 )
+void MR_DllObjectFactory::SetTexturePalette( const MR_UInt8* pPalette768, float pBrightness, bool pGradeAiImages )
 {
    POSITION lNextPos = gsDllList.GetStartPosition();
 
@@ -148,7 +148,7 @@ void MR_DllObjectFactory::SetTexturePalette( const MR_UInt8* pPalette768 )
 
       if( lDllPtr != NULL && lDllPtr->mSetTexturePalette != NULL )
       {
-         lDllPtr->mSetTexturePalette( pPalette768 );
+         lDllPtr->mSetTexturePalette( pPalette768, pBrightness, pGradeAiImages ? 1 : 0 );
       }
    }
 }
@@ -472,7 +472,7 @@ BOOL MR_FactoryDll::Open( MR_UInt16 pDllId )
                               GetProcAddress( mHandle,
                                               "MR_GetObject" );
 
-      mSetTexturePalette    = ( void (*)( const MR_UInt8* ))
+      mSetTexturePalette    = ( void (*)( const MR_UInt8*, float, int ))
                               GetProcAddress( mHandle,
                                               "MR_SetTexturePalette" );
 

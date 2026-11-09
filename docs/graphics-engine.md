@@ -4,6 +4,9 @@
 each part looks like, the measured costs and what was and was not run) is in [render-golden.md](render-golden.md#the-modern-look); the plan is
 [roadmap-3.0.md](roadmap-3.0.md#graphics-improvements).
 
+> **The camera is off limits.** Nothing in this engine may change how the race camera works (CLAUDE.md rule 7, [camera.md](camera.md)): no field-of-view or zoom change,
+> no shake, no look-ahead, no smoothing. A pass changes what is drawn in the picture, never where it is drawn from. `HoverNetCameraRule` and the golden frames guard it.
+
 ## The pipeline
 
 ```

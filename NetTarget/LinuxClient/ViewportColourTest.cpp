@@ -77,6 +77,7 @@ long Steps(const Picture& p)   // the sum of the colour differences between hori
 int main()
 {
     MR_InitTrigoTables();
+    setenv("HOVERNET_NO_AI_TEXTURES", "1", 1);   // this test is about the rasteriser and the palette textures, not the AI pack (HoverNetTexturePack)
     MR_ResourceLib resources("NetTarget/ObjFac1.dat");
     const MR_ResBitmap* bitmap = resources.GetBitmap(1051);
     if (bitmap == nullptr) { std::fprintf(stderr, "Could not load the test bitmap\n"); return 2; }

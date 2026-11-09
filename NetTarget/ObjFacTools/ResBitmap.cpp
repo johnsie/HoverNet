@@ -23,6 +23,7 @@
 
 #include "StdAfx.h"
 #include "ResBitmap.h"
+#include "../VideoServices/ColourGrade.h"
 #include "../VideoServices/TextureEnhance.h"
 
 #include <cstring>
@@ -41,6 +42,9 @@ MR_ResBitmap::MR_ResBitmap( int pResourceId )
       Registry().push_back( this );
    }
    mColourVersion = -1;
+   mColourShift = 1;
+   mAiWidth = 0;
+   mAiHeight = 0;
    mResourceId     = pResourceId;
    mWidth          = 1;         
    mHeight         = 1;        
@@ -248,8 +252,10 @@ static std::atomic<bool> gsColourOn( false );
 static std::atomic<int>  gsColourVersion( 0 );
 static std::mutex        gsColourPaletteMutex;
 static MR_UInt8          gsColourPalette[ 768 ];
+static float             gsColourBrightness = 1.0f;
+static bool              gsColourGradeAi = false;
 
-void MR_ResBitmap::SetColourPalette( const MR_UInt8* pPalette768 )
+void MR_ResBitmap::SetColourPalette( const MR_UInt8* pPalette768, float pBrightness, bool pGradeAiImages )
 {
    bool lChanged = false;
    {
@@ -261,9 +267,11 @@ void MR_ResBitmap::SetColourPalette( const MR_UInt8* pPalette768 )
       }
       else
       {
-         if( !gsColourOn || memcmp( gsColourPalette, pPalette768, sizeof( gsColourPalette ) ) != 0 )
+         if( !gsColourOn || memcmp( gsColourPalette, pPalette768, sizeof( gsColourPalette ) ) != 0 || gsColourBrightness != pBrightness || gsColourGradeAi != pGradeAiImages )
          {
             memcpy( gsColourPalette, pPalette768, sizeof( gsColourPalette ) );
+            gsColourBrightness = pBrightness;
+            gsColourGradeAi = pGradeAiImages;
             gsColourVersion++;
             lChanged = true;
          }
@@ -316,21 +324,75 @@ bool MR_ResBitmap::EnsureColour()const
          lTop = lIndex;
       }
    }
-   // The true-colour copy of each level is twice the size of the 8-bit one in both directions (see MR_Bitmap::GetColourColumnBuffer).
+   // The true-colour copy of each level is (1 << shift) times the 8-bit one in both directions: 2x from the palette, or the scale of the AI-enhanced image.
+   const SubBitmap& lBase = mSubBitmapList[ lTop ];
+   int lShift = 1;
+   bool lUseAi = false;
+   if( mAiWidth > 0 && mAiWidth%lBase.mXRes == 0 )
+   {
+      const int lScale = mAiWidth/lBase.mXRes;
+      lShift = lScale == 8 ? 3 : (lScale == 4 ? 2 : 1);
+      lUseAi = lScale == 2 || lScale == 4 || lScale == 8;
+      if( !lUseAi )
+      {
+         lShift = 1;
+      }
+   }
+   const int lPreviousShift = mColourShift;
+   mColourShift = lShift;
    for( int lIndex = 0; lIndex < mSubBitmapCount; lIndex++ )
    {
       SubBitmap& lSub = mSubBitmapList[ lIndex ];
+      if( lSub.mColour != NULL && lPreviousShift != lShift )
+      {
+         delete []lSub.mColour;
+         delete []lSub.mColourColumnPtr;
+         lSub.mColour = NULL;
+         lSub.mColourColumnPtr = NULL;
+      }
       if( lSub.mColour == NULL )
       {
-         lSub.mColour = new MR_UInt32[ 4*lSub.mXRes*lSub.mYRes ];
-         lSub.mColourColumnPtr = new MR_UInt32*[ 2*lSub.mXRes ];
-         for( int lColumn = 0; lColumn < 2*lSub.mXRes; lColumn++ )
+         const int lW = lSub.mXRes << lShift, lH = lSub.mYRes << lShift;
+         lSub.mColour = new MR_UInt32[ (size_t)lW*lH ];
+         lSub.mColourColumnPtr = new MR_UInt32*[ lW ];
+         for( int lColumn = 0; lColumn < lW; lColumn++ )
          {
-            lSub.mColourColumnPtr[ lColumn ] = lSub.mColour + lColumn*2*lSub.mYRes;
+            lSub.mColourColumnPtr[ lColumn ] = lSub.mColour + (size_t)lColumn*lH;
          }
       }
    }
-   const SubBitmap& lBase = mSubBitmapList[ lTop ];
+
+   if( lUseAi )
+   {
+      // The AI-enhanced image is the source: the look's grade applied (it is in the game's own colours), a trace of surface variation on its flat fields, and
+      // the smaller levels made from it by averaging in linear light.
+      std::vector<MR_UInt32> lTopColour( mAiWords );
+      if( gsColourGradeAi )
+      {
+         const HoverNetGfx::ColourGrade lGrade( gsColourBrightness );
+         for( size_t lIndex = 0; lIndex < lTopColour.size(); lIndex++ )
+         {
+            lTopColour[ lIndex ] = lGrade.Apply( lTopColour[ lIndex ] );
+         }
+      }
+      HoverNetTex::AddSurfaceDetail( lTopColour.data(), mAiWidth, mAiHeight, 1 );
+      for( int lIndex = 0; lIndex < mSubBitmapCount; lIndex++ )
+      {
+         SubBitmap& lSub = mSubBitmapList[ lIndex ];
+         const int lW = lSub.mXRes << lShift, lH = lSub.mYRes << lShift;
+         if( lIndex == lTop )
+         {
+            memcpy( lSub.mColour, lTopColour.data(), (size_t)lW*lH*sizeof( MR_UInt32 ) );
+         }
+         else if( !HoverNetTex::Downsample( lTopColour.data(), mAiWidth, mAiHeight, lSub.mColour, lW, lH ) )
+         {
+            HoverNetTex::EnhanceBase( lSub.mBuffer, lSub.mXRes, lSub.mYRes, lPalette, lSub.mColour, false );   // not a whole division: the palette's colours, at 1x
+         }
+      }
+      mColourVersion.store( lVersion, std::memory_order_release );
+      return true;
+   }
+
    std::vector<MR_UInt32> lTopColour( (size_t)lBase.mXRes*lBase.mYRes );
    HoverNetTex::EnhanceBase( lBase.mBuffer, lBase.mXRes, lBase.mYRes, lPalette, lTopColour.data(), true, 1 );
    for( int lIndex = 0; lIndex < mSubBitmapCount; lIndex++ )
@@ -349,6 +411,39 @@ bool MR_ResBitmap::EnsureColour()const
    }
    mColourVersion.store( lVersion, std::memory_order_release );
    return true;
+}
+
+void MR_ResBitmap::SetEnhancedImage( int pWidth, int pHeight, std::vector<MR_UInt32>& pWords )
+{
+   if( mSubBitmapCount <= 0 || pWidth <= 0 || pHeight <= 0 || pWords.size() != (size_t)pWidth*pHeight )
+   {
+      return;
+   }
+   int lTop = 0;
+   for( int lIndex = 1; lIndex < mSubBitmapCount; lIndex++ )
+   {
+      if( mSubBitmapList[ lIndex ].mXRes*mSubBitmapList[ lIndex ].mYRes > mSubBitmapList[ lTop ].mXRes*mSubBitmapList[ lTop ].mYRes )
+      {
+         lTop = lIndex;
+      }
+   }
+   const int lXRes = mSubBitmapList[ lTop ].mXRes;
+   const int lYRes = mSubBitmapList[ lTop ].mYRes;
+   const int lScale = pWidth/lXRes;
+   if( pWidth%lXRes != 0 || pHeight%lYRes != 0 || pHeight/lYRes != lScale || (lScale != 2 && lScale != 4 && lScale != 8) )
+   {
+      return;   // not this texture's size at a power-of-two scale: not used
+   }
+   mAiWords.swap( pWords );
+   mAiWidth  = pWidth;
+   mAiHeight = pHeight;
+   mColourVersion = -1;
+}
+
+int MR_ResBitmap::GetColourScaleShift()const
+{
+   EnsureColour();
+   return mColourShift;
 }
 
 const MR_UInt32* MR_ResBitmap::GetColourColumnBuffer( int pSubBitmap, int pColumn )const

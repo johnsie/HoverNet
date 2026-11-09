@@ -32,6 +32,7 @@ install -Dm755 "$plugin" "$package_root/usr/lib/hovernet/ObjFac1.so"
 install -Dm755 packaging/debian/hovernet-game "$package_root/usr/games/hovernet"
 install -Dm644 packaging/debian/hovernet-game.desktop "$package_root/usr/share/applications/hovernet.desktop"
 install -Dm644 NetTarget/ObjFac1.dat "$package_root/usr/share/games/hovernet/NetTarget/ObjFac1.dat"
+install -Dm644 NetTarget/ObjFac1.textures "$package_root/usr/share/games/hovernet/NetTarget/ObjFac1.textures"
 install -Dm644 NetTarget/LinuxClient/assets/menu-hovercraft.bmp \
   "$package_root/usr/share/games/hovernet/NetTarget/LinuxClient/assets/menu-hovercraft.bmp"
 install -Dm644 NetTarget/LinuxClient/assets/menu-banner.bmp \

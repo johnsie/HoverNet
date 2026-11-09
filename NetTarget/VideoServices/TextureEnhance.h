@@ -22,6 +22,10 @@ namespace HoverNetTex
 // colour is what makes a texture look painted; a trace of variation makes it look like a surface.
 void EnhanceBase(const std::uint8_t* indices, int xres, int yres, const std::uint8_t* palette768, std::uint32_t* out, bool enhance, int detail = 0);
 
+// Just the surface variation of EnhanceBase's detail, applied to a true-colour texture (a word 0x00RRGGBB per texel, in place): about +-3% brightness at detail 1,
+// on flat fields only. Used for the AI-enhanced images too.
+void AddSurfaceDetail(std::uint32_t* texels, int xres, int yres, int detail);
+
 // A smaller copy of a true-colour texture: each output texel is the average, in linear light, of the block of source texels it covers. The source
 // size must be a whole multiple of the destination size in both directions.
 bool Downsample(const std::uint32_t* src, int srcXRes, int srcYRes, std::uint32_t* dst, int dstXRes, int dstYRes);

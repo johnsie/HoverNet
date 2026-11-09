@@ -65,10 +65,13 @@ class MR_DllDeclare MR_Bitmap
       virtual MR_UInt8*  GetColumnBuffer( int pSubBitmap, int pColumn )const = 0;
       virtual MR_UInt8** GetColumnBufferTable( int pSubBitmap )const = 0;
 
-      // True colour (optional): the same picture as 32-bit words 0x00RRGGBB at TWICE the resolution in each direction (2 * GetXRes columns of 2 * GetYRes
-      // words), smoothed and upscaled from the 8-bit texels (see VideoServices/TextureEnhance.h): texel (x, y) of the 8-bit level is covered by the four
+      // True colour (optional): the same picture as 32-bit words 0x00RRGGBB at a higher resolution in each direction (a power of two times GetXRes columns
+      // of as many times GetYRes words, see GetColourScaleShift), smoothed and upscaled from the 8-bit texels (see VideoServices/TextureEnhance.h): texel (x, y) of the 8-bit level is covered by the four
       // words (2x, 2y) .. (2x+1, 2y+1).
       // NULL when this bitmap has no true-colour copy (or true colour is off), in which case the 8-bit texels and the palette are used.
+      // The true-colour copy is (1 << GetColourScaleShift()) times the 8-bit one in each direction: 2x by default, more (4x) for a texture that has an
+      // AI-enhanced image (see ObjFacTools/TexturePack.h). Call it before GetColourColumnBuffer to find the columns.
+      virtual int               GetColourScaleShift()const { return 1; }
       virtual const MR_UInt32*  GetColourColumnBuffer( int /*pSubBitmap*/, int /*pColumn*/ )const { return 0; }
       virtual const MR_UInt32* const* GetColourColumnBufferTable( int /*pSubBitmap*/ )const { return 0; }
 };

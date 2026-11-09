@@ -31,6 +31,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <vector>
 
 #if defined(_WIN32) && !defined(HOVERNET_STATIC)
 #ifdef MR_OBJ_FAC_TOOLS
@@ -78,6 +79,11 @@ class MR_ResBitmap: public MR_Bitmap
 
       // The true-colour copy is built the first time it is wanted after SetColourPalette: the largest level from the palette indices (with the dither
       // and banding smoothed, see VideoServices/TextureEnhance.h), the smaller ones by averaging it in linear light.
+      // An AI-enhanced image for this texture, when the texture pack has one (MR_ResourceLib loads it): the source of the true-colour copy instead of the palette.
+      std::vector<MR_UInt32>   mAiWords;        // column-major, 0x00RRGGBB
+      int                      mAiWidth;
+      int                      mAiHeight;
+      mutable int              mColourShift;    // the scale of the true-colour copy as built: 1 (2x) or more
       mutable std::atomic<int> mColourVersion;
       mutable std::mutex       mColourMutex;
       bool EnsureColour()const;
@@ -109,12 +115,18 @@ class MR_ResBitmap: public MR_Bitmap
       MR_DllDeclare MR_UInt8*  GetBuffer( int pSubBitmap )const;
       MR_DllDeclare MR_UInt8*  GetColumnBuffer( int pSubBitmap, int pColumn )const;
       MR_DllDeclare MR_UInt8** GetColumnBufferTable( int pSubBitmap )const;
+      MR_DllDeclare int               GetColourScaleShift()const;
       MR_DllDeclare const MR_UInt32*  GetColourColumnBuffer( int pSubBitmap, int pColumn )const;
       MR_DllDeclare const MR_UInt32* const* GetColourColumnBufferTable( int pSubBitmap )const;
 
       // True-colour textures for every bitmap in this program: pPalette768 is what the palette indices mean (256 RGB triples, copied; NULL switches
       // true-colour textures off). Safe to call from any thread; textures are rebuilt lazily, one at a time, when next used.
-      MR_DllDeclare static void SetColourPalette( const MR_UInt8* pPalette768 );
+      // pBrightness and pGradeAiImages: the look's grade (brightness setting, tone curve, saturation) is applied to the AI-enhanced images, which are in the
+      // game's own colours; the palette (pPalette768) already has it.
+      MR_DllDeclare static void SetColourPalette( const MR_UInt8* pPalette768, float pBrightness = 1.0f, bool pGradeAiImages = false );
+
+      // Gives this texture an AI-enhanced image (the words are column-major 0x00RRGGBB). Ignored unless its size is the texture's times 2, 4 or 8.
+      MR_DllDeclare void SetEnhancedImage( int pWidth, int pHeight, std::vector<MR_UInt32>& pWords );
 
 };
 

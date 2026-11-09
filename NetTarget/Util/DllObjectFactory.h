@@ -123,7 +123,7 @@ namespace MR_DllObjectFactory
 
    // True-colour textures: tells every loaded object library (a separate shared library has its own copy of the bitmap code) what palette indices mean,
    // 256 RGB triples; NULL switches true-colour textures off. A library without the entry point is skipped.
-   MR_DllDeclare void SetTexturePalette( const MR_UInt8* pPalette768 );
+   MR_DllDeclare void SetTexturePalette( const MR_UInt8* pPalette768, float pBrightness = 1.0f, bool pGradeAiImages = false );
 
    // Fast Object Creation function
    MR_DllDeclare MR_ObjectFromFactory* CreateObject( const MR_ObjectFromFactoryId& pId );

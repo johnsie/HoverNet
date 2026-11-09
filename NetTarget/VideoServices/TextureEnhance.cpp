@@ -44,6 +44,28 @@ float Mottle(int x, int y, int xres, int yres)
 }
 }
 
+void AddSurfaceDetail(std::uint32_t* out, int xres, int yres, int detail)
+{
+    if (detail <= 0 || xres < 2 || yres < 2) return;
+    std::vector<std::uint32_t> source(out, out + static_cast<std::size_t>(xres) * yres);   // the flatness is judged on the texture as it was
+    {
+        for (int x = 0; x < xres; ++x) {
+            for (int y = 0; y < yres; ++y) {
+                const std::size_t i = static_cast<std::size_t>(x) * yres + y;
+                const std::uint32_t c = source[i];
+                const std::uint32_t n0 = source[static_cast<std::size_t>(Wrap(x - 1, xres)) * yres + y], n1 = source[static_cast<std::size_t>(Wrap(x + 1, xres)) * yres + y];
+                const std::uint32_t n2 = source[static_cast<std::size_t>(x) * yres + Wrap(y - 1, yres)], n3 = source[static_cast<std::size_t>(x) * yres + Wrap(y + 1, yres)];
+                const int contrast = std::max(std::max(std::abs(R(c) - R(n0)) + std::abs(G(c) - G(n0)) + std::abs(B(c) - B(n0)), std::abs(R(c) - R(n1)) + std::abs(G(c) - G(n1)) + std::abs(B(c) - B(n1))),
+                                              std::max(std::abs(R(c) - R(n2)) + std::abs(G(c) - G(n2)) + std::abs(B(c) - B(n2)), std::abs(R(c) - R(n3)) + std::abs(G(c) - G(n3)) + std::abs(B(c) - B(n3))));
+                const float flat = contrast >= 36 ? 0.0f : 1.0f - contrast / 36.0f;   // 1 on a flat field, 0 at an edge
+                if (flat <= 0.0f) continue;
+                const float n = (0.6f * Mottle(x, y, xres, yres) + 0.4f * Hash(x, y, 3)) * 0.03f * detail * flat;   // about +-3% at detail 1
+                out[i] = Pack(static_cast<int>(R(c) * (1.0f + n) + 0.5f), static_cast<int>(G(c) * (1.0f + n) + 0.5f), static_cast<int>(B(c) * (1.0f + n) + 0.5f));
+            }
+        }
+    }
+}
+
 void EnhanceBase(const std::uint8_t* indices, int xres, int yres, const std::uint8_t* palette768, std::uint32_t* out, bool enhance, int detail)
 {
     const std::size_t count = static_cast<std::size_t>(xres) * yres;
@@ -87,23 +109,7 @@ void EnhanceBase(const std::uint8_t* indices, int xres, int yres, const std::uin
         }
     }
 
-    // Step 3: a trace of surface variation where the texture is a flat field (see EnhanceBase's declaration).
-    if (detail > 0) {
-        for (int x = 0; x < xres; ++x) {
-            for (int y = 0; y < yres; ++y) {
-                const std::size_t i = static_cast<std::size_t>(x) * yres + y;
-                const std::uint32_t c = out[i];
-                const std::uint32_t n0 = out[static_cast<std::size_t>(Wrap(x - 1, xres)) * yres + y], n1 = out[static_cast<std::size_t>(Wrap(x + 1, xres)) * yres + y];
-                const std::uint32_t n2 = out[static_cast<std::size_t>(x) * yres + Wrap(y - 1, yres)], n3 = out[static_cast<std::size_t>(x) * yres + Wrap(y + 1, yres)];
-                const int contrast = std::max(std::max(std::abs(R(c) - R(n0)) + std::abs(G(c) - G(n0)) + std::abs(B(c) - B(n0)), std::abs(R(c) - R(n1)) + std::abs(G(c) - G(n1)) + std::abs(B(c) - B(n1))),
-                                              std::max(std::abs(R(c) - R(n2)) + std::abs(G(c) - G(n2)) + std::abs(B(c) - B(n2)), std::abs(R(c) - R(n3)) + std::abs(G(c) - G(n3)) + std::abs(B(c) - B(n3))));
-                const float flat = contrast >= 36 ? 0.0f : 1.0f - contrast / 36.0f;   // 1 on a flat field, 0 at an edge
-                if (flat <= 0.0f) continue;
-                const float n = (0.6f * Mottle(x, y, xres, yres) + 0.4f * Hash(x, y, 3)) * 0.03f * detail * flat;   // about +-3% at detail 1
-                out[i] = Pack(static_cast<int>(R(c) * (1.0f + n) + 0.5f), static_cast<int>(G(c) * (1.0f + n) + 0.5f), static_cast<int>(B(c) * (1.0f + n) + 0.5f));
-            }
-        }
-    }
+    if (detail > 0) AddSurfaceDetail(out, xres, yres, detail);
 }
 
 bool Downsample(const std::uint32_t* src, int srcXRes, int srcYRes, std::uint32_t* dst, int dstXRes, int dstYRes)
