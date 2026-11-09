@@ -4,7 +4,7 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## Unreleased
+## 2.3.40 - 2026-11-09
 
 ### Added
 - **Sounds for sliders and tabs**: a soft tick as a slider moves (at most every 45 ms) and a click when another Settings tab is chosen. Not listened to by a person.
