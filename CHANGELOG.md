@@ -4,6 +4,11 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## Unreleased
+
+### Fixed
+- **Web: the music no longer goes crazy when the page is not in the foreground.** The browser throttles a hidden page's timers and the audio is mixed on the page's own thread, so it starved and stuttered; audio now pauses while the page is hidden and carries on from the same place when it is shown again. The web build compiles with the change; I could not test a real hidden tab here, so please check it in your browser. A window that is visible but not focused is not paused.
+
 ## 2.3.39 - 2026-11-09
 
 ### Added

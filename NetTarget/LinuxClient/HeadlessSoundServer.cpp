@@ -7,6 +7,9 @@
 #include "../VideoServices/SoundServer.h"
 
 #include <SDL.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten/html5.h>
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -191,6 +194,14 @@ namespace MR_SoundServer
             return FALSE;
         }
         SDL_PauseAudioDevice(audioDevice, 0);
+#ifdef __EMSCRIPTEN__
+        // A page that is not in the foreground has its timers throttled by the browser, and here the audio callback runs on the page's thread, so the music starved
+        // and stuttered. Audio is paused while the page is hidden and carries on from the same place when it is shown again.
+        emscripten_set_visibilitychange_callback(nullptr, EM_TRUE, [](int, const EmscriptenVisibilityChangeEvent* event, void*) -> EM_BOOL {
+            if (audioDevice != 0 && event != nullptr) SDL_PauseAudioDevice(audioDevice, event->hidden ? 1 : 0);
+            return EM_TRUE;
+        });
+#endif
         return TRUE;
     }
 
