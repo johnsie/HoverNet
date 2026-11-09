@@ -54,6 +54,13 @@ void RenderInterface_SDL::RenderGeometry(Rml::Vertex* vertices, int num_vertices
 	{
 		positions[i].x = vertices[i].position.x + translation.x;
 		positions[i].y = vertices[i].position.y + translation.y;
+		if (has_transform)   // HoverNet, 2026-11-09
+		{
+			const Rml::Vector4f moved = transform_matrix * Rml::Vector4f(positions[i].x, positions[i].y, 0.0f, 1.0f);
+			const float w = moved.w != 0.0f ? moved.w : 1.0f;
+			positions[i].x = moved.x / w;
+			positions[i].y = moved.y / w;
+		}
 	}
 
 	SDL_Texture* sdl_texture = (SDL_Texture*)texture;
@@ -62,6 +69,14 @@ void RenderInterface_SDL::RenderGeometry(Rml::Vertex* vertices, int num_vertices
 		&vertices->tex_coord.x, sizeof(Rml::Vertex), num_vertices, indices, num_indices, 4);
 
 	delete[] positions;
+}
+
+void RenderInterface_SDL::SetTransform(const Rml::Matrix4f* transform)
+{
+	// HoverNet, 2026-11-09: remember the transform for the next geometry calls (null = none).
+	has_transform = transform != nullptr;
+	if (transform)
+		transform_matrix = *transform;
 }
 
 void RenderInterface_SDL::EnableScissorRegion(bool enable)

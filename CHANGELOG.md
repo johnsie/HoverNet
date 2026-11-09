@@ -9,6 +9,9 @@ and how to roll one back.
 ### Fixed
 - **Online: the number of laps you choose is remembered.** Creating a race in the online lobby kept your laps, weapons and track in memory only, so the next session went back to 1 lap. They are now saved, and the dialog opens with them. Checked by `HoverNetOnlineScreenClicks`: a new player starts at 1, hosting with 4 laps makes the next session start at 4. (The local race setup already remembered them.)
 
+### Fixed
+- **RmlUi: transforms now work.** The SDL renderer that came with RmlUi ignored CSS transforms, so the panel slide-in, the craft drifting in, and the button grow-on-hover and shrink-on-press did nothing but fade. Transforms are now applied to the vertices (marked in the vendored file). The menu also has faint light bars drifting across the background (off with Reduced motion). Seen in a screenshot (the focused button is 2.5% larger); the motion itself was not watched. Rotated translucent shapes are drawn wrongly by SDL's software renderer, so none are used; the GPU renderer was not available here to check.
+
 ### Added
 - **The RmlUi screens make the game's interface sounds**: a tick as the focus or pointer moves to a button, a click when one is chosen, the back sound on Esc. Checked from the log of the sounds triggered (`HoverNetRmlMenu`), not by listening.
 - **RmlUi results screen (prototype, with `HOVERNET_RML_MENU=1`)**: the card eases in, its parts appear one after another, the XP counts up and the level bar fills; VICTORY! in gold. Both RmlUi screens are kept light on text. Checked: renders in a screenshot, and a scripted run after a real autoplay race presses its button (`HoverNetRmlMenu`). Not checked: an online race's RETURN TO LOBBY button, the counting and staggering in motion.

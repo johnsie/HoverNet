@@ -91,3 +91,12 @@ button:active { transform: scale(0.97); }
 .hint { margin-top: 8dp; text-align: center; }
 
 #footer { position: absolute; left: 22dp; bottom: 14dp; color: #6c7086; font-size: 13dp; }
+
+/* slow light streaks drifting across the background (straight bars: rotated translucent shapes are not drawn correctly by SDL's software renderer) */
+.streak { position: absolute; top: 0; height: 100%; background-color: #ffffff08; }
+.s1 { left: 8%;  width: 90dp;  animation: 17s linear infinite drift-a; }
+.s2 { left: 44%; width: 150dp; animation: 23s linear infinite drift-b; }
+.s3 { left: 70%; width: 60dp;  animation: 13s linear infinite drift-a; }
+@keyframes drift-a { from { transform: translateX(-60dp); opacity: 0.4; } 50% { opacity: 1; } to { transform: translateX(160dp); opacity: 0.4; } }
+@keyframes drift-b { from { transform: translateX(120dp); opacity: 1; } 50% { opacity: 0.3; } to { transform: translateX(-140dp); opacity: 1; } }
+body.still .streak { animation: none; }

@@ -47,6 +47,8 @@ public:
 
 	void EnableScissorRegion(bool enable) override;
 	void SetScissorRegion(int x, int y, int width, int height) override;
+	// HoverNet, 2026-11-09: 2D transforms (translate, scale, rotate) are applied to the vertices on the processor; the original ignored them.
+	void SetTransform(const Rml::Matrix4f* transform) override;
 
 	bool LoadTexture(Rml::TextureHandle& texture_handle, Rml::Vector2i& texture_dimensions, const Rml::String& source) override;
 	bool GenerateTexture(Rml::TextureHandle& texture_handle, const Rml::byte* source, const Rml::Vector2i& source_dimensions) override;
@@ -56,6 +58,8 @@ private:
 	SDL_Renderer* renderer;
 	SDL_Rect rect_scissor = {};
 	bool scissor_region_enabled = false;
+	bool has_transform = false;
+	Rml::Matrix4f transform_matrix = Rml::Matrix4f::Identity();
 };
 
 #endif

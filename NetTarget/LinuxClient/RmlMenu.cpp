@@ -92,6 +92,7 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
 
     ChooseListener listener(&result, pInfo.sound);
     for (const char* id : kButtons) if (Rml::Element* button = document->GetElementById(id)) { button->AddEventListener("click", &listener); button->AddEventListener("mouseover", &listener); }
+    if (pInfo.reducedMotion) document->SetClass("still", true);
     document->Show();
     if (Rml::Element* first = document->GetElementById("online")) first->Focus();
 
