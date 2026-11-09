@@ -8146,6 +8146,9 @@ enum class MenuChoice
 
 // The first player screen. A bounded/headless run still defaults to Local Play
 // if no button is activated, preserving the automated gameplay contract.
+// The object library, for the craft turning on the main menu (set by the caller before the menu opens; null = the menu keeps its picture).
+MR_ResourceLib* gMenuCraftResources = nullptr;
+
 MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                        const MR_Sprite& font, int pFrameLimit)
 {
@@ -8187,6 +8190,28 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             }
             SDL_FreeSurface(bannerSurface);
         }
+    }
+
+    // The player's own craft, turning slowly on the menu with the design saved in the Garage (the same drawing as the Garage preview, on a clear background).
+    constexpr int kMenuCraftW = 560, kMenuCraftH = 420;
+    SDL_Texture* menuCraftTexture = nullptr;
+    std::vector<std::uint32_t> menuCraftPixels, menuPaletteWords(256, 0);
+    Authority::CraftDesign menuCraftDesign;
+    bool menuCraftReady = false;
+    int menuCraftShownYaw = -1000;
+    Uint32 menuCraftLastBuild = 0;
+    if (gMenuCraftResources != nullptr && graphics.GetRenderPalette() != nullptr && std::getenv("HOVERNET_NO_MENU_CRAFT") == nullptr) {
+        const MR_UInt8* palette768 = graphics.GetRenderPalette();
+        for (int i = 0; i < 256; ++i) menuPaletteWords[i] = (static_cast<std::uint32_t>(palette768[i * 3]) << 16) | (static_cast<std::uint32_t>(palette768[i * 3 + 1]) << 8) | palette768[i * 3 + 2];
+        MR_ResBitmap::SetColourPalette(palette768, 1.0f, false);
+        MR_ResBitmap::SetBakePalette(palette768);
+        const HoverNetCraft::CraftStore store(ConfigDirPath());
+        int slot = store.Active();
+        if (slot < 0) slot = 0;
+        if (!store.Load(slot, menuCraftDesign)) menuCraftDesign = Authority::CraftDesign();
+        menuCraftDesign = Authority::SanitiseCraftDesign(menuCraftDesign);
+        menuCraftTexture = SDL_CreateTexture(graphics.GetRenderer(), SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, kMenuCraftW, kMenuCraftH);
+        if (menuCraftTexture != nullptr) SDL_SetTextureBlendMode(menuCraftTexture, SDL_BLENDMODE_BLEND);
     }
 
     MenuChoice choice = MenuChoice::eLocalPlay;
@@ -8308,7 +8333,29 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         const float craftX = workPos.x + workSize.x * 0.30f;
         const float craftY = workPos.y + workSize.y * 0.68f;
         const float craftScale = std::min(workSize.x / 1200.0f, workSize.y / 760.0f);
-        if (menuBannerTexture != nullptr) {
+        if (menuCraftTexture != nullptr) {
+            // Turn the craft (a few degrees a second; still with reduced motion), redrawn only when the angle moved by two degrees.
+            const int yawNow = reducedMotion ? 28 : static_cast<int>(SDL_GetTicks() / 1000.0 * 22.0) % 360 / 2 * 2;
+            const Uint32 nowTicks = SDL_GetTicks();
+            if (yawNow != menuCraftShownYaw && (nowTicks - menuCraftLastBuild >= 40 || !menuCraftReady)) {
+                menuCraftReady = HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, menuCraftDesign.IsPlain() ? nullptr : &menuCraftDesign, menuCraftDesign.craft, yawNow,
+                                                                   menuPaletteWords.data(), kMenuCraftW, kMenuCraftH, menuCraftPixels, true);
+                if (menuCraftReady) SDL_UpdateTexture(menuCraftTexture, nullptr, menuCraftPixels.data(), kMenuCraftW * 4);
+                menuCraftShownYaw = yawNow; menuCraftLastBuild = nowTicks;
+            }
+        }
+        if (menuCraftTexture != nullptr && menuCraftReady) {
+            const float availableWidth = phonePortrait ? workSize.x - 8.0f : std::max(220.0f, workSize.x - panelWidth - 66.0f);
+            // The craft sits in the lower middle of its picture: show that part, larger.
+            const float u0 = 0.10f, u1 = 0.90f, v0 = 0.22f, v1 = 0.86f;
+            const float cropAspect = (u1 - u0) * kMenuCraftW / ((v1 - v0) * kMenuCraftH);
+            const float width = std::min(availableWidth, workSize.y * 0.6f * cropAspect);
+            const float height = width / cropAspect;
+            const float x = workPos.x + (phonePortrait ? 4.0f : std::max(8.0f, (availableWidth - width) * 0.5f + 8.0f));
+            const float y = phonePortrait ? workPos.y + std::max(40.0f, (panelPos.y - height) * 0.5f) : workPos.y + std::max(40.0f, (workSize.y - height) * 0.5f + workSize.y * 0.06f);
+            background->AddImage(reinterpret_cast<ImTextureID>(menuCraftTexture), ImVec2(x, y), ImVec2(x + width, y + height), ImVec2(u0, v0), ImVec2(u1, v1));
+        }
+        else if (menuBannerTexture != nullptr) {
             // The banner picture fills the space left of the panel (above the panel on a portrait phone).
             const float availableWidth = phonePortrait ? workSize.x - 8.0f
                                        : std::max(220.0f, workSize.x - panelWidth - 66.0f);
@@ -8483,6 +8530,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     if (menuBannerTexture != nullptr) {
         SDL_DestroyTexture(menuBannerTexture);
     }
+    if (menuCraftTexture != nullptr) SDL_DestroyTexture(menuCraftTexture);
     ImGui_ImplSDLRenderer2_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
@@ -9694,6 +9742,7 @@ int RunClient(int argc, char** argv)
     bool pickingMode = true;
         while (pickingMode) {
             pickingMode = false;
+            gMenuCraftResources = &resources;
             const MenuChoice choice = std::getenv("HOVERNET_OPEN_GARAGE") != nullptr ? MenuChoice::eGarage : RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
                                                   frameLimit);
             if (g_QuitConfirmed) {

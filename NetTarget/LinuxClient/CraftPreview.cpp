@@ -20,7 +20,7 @@ constexpr int kPreviewSlot = 15;   // the slot the preview borrows in CraftLook;
 }
 
 bool RenderCraftPreview(MR_ResourceLib& pLib, const Authority::CraftDesign* pDesign, int pCraft, int pYawDegrees, const std::uint32_t* pPalette256,
-                        int pWidth, int pHeight, std::vector<std::uint32_t>& pRgba)
+                        int pWidth, int pHeight, std::vector<std::uint32_t>& pRgba, bool pTransparentBackground)
 {
     static const int kActors[5] = {MR_ELECTRO_CAR, MR_HITECH_CAR, MR_BITURBO_CAR, 19, MR_MANTA_CRAFT};
     if (pCraft < 0 || pCraft > 4 || pWidth < 16 || pHeight < 16) return false;
@@ -58,6 +58,7 @@ bool RenderCraftPreview(MR_ResourceLib& pLib, const Authority::CraftDesign* pDes
         for (int x = 0; x < pWidth; ++x) {
             const std::size_t at = static_cast<std::size_t>(y) * pWidth + x;
             std::uint32_t rgb;
+            if (indices[at] == 255 && pTransparentBackground) { pRgba[at] = 0; continue; }
             if (indices[at] == 255) {   // not drawn: a soft dark gradient with a lighter floor
                 const int shade = 26 + y * 22 / pHeight + (y > pHeight * 7 / 10 ? 14 : 0);
                 rgb = (static_cast<std::uint32_t>(shade) << 16) | (static_cast<std::uint32_t>(shade) << 8) | static_cast<std::uint32_t>(shade + 6);
