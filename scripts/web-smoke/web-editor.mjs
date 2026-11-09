@@ -192,6 +192,11 @@ try {
   check(await call('hn_publish_visible') === 1, 'clicking Track > Publish to the community opens the Publish dialog');
   check(dlg > 25000, 'and it is drawn');
   check(exceptions.length === 0, 'no uncaught page exceptions' + (exceptions.length ? ': ' + exceptions[0] : ''));
-} finally { try { chrome.kill(); } catch (e) {} await sleep(500); server.close(); }
+} finally {
+  try { chrome.kill(); } catch (e) {} await sleep(800); server.close();
+  // /tmp is RAM on many systems: never leave the Chrome profile behind, and keep the pictures only when asked (HN_KEEP_PICTURES=1).
+  try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }); } catch (e) {}
+  if (!process.env.HN_KEEP_PICTURES) { try { fs.rmSync(downloads, { recursive: true, force: true }); } catch (e) {} }
+}
 if (failures) { console.log(`${failures} check(s) failed`); process.exit(1); }
-console.log('web editor test passed (pictures in ' + downloads + ')');
+console.log('web editor test passed' + (process.env.HN_KEEP_PICTURES ? ' (pictures in ' + downloads + ')' : ''));

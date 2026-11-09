@@ -50,7 +50,7 @@ let failures = 0;
 const check = (ok, what) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${what}`); if (!ok) failures++; };
 let targets;
 for (let i = 0; i < 60 && !targets?.length; i++) { try { targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json(); } catch (e) { await sleep(250); } }
-if (!targets?.length) { console.log('FAIL: Chrome started'); chrome.kill(); server.close(); process.exit(1); }
+if (!targets?.length) { console.log('FAIL: Chrome started'); chrome.kill(); server.close(); await sleep(500); try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) {} process.exit(1); }
 const ws = new WebSocket(targets.find((t) => t.type === 'page').webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
 let nextId = 0; const pending = new Map();
