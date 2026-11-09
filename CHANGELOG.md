@@ -4,6 +4,11 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## Unreleased
+
+### Added
+- **The sound of speed**: wind and a low air rumble, made in code, rise in volume and pitch with the craft's speed. Checked by recording the game's audio output and comparing it with and without them (a small, steady rise while moving, nothing near clipping); not listened to by a person, and the autoplay bot only moves briefly. `HOVERNET_NO_SPEED_SOUNDS=1` turns them off.
+
 ## 2.3.37 - 2026-11-09
 
 ### Added

@@ -2376,6 +2376,64 @@ void PlaySfx(Sfx which, int decibels = 0, double pitch = 1.0)
     if (sound != nullptr) MR_SoundServer::Play(sound, decibels, pitch, 0);
 }
 
+// The sound of speed, made in code: a loop of wind (filtered noise, brighter as it gets faster) and a low rumble of the air under the craft. They follow the craft's
+// speed through the volume and the pitch of two continuous sounds; nothing here touches the simulation or the engine sound.
+std::vector<char> MakeNoiseLoop(double seconds, double lowpass /* 0..1, higher = brighter */, double amplitude, unsigned seed)
+{
+    const int rate = 44100, frames = static_cast<int>(seconds * rate);
+    std::vector<double> raw(static_cast<std::size_t>(frames));
+    std::uint32_t state = seed * 2654435761u + 12345u;
+    double low = 0.0, low2 = 0.0;
+    for (int i = 0; i < frames; ++i) {
+        state = state * 1664525u + 1013904223u;
+        const double white = (static_cast<double>(state >> 8) / 8388608.0) - 1.0;
+        low += (white - low) * lowpass; low2 += (low - low2) * lowpass;   // two poles
+        raw[static_cast<std::size_t>(i)] = low2;
+    }
+    // seamless: the last quarter second fades into what came before the start
+    const int fade = rate / 4;
+    for (int i = 0; i < fade; ++i) {
+        const double t = static_cast<double>(i) / fade;
+        raw[static_cast<std::size_t>(frames - fade + i)] = raw[static_cast<std::size_t>(frames - fade + i)] * (1.0 - t) + raw[static_cast<std::size_t>(i)] * t;
+    }
+    const int length = frames - fade;
+    double peak = 1e-9;
+    for (int i = 0; i < length; ++i) peak = std::max(peak, std::fabs(raw[static_cast<std::size_t>(i)]));
+    std::vector<char> blob(22 + static_cast<std::size_t>(length) * 2);
+    auto put32 = [&](std::size_t at, std::uint32_t v) { for (int b = 0; b < 4; ++b) blob[at + static_cast<std::size_t>(b)] = static_cast<char>((v >> (8 * b)) & 255); };
+    auto put16 = [&](std::size_t at, std::uint16_t v) { blob[at] = static_cast<char>(v & 255); blob[at + 1] = static_cast<char>(v >> 8); };
+    put32(0, static_cast<std::uint32_t>(length * 2));
+    put16(4, 1); put16(6, 1); put32(8, rate); put32(12, rate * 2); put16(16, 2); put16(18, 16); put16(20, 0);
+    for (int i = 0; i < length; ++i) put16(22 + static_cast<std::size_t>(i) * 2, static_cast<std::uint16_t>(static_cast<short>(raw[static_cast<std::size_t>(i)] / peak * amplitude * 32767.0)));
+    return blob;
+}
+
+// Called once per race frame with the craft's speed as a fraction of the top speed (0 to about 1.2).
+void UpdateSpeedSounds(double speed)
+{
+    static MR_ContinuousSound* wind = nullptr;
+    static MR_ContinuousSound* rumble = nullptr;
+    static bool built = false;
+    static double smooth = 0.0;
+    if (!built) {
+        built = true;
+        const std::vector<char> windBlob = MakeNoiseLoop(2.5, 0.22, 0.55, 7), rumbleBlob = MakeNoiseLoop(2.5, 0.035, 0.80, 11);
+        wind = MR_SoundServer::CreateContinuousSound(windBlob.data(), 1);
+        rumble = MR_SoundServer::CreateContinuousSound(rumbleBlob.data(), 1);
+    }
+    if (std::getenv("HOVERNET_NO_SPEED_SOUNDS") != nullptr) return;
+    smooth += (std::max(0.0, std::min(1.3, speed)) - smooth) * 0.12;   // the sound follows a little behind, so a bump does not click
+    if (smooth < 0.04) return;
+    if (wind != nullptr) {
+        const double t = std::min(1.0, smooth / 1.0);
+        MR_SoundServer::Play(wind, 0, static_cast<int>(-3200 + 2300 * t * t), 0.75 + 0.55 * t, 0);   // louder and higher as it gets faster (the dB are in hundredths)
+    }
+    if (rumble != nullptr) {
+        const double t = std::min(1.0, smooth / 1.0);
+        MR_SoundServer::Play(rumble, 0, static_cast<int>(-2600 + 1500 * t), 0.8 + 0.4 * t, 0);
+    }
+}
+
 bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
 {
     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
@@ -11621,6 +11679,7 @@ int RunClient(int argc, char** argv)
                     }
                 }
                 observer->PlaySoundsSafe(session.GetCurrentLevel(), mainCharacter);
+                if (!replay.active) UpdateSpeedSounds(mainCharacter->GetAbsoluteSpeed());
                 MR_SoundServer::ApplyContinuousPlay();
             }
             else
