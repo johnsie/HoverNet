@@ -15,8 +15,7 @@ p, h1, div { display: block; }
 	margin-left: -320dp;
 	margin-top: -210dp;
 	padding: 26dp 30dp;
-	background-color: #101018f0;
-	border-radius: 14dp;
+	background-color: #101018f2;
 	text-align: center;
 	opacity: 0;
 	transform: translateY(40dp);
@@ -33,10 +32,10 @@ hr { height: 1dp; margin: 14dp 0; background-color: #303342; }
 .reveal { opacity: 0; transform: translateY(18dp); transition: opacity 0.4s cubic-out, transform 0.45s cubic-out; }
 .reveal.show { opacity: 1; transform: translateY(0dp); }
 
-#stats { width: 100%; margin-top: 16dp; }
+#stats { width: 100%; margin-top: 20dp; margin-bottom: 8dp; }
 .stat { display: inline-block; width: 32%; vertical-align: top; }
-.label { color: #8b8fa3; font-size: 14dp; margin: 0; }
-.value { font-family: Oxanium; font-size: 30dp; font-weight: bold; margin: 2dp 0; }
+.label { color: #8b8fa3; font-size: 14dp; margin: 0 0 8dp 0; }
+.value { font-family: Oxanium; font-size: 30dp; font-weight: bold; margin: 0 0 6dp 0; }
 
 #bests { margin-top: 8dp; }
 #bests p { margin: 2dp 0; font-size: 15dp; color: #8b8fa3; }

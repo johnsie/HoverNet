@@ -164,6 +164,25 @@ void DrawMenuBackdrop(SDL_Renderer* pRenderer, int pWidth, int pHeight, int pFac
     }
 }
 
+// The results screen's background, as the older screen draws it: a dark red wash from the top left to the top right, and wide soft white diagonal stripes.
+void DrawResultsBackdrop(SDL_Renderer* pRenderer, int pWidth, int pHeight, int pFactor)
+{
+    SDL_SetRenderDrawBlendMode(pRenderer, SDL_BLENDMODE_BLEND);
+    const float f = static_cast<float>(pFactor), w = static_cast<float>(pWidth), h = static_cast<float>(pHeight);
+    SDL_SetRenderDrawColor(pRenderer, 18, 12, 20, 255);
+    SDL_RenderClear(pRenderer);
+    const SDL_Color tl = {18, 12, 20, 255}, tr = {69, 13, 28, 255}, br = {8, 8, 13, 255}, bl = {23, 8, 14, 255};
+    const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, tl, {0, 0}}, {{w, 0.0f}, tr, {0, 0}}, {{0.0f, h}, bl, {0, 0}}, {{w, h}, br, {0, 0}}};
+    const int order[6] = {0, 1, 2, 1, 3, 2};
+    SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
+    const float stripe = std::max(32.0f * f, w / 18.0f);
+    const SDL_Color white = {255, 255, 255, 10};
+    for (float x = -h; x < w; x += stripe * 2.0f) {
+        const SDL_Vertex v[4] = {{{x, h}, white, {0, 0}}, {{x + stripe, h}, white, {0, 0}}, {{x + h * 0.36f, 0.0f}, white, {0, 0}}, {{x + h * 0.36f + stripe, 0.0f}, white, {0, 0}}};
+        SDL_RenderGeometry(pRenderer, nullptr, v, 4, order, 6);
+    }
+}
+
 const char* const kButtons[] = {"online", "offline", "leaderboards", "garage", "tutorial", "settings"};   // in the order the arrow keys walk them
 constexpr int kButtonCount = 6;
 
@@ -472,17 +491,11 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
         if (w != width || h != height) { width = w; height = h; ss.Resize(context, width, height); }
         context->Update();
         ss.Begin();
-        SDL_SetRenderDrawColor(pRenderer, 18, 12, 20, 255);
-        SDL_RenderClear(pRenderer);
-        const SDL_Color top = {18, 12, 20, 255}, bottom = {69, 13, 28, 255};   // the same dark red wash as the ImGui results screen
-        const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, top, {0, 0}}, {{static_cast<float>(ss.W()), 0.0f}, top, {0, 0}},
-                                    {{0.0f, static_cast<float>(ss.H())}, bottom, {0, 0}}, {{static_cast<float>(ss.W()), static_cast<float>(ss.H())}, bottom, {0, 0}}};
-        const int order[6] = {0, 1, 2, 1, 3, 2};
-        SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
+        DrawResultsBackdrop(pRenderer, ss.W(), ss.H(), ss.factor);
         context->Render();
         ss.End();
         if (const char* shot = std::getenv("HOVERNET_CAPTURE_RML")) {
-            if (pFrameLimit >= 0 && frames == pFrameLimit) {
+            if ((pFrameLimit >= 0 && frames == pFrameLimit) || (pFrameLimit < 0 && frames == 62)) {   // a bounded run: its last frame; a scripted run: just before its first keystroke
                 if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888)) {
                     SDL_RenderReadPixels(pRenderer, nullptr, SDL_PIXELFORMAT_ARGB8888, surface->pixels, surface->pitch);
                     SDL_SaveBMP(surface, shot);
