@@ -5789,14 +5789,16 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         ImGui::TextDisabled("Design the shape, colours and paint of your craft. It changes how it looks, never how it drives.");
         MenuBeginChild("GaragePanel", ImVec2(-FLT_MIN, -52.0f), true);
 
-        const bool twoColumns = !narrow && ImGui::BeginTable("GarageColumns", 2, ImGuiTableFlags_SizingStretchProp);
-        if (twoColumns) { ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); }
-
+        // The preview stays in view while the controls scroll beneath it (on a wide screen the paint scrolls on its own, beside them).
+        auto drawPreview = [&]() {
         // ---- the preview, hull, shape, colours
-        const float previewWidth = std::min(static_cast<float>(kPreviewW), ImGui::GetContentRegionAvail().x);
+        const float maxHeight = std::min(static_cast<float>(kPreviewH), mainViewport->WorkSize.y * (narrow ? 0.28f : 0.32f));   // small enough to leave room for the controls under it
+        const float previewWidth = std::min(std::min(static_cast<float>(kPreviewW), ImGui::GetContentRegionAvail().x), maxHeight * kPreviewW / kPreviewH);
         if (previewTexture != nullptr && previewOk) ImGui::Image(reinterpret_cast<ImTextureID>(previewTexture), ImVec2(previewWidth, previewWidth * kPreviewH / kPreviewW));
         ImGui::Checkbox("Turn the craft", &spin);
         if (!spin) { ImGui::SameLine(); ImGui::SetNextItemWidth(-FLT_MIN); ImGui::SliderFloat("##yaw", &yaw, 0.0f, 359.0f, "%.0f deg"); }
+        };
+        auto drawControls = [&]() {
         HoverNetSectionHeading("HULL");
         for (int c = 0; c < Authority::kCraftCount; ++c) {
             if (c > 0) ImGui::SameLine();
@@ -5810,10 +5812,10 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         ImGui::PopTextWrapPos();
         HoverNetSectionHeading("SHAPE");
         int length = design.length, width = design.width, height = design.height, taper = design.taper;
-        ImGui::SetNextItemWidth(-FLT_MIN); MenuSliderInt("Length", &length, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, "%d%%");
-        ImGui::SetNextItemWidth(-FLT_MIN); MenuSliderInt("Width", &width, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, "%d%%");
-        ImGui::SetNextItemWidth(-FLT_MIN); MenuSliderInt("Height", &height, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, "%d%%");
-        ImGui::SetNextItemWidth(-FLT_MIN); MenuSliderInt("Nose (narrow to wide)", &taper, -Authority::kMaxTaperPercent, Authority::kMaxTaperPercent, "%d%%");
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f); MenuSliderInt("Length", &length, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, "%d%%");
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f); MenuSliderInt("Width", &width, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, "%d%%");
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f); MenuSliderInt("Height", &height, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, "%d%%");
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f); MenuSliderInt("Nose (narrow to wide)", &taper, -Authority::kMaxTaperPercent, Authority::kMaxTaperPercent, "%d%%");
         design.length = static_cast<std::int8_t>(length); design.width = static_cast<std::int8_t>(width); design.height = static_cast<std::int8_t>(height); design.taper = static_cast<std::int8_t>(taper);
         if (HoverNetQuietButton("Reset shape", ImVec2(-FLT_MIN, 30))) design.length = design.width = design.height = design.taper = 0;
         HoverNetSectionHeading("COLOURS");
@@ -5826,8 +5828,8 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         ImGui::SameLine(); int accentStrength = design.accentStrength * 100 / 255;
         ImGui::SetNextItemWidth(-FLT_MIN); if (MenuSliderInt("##accentStrength", &accentStrength, 0, 100, "trim colour %d%%")) design.accentStrength = static_cast<std::uint8_t>(accentStrength * 255 / 100);
 
-        // ---- the livery canvas, saved designs
-        if (twoColumns) ImGui::TableSetColumnIndex(1);
+        };
+        auto drawPaint = [&]() {
         HoverNetSectionHeading("PAINT");
         {
             const float cell = std::max(6.0f, std::min(12.0f, (ImGui::GetContentRegionAvail().x - 8.0f) / Authority::kPaintSize));
@@ -5921,7 +5923,27 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
 #endif
         }
         if (!status.empty()) ImGui::TextColored(ImVec4(0.55f, 0.95f, 0.65f, 1.0f), "%s", status.c_str());
-        if (twoColumns) ImGui::EndTable();
+        };
+        if (!narrow) {
+            const float half = ImGui::GetContentRegionAvail().x * 0.5f - 6.0f;
+            ImGui::BeginChild("##garageLeft", ImVec2(half, 0), false);
+            drawPreview();
+            ImGui::BeginChild("##garageControls", ImVec2(0, 0), false);
+            drawControls();
+            ImGui::EndChild();
+            ImGui::EndChild();
+            ImGui::SameLine();
+            ImGui::BeginChild("##garageRight", ImVec2(0, 0), false);
+            drawPaint();
+            ImGui::EndChild();
+        }
+        else {
+            drawPreview();
+            ImGui::BeginChild("##garageScroll", ImVec2(0, 0), false);
+            drawControls();
+            drawPaint();
+            ImGui::EndChild();
+        }
         ImGui::EndChild();
         ImGui::Spacing();
         if (HoverNetQuietButton("Back", ImVec2(-FLT_MIN, 40))) running = false;
