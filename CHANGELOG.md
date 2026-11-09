@@ -4,7 +4,7 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## Unreleased
+## 2.3.33 - 2026-11-09
 
 ### Fixed
 - **Your craft design now shows in races on desktop** (the craft is drawn by the object library, which kept its own copy of the designs, and it only showed in true colour: the design is now sent to the library and baked into the craft's 8-bit pixels too).
