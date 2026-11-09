@@ -4,6 +4,17 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## Unreleased
+
+### Changed
+- **Settings has tabs** (Player, Sound, Access, Graphics, Display) with Save and Cancel under the panel, so it never scrolls.
+- **The main menu has a Tutorial button** next to Leaderboards and Garage; it is highlighted until you have done the tutorial.
+- **The chat line you type, and the replay's "who am I watching" label, are drawn in the menu typefaces**, not the bitmap font (the in-race words were already). The only bitmap-font text left in the game is the player number on the minimap icons.
+- Windows: the packages and the CI staging now carry `ObjFac1.textures` (the AI-enhanced textures), and the legacy project lists the new sources.
+
+### Fixed
+- Overlapping chat lines at the start of a replay; a replay no longer shows the driver's start-of-race hints ("pick your craft", "Esc for the pause menu").
+
 ## 2.3.33 - 2026-11-09
 
 ### Fixed

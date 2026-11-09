@@ -4687,14 +4687,49 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         // Fill the available height so added accessibility/audio controls do not
         // force scrolling while the screen still has unused space below.
         // Phones: the Save/Cancel row is pinned under the scrolling panel so it never needs a scroll.
-        MenuBeginChild("SettingsPanel", ImVec2(centerWidth, phoneHeader ? -52.0f : 0.0f), true);
+        MenuBeginChild("SettingsPanel", ImVec2(centerWidth, -56.0f), true, ImGuiWindowFlags_NoScrollbar);   // Save and Cancel sit under the panel, so the panel never scrolls
         if (const char* testScroll = std::getenv("HOVERNET_TEST_SETTINGS_SCROLL")) { if (framesShown >= 2) ImGui::SetScrollY(static_cast<float>(std::atoi(testScroll))); }   // screenshot tests: look further down
 
+        // What the Save button needs to be true. Computed before the tabs (and again after them), because the fields live on different tabs.
+        bool usernameBlank = false, hostBlank = false, portValid = true, authAddressValid = true;
+        const char* authAddressProblem = "";
+        auto validateSettings = [&]() {
+            usernameBlank = IsBlank(usernameBuf);
+            hostBlank = IsBlank(hostBuf);
+            portValid = port > 0 && port <= 65535;
+            authAddressValid = true;
+            authAddressProblem = "";
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+        if (authAddressBuf[0] != '\0') {
+                const std::string typedAddress = authAddressBuf;
+#ifdef HOVERNET_WEB
+                authAddressValid = typedAddress.compare(0, 6, "wss://") == 0 || typedAddress.compare(0, 5, "ws://") == 0;
+                authAddressProblem = "A web address starts with wss://";
+#else
+                std::string checkHost;
+                int checkPort = 0;
+                authAddressValid = SplitServerAddress(typedAddress, checkHost, checkPort);
+                authAddressProblem = "Type it as name:port, for example race.example.org:9610";
+                Crypto::Bytes checkKey;
+                if (authAddressValid && authKeyBuf[0] != '\0' && (!Crypto::FromHex(authKeyBuf, checkKey) || checkKey.size() != 32)) {
+                    authAddressValid = false;
+                    authAddressProblem = "The server key is 64 characters (0 to 9, a to f)";
+                }
+#endif
+            }
+#endif
+        };
+        validateSettings();
+        // Tabs instead of one long list, so nothing needs scrolling: Player, Sound, Access, Graphics, Display.
+        const char* testTab = std::getenv("HOVERNET_TEST_SETTINGS_TAB");   // screenshots: open a given tab (0..3)
+        auto settingsTabFlag = [&](int index) { return testTab != nullptr && std::atoi(testTab) == index && framesShown <= 2 ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None; };
+        const bool tabsOpen = ImGui::BeginTabBar("##settingsTabs");
+        bool tabOpen = tabsOpen && ImGui::BeginTabItem("Player", nullptr, settingsTabFlag(0));
+        if (tabOpen) {
         HoverNetSectionHeading("Display Name");
         ImGui::PushItemWidth(-1.0f);
         ImGui::InputText("##Username", usernameBuf, sizeof(usernameBuf));
         ImGui::PopItemWidth();
-        const bool usernameBlank = IsBlank(usernameBuf);
         if (usernameBlank) {
             HoverNetHint("Enter a display name");
         }
@@ -4703,37 +4738,12 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Separator();
         ImGui::Spacing();
 
-#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
-        bool authAddressValid = true;
-        const char* authAddressProblem = "";
-        if (authAddressBuf[0] != '\0') {
-            const std::string typedAddress = authAddressBuf;
-#ifdef HOVERNET_WEB
-            authAddressValid = typedAddress.compare(0, 6, "wss://") == 0 || typedAddress.compare(0, 5, "ws://") == 0;
-            authAddressProblem = "A web address starts with wss://";
-#else
-            std::string checkHost;
-            int checkPort = 0;
-            authAddressValid = SplitServerAddress(typedAddress, checkHost, checkPort);
-            authAddressProblem = "Type it as name:port, for example race.example.org:9610";
-            Crypto::Bytes checkKey;
-            if (authAddressValid && authKeyBuf[0] != '\0' && (!Crypto::FromHex(authKeyBuf, checkKey) || checkKey.size() != 32)) {
-                authAddressValid = false;
-                authAddressProblem = "The server key is 64 characters (0 to 9, a to f)";
-            }
-#endif
-        }
-#else
-        const bool authAddressValid = true;
-#endif
         HoverNetSectionHeading("RaceServer Address");
         ImGui::SetNextItemWidth(-96.0f);
         ImGui::InputText("##ServerHost", hostBuf, sizeof(hostBuf));
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1.0f);
         ImGui::InputInt("##ServerPort", &port, 0);
-        const bool hostBlank = IsBlank(hostBuf);
-        const bool portValid = port > 0 && port <= 65535;
         if (hostBlank) {
             HoverNetHint("Enter a server address");
         }
@@ -4776,6 +4786,10 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Separator();
         ImGui::Spacing();
 
+        }
+        if (tabOpen) ImGui::EndTabItem();
+        tabOpen = tabsOpen && ImGui::BeginTabItem("Sound", nullptr, settingsTabFlag(1));
+        if (tabOpen) {
         HoverNetSectionHeading("Audio");
         if (ImGui::Checkbox("Mute all sound", &muted)) {
             MR_SoundServer::SetMasterVolume(muted ? 0.0 : volumePercent / 100.0);
@@ -4788,7 +4802,10 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         ImGui::PopItemWidth();
 
-        ImGui::Spacing();
+        }
+        if (tabOpen) ImGui::EndTabItem();
+        tabOpen = tabsOpen && ImGui::BeginTabItem("Access", nullptr, settingsTabFlag(4));
+        if (tabOpen) {
         ImGui::TextUnformatted("UI Scale");
         ImGui::PushItemWidth(-1.0f);
         if (MenuSliderFloat("##UiScale", &uiScalePercent, 75.0f, 150.0f, "%.0f%%",
@@ -4814,6 +4831,10 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::Separator();
         ImGui::Spacing();
 
+        }
+        if (tabOpen) ImGui::EndTabItem();
+        tabOpen = tabsOpen && ImGui::BeginTabItem("Graphics", nullptr, settingsTabFlag(3));
+        if (tabOpen) {
         ImGui::TextUnformatted("Graphics");
         {
             static const HoverNetGfx::Preset presets[] = {HoverNetGfx::Preset::eModern, HoverNetGfx::Preset::eModernHigh, HoverNetGfx::Preset::eModernLite};
@@ -4860,12 +4881,15 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                 ImGui::PopItemWidth();
             }
             ImGui::PushTextWrapPos(0.0f);
-            ImGui::TextDisabled("Modern improves how the race looks and never changes how it plays. High quality needs a fast processor; light suits phones, the browser and older machines. "
-                                "\"Reduced motion\" above turns off the sparks, exhaust, dust, smoke and the impact flash.");
+            ImGui::TextDisabled("Only how the race looks: it never changes how it plays. High needs a fast processor; Light suits phones and older machines.");
             ImGui::PopTextWrapPos();
             ImGui::Spacing();
         }
 
+        }
+        if (tabOpen) ImGui::EndTabItem();
+        tabOpen = tabsOpen && ImGui::BeginTabItem("Display", nullptr, settingsTabFlag(4));
+        if (tabOpen) {
         if (!HoverNetIsTouchDevice()) {   // phones and tablets always use a picture shaped like their screen
             ImGui::TextUnformatted("Race view");
             static const char* const raceViewLabels[] = {"Classic (4:3)", "Widescreen (16:9)", "Match my window"};
@@ -4950,9 +4974,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
 
         ImGui::Spacing();
-        ImGui::Spacing();
-
-        if (HoverNetQuietButton("Restore defaults", ImVec2(-FLT_MIN, 34))) {
+        if (HoverNetQuietButton("Restore all defaults", ImVec2(-FLT_MIN, 34))) {
             std::snprintf(usernameBuf, sizeof(usernameBuf), "%s", "Player");
             std::snprintf(hostBuf, sizeof(hostBuf), "%s", kDefaultLobbyHost);
             port = static_cast<int>(kDefaultLobbyPort);
@@ -4987,9 +5009,13 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         ImGui::TextDisabled("Preview only until Save is selected.");
         ImGui::Spacing();
+        }   // the Display tab ends with the Restore button
+        if (tabOpen) ImGui::EndTabItem();
+        if (tabsOpen) ImGui::EndTabBar();
 
+        validateSettings();
         const bool canSave = !usernameBlank && !hostBlank && portValid && authAddressValid;
-        if (!phoneHeader) {
+        if (false) {
             ImGui::BeginDisabled(!canSave);
             if (HoverNetButton("Save", ImVec2(-FLT_MIN, 40))) {
                 running = false;
@@ -5003,7 +5029,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
 
         ImGui::EndChild();
-        if (phoneHeader) {
+        if (true) {
             ImGui::SetCursorPosX((ImGui::GetWindowWidth() - centerWidth) * 0.5f);
             const float half = (centerWidth - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
             ImGui::BeginDisabled(!canSave);
@@ -5412,6 +5438,9 @@ struct TutorialCard
 TutorialCard gTutorialCard;
 bool gTutorialOverlayOwnsContext = false;
 // Set while a finished race waits for the player to open the results screen: the overlay then says so, in big letters, until they do.
+std::string gReplayLabel;            // who is being watched and how far through (replays and spectating), drawn by the overlay
+std::string gChatPrompt;            // the chat line being typed, drawn by the overlay (empty when not typing)
+bool gHudTextInOverlay = false;      // the HUD's words (and the chat line) are drawn by the overlay, not in the bitmap font
 bool gFinishPromptVisible = false;
 bool gFinishPromptTouch = false;
 
@@ -5556,15 +5585,47 @@ void DrawRaceHud(const HudText& hud, const ImVec2& origin, const ImVec2& display
         const float left = origin.x + display.x * 0.02f;
         float y2 = origin.y + display.y - display.y * 0.20f;
         auto line = [&](const std::string& text, ImU32 colour) {
-            const ImVec2 box = body->CalcTextSizeA(size, display.x * 0.5f, display.x * 0.5f, text.c_str());
-            draw->AddRectFilled(ImVec2(left - 8.0f, y2 - 3.0f), ImVec2(left + box.x + 8.0f, y2 + box.y + 3.0f), IM_COL32(8, 10, 16, 140), 7.0f);
-            draw->AddText(body, size, ImVec2(left, y2), colour, text.c_str(), nullptr, display.x * 0.5f);
-            y2 -= box.y + 10.0f;
+            // y2 is the bottom of the next line: each line (which may wrap to several) is drawn above the one before it, so none overlap.
+            const ImVec2 box = body->CalcTextSizeA(size, FLT_MAX, display.x * 0.5f, text.c_str());
+            const float top = y2 - box.y - 6.0f;
+            draw->AddRectFilled(ImVec2(left - 8.0f, top), ImVec2(left + box.x + 8.0f, y2), IM_COL32(8, 10, 16, 150), 7.0f);
+            draw->AddText(body, size, ImVec2(left, top + 3.0f), colour, text.c_str(), nullptr, display.x * 0.5f);
+            y2 = top - 6.0f;
         };
         if (!hud.typing.empty()) line(hud.typing + "_", IM_COL32(255, 255, 255, 255));
         for (const std::string& message : hud.chat) line(message, IM_COL32(225, 230, 240, 255));
     }
 }
+}
+
+void DrawReplayLabel(const ImVec2& origin, const ImVec2& display, const std::string& text)
+{
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    ImFont* body = ImGui::GetIO().Fonts->Fonts[0];
+    const float scale = std::max(0.7f, std::min(1.5f, display.y / 768.0f));
+    const float size = 20.0f * scale;
+    const ImVec2 box = body->CalcTextSizeA(size, FLT_MAX, 0.0f, text.c_str());
+    const float right = origin.x + display.x - 20.0f * display.x / 640.0f;
+    const float bottom = origin.y + display.y - 44.0f * display.y / 480.0f - 14.0f * display.y / 480.0f;
+    const ImVec2 lo(right - box.x - 24.0f * scale, bottom - box.y - 14.0f * scale), hi(right, bottom);
+    draw->AddRectFilled(lo, hi, IM_COL32(8, 10, 16, 190), 10.0f * scale);
+    draw->AddText(body, size, ImVec2(lo.x + 12.0f * scale, lo.y + 7.0f * scale), IM_COL32(240, 242, 248, 255), text.c_str());
+}
+
+void DrawChatPrompt(const ImVec2& origin, const ImVec2& display, const std::string& typed)
+{
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    ImFont* body = ImGui::GetIO().Fonts->Fonts[0];
+    const float scale = std::max(0.7f, std::min(1.5f, display.y / 768.0f));
+    const float size = 22.0f * scale;
+    const std::string line = typed + "_";
+    const float labelW = body->CalcTextSizeA(size * 0.75f, FLT_MAX, 0.0f, "CHAT").x;
+    const float width = std::min(display.x * 0.8f, std::max(display.x * 0.28f, body->CalcTextSizeA(size, FLT_MAX, 0.0f, line.c_str()).x + labelW + 60.0f * scale));
+    const ImVec2 lo(origin.x + display.x * 0.02f, origin.y + display.y - display.y * 0.075f - 40.0f * scale), hi(lo.x + width, lo.y + 40.0f * scale);
+    draw->AddRectFilled(lo, hi, IM_COL32(8, 10, 16, 225), 12.0f * scale);
+    draw->AddRect(lo, hi, IM_COL32(250, 115, 122, 200), 12.0f * scale, 0, 1.5f);
+    draw->AddText(body, size * 0.75f, ImVec2(lo.x + 14.0f * scale, lo.y + 11.0f * scale), IM_COL32(250, 125, 132, 255), "CHAT");
+    draw->AddText(body, size, ImVec2(lo.x + 28.0f * scale + labelW, lo.y + 7.0f * scale), IM_COL32(255, 255, 255, 255), line.c_str(), nullptr, width - labelW - 40.0f * scale);
 }
 
 void DrawFinishPrompt(const ImVec2& origin, const ImVec2& display, bool touch)
@@ -5609,7 +5670,7 @@ void DrawFinishPrompt(const ImVec2& origin, const ImVec2& display, bool touch)
 void DrawGameOverlay(SDL2GraphicsBackend& graphics, SDL_Renderer* renderer, const HudText* hud)
 {
     const bool hudVisible = hud != nullptr && hud->valid;
-    if (!gTutorialCard.visible && !hudVisible && !gFinishPromptVisible) return;
+    if (!gTutorialCard.visible && !hudVisible && !gFinishPromptVisible && gChatPrompt.empty() && gReplayLabel.empty()) return;
     if (ImGui::GetCurrentContext() == nullptr) {
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
@@ -5638,6 +5699,8 @@ void DrawGameOverlay(SDL2GraphicsBackend& graphics, SDL_Renderer* renderer, cons
     }
     if (hudVisible) DrawRaceHud(*hud, origin, display);
     if (gFinishPromptVisible) DrawFinishPrompt(origin, display, gFinishPromptTouch);
+    if (!gChatPrompt.empty()) DrawChatPrompt(origin, display, gChatPrompt);
+    if (!gReplayLabel.empty()) DrawReplayLabel(origin, display, gReplayLabel);
     if (gTutorialCard.visible) {
     // Top right, just under the weapon meter.
     const float width = std::max(270.0f, std::min(380.0f, display.x * 0.30f));
@@ -7938,12 +8001,12 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         const int primaryRows = sideBySidePrimary ? 1 : 2;
         const bool showHeading = roomyPanel;
         const bool showHint = roomyPanel && panelHeight >= 540.0f;
-        const bool showTutorialHint = !tutorialDone && panelHeight >= 440.0f;
+        const bool showTutorialHint = false;
         const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
         const float reserved = (showHeading ? lineHeight + gap * 3.0f + 4.0f : 0.0f) + (showHint ? lineHeight * 2.0f + gap : 0.0f) + (showTutorialHint ? lineHeight * 2.0f : 0.0f) + gap * (primaryRows + 3);
-        // Heights in "units": a main button is 1.45 units, a grid button 1 unit, Settings 0.9.
+        // Heights in "units": a main button is 1.45 units, a grid button 1 unit (two rows of them).
         const float room = std::max(0.0f, ImGui::GetContentRegionAvail().y - reserved);
-        const float unit = room / (primaryRows * 1.45f + 1.0f + 0.9f);
+        const float unit = room / (primaryRows * 1.45f + 2.0f);
         const float primaryHeight = std::max(34.0f, std::min(70.0f, unit * 1.45f));
         const float secondaryHeight = std::max(32.0f, std::min(52.0f, unit));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
@@ -7959,17 +8022,15 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         }
         ImGui::PopStyleVar();
         {
+            // Four more doors in a grid: Leaderboards, Garage, Tutorial (marked until it has been done) and Settings.
             const float cell = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
             if (HoverNetButton("Leaderboards", ImVec2(cell, secondaryHeight))) { choice = MenuChoice::eLeaderboards; running = false; }
             ImGui::SameLine();
             if (HoverNetButton("Garage", ImVec2(cell, secondaryHeight))) { choice = MenuChoice::eGarage; running = false; }
-        }
-        if (showHeading) { ImGui::Spacing(); ImGui::Separator(); }
-        if (HoverNetQuietButton("Settings", ImVec2(-FLT_MIN, std::max(30.0f, secondaryHeight * 0.9f)))) { choice = MenuChoice::eSettings; running = false; }
-        if (showTutorialHint) {
-            ImGui::PushTextWrapPos(0.0f);
-            HoverNetHint("New here? Settings has a hands-on tutorial.");
-            ImGui::PopTextWrapPos();
+            const bool tutorialClicked = tutorialDone ? HoverNetQuietButton("Tutorial", ImVec2(cell, secondaryHeight)) : HoverNetButton("Tutorial", ImVec2(cell, secondaryHeight));
+            if (tutorialClicked) { choice = MenuChoice::eTutorial; running = false; }
+            ImGui::SameLine();
+            if (HoverNetQuietButton("Settings", ImVec2(cell, secondaryHeight))) { choice = MenuChoice::eSettings; running = false; }
         }
         if (showHint) {
             ImGui::PushTextWrapPos(0.0f);
@@ -8719,6 +8780,7 @@ int RunClient(int argc, char** argv)
         // The HUD's words are drawn over each frame in the menu typefaces (the bars, meters and map stay in the picture); the lesson card of the tutorial goes the same way.
         const bool bitmapHudText = std::getenv("HOVERNET_CLASSIC_HUD_TEXT") != nullptr;
         observer->SetExternalHudText(bitmapHudText ? FALSE : TRUE);
+        gHudTextInOverlay = !bitmapHudText;
         graphics.SetOverlay([&graphics, observer, bitmapHudText](SDL_Renderer* renderer) { DrawGameOverlay(graphics, renderer, bitmapHudText ? nullptr : &observer->GetHudText()); });
     }
 #endif
@@ -10262,7 +10324,7 @@ int RunClient(int argc, char** argv)
                 const MR_SimulationTime raceClock = session.GetSimulationTime();
                 if (raceClock + 1000 < lastRaceClock) pauseHintShown = false;
                 lastRaceClock = raceClock;
-                if (!pauseHintShown && raceClock < 0) {
+                if (!pauseHintShown && raceClock < 0 && !replay.active) {   // a replay needs no instructions for the driver
                     pauseHintShown = true;
                     // Shown newest first, so the craft hint is added first and sits below the pause hint.
                     if (HoverNetIsTouchDevice()) {
@@ -10966,7 +11028,10 @@ int RunClient(int argc, char** argv)
                                                       session.GetBackImage());
                     }
                 }
-                if (!chatBuffer.empty() && menuFontHandle != nullptr) {
+                gReplayLabel.clear();
+                gChatPrompt = gHudTextInOverlay ? chatBuffer : std::string();
+                if (const char* shown = std::getenv("HOVERNET_TEST_CHAT_PROMPT")) gChatPrompt = shown;   // test hook: look at the chat line without typing
+                if (!chatBuffer.empty() && !gHudTextInOverlay && menuFontHandle != nullptr) {
                     const std::string prompt = "Chat: " + chatBuffer + "_";
                     DrawUiText(*menuFontHandle->GetSprite(), 20, kHeight - 40, prompt.c_str(), &viewport,
                                MR_Sprite::eLeft, MR_Sprite::eTop, LoadLargeHudText() ? 1 : 2);
@@ -10989,7 +11054,8 @@ int RunClient(int argc, char** argv)
                         char label[96];
                         std::snprintf(label, sizeof label, "%s   %d:%02d / %d:%02d   x%g%s", replayRacerName(replay.watch).c_str(), sec / 60, sec % 60, total / 60, total % 60,
                                       kReplaySpeeds[replay.speedStep], replay.paused ? "   paused" : "");
-                        DrawUiText(*menuFontHandle->GetSprite(), barX + barW, barY - 44, label, &viewport, MR_Sprite::eRight, MR_Sprite::eBottom, 1);
+                        if (gHudTextInOverlay) gReplayLabel = label;
+                        else DrawUiText(*menuFontHandle->GetSprite(), barX + barW, barY - 44, label, &viewport, MR_Sprite::eRight, MR_Sprite::eBottom, 1);
                     }
                 }
                 observer->PlaySoundsSafe(session.GetCurrentLevel(), mainCharacter);

@@ -359,6 +359,7 @@ jobs:
             "$x64Release\NetTarget\Tracks", `
             "$x64Release\NetTarget\LinuxClient\assets" | Out-Null
           Copy-Item "NetTarget\ObjFac1.dat" "$x64Release\NetTarget\ObjFac1.dat" -Force
+          Copy-Item "NetTarget\ObjFac1.textures" "$x64Release\NetTarget\ObjFac1.textures" -Force   # the AI-enhanced textures (docs/texture-pipeline.md)
           Copy-Item "NetTarget\Tracks\*.trk" "$x64Release\NetTarget\Tracks\" -Force
           Copy-Item "NetTarget\CommunityTracks.tsv" "$x64Release\NetTarget\CommunityTracks.tsv" -Force
           Copy-Item "LICENSE", "THIRD_PARTY_NOTICES.md" "$x64Release\" -Force   # the licence conditions travel with the binaries

@@ -79,6 +79,9 @@
     <ClCompile Include="ObjectFactoryData.cpp" />
     <ClCompile Include="ResActor.cpp" />
     <ClCompile Include="ResBitmap.cpp" />
+    <ClCompile Include="TexturePack.cpp" />
+    <ClCompile Include="CraftLook.cpp" />
+    <ClCompile Include="..\Authority\CraftDesign.cpp" />
     <ClCompile Include="ResSound.cpp" />
     <ClCompile Include="ResSprite.cpp" />
     <ClCompile Include="ResourceLib.cpp" />
