@@ -670,12 +670,43 @@ public:
     std::function<void(Sound)> sound;
     // select options, so the arrows can step through them: id -> (current index, count)
     std::map<std::string, std::pair<int, int>> selects;
+    // choosers: id -> every choice and the chosen one; the filter box narrows the list shown to the first 60 matches
+    struct Chooser { std::vector<std::string> items; int selected = 0; };
+    std::map<std::string, Chooser> choosers;
+
+    static std::string Lower(std::string pText) { for (char& c : pText) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return pText; }
+
+    void FillChooser(Rml::ElementDocument* pDocument, const std::string& pId, const std::string& pFilter)
+    {
+        auto found = choosers.find(pId);
+        Rml::Element* list = pDocument->GetElementById("l_" + pId);
+        if (found == choosers.end() || list == nullptr) return;
+        const Chooser& c = found->second;
+        const std::string needle = Lower(pFilter);
+        Rml::String html;
+        int shown = 0, matches = 0;
+        for (size_t i = 0; i < c.items.size(); ++i) {
+            if (!needle.empty() && Lower(c.items[i]).find(needle) == std::string::npos) continue;
+            ++matches;
+            if (shown >= 60) continue;
+            ++shown;
+            html += "<button class=\"item" + Rml::String(static_cast<int>(i) == c.selected ? " cur" : "") + "\" id=\"i_" + pId + "_" + std::to_string(i) + "\">" + Escaped(c.items[i]) + "</button>";
+        }
+        if (matches > shown) html += "<p class=\"itemnote\">" + std::to_string(matches - shown) + " more: keep typing to narrow the list</p>";
+        if (matches == 0) html += "<p class=\"itemnote\">Nothing matches that</p>";
+        list->SetInnerRML(html);
+        for (int i = 0; i < static_cast<int>(c.items.size()); ++i) if (Rml::Element* item = pDocument->GetElementById("i_" + pId + "_" + std::to_string(i))) { item->AddEventListener("click", this); item->AddEventListener("mouseover", this); }
+    }
 
     void ProcessEvent(Rml::Event& pEvent) override
     {
         Rml::Element* element = pEvent.GetCurrentElement();
         const Rml::String id = element->GetId();
-        if (pEvent.GetId() == Rml::EventId::Mouseover) { if (sound && (element->IsClassSet("act") || element->IsClassSet("tab") || element->IsClassSet("toggle") || element->IsClassSet("arrow"))) sound(Sound::eHover); return; }
+        if (pEvent.GetId() == Rml::EventId::Mouseover) { if (sound && (element->IsClassSet("act") || element->IsClassSet("tab") || element->IsClassSet("toggle") || element->IsClassSet("arrow") || element->IsClassSet("item") || element->IsClassSet("chooserbtn"))) sound(Sound::eHover); return; }
+        if (pEvent.GetId() == Rml::EventId::Change && id.compare(0, 2, "q_") == 0) {   // a chooser's filter box
+            FillChooser(element->GetOwnerDocument(), id.substr(2), pEvent.GetParameter<Rml::String>("value", ""));
+            return;
+        }
         if (pEvent.GetId() == Rml::EventId::Change) {
             FormEvent e;
             e.id = id.size() > 2 && id.compare(0, 2, "f_") == 0 ? id.substr(2) : id;
@@ -688,6 +719,33 @@ public:
             return;
         }
         // clicks
+        if (id == "busybutton") { if (sound) sound(Sound::eClick); FormEvent e; e.id = "busy"; pending.push_back(e); return; }
+        if (element->IsClassSet("chooserbtn")) {   // opens or closes the chooser's panel
+            if (sound) sound(Sound::eClick);
+            const std::string chooserId = id.substr(2);
+            Rml::ElementDocument* document = element->GetOwnerDocument();
+            if (Rml::Element* panel = document->GetElementById("p_" + chooserId)) {
+                const bool open = !panel->IsClassSet("open");
+                panel->SetClass("open", open);
+                if (open) { FillChooser(document, chooserId, ""); if (Rml::Element* box = document->GetElementById("q_" + chooserId)) { box->Focus(); } }
+            }
+            return;
+        }
+        if (element->IsClassSet("item")) {   // i_<chooser>_<index>
+            if (sound) sound(Sound::eClick);
+            const size_t cut = id.rfind('_');
+            const std::string chooserId = id.substr(2, cut - 2);
+            const int index = std::atoi(id.c_str() + cut + 1);
+            auto found = choosers.find(chooserId);
+            Rml::ElementDocument* document = element->GetOwnerDocument();
+            if (found != choosers.end() && index >= 0 && index < static_cast<int>(found->second.items.size())) {
+                found->second.selected = index;
+                if (Rml::Element* button = document->GetElementById("f_" + chooserId)) button->SetInnerRML(Escaped(found->second.items[static_cast<size_t>(index)]));
+                if (Rml::Element* panel = document->GetElementById("p_" + chooserId)) panel->SetClass("open", false);
+                FormEvent e; e.id = chooserId; e.index = index; pending.push_back(e);
+            }
+            return;
+        }
         if (id == "save") { if (saveEnabled) { if (sound) sound(Sound::eClick); outcome = FormOutcome::eSave; } return; }
         if (id == "cancel") { if (sound) sound(Sound::eBack); outcome = FormOutcome::eCancel; return; }
         if (id.compare(0, 3, "tab") == 0 && id.size() > 3 && std::isdigit(static_cast<unsigned char>(id[3]))) {
@@ -738,6 +796,9 @@ struct FormScreen::Impl
     int width = 0, height = 0, restoreW = 0, restoreH = 0;
     std::vector<std::string> script;     // test hook HOVERNET_TEST_RML: "tab:2", "click:name", "text:name=Tester", "enter", "down" ...
     int tabCount = 0;
+    std::function<SDL_Texture*(SDL_Rect&)> sideImage;
+    bool busyFocused = false;
+    bool captureKeys = false, captureButtons = false;
 };
 
 FormScreen::FormScreen(SDL_Window* pWindow, SDL_Renderer* pRenderer, const std::string& pAssetDir, const std::string& pTitle, bool, std::function<void(Sound)> pSound,
@@ -799,6 +860,7 @@ void FormScreen::SetFields(const std::vector<FormField>& pFields)
     Rml::Element* host = m.document->GetElementById("fields");
     if (host == nullptr) return;
     m.listener.selects.clear();
+    m.listener.choosers.clear();
     Rml::String html;
     for (const FormField& f : pFields) {
         const Rml::String id = Escaped(f.id);
@@ -815,7 +877,7 @@ void FormScreen::SetFields(const std::vector<FormField>& pFields)
         case FormField::Type::eSlider:
             html += "<div class=\"field\"><p class=\"label\">" + Escaped(f.label) + "<span class=\"val\" id=\"v_" + id + "\">" + FormListener::FormatNumber(f.value) + Escaped(f.suffix) + "</span></p><input type=\"range\" class=\"range\" id=\"f_" + id + "\" min=\"" +
                     std::to_string(f.min) + "\" max=\"" + std::to_string(f.max) + "\" step=\"" + std::to_string(f.step) + "\" value=\"" + std::to_string(f.value) + "\" data-suffix=\"" + Escaped(f.suffix) + "\"/>" +
-                    (f.hint.empty() ? Rml::String() : "<p class=\"note\">" + Escaped(f.hint) + "</p>") + "</div>";
+                    "<p class=\"note\" id=\"h_" + id + "\">" + Escaped(f.hint) + "</p>" + "</div>";
             break;
         case FormField::Type::eSelect: {
             const int count = static_cast<int>(f.options.size());
@@ -829,6 +891,14 @@ void FormScreen::SetFields(const std::vector<FormField>& pFields)
         case FormField::Type::eButton:
             html += "<button class=\"act" + Rml::String(f.quiet ? " quiet" : "") + "\" id=\"f_" + id + "\">" + Escaped(f.label) + "</button>";
             break;
+        case FormField::Type::eChooser: {
+            FormListener::Chooser chooser; chooser.items = f.items; chooser.selected = f.selected;
+            m.listener.choosers[f.id] = chooser;
+            const int count = static_cast<int>(f.items.size());
+            html += "<div class=\"field\"><p class=\"label\">" + Escaped(f.label) + "</p><button class=\"act chooserbtn\" id=\"f_" + id + "\">" + Escaped(count > 0 && f.selected >= 0 && f.selected < count ? f.items[static_cast<size_t>(f.selected)] : "") +
+                    "</button><div class=\"choosepanel\" id=\"p_" + id + "\"><input type=\"text\" class=\"text\" id=\"q_" + id + "\" value=\"\"/><div class=\"chooselist\" id=\"l_" + id + "\"></div></div></div>";
+            break;
+        }
         }
     }
     host->SetInnerRML(html);
@@ -837,14 +907,48 @@ void FormScreen::SetFields(const std::vector<FormField>& pFields)
         if (e == nullptr) continue;
         switch (f.type) {
         case FormField::Type::eText: case FormField::Type::eSlider: e->AddEventListener("change", &m.listener); break;
-        case FormField::Type::eToggle: case FormField::Type::eButton: e->AddEventListener("click", &m.listener); e->AddEventListener("mouseover", &m.listener); break;
+        case FormField::Type::eToggle: case FormField::Type::eButton: case FormField::Type::eChooser: e->AddEventListener("click", &m.listener); e->AddEventListener("mouseover", &m.listener); break;
         case FormField::Type::eSelect:
             for (const char* suffix : {"_prev", "_next"}) if (Rml::Element* arrow = m.document->GetElementById("f_" + f.id + suffix)) { arrow->AddEventListener("click", &m.listener); arrow->AddEventListener("mouseover", &m.listener); }
             break;
         default: break;
         }
     }
+    for (const FormField& f : pFields) if (f.type == FormField::Type::eChooser) if (Rml::Element* box = m.document->GetElementById("q_" + f.id)) box->AddEventListener("change", &m.listener);
     host->SetScrollTop(0.0f);
+}
+
+void FormScreen::SetLayout(bool pWide, bool pTabs)
+{
+    Impl& m = *mImpl;
+    if (Rml::Element* card = m.document->GetElementById("card")) { card->SetClass("wide", pWide); card->SetClass("notabs", !pTabs); }
+    if (Rml::Element* footer = m.document->GetElementById("footer")) footer->SetClass("wide", pWide);
+}
+
+void FormScreen::SetFooter(const std::string& pSave, const std::string& pCancel)
+{
+    if (Rml::Element* save = mImpl->document->GetElementById("save")) save->SetInnerRML(Escaped(pSave));
+    if (Rml::Element* cancel = mImpl->document->GetElementById("cancel")) { cancel->SetInnerRML(Escaped(pCancel)); cancel->SetProperty("display", pCancel.empty() ? "none" : "inline-block"); }
+    if (Rml::Element* footer = mImpl->document->GetElementById("footer")) footer->SetClass("single", pCancel.empty());
+}
+
+void FormScreen::SetCapture(bool pKeys, bool pButtons) { mImpl->captureKeys = pKeys; mImpl->captureButtons = pButtons; }
+
+void FormScreen::SetSideImage(std::function<SDL_Texture*(SDL_Rect&)> pImage) { mImpl->sideImage = std::move(pImage); }
+
+void FormScreen::SetBusy(const std::string& pTitle, const std::string& pLine, float pFraction, const std::string& pButton)
+{
+    Impl& m = *mImpl;
+    Rml::Element* busy = m.document->GetElementById("busy");
+    if (busy == nullptr) return;
+    busy->SetClass("show", !pTitle.empty());
+    if (pTitle.empty()) return;
+    if (Rml::Element* e = m.document->GetElementById("busytitle")) e->SetInnerRML(Escaped(pTitle));
+    if (Rml::Element* e = m.document->GetElementById("busyline")) e->SetInnerRML(Escaped(pLine));
+    if (Rml::Element* bar = m.document->GetElementById("busybar")) bar->SetProperty("display", pFraction < 0.0f ? "none" : "block");
+    if (Rml::Element* fill = m.document->GetElementById("busyfill")) fill->SetProperty("width", std::to_string(static_cast<int>(std::max(0.0f, std::min(1.0f, pFraction)) * 100.0f)) + "%");
+    if (Rml::Element* button = m.document->GetElementById("busybutton")) { button->SetInnerRML(Escaped(pButton)); button->SetProperty("display", pButton.empty() ? "none" : "block"); if (!m.busyFocused && !pButton.empty()) { button->Focus(); m.busyFocused = true; } }
+    if (pTitle.empty()) m.busyFocused = false;
 }
 
 void FormScreen::SetHint(const std::string& pId, const std::string& pText)
@@ -893,6 +997,12 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
         SDL_Event scripted; SDL_zero(scripted);
         if (step.compare(0, 4, "tab:") == 0) { if (Rml::Element* e = m.document->GetElementById("tab" + step.substr(4))) e->Click(); }
         else if (step.compare(0, 6, "click:") == 0) { if (Rml::Element* e = m.document->GetElementById(step.substr(6))) e->Click(); }
+        else if (step.compare(0, 6, "press:") == 0) {   // a key by SDL's name ("press:J", "press:Left Shift")
+            const SDL_Scancode code = SDL_GetScancodeFromName(step.substr(6).c_str());
+            scripted.type = SDL_KEYDOWN; scripted.key.state = SDL_PRESSED; scripted.key.repeat = 0;
+            scripted.key.keysym.scancode = code; scripted.key.keysym.sym = SDL_GetKeyFromScancode(code);
+            SDL_PushEvent(&scripted);
+        }
         else if (step.compare(0, 5, "text:") == 0) {
             const size_t eq = step.find('=');
             if (eq != std::string::npos) if (Rml::Element* e = m.document->GetElementById("f_" + step.substr(5, eq - 5))) if (auto* control = dynamic_cast<Rml::ElementFormControl*>(e)) {
@@ -920,6 +1030,17 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) return FormOutcome::eClose;
+        if (m.captureKeys && event.type == SDL_KEYDOWN && event.key.repeat != 0) continue;   // a held key (the Enter that started the capture) is not the answer
+        if (m.captureKeys && event.type == SDL_KEYDOWN) {   // remapping: this key is the answer, not a way to move around
+            FormEvent e; e.id = event.key.keysym.sym == SDLK_ESCAPE ? "capturecancel" : "capturekey"; e.index = static_cast<int>(event.key.keysym.scancode);
+            m.listener.pending.push_back(e);
+            continue;
+        }
+        if (m.captureButtons && event.type == SDL_CONTROLLERBUTTONDOWN) {
+            FormEvent e; e.id = "capturebutton"; e.index = event.cbutton.button;
+            m.listener.pending.push_back(e);
+            continue;
+        }
         if (event.type == SDL_KEYDOWN) {
             const SDL_Keycode key = event.key.keysym.sym;
             Rml::Element* focused = m.document->GetFocusLeafNode();
@@ -949,6 +1070,20 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
     m.ss->Begin();
     DrawGridBackdrop(m.renderer, m.ss->W(), m.ss->H(), 1, m.ss->factor);
     m.context->Render();
+    if (m.sideImage) {   // the picture beside the controls (the track map), inside the #side box
+        SDL_Rect crop = {0, 0, 0, 0};
+        SDL_Texture* image = m.sideImage(crop);
+        Rml::Element* side = m.document->GetElementById("side");
+        if (image != nullptr && side != nullptr && side->IsVisible() && crop.w > 0 && crop.h > 0) {
+            const Rml::Vector2f origin = side->GetAbsoluteOffset(Rml::Box::BORDER), size = side->GetBox().GetSize(Rml::Box::BORDER);
+            const float aspect = static_cast<float>(crop.w) / static_cast<float>(crop.h);
+            float w = size.x, h = w / aspect;
+            if (h > size.y) { h = size.y; w = h * aspect; }
+            const SDL_FRect to = {origin.x + (size.x - w) * 0.5f, origin.y + (size.y - h) * 0.5f, w, h};
+            SDL_SetTextureAlphaMod(image, 255);
+            SDL_RenderCopyF(m.renderer, image, &crop, &to);
+        }
+    }
     m.ss->End();
     if (const char* shot = std::getenv("HOVERNET_CAPTURE_RML")) {
         if ((pFrameLimit >= 0 && pFrame == pFrameLimit) || (pFrameLimit < 0 && pFrame == 62)) {

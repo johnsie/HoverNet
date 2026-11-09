@@ -34,7 +34,7 @@ input.text {
 }
 input.text:focus { border-color: #fa737a; }
 input.text selection { background-color: #dc3546; color: #ffffff; }
-input.range { display: block; box-sizing: border-box; width: 100%; height: 26dp; margin: 2dp 0 6dp 0; tab-index: auto; }
+input.range { display: block; box-sizing: border-box; width: 100%; height: 26dp; margin: 10dp 0 6dp 0; tab-index: auto; }
 input.range slidertrack { height: 8dp; margin-top: 9dp; background-color: #303342; }
 input.range sliderbar { width: 22dp; height: 22dp; margin-top: -7dp; background-color: #dc3546; cursor: pointer; }
 input.range sliderbar:hover, input.range:focus sliderbar { background-color: #f04a5b; }
@@ -108,3 +108,10 @@ scrollbarvertical sliderbar { width: 12dp; min-height: 36dp; background-color: #
 scrollbarvertical sliderbar:hover { background-color: #5a6285; }
 scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0dp; height: 0dp; display: none; }
 #rule { width: 520dp; height: 3dp; margin: 8dp auto 0 auto; decorator: gradient( horizontal #e02a43 #e02a4300 ); }
+
+#footer.single button { width: 100%; margin-left: 0; }
+
+/* the chooser button reads as a field, not as a call to action */
+.chooserbtn { text-align: left; padding: 11dp 12dp; background-color: #0b0c11; border-width: 1dp; border-color: #4a4f66; font-family: Inter; font-weight: normal; font-size: 16dp; }
+.chooserbtn:hover, .chooserbtn:focus { background-color: #171a24; border-color: #fa737a; transform: none; }
+#side { background-color: #0b0c11; border-width: 1dp; border-color: #303342; border-radius: 6dp; padding: 10dp; box-sizing: border-box; }

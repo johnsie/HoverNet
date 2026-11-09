@@ -35,5 +35,17 @@ case "$form" in
   *"form tab "*"index=1"*"form mute "*"on=1"*"form tab "*"index=0"*"form name text=[Tester]"*) echo "ok   the Settings form: a tab, the Mute toggle and the name field each report their change";;
   *) echo "FAIL: settings form events were: $form"; fail=1;;
 esac
+# The local race setup (Practice offline): the Weapons toggle reports, Start Race leaves the screen (the race loads), and the track map screen did not need a download.
+setup=$(HOVERNET_TEST_RML="down,enter;click:f_weapons,click:save" timeout -s KILL 50 "$client" --play --frames 100000 2>&1 | grep -a "^RMLTEST form weapons\|FINISHTEST\|3D view" | head -2 | tr '\n' '|')
+case "$setup" in
+  *"form weapons"*"on=0"*) echo "ok   the local race setup: the Weapons toggle reports its change";;
+  *) echo "FAIL: local race setup events were: $setup"; fail=1;;
+esac
+# Controls: choose Jump, press J; the remap is reported as the key's scancode (J = 13), and the screen leaves with Back.
+ctl=$(HOVERNET_TEST_RML="up,enter;down,enter;click:f_key4,press:J,click:save" timeout -s KILL 50 "$client" --play --frames 100000 2>&1 | grep -a "^RMLTEST form capturekey" | head -1)
+case "$ctl" in
+  *"index=13"*) echo "ok   Controls: choosing Jump and pressing J remaps it (scancode 13)";;
+  *) echo "FAIL: controls remap event was: '$ctl'"; fail=1;;
+esac
 [ $fail -eq 0 ] && echo "RmlUi main menu, results screen, pause menu and Settings hub: keyboard and mouse reach every door"
 exit $fail

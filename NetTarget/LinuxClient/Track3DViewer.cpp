@@ -1386,6 +1386,8 @@ public:
     enum class State { eIdle, eRunning, eDone, eFailed };
 
     bool Active() const { return mJob != nullptr; }
+    TrackDownloadJob* Job() { return mJob.get(); }   // for screens that show the progress themselves (the RmlUi ones)
+    void Reset() { mJob.reset(); }
 
     void Begin(const std::vector<TrackEntry>& tracks, int scope)
     {
@@ -1685,6 +1687,7 @@ void SaveMusicVolume(double volume)
 struct MusicState
 {
     MusicTrack current = MusicTrack::eNone;
+    double gain = 1.0;            // the playing track's own level (see MusicFile::gain): every volume change below includes it
     bool ducked = false;
     std::string toast;            // "Asphalt - Sygil", shown for a few seconds when a track starts
     Uint32 toastAt = 0;
@@ -1699,14 +1702,16 @@ std::string ProfilePath() { return ConfigDirPath() + "/profile"; }
 
 // The tracks that can play in a race, taken in turn: one is never played twice in a row (the last one is remembered between runs), and a package that lacks some of
 // the files simply rotates through the rest. The final lap has its own, faster track.
-struct MusicFile { const char* file; const char* credit; };
+// gain: each track is brought to the level of Asphalt (about -12.5 LUFS integrated, measured with ffmpeg's ebur128 on 2026-11-09: Hard Left -14.0, Asphalt -12.5, Fever Stadium
+// -10.8, its Climax -12.0, Hyper Ultra-Racing -8.8), so a new track never jumps out louder than the one before it. The files themselves are untouched.
+struct MusicFile { const char* file; const char* credit; double gain; };
 const MusicFile kRaceMusic[] = {
-    {"Asphalt.ogg", "Asphalt - Sygil"},
-    {"FeverStadium.ogg", "Fever Stadium - MintoDog"},
-    {"HyperUltraRacing.ogg", "Hyper Ultra-Racing - cynicmusic"},
+    {"Asphalt.ogg", "Asphalt - Sygil", 1.0},
+    {"FeverStadium.ogg", "Fever Stadium - MintoDog", 0.82},          // -1.7 dB
+    {"HyperUltraRacing.ogg", "Hyper Ultra-Racing - cynicmusic", 0.65},   // -3.7 dB
 };
-const MusicFile kFinalLapMusic = {"FeverStadiumClimax.ogg", "Fever Stadium (final lap) - MintoDog"};
-const MusicFile kMenuMusic = {"HardLeft.ogg", "Hard Left - Dan Knoflicek"};
+const MusicFile kFinalLapMusic = {"FeverStadiumClimax.ogg", "Fever Stadium (final lap) - MintoDog", 1.0};   // -12.0: a touch above the others on purpose
+const MusicFile kMenuMusic = {"HardLeft.ogg", "Hard Left - Dan Knoflicek", 1.0};
 
 bool MusicFileExists(const char* file)
 {
@@ -1737,10 +1742,11 @@ void PlayMusic(MusicTrack track)
     gMusicState.current = track;
     if (track == MusicTrack::eNone) { MR_SoundServer::MusicStop(1.0); return; }
     const MusicFile& chosen = track == MusicTrack::eMenu ? kMenuMusic : track == MusicTrack::eFinalLap ? kFinalLapMusic : ChooseRaceMusic();
+    gMusicState.gain = chosen.gain;
     std::ifstream in(SourcePath((std::string("NetTarget/Music/") + chosen.file).c_str()), std::ios::binary);
     if (!in) return;   // a package without the music is simply quiet
     const std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    MR_SoundServer::MusicPlay(reinterpret_cast<const unsigned char*>(bytes.data()), static_cast<unsigned long>(bytes.size()), LoadMusicVolume() * (gMusicState.ducked ? 0.35 : 1.0), track == MusicTrack::eFinalLap ? 0.8 : 1.6);
+    MR_SoundServer::MusicPlay(reinterpret_cast<const unsigned char*>(bytes.data()), static_cast<unsigned long>(bytes.size()), LoadMusicVolume() * chosen.gain * (gMusicState.ducked ? 0.35 : 1.0), track == MusicTrack::eFinalLap ? 0.8 : 1.6);
     gMusicState.toast = chosen.credit;
     gMusicState.toastAt = SDL_GetTicks();
     if (std::getenv("HOVERNET_TEST_MUSIC") != nullptr) { std::printf("MUSICTEST %s\n", chosen.file); std::fflush(stdout); }
@@ -1757,7 +1763,7 @@ void ImpactDuckMusic(bool hitNow)
     const bool want = now < until && !gMusicState.ducked;
     if (want != active) {
         active = want;
-        MR_SoundServer::MusicSetVolume(LoadMusicVolume() * (want ? 0.45 : 1.0));
+        MR_SoundServer::MusicSetVolume(LoadMusicVolume() * gMusicState.gain * (want ? 0.45 : 1.0));
     }
 }
 
@@ -1765,7 +1771,7 @@ void DuckMusic(bool duck)
 {
     if (gMusicState.ducked == duck) return;
     gMusicState.ducked = duck;
-    MR_SoundServer::MusicSetVolume(LoadMusicVolume() * (duck ? 0.35 : 1.0));
+    MR_SoundServer::MusicSetVolume(LoadMusicVolume() * gMusicState.gain * (duck ? 0.35 : 1.0));
 }
 
 std::string MutePath()
@@ -4835,6 +4841,109 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     // Test hook: behave as if Start Race was pressed on the first frame.
     bool autoStartForTest = std::getenv("HOVERNET_TEST_AUTO_START") != nullptr;
 
+#ifdef HOVERNET_HAVE_RMLUI
+    if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this screen (docs/rmlui.md): the same choices, briefing, records, map and download; if it cannot load, the ImGui screen below runs
+        using HoverNetRml::FormField;
+        std::unique_ptr<HoverNetRml::FormScreen> form(new HoverNetRml::FormScreen(
+            graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "LOCAL RACE SETUP", LoadReducedMotion(),
+            [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight));
+        if (form->Ok()) {
+            form->SetLayout(true, false);
+            std::vector<std::string> items;
+            for (int i = 0; i < Tracks().Count(); ++i) {
+                const TrackEntry* e = Tracks().Get(i);
+                items.push_back(e == nullptr ? std::string() : e->mName + (e->mOfficial ? "" : "  -  community") + (e->mInstalled ? "" : "  (download)"));
+            }
+            auto note = [](const std::string& text) { FormField f; f.type = FormField::Type::eNote; f.label = text; return f; };
+            auto bestsText = [&]() {
+                const std::string trackName = TrackNameAt(prefs.mTrackIndex);
+                const long long raceBest = personalBests.RaceBest(trackName, prefs.mLaps), lapBest = personalBests.LapBest(trackName);
+                char best[32];
+                std::string text;
+                if (raceBest > 0) { FormatRaceTime(static_cast<MR_SimulationTime>(raceBest), best, sizeof(best)); text += "Your best over " + std::to_string(prefs.mLaps) + " lap" + (prefs.mLaps == 1 ? "" : "s") + ": " + best; }
+                if (lapBest > 0) { FormatRaceTime(static_cast<MR_SimulationTime>(lapBest), best, sizeof(best)); text += std::string(text.empty() ? "" : "   -   ") + "Your best lap on this track: " + best; }
+                return text;
+            };
+            auto selectedEntry = [&]() { return Tracks().Get(prefs.mTrackIndex); };
+            auto needsDownloadNow = [&]() { const TrackEntry* e = selectedEntry(); return e != nullptr && !e->mInstalled; };
+            auto show = [&]() {
+                const TrackBriefing guide = BriefingFor(prefs.mTrackIndex);
+                const TrackEntry* entry = selectedEntry();
+                std::vector<FormField> f;
+                { FormField c; c.type = FormField::Type::eChooser; c.id = "track"; c.label = "Track"; c.items = items; c.selected = prefs.mTrackIndex; f.push_back(c); }
+                { FormField h; h.type = FormField::Type::eHeading; h.label = "Course briefing"; f.push_back(h); }
+                f.push_back(note("Style: " + guide.mCharacter + "     Difficulty: " + guide.mDifficulty));
+                f.push_back(note(guide.mDescription));
+                if (entry != nullptr && !entry->mInstalled) f.push_back(note("Not on this computer yet - it downloads (" + FormatMegabytes(entry->mDownloadBytes) + ") when you start."));
+                if (guide.mFreePlay) f.push_back(note("Laps: not used on a free-play track."));
+                else { FormField l; l.type = FormField::Type::eSlider; l.id = "laps"; l.label = "Laps"; l.value = static_cast<float>(prefs.mLaps); l.min = 1.0f; l.max = 20.0f; l.step = 1.0f; l.hint = bestsText(); f.push_back(l); f.push_back(note("Suggested: " + std::to_string(guide.mSuggestedLaps))); }
+                { FormField w; w.type = FormField::Type::eToggle; w.id = "weapons"; w.label = "Weapons enabled"; w.on = prefs.mWeapons; f.push_back(w); }
+                const std::vector<TrackEntry> missing = Tracks().MissingDownloads();
+                if (!missing.empty()) { FormField b; b.type = FormField::Type::eButton; b.id = "dlall"; b.quiet = true; b.label = "Download all " + std::to_string(missing.size()) + " community tracks (" + FormatMegabytes(Tracks().MissingDownloadBytes()) + ")"; f.push_back(b); }
+                form->SetFields(f);
+                form->SetFooter(needsDownloadNow() ? "Download & Start Race" : "Start Race", "Cancel");
+                form->SetSaveEnabled(!download.Active());
+            };
+            form->SetSideImage([&](SDL_Rect& crop) -> SDL_Texture* {
+                TrackPreview& preview = trackPreviews[static_cast<std::size_t>(prefs.mTrackIndex)];
+                if (!preview.mLoaded) preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(prefs.mTrackIndex).c_str());
+                if (preview.mTexture == nullptr) return nullptr;
+                crop = SDL_Rect{0, 0, preview.mWidth, preview.mHeight};
+                return preview.mTexture;
+            });
+            show();
+            int frame = 0;
+            const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
+            bool closeRequested = false;
+            while (running && (limit < 0 || frame < limit)) {
+                ++frame;
+                std::vector<HoverNetRml::FormEvent> events;
+                HoverNetRml::FormOutcome outcome = form->Frame(events, frame, limit);
+                if (autoStartForTest && frame == 1) outcome = HoverNetRml::FormOutcome::eSave;   // the test hook: Start Race pressed on the first frame
+                bool refresh = false;
+                for (const HoverNetRml::FormEvent& e : events) {
+                    if (e.id == "track") { prefs.mTrackIndex = std::max(0, std::min(Tracks().Count() - 1, e.index)); refresh = true; }
+                    else if (e.id == "laps") { prefs.mLaps = static_cast<int>(e.value + 0.5f); form->SetHint("laps", bestsText()); }
+                    else if (e.id == "weapons") prefs.mWeapons = e.on;
+                    else if (e.id == "dlall") { const std::vector<TrackEntry> missing = Tracks().MissingDownloads(); if (!download.Active()) { download.Begin(missing, 0); startAfterDownload = false; } }
+                    else if (e.id == "busy") {
+                        if (TrackDownloadJob* job = download.Job()) { if (!job->Finished()) job->Cancel(); else { download.Reset(); startAfterDownload = false; form->SetBusy("", "", -1.0f, ""); refresh = true; } }
+                    }
+                }
+                if (outcome == HoverNetRml::FormOutcome::eSave && !download.Active()) {
+                    const TrackEntry* entry = selectedEntry();
+                    if (entry != nullptr && !entry->mInstalled) { download.Begin({*entry}, 0); startAfterDownload = true; }
+                    else running = false;
+                }
+                else if (outcome == HoverNetRml::FormOutcome::eCancel && !download.Active()) { cancelled = true; running = false; }
+                else if (outcome == HoverNetRml::FormOutcome::eClose) { cancelled = true; running = false; closeRequested = true; }
+                if (TrackDownloadJob* job = download.Job()) {   // a download is under way: shown over the screen until it ends
+                    if (!job->Finished()) {
+                        const int total = job->TotalTracks(), done = std::min(job->CompletedTracks() + 1, total);
+                        const long long totalBytes = std::max<long long>(1, job->TotalBytes());
+                        form->SetBusy(total > 1 ? "Downloading track " + std::to_string(done) + " of " + std::to_string(total) : std::string("Downloading track"),
+                                      job->CurrentName() + "   " + FormatMegabytes(job->BytesDone()) + " of " + FormatMegabytes(totalBytes),
+                                      std::min(1.0f, static_cast<float>(job->BytesDone()) / static_cast<float>(totalBytes)), "Cancel");
+                    }
+                    else {
+                        Tracks().Refresh();
+                        if (job->Succeeded()) { download.Reset(); form->SetBusy("", "", -1.0f, ""); if (startAfterDownload) { startAfterDownload = false; running = false; } else refresh = true; }
+                        else if (job->Cancelled() && job->Error().empty()) { download.Reset(); startAfterDownload = false; form->SetBusy("", "", -1.0f, ""); refresh = true; }
+                        else form->SetBusy("The download did not finish", job->Error(), -1.0f, "OK");   // "busy" (OK) then closes it
+                    }
+                }
+                if (refresh) {
+                    for (TrackPreview& preview : trackPreviews) if (preview.mTexture != nullptr && !preview.mLoaded) { SDL_DestroyTexture(preview.mTexture); preview = TrackPreview(); }
+                    show();
+                }
+            }
+            form.reset();
+            if (closeRequested && ConfirmQuit(graphics, buffer, viewport, font)) g_QuitConfirmed = true;
+        }
+        else form.reset();
+    }
+#endif
+
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
         SDL_Event event;
@@ -5337,7 +5446,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 #endif
                     else if (id == "mute") { muted = e.on; MR_SoundServer::SetMasterVolume(muted ? 0.0 : volumePercent / 100.0); }
                     else if (id == "volume") { volumePercent = e.value; MR_SoundServer::SetMasterVolume(muted ? 0.0 : volumePercent / 100.0); }
-                    else if (id == "music") { musicPercent = e.value; MR_SoundServer::MusicSetVolume(musicPercent / 100.0); SaveMusicVolume(musicPercent / 100.0); }
+                    else if (id == "music") { musicPercent = e.value; MR_SoundServer::MusicSetVolume(musicPercent / 100.0 * gMusicState.gain); SaveMusicVolume(musicPercent / 100.0); }
                     else if (id == "uiscale") uiScalePercent = e.value;
                     else if (id == "largehud") largeHudText = e.on;
                     else if (id == "reduced") reducedMotion = e.on;
@@ -5605,7 +5714,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             if (musicPercent < 0.0f) musicPercent = static_cast<float>(LoadMusicVolume() * 100.0);
             ImGui::PushItemWidth(-1.0f);
             if (MenuSliderFloat("##MusicVolume", &musicPercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
-                MR_SoundServer::MusicSetVolume(musicPercent / 100.0);
+                MR_SoundServer::MusicSetVolume(musicPercent / 100.0 * gMusicState.gain);
                 SaveMusicVolume(musicPercent / 100.0);
             }
             ImGui::PopItemWidth();
@@ -5953,6 +6062,145 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
     int listeningForBinding = -1;
     int listeningForControllerBinding = -1;
     std::string bindingStatus;
+
+#ifdef HOVERNET_HAVE_RMLUI
+    if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this screen (docs/rmlui.md): the same bindings, swapping on conflict, axes and defaults; if it cannot load, the ImGui screen below runs
+        using HoverNetRml::FormField;
+        std::unique_ptr<HoverNetRml::FormScreen> form(new HoverNetRml::FormScreen(
+            graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "CONTROLS", LoadReducedMotion(),
+            [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight));
+        if (form->Ok()) {
+            const std::vector<std::string> tabNames = {"Keyboard", "Controller"};
+            const char* keyLabels[] = {"Accelerate", "Brake / Reverse", "Steer left", "Steer right", "Jump", "Fire weapon", "Select weapon"};
+            const char* padLabels[] = {"Jump", "Fire weapon", "Select weapon"};
+            const char* axisNames[] = {"Left stick X", "Left stick Y", "Right stick X", "Right stick Y", "Left trigger", "Right trigger"};
+            const int axisCount = static_cast<int>(SDL_CONTROLLER_AXIS_MAX);
+            int tab = 0;
+            std::string status;
+            auto heading = [](const char* label) { FormField f; f.type = FormField::Type::eHeading; f.label = label; return f; };
+            auto note = [](const std::string& label) { FormField f; f.type = FormField::Type::eNote; f.label = label; return f; };
+            auto button = [](const std::string& id, const std::string& label, bool quiet = false) { FormField f; f.type = FormField::Type::eButton; f.id = id; f.label = label; f.quiet = quiet; return f; };
+            auto toggle = [](const char* id, const char* label, bool on) { FormField f; f.type = FormField::Type::eToggle; f.id = id; f.label = label; f.on = on; return f; };
+            auto axisSelect = [&](const char* id, const char* label, int current) {
+                FormField f; f.type = FormField::Type::eSelect; f.id = id; f.label = label; for (int i = 0; i < axisCount; ++i) f.options.push_back(axisNames[i]); f.selected = std::max(0, std::min(axisCount - 1, current)); return f; };
+            auto show = [&]() {
+                std::vector<FormField> f;
+                if (tab == 0) {
+                    f.push_back(heading("Keyboard"));
+                    f.push_back(note("Choose a control, then press the key you want. Escape cancels. Using a key that another control has swaps the two."));
+                    for (int i = 0; i < 7; ++i) {
+                        const std::string key = listeningForBinding == i ? "Press a key..." : SDL_GetScancodeName(*remappableBindings[i]);
+                        f.push_back(button("key" + std::to_string(i), std::string(keyLabels[i]) + ":   " + key, true));
+                    }
+                    f.push_back(heading("Fixed keys"));
+                    f.push_back(note("External / Cockpit view:  F3 / F4"));
+                    f.push_back(note("Player list / More messages:  F5 / F6"));
+                    f.push_back(note("HUD margin:  + / -"));
+                    f.push_back(note("Scroll HUD:  Page Up / Page Down"));
+                    f.push_back(note("HUD zoom:  Insert / Delete"));
+                    f.push_back(note("Reset HUD:  Home"));
+                    f.push_back(note("Camera distance (replays, spectating):  C"));
+                    f.push_back(note("Pause menu:  Escape"));
+                }
+                else {
+                    int recognised = 0;
+                    for (int i = 0; i < SDL_NumJoysticks(); ++i) if (SDL_IsGameController(i)) ++recognised;
+                    f.push_back(heading("Controller buttons"));
+                    f.push_back(note(recognised > 0 ? std::to_string(recognised) + " controller" + (recognised == 1 ? "" : "s") + " connected." : "No SDL-compatible controller detected; keyboard controls remain available."));
+                    f.push_back(note("Choose a control, then press the button you want. Start is reserved for pause."));
+                    for (int i = 0; i < 3; ++i) {
+                        const char* name = listeningForControllerBinding == i ? "Press a button..." : SDL_GameControllerGetStringForButton(*remappableControllerBindings[i]);
+                        if (name == nullptr || name[0] == '\0') name = "Unknown";
+                        f.push_back(button("pad" + std::to_string(i), std::string(padLabels[i]) + ":   " + name, true));
+                    }
+                    f.push_back(heading("Controller axes"));
+                    f.push_back(axisSelect("steeraxis", "Steering axis", static_cast<int>(gControllerBindings.steerAxis)));
+                    f.push_back(toggle("invertsteer", "Invert steering", gControllerBindings.invertSteering));
+                    f.push_back(axisSelect("accelaxis", "Accelerate axis", static_cast<int>(gControllerBindings.accelerateAxis)));
+                    f.push_back(toggle("invertaccel", "Invert accelerate direction", gControllerBindings.invertAccelerate));
+                    f.push_back(axisSelect("brakeaxis", "Brake / reverse axis", static_cast<int>(gControllerBindings.brakeAxis)));
+                    f.push_back(toggle("invertbrake", "Invert brake direction", gControllerBindings.invertBrake));
+                    { FormField d; d.type = FormField::Type::eSlider; d.id = "deadzone"; d.label = "Axis deadzone"; d.value = static_cast<float>(gControllerBindings.deadzone); d.min = 0.0f; d.max = 24000.0f; d.step = 500.0f; f.push_back(d); }
+                }
+                f.push_back(button("defaults", "Reset all control defaults", true));
+                if (!status.empty()) f.push_back(note(status));
+                f.push_back(note("Remaps, axis direction and deadzone changes apply immediately."));
+                form->SetFields(f);
+                form->SetCapture(listeningForBinding >= 0, listeningForControllerBinding >= 0);
+            };
+            form->SetLayout(false, true);
+            form->SetFooter("Back", "");
+            form->SetTabs(tabNames, tab);
+            show();
+            int frame = 0;
+            const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
+            bool running = true;
+            while (running && (limit < 0 || frame < limit)) {
+                ++frame;
+                std::vector<HoverNetRml::FormEvent> events;
+                const HoverNetRml::FormOutcome outcome = form->Frame(events, frame, limit);
+                bool refresh = false;
+                for (const HoverNetRml::FormEvent& e : events) {
+                    const std::string& id = e.id;
+                    if (id == "tab") { tab = e.index; listeningForBinding = listeningForControllerBinding = -1; form->SetTabs(tabNames, tab); refresh = true; }
+                    else if (id.compare(0, 3, "key") == 0 && id.size() == 4 && id != "keys") { listeningForBinding = id[3] - '0'; listeningForControllerBinding = -1; refresh = true; }
+                    else if (id.compare(0, 3, "pad") == 0 && id.size() == 4) { listeningForControllerBinding = id[3] - '0'; listeningForBinding = -1; refresh = true; }
+                    else if (id == "capturecancel") { listeningForBinding = listeningForControllerBinding = -1; refresh = true; }
+                    else if (id == "capturekey" && listeningForBinding >= 0) {
+                        const SDL_Scancode scancode = static_cast<SDL_Scancode>(e.index);
+                        if (IsValidBinding(scancode)) {
+                            const int target = listeningForBinding;
+                            const SDL_Scancode previous = *remappableBindings[target];
+                            for (int index = 0; index < 7; ++index) if (index != target && *remappableBindings[index] == scancode) *remappableBindings[index] = previous;   // a taken key swaps
+                            *remappableBindings[target] = scancode;
+                            SaveKeyboardBindings(gKeyboardBindings);
+                            status = std::string(keyLabels[target]) + " is now " + SDL_GetScancodeName(scancode) + ".";
+                        }
+                        else status = "That key cannot be used.";
+                        listeningForBinding = -1; refresh = true;
+                    }
+                    else if (id == "capturebutton" && listeningForControllerBinding >= 0) {
+                        const SDL_GameControllerButton requested = static_cast<SDL_GameControllerButton>(e.index);
+                        if (IsValidControllerBinding(requested)) {
+                            const int target = listeningForControllerBinding;
+                            const SDL_GameControllerButton previous = *remappableControllerBindings[target];
+                            for (int index = 0; index < 3; ++index) if (index != target && *remappableControllerBindings[index] == requested) *remappableControllerBindings[index] = previous;
+                            *remappableControllerBindings[target] = requested;
+                            SaveControllerBindings(gControllerBindings);
+                            status = std::string(padLabels[target]) + " is now " + SDL_GameControllerGetStringForButton(requested) + ".";
+                        }
+                        else status = "That button cannot be used.";
+                        listeningForControllerBinding = -1; refresh = true;
+                    }
+                    else if (id == "steeraxis") { gControllerBindings.steerAxis = static_cast<SDL_GameControllerAxis>(e.index); SaveControllerBindings(gControllerBindings); }
+                    else if (id == "accelaxis") { gControllerBindings.accelerateAxis = static_cast<SDL_GameControllerAxis>(e.index); SaveControllerBindings(gControllerBindings); }
+                    else if (id == "brakeaxis") { gControllerBindings.brakeAxis = static_cast<SDL_GameControllerAxis>(e.index); SaveControllerBindings(gControllerBindings); }
+                    else if (id == "invertsteer") { gControllerBindings.invertSteering = e.on; SaveControllerBindings(gControllerBindings); }
+                    else if (id == "invertaccel") { gControllerBindings.invertAccelerate = e.on; SaveControllerBindings(gControllerBindings); }
+                    else if (id == "invertbrake") { gControllerBindings.invertBrake = e.on; SaveControllerBindings(gControllerBindings); }
+                    else if (id == "deadzone") { gControllerBindings.deadzone = static_cast<int>(e.value); SaveControllerBindings(gControllerBindings); }
+                    else if (id == "defaults") {
+                        gKeyboardBindings = KeyboardBindings{};
+                        gControllerBindings = ControllerBindings{};
+                        SaveKeyboardBindings(gKeyboardBindings);
+                        SaveControllerBindings(gControllerBindings);
+                        listeningForBinding = listeningForControllerBinding = -1;
+                        status = "Default controls restored.";
+                        refresh = true;
+                    }
+                }
+                if (refresh) show();
+                if (outcome == HoverNetRml::FormOutcome::eSave || outcome == HoverNetRml::FormOutcome::eCancel) running = false;
+                else if (outcome == HoverNetRml::FormOutcome::eClose) { running = false; }
+            }
+            form->SetCapture(false, false);
+            form.reset();
+            if (ownsImGuiContext) { ImGui_ImplSDLRenderer2_Shutdown(); ImGui_ImplSDL2_Shutdown(); ImGui::DestroyContext(); }
+            return;
+        }
+        else form.reset();
+    }
+#endif
     struct CaptureReset { ~CaptureReset() { MenuGamepadCapture() = false; } } captureReset;
     bool running = true;
     int framesShown = 0;
