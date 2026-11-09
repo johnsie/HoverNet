@@ -4,7 +4,7 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## Unreleased
+## 2.3.34 - 2026-11-09
 
 ### Changed
 - **Settings has tabs** (Player, Sound, Access, Graphics, Display) with Save and Cancel under the panel, so it never scrolls.
