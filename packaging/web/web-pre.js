@@ -1,6 +1,8 @@
 // Emscripten preRun hook: hydrate the per-browser config directory before
 // main() reads settings. Files are copied back to IndexedDB periodically and
 // when the page becomes hidden.
+// Emscripten includes this file in every pthread worker too, where there is no `window`: top-level code must not touch it, so it goes through this.
+var hoverNetWindow = typeof window !== 'undefined' ? window : {};
 var hoverNetConfigPath = '/home/web/.config';
 var hoverNetSync = function(populate, done) {
   FS.syncfs(populate, function(error) {
@@ -18,12 +20,12 @@ function hoverNetReadUsername() {
 }
 function hoverNetAccount() {
   var controller = typeof AbortController === 'function' ? new AbortController() : null;
-  var timer = controller ? window.setTimeout(function() { controller.abort(); }, 3000) : 0;
+  var timer = controller ? hoverNetWindow.setTimeout(function() { controller.abort(); }, 3000) : 0;
   return fetch('/account/me', { credentials: 'same-origin', cache: 'no-store', signal: controller ? controller.signal : undefined })
     .then(function(response) { return response.status === 200 ? response.json() : null; })
     .then(function(profile) {
       if (!profile || !profile.sub) return;
-      window.outivaProfile = profile;
+      hoverNetWindow.outivaProfile = profile;
       var label = profile.name || profile.preferred_username || profile.email || 'Outiva user';
       var note = document.getElementById('outiva-account');
       if (note) note.textContent = 'Outiva account: ' + label;
@@ -39,14 +41,14 @@ function hoverNetAccount() {
         hoverNetSync(false);
       }
       hoverNetAccountCallsign = profile.callsign || '';
-      window.hoverNetAccountSignedIn = true;
+      hoverNetWindow.hoverNetAccountSignedIn = true;
     })
     .catch(function(error) { console.warn('Optional Outiva account was not available', error); })
-    .then(function() { if (timer) window.clearTimeout(timer); });
+    .then(function() { if (timer) hoverNetWindow.clearTimeout(timer); });
 }
 // When a signed-in player changes their name in the game, remember it for the account.
 function hoverNetSaveAccountCallsign() {
-  if (!window.hoverNetAccountSignedIn) return;
+  if (!hoverNetWindow.hoverNetAccountSignedIn) return;
   var name = hoverNetReadUsername();
   if (!hoverNetValidCallsign(name) || name === hoverNetAccountCallsign) return;
   hoverNetAccountCallsign = name;
@@ -54,9 +56,9 @@ function hoverNetSaveAccountCallsign() {
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ callsign: name }) })
     .catch(function(error) { console.warn('Could not save the account display name', error); });
 }
-window.hoverNetCraftStatus = '';
-window.hoverNetCraftRevision = 0;
-window.hoverNetCraftBusy = false;
+hoverNetWindow.hoverNetCraftStatus = '';
+hoverNetWindow.hoverNetCraftRevision = 0;
+hoverNetWindow.hoverNetCraftBusy = false;
 function hoverNetCraftDesignValid(bytes) {
   var fixed = 4 + 1 + 4 + 3 + 1 + 3 + 1 + 16 * 3 + 32 * 32 / 2 + 1;
   if (!bytes || bytes.length < fixed + 4 || bytes.length > 640 ||
@@ -77,7 +79,7 @@ function hoverNetCraftDesignValid(bytes) {
 }
 function hoverNetCraftAccountFetch(path, options) {
   var controller = typeof AbortController === 'function' ? new AbortController() : null;
-  var timer = controller ? window.setTimeout(function() { controller.abort(); }, 5000) : 0;
+  var timer = controller ? hoverNetWindow.setTimeout(function() { controller.abort(); }, 5000) : 0;
   options = options || {};
   options.credentials = 'same-origin';
   options.cache = 'no-store';
@@ -85,7 +87,7 @@ function hoverNetCraftAccountFetch(path, options) {
   return fetch(path, options).then(function(response) {
     if (!response.ok) throw new Error('Account service returned HTTP ' + response.status);
     return response;
-  }).then(function(response) { return response; }).finally(function() { if (timer) window.clearTimeout(timer); });
+  }).then(function(response) { return response; }).finally(function() { if (timer) hoverNetWindow.clearTimeout(timer); });
 }
 function hoverNetCraftSlotsFromBrowser() {
   var directory = hoverNetConfigPath + '/craft';
@@ -104,28 +106,28 @@ function hoverNetCraftSlotsFromBrowser() {
   if (!Number.isInteger(active) || active < 0 || active >= 8 || !designs[active]) active = -1;
   return { designs: designs, active: active };
 }
-window.hoverNetSaveCraftAccount = function() {
-  if (!window.hoverNetAccountSignedIn) { window.hoverNetCraftStatus = 'Sign in to your Outiva account before saving.'; return; }
-  if (window.hoverNetCraftBusy) return;
-  window.hoverNetCraftStatus = 'Saving craft designs to your Outiva account...';
+hoverNetWindow.hoverNetSaveCraftAccount = function() {
+  if (!hoverNetWindow.hoverNetAccountSignedIn) { hoverNetWindow.hoverNetCraftStatus = 'Sign in to your Outiva account before saving.'; return; }
+  if (hoverNetWindow.hoverNetCraftBusy) return;
+  hoverNetWindow.hoverNetCraftStatus = 'Saving craft designs to your Outiva account...';
   var document;
   try { document = hoverNetCraftSlotsFromBrowser(); }
-  catch (error) { window.hoverNetCraftStatus = 'Could not save: ' + error.message; return; }
-  window.hoverNetCraftBusy = true;
+  catch (error) { hoverNetWindow.hoverNetCraftStatus = 'Could not save: ' + error.message; return; }
+  hoverNetWindow.hoverNetCraftBusy = true;
   hoverNetCraftAccountFetch('/account/craft', {
     method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(document)
   }).then(function() {
-    window.hoverNetCraftStatus = 'Saved craft designs to your Outiva account.';
+    hoverNetWindow.hoverNetCraftStatus = 'Saved craft designs to your Outiva account.';
   }).catch(function(error) {
     console.warn('Could not save craft designs to the account', error);
-    window.hoverNetCraftStatus = 'Could not save craft designs to the account.';
-  }).finally(function() { window.hoverNetCraftBusy = false; });
+    hoverNetWindow.hoverNetCraftStatus = 'Could not save craft designs to the account.';
+  }).finally(function() { hoverNetWindow.hoverNetCraftBusy = false; });
 };
-window.hoverNetLoadCraftAccount = function() {
-  if (!window.hoverNetAccountSignedIn) { window.hoverNetCraftStatus = 'Sign in to your Outiva account before restoring.'; return; }
-  if (window.hoverNetCraftBusy) return;
-  window.hoverNetCraftStatus = 'Loading craft designs from your Outiva account...';
-  window.hoverNetCraftBusy = true;
+hoverNetWindow.hoverNetLoadCraftAccount = function() {
+  if (!hoverNetWindow.hoverNetAccountSignedIn) { hoverNetWindow.hoverNetCraftStatus = 'Sign in to your Outiva account before restoring.'; return; }
+  if (hoverNetWindow.hoverNetCraftBusy) return;
+  hoverNetWindow.hoverNetCraftStatus = 'Loading craft designs from your Outiva account...';
+  hoverNetWindow.hoverNetCraftBusy = true;
   hoverNetCraftAccountFetch('/account/craft').then(function(response) { return response.json(); }).then(function(document) {
     if (!document || !Array.isArray(document.designs) || document.designs.length > 8) throw new Error('Invalid craft-design list.');
     var designs = [];
@@ -150,16 +152,16 @@ window.hoverNetLoadCraftAccount = function() {
     FS.writeFile(directory + '/active', active + '\n');
     return new Promise(function(resolve) {
       hoverNetSync(false, function(error) {
-        ++window.hoverNetCraftRevision;
-        if (error) window.hoverNetCraftStatus = 'Restored account designs, but browser storage could not be saved.';
-        else window.hoverNetCraftStatus = "Restored account designs, replacing this browser's local slots.";
+        ++hoverNetWindow.hoverNetCraftRevision;
+        if (error) hoverNetWindow.hoverNetCraftStatus = 'Restored account designs, but browser storage could not be saved.';
+        else hoverNetWindow.hoverNetCraftStatus = "Restored account designs, replacing this browser's local slots.";
         resolve();
       });
     });
   }).catch(function(error) {
     console.warn('Could not restore craft designs from the account', error);
-    window.hoverNetCraftStatus = 'Could not restore craft designs from the account.';
-  }).finally(function() { window.hoverNetCraftBusy = false; });
+    hoverNetWindow.hoverNetCraftStatus = 'Could not restore craft designs from the account.';
+  }).finally(function() { hoverNetWindow.hoverNetCraftBusy = false; });
 };
 Module.preRun = Module.preRun || [];
 Module.preRun.push(function() {
@@ -172,9 +174,9 @@ Module.preRun.push(function() {
   hoverNetSync(true, function() {
     hoverNetAccount().then(function() { removeRunDependency('hovernet-idbfs'); });
   });
-  window.setInterval(function() { hoverNetSync(false); }, 15000);
+  hoverNetWindow.setInterval(function() { hoverNetSync(false); }, 15000);
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'hidden') { hoverNetSync(false); hoverNetSaveAccountCallsign(); }
   });
-  window.addEventListener('pagehide', hoverNetSaveAccountCallsign);
+  hoverNetWindow.addEventListener('pagehide', hoverNetSaveAccountCallsign);
 });
