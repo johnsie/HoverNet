@@ -1,0 +1,18 @@
+<rml>
+<head>
+	<title>HoverNet</title>
+	<link type="text/rcss" href="choice.rcss"/>
+</head>
+<body>
+	<div id="brand">
+		<h1 id="title">GAME PAUSED</h1>
+		<p id="eyebrow" class="coral"></p>
+		<p id="subtitle" class="dim"></p>
+	</div>
+	<div id="panel">
+		<p id="paneltitle" class="coral"></p>
+		<hr/>
+		<div id="options"></div>
+	</div>
+</body>
+</rml>

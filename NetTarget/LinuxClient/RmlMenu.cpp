@@ -350,8 +350,146 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
         const int order[6] = {0, 1, 2, 1, 3, 2};
         SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
         context->Render();
-        if (const char* shot = std::getenv("HOVERNET_CAPTURE_FRAME")) {
+        if (const char* shot = std::getenv("HOVERNET_CAPTURE_RML")) {
             if (pFrameLimit >= 0 && frames == pFrameLimit) {
+                if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888)) {
+                    SDL_RenderReadPixels(pRenderer, nullptr, SDL_PIXELFORMAT_ARGB8888, surface->pixels, surface->pitch);
+                    SDL_SaveBMP(surface, shot);
+                    SDL_FreeSurface(surface);
+                }
+            }
+        }
+        SDL_RenderPresent(pRenderer);
+        SDL_Delay(pFrameLimit >= 0 ? 16 : 4);
+    }
+    document->Close();
+    Rml::Shutdown();
+    return leave(result);
+}
+
+namespace
+{
+// The synthwave backdrop of the pause menu: a dark gradient, lines running to a vanishing point and a few horizontal rows.
+void DrawGridBackdrop(SDL_Renderer* pRenderer, int pWidth, int pHeight)
+{
+    SDL_SetRenderDrawColor(pRenderer, 13, 13, 19, 255);
+    SDL_RenderClear(pRenderer);
+    const SDL_Color top = {13, 13, 19, 255}, bottom = {30, 9, 16, 255};
+    const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, top, {0, 0}}, {{static_cast<float>(pWidth), 0.0f}, top, {0, 0}},
+                                {{0.0f, static_cast<float>(pHeight)}, bottom, {0, 0}}, {{static_cast<float>(pWidth), static_cast<float>(pHeight)}, bottom, {0, 0}}};
+    const int order[6] = {0, 1, 2, 1, 3, 2};
+    SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
+    SDL_SetRenderDrawBlendMode(pRenderer, SDL_BLENDMODE_BLEND);
+    const float horizon = pHeight * 0.60f, vx = pWidth * 0.28f;
+    SDL_SetRenderDrawColor(pRenderer, 227, 43, 66, 55);
+    for (int line = -5; line <= 10; ++line) SDL_RenderDrawLineF(pRenderer, vx, horizon, pWidth * (static_cast<float>(line) / 7.0f), static_cast<float>(pHeight));
+    SDL_SetRenderDrawColor(pRenderer, 240, 53, 75, 48);
+    for (float row : {0.10f, 0.24f, 0.43f, 0.68f, 0.94f}) { const float y = horizon + (pHeight - horizon) * row; SDL_RenderDrawLineF(pRenderer, 0.0f, y, static_cast<float>(pWidth), y); }
+}
+
+class OptionListener : public Rml::EventListener
+{
+public:
+    OptionListener(int* pResult, std::function<void(Sound)> pSound) : mResult(pResult), mSound(std::move(pSound)) {}
+    void ProcessEvent(Rml::Event& pEvent) override
+    {
+        if (pEvent.GetId() == Rml::EventId::Mouseover) { if (mSound) mSound(Sound::eHover); return; }
+        if (mSound) mSound(Sound::eClick);
+        *mResult = std::atoi(pEvent.GetCurrentElement()->GetId().c_str() + 3);   // ids are opt0, opt1, ...
+        if (std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST choice %d\n", *mResult); std::fflush(stdout); }
+    }
+private:
+    int* mResult;
+    std::function<void(Sound)> mSound;
+};
+}  // namespace
+
+int RunChoiceMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const ChoiceInfo& pInfo, int pFrameLimit, int pRestoreW, int pRestoreH)
+{
+    SDL_RenderSetLogicalSize(pRenderer, 0, 0);
+    SystemInterface_SDL system;
+    system.SetWindow(pWindow);
+    RenderInterface_SDL renderInterface(pRenderer);
+    Rml::SetSystemInterface(&system);
+    Rml::SetRenderInterface(&renderInterface);
+    auto leave = [&](int pResult) { SDL_RenderSetLogicalSize(pRenderer, pRestoreW, pRestoreH); return pResult; };
+    if (!Rml::Initialise()) return leave(kChoiceNone);
+    int width = 0, height = 0;
+    SDL_GetRendererOutputSize(pRenderer, &width, &height);
+    Rml::Context* context = Rml::CreateContext("hovernet-choice", Rml::Vector2i(width, height));
+    Rml::LoadFontFace(pInfo.assetDir + "/Inter-Variable.ttf", true);
+    Rml::LoadFontFace(pInfo.assetDir + "/Oxanium-Variable.ttf", false);
+    Rml::ElementDocument* document = context != nullptr ? context->LoadDocument(pInfo.assetDir + "/ui/choice.rml") : nullptr;
+    if (document == nullptr) {
+        std::fprintf(stderr, "RmlUi choice menu: could not load %s/ui/choice.rml\n", pInfo.assetDir.c_str());
+        Rml::Shutdown();
+        return leave(kChoiceNone);
+    }
+    auto set = [&](const char* id, const std::string& text) { if (Rml::Element* e = document->GetElementById(id)) e->SetInnerRML(Escaped(text)); };
+    set("title", pInfo.title); set("eyebrow", pInfo.eyebrow); set("subtitle", pInfo.subtitle); set("paneltitle", pInfo.panelTitle);
+    Rml::String html;
+    for (size_t i = 0; i < pInfo.options.size(); ++i) {
+        const ChoiceOption& option = pInfo.options[i];
+        if (!option.headingBefore.empty()) html += "<p class=\"group\">" + Escaped(option.headingBefore) + "</p>";
+        html += "<button id=\"opt" + std::to_string(i) + "\"" + (option.primary ? " class=\"primary\"" : "") + ">" + Escaped(option.label) + "</button>";
+    }
+    if (Rml::Element* list = document->GetElementById("options")) list->SetInnerRML(html);
+    int result = kChoiceNone;
+    OptionListener listener(&result, pInfo.sound);
+    const int count = static_cast<int>(pInfo.options.size());
+    for (int i = 0; i < count; ++i) if (Rml::Element* button = document->GetElementById("opt" + std::to_string(i))) { button->AddEventListener("click", &listener); button->AddEventListener("mouseover", &listener); }
+    document->Show();
+    if (Rml::Element* first = document->GetElementById("opt0")) first->Focus();
+    auto move = [&](int step) {
+        if (pInfo.sound) pInfo.sound(Sound::eHover);
+        int at = -1;
+        Rml::Element* focused = document->GetFocusLeafNode();
+        for (int i = 0; i < count; ++i) if (document->GetElementById("opt" + std::to_string(i)) == focused) at = i;
+        const int next = at < 0 ? 0 : (at + step + count) % count;
+        if (Rml::Element* button = document->GetElementById("opt" + std::to_string(next))) button->Focus();
+    };
+    std::vector<std::string> script;
+    if (const char* steps = std::getenv("HOVERNET_TEST_RML")) for (std::string step; *steps != 0; ++steps) { if (*steps == ',') { script.push_back(step); step.clear(); } else step += *steps; if (steps[1] == 0) script.push_back(step); }
+    bool decided = false;
+    int frames = 0;
+    while (!decided && (pFrameLimit < 0 || frames < pFrameLimit)) {
+        ++frames;
+        if (result != kChoiceNone) { decided = true; break; }
+        if (frames >= 60 && (frames - 60) % 4 == 0 && static_cast<size_t>((frames - 60) / 4) < script.size()) {
+            const std::string& step = script[static_cast<size_t>((frames - 60) / 4)];
+            SDL_Event scripted; SDL_zero(scripted);
+            scripted.type = SDL_KEYDOWN; scripted.key.state = SDL_PRESSED;
+            scripted.key.keysym.sym = step == "down" ? SDLK_DOWN : step == "up" ? SDLK_UP : step == "enter" ? SDLK_RETURN : SDLK_ESCAPE;
+            SDL_PushEvent(&scripted);
+        }
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) { result = kChoiceClose; decided = true; break; }
+            if (event.type == SDL_KEYDOWN) {
+                const SDL_Keycode key = event.key.keysym.sym;
+                if (key == SDLK_ESCAPE) { if (pInfo.sound) pInfo.sound(Sound::eBack); result = kChoiceBack; decided = true; break; }
+                if (key == SDLK_DOWN) { move(1); continue; }
+                if (key == SDLK_UP) { move(-1); continue; }
+                if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_SPACE) { if (Rml::Element* f = document->GetFocusLeafNode()) f->Click(); continue; }
+            }
+            if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+                const int b = event.cbutton.button;
+                if (b == SDL_CONTROLLER_BUTTON_B || b == SDL_CONTROLLER_BUTTON_START) { if (pInfo.sound) pInfo.sound(Sound::eBack); result = kChoiceBack; decided = true; break; }
+                if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN) { move(1); continue; }
+                if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) { move(-1); continue; }
+                if (b == SDL_CONTROLLER_BUTTON_A) { if (Rml::Element* f = document->GetFocusLeafNode()) f->Click(); continue; }
+            }
+            RmlSDL::InputEventHandler(context, event);
+        }
+        if (decided) break;
+        int w = 0, h = 0;
+        SDL_GetRendererOutputSize(pRenderer, &w, &h);
+        if (w != width || h != height) { width = w; height = h; context->SetDimensions(Rml::Vector2i(width, height)); }
+        context->Update();
+        DrawGridBackdrop(pRenderer, width, height);
+        context->Render();
+        if (const char* shot = std::getenv("HOVERNET_CAPTURE_RML")) {
+            if ((pFrameLimit >= 0 && frames == pFrameLimit) || (pFrameLimit < 0 && frames == 62)) {
                 if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888)) {
                     SDL_RenderReadPixels(pRenderer, nullptr, SDL_PIXELFORMAT_ARGB8888, surface->pixels, surface->pitch);
                     SDL_SaveBMP(surface, shot);

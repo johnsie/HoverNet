@@ -15,6 +15,13 @@ $required = @(
     "NetTarget\Music\CREDITS.md",
     "NetTarget\LinuxClient\assets\menu-hovercraft.bmp",
     "NetTarget\LinuxClient\assets\menu-banner.bmp",
+    "NetTarget\LinuxClient\assets\menu-hovercraft-source.png",
+    "NetTarget\LinuxClient\assets\ui\main-menu.rml",
+    "NetTarget\LinuxClient\assets\ui\main-menu.rcss",
+    "NetTarget\LinuxClient\assets\ui\results.rml",
+    "NetTarget\LinuxClient\assets\ui\results.rcss",
+    "NetTarget\LinuxClient\assets\ui\choice.rml",
+    "NetTarget\LinuxClient\assets\ui\choice.rcss",
     "NetTarget\LinuxClient\assets\Inter-Variable.ttf",
     "NetTarget\LinuxClient\assets\Oxanium-Variable.ttf",
     "NetTarget\CommunityTracks.tsv"

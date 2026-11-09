@@ -4112,6 +4112,32 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
     options.push_back({"QUIT HOVERNET", PauseChoice::eQuit});
 #endif
     const int optionCount = static_cast<int>(options.size());
+#ifdef HOVERNET_HAVE_RMLUI
+    if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this screen (docs/rmlui.md); if it cannot load, the ImGui screen below is shown
+        HoverNetRml::ChoiceInfo info;
+        info.assetDir = SourcePath("NetTarget/LinuxClient/assets");
+        info.title = "GAME PAUSED";
+        info.eyebrow = pIsOnline ? "ONLINE RACE" : "LOCAL RACE";
+        info.subtitle = "Take a breath. The track will wait.";
+        info.panelTitle = "RACE OPTIONS";
+        info.reducedMotion = LoadReducedMotion();
+        info.sound = [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); };
+        for (int index = 0; index < optionCount; ++index) {
+            HoverNetRml::ChoiceOption option;
+            option.label = options[static_cast<std::size_t>(index)].label;
+            option.primary = index == 0;   // Resume is the one red button
+            if (index == primaryCount) option.headingBefore = "GAME & ACCESSIBILITY";
+            info.options.push_back(option);
+        }
+        const int picked = HoverNetRml::RunChoiceMenu(graphics.GetWindow(), graphics.GetRenderer(), info, std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit, kWidth, kHeight);   // the scripted-input test lets the screen run until its script has acted
+        auto shutdownImGui = [&]() { if (ownsImGuiContext) { ImGui_ImplSDLRenderer2_Shutdown(); ImGui_ImplSDL2_Shutdown(); ImGui::DestroyContext(); } };
+        if (picked >= 0 && picked < optionCount) { shutdownImGui(); return options[static_cast<std::size_t>(picked)].choice; }
+        if (picked == HoverNetRml::kChoiceBack) { shutdownImGui(); return PauseChoice::eResume; }
+        if (picked == HoverNetRml::kChoiceClose && ConfirmQuit(graphics, buffer, viewport, font)) { shutdownImGui(); return PauseChoice::eQuit; }
+        if (picked == HoverNetRml::kChoiceNone && pFrameLimit >= 0) { shutdownImGui(); return PauseChoice::eResume; }
+        // otherwise (could not load, or the player changed their mind about closing): the ImGui pause menu below
+    }
+#endif
     PauseChoice choice = PauseChoice::eResume;
     bool focusFirstButton = true;
     bool running = true;

@@ -23,5 +23,8 @@ if [ "$snd" = "hover hover click " ]; then echo "ok   two keystrokes tick twice 
 # The results screen after a race (the real client, an autoplay race that finishes): Down then Enter chooses the one button an offline race offers, MAIN MENU.
 got=$(HOVERNET_TEST_FINISH=1 HOVERNET_TEST_RML="down,enter" timeout -s KILL 60 "$client" --play --track "The River" --autoplay --frames 100000 2>&1 | grep -a -m1 "^RMLTEST results chose" | sed 's/^RMLTEST results chose //')
 if [ "$got" = "menu" ]; then echo "ok   the results screen opens after a race and its button works: menu"; else echo "FAIL: results screen: wanted 'menu', got '${got:-nothing}'"; fail=1; fi
+# The pause menu in a real race (Escape at frame 60 of an autoplay race, then Down and Enter): the second button is chosen.
+pick=$(HOVERNET_TEST_PAUSE_AT_FRAME=60 HOVERNET_TEST_RML="down,enter" timeout -s KILL 60 "$client" --play --track "The River" --autoplay --frames 100000 2>&1 | grep -a "^RMLTEST choice" | head -1 | sed 's/^RMLTEST choice //')
+if [ "$pick" = "1" ]; then echo "ok   the pause menu opens in a race and the second button (Down, Enter) is chosen: 1"; else echo "FAIL: pause menu: wanted choice 1, got '${pick:-nothing}'"; fail=1; fi
 [ $fail -eq 0 ] && echo "RmlUi main menu and results screen: keyboard and mouse reach every door"
 exit $fail

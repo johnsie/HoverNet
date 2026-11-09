@@ -141,13 +141,8 @@ set_target_properties(HoverNetImGui PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # RmlUi (HTML/CSS-style user interface with real layout, transitions and animation), vendored with FreeType for its fonts (THIRD_PARTY_NOTICES.md).
 # On by default (Linux, the browser build): the new main menu and results screen are what players see; the old ImGui menus remain the fallback (HOVERNET_IMGUI_MENU=1, a
-# bounded test run, or if the files cannot be loaded). Off on Windows until that build has been checked there (docs/rmlui.md).
-if(WIN32)
-    set(HOVERNET_RMLUI_DEFAULT OFF)
-else()
-    set(HOVERNET_RMLUI_DEFAULT ON)
-endif()
-option(HOVERNET_RMLUI "Build the RmlUi user interface (the new menus)" ${HOVERNET_RMLUI_DEFAULT})
+# bounded test run, or if the files cannot be loaded). Checked on Linux, in the browser build and on Windows x64 (docs/rmlui.md).
+option(HOVERNET_RMLUI "Build the RmlUi user interface (the new menus)" ON)
 if(HOVERNET_RMLUI)
     set(FT_DISABLE_ZLIB ON CACHE BOOL "" FORCE)
     set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)

@@ -57,4 +57,26 @@ enum class ResultsChoice { eNone, eLobby, eMainMenu, eQuitRequested };
 
 // Runs until a door is chosen (or, with frameLimit >= 0, for that many frames, all parts shown at once). Same event and logical-size rules as RunMainMenu.
 ResultsChoice RunResults(SDL_Window* window, SDL_Renderer* renderer, const ResultsInfo& info, int frameLimit, int restoreW, int restoreH);
+
+// A column of buttons beside a title block: the pause menu, and any other screen that is a list of choices.
+struct ChoiceOption
+{
+    std::string label;
+    bool primary = false;           // the one red button
+    std::string headingBefore;      // a small heading above this button (empty: none)
+};
+
+struct ChoiceInfo
+{
+    std::string assetDir;
+    std::string title, eyebrow, subtitle;   // the block at the top left
+    std::string panelTitle;                 // above the buttons
+    std::vector<ChoiceOption> options;
+    bool reducedMotion = false;
+    std::function<void(Sound)> sound;
+};
+
+// Returns the index of the option chosen; kBack for Esc / B / Start; kClose when the window was closed; kNone when a bounded run ended or the screen could not load.
+constexpr int kChoiceBack = -1, kChoiceClose = -2, kChoiceNone = -3;
+int RunChoiceMenu(SDL_Window* window, SDL_Renderer* renderer, const ChoiceInfo& info, int frameLimit, int restoreW, int restoreH);
 }
