@@ -5132,6 +5132,261 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     bool cancelled = false;
     int framesShown = 0;
 
+#ifdef HOVERNET_HAVE_RMLUI
+    if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this screen (docs/rmlui.md): the same settings, side effects and Save/Cancel; if it cannot load, the ImGui screen below runs
+        using HoverNetRml::FormField;
+        std::unique_ptr<HoverNetRml::FormScreen> form(new HoverNetRml::FormScreen(
+            graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "SETTINGS", LoadReducedMotion(),
+            [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight));
+        if (form->Ok()) {
+            const std::vector<std::string> tabNames = {"Player", "Sound", "Access", "Graphics", "Display"};
+            int tab = 0;
+            bool gfxMore = false;
+            float musicPercent = static_cast<float>(LoadMusicVolume() * 100.0);
+            static const HoverNetGfx::Preset presets[] = {HoverNetGfx::Preset::eModern, HoverNetGfx::Preset::eModernHigh, HoverNetGfx::Preset::eModernLite};
+            static const char* const raceViewLabels[] = {"Classic (4:3)", "Widescreen (16:9)", "Match my window"};
+            auto heading = [](const char* label) { FormField f; f.type = FormField::Type::eHeading; f.label = label; return f; };
+            auto note = [](const char* label) { FormField f; f.type = FormField::Type::eNote; f.label = label; return f; };
+            auto text = [](const char* id, const char* label, const char* value, const char* hint = "") { FormField f; f.type = FormField::Type::eText; f.id = id; f.label = label; f.text = value; f.hint = hint; return f; };
+            auto toggle = [](const char* id, const char* label, bool on, const char* hint = "") { FormField f; f.type = FormField::Type::eToggle; f.id = id; f.label = label; f.on = on; f.hint = hint; return f; };
+            auto slider = [](const char* id, const char* label, float value, float lo, float hi, const char* suffix, const char* hint = "") {
+                FormField f; f.type = FormField::Type::eSlider; f.id = id; f.label = label; f.value = value; f.min = lo; f.max = hi; f.step = 1.0f; f.suffix = suffix; f.hint = hint; return f; };
+            auto select = [](const char* id, const char* label, std::vector<std::string> options, int selected, const char* hint = "") {
+                FormField f; f.type = FormField::Type::eSelect; f.id = id; f.label = label; f.options = std::move(options); f.selected = selected; f.hint = hint; return f; };
+            auto button = [](const char* id, const char* label) { FormField f; f.type = FormField::Type::eButton; f.id = id; f.label = label; f.quiet = true; return f; };
+            auto resolutionLabel = [&](int index) { return std::to_string(resolutions[index].width) + " x " + std::to_string(resolutions[index].height); };
+
+            // what Save needs to be true (the same rules as the ImGui screen)
+            auto validate = [&](std::string& hostHint, std::string& authHint) {
+                const bool usernameBlank = IsBlank(usernameBuf), hostBlank = IsBlank(hostBuf), portValid = port > 0 && port <= 65535;
+                bool authAddressValid = true;
+                std::string problem;
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+                if (authAddressBuf[0] != '\0') {
+                    const std::string typedAddress = authAddressBuf;
+#ifdef HOVERNET_WEB
+                    authAddressValid = typedAddress.compare(0, 6, "wss://") == 0 || typedAddress.compare(0, 5, "ws://") == 0;
+                    problem = "A web address starts with wss://";
+#else
+                    std::string checkHost; int checkPort = 0;
+                    authAddressValid = SplitServerAddress(typedAddress, checkHost, checkPort);
+                    problem = "Type it as name:port, for example race.example.org:9610";
+                    Crypto::Bytes checkKey;
+                    if (authAddressValid && authKeyBuf[0] != '\0' && (!Crypto::FromHex(authKeyBuf, checkKey) || checkKey.size() != 32)) { authAddressValid = false; problem = "The server key is 64 characters (0 to 9, a to f)"; }
+#endif
+                }
+#endif
+                hostHint = hostBlank ? "Enter a server address" : !portValid ? "Port must be between 1 and 65535" : "";
+                authHint = authAddressValid ? "" : problem;
+                form->SetHint("name", usernameBlank ? "Enter a display name" : "");
+                form->SetHint("host", hostHint);
+                form->SetHint("authaddr", authHint);
+                return !usernameBlank && !hostBlank && portValid && authAddressValid;
+            };
+            auto fieldsFor = [&](int which) {
+                std::vector<FormField> f;
+                if (which == 0) {
+                    f.push_back(heading("Display Name"));
+                    f.push_back(text("name", "", usernameBuf));
+                    f.push_back(heading("RaceServer Address"));
+                    f.push_back(text("host", "Address", hostBuf));
+                    f.push_back(text("port", "Port", std::to_string(port).c_str()));
+                    f.push_back(button("resetserver", "Reset to default server"));
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+                    f.push_back(heading("Online server"));
+                    f.push_back(note("Leave empty to use the official HoverNet server. For a friend's or a club's server, type its address."));
+#ifdef HOVERNET_WEB
+                    f.push_back(text("authaddr", "Address (wss://race.example.org/auth/)", authAddressBuf));
+#else
+                    f.push_back(text("authaddr", "Address (race.example.org:9610)", authAddressBuf));
+                    f.push_back(text("authkey", "Server key, 64 characters (optional)", authKeyBuf));
+#endif
+                    f.push_back(button("useofficial", "Use the official HoverNet server"));
+#endif
+                }
+                else if (which == 1) {
+                    f.push_back(heading("Audio"));
+                    f.push_back(toggle("mute", "Mute all sound", muted));
+                    f.push_back(slider("volume", "Volume", volumePercent, 0.0f, 100.0f, "%"));
+                    f.push_back(slider("music", "Music volume", musicPercent, 0.0f, 100.0f, "%"));
+                    f.push_back(note("Music: Hard Left by Dan Knoflicek, Asphalt by Sygil (open licences, see NetTarget/Music/CREDITS.md)."));
+                }
+                else if (which == 2) {
+                    f.push_back(slider("uiscale", "UI Scale", uiScalePercent, 75.0f, 150.0f, "%", "Applies to the other menus, and to this one the next time it opens."));
+                    f.push_back(toggle("largehud", "Large HUD text", largeHudText, "Keeps race information and chat at the font's native size."));
+                    f.push_back(toggle("reduced", "Reduced motion", reducedMotion, "Turns off menu animations and the moving effects in a race."));
+                    f.push_back(toggle("ghost", "Show my best run as a ghost", showGhost, "Draws your fastest run on this track beside your craft, so you race your own best time. It never touches the race."));
+                    f.push_back(toggle("contrast", "High contrast menus", highContrast, "Strengthens text, borders, fields, and focus states (the older menus; these menus already have strong contrast)."));
+                }
+                else if (which == 3) {
+                    std::vector<std::string> presetLabels;
+                    int presetIndex = 0;
+                    for (int i = 0; i < 3; ++i) { presetLabels.push_back(HoverNetGfx::PresetLabel(presets[i])); if (presets[i] == graphicsSettings.preset) presetIndex = i; }
+                    f.push_back(heading("Graphics"));
+                    f.push_back(select("preset", "Quality", presetLabels, presetIndex));
+                    f.push_back(toggle("gpu", "Use my graphics card for the picture passes", graphicsSettings.gpu));
+                    f.push_back(toggle("shadows", "Soft craft shadows", graphicsSettings.shadows));
+                    if (graphicsSettings.preset != HoverNetGfx::Preset::eModernLite) f.push_back(toggle("deband", "Smooth colour bands", graphicsSettings.deband));
+                    if (graphicsSettings.preset == HoverNetGfx::Preset::eModernHigh) {
+                        f.push_back(toggle("smoothing", "Smooth jagged edges", graphicsSettings.smoothing));
+                        f.push_back(toggle("bloom", "Glow around bright lights", graphicsSettings.bloom));
+                    }
+                    if (graphicsSettings.preset != HoverNetGfx::Preset::eModernLite) f.push_back(toggle("textures", "Smooth textures (true colour)", graphicsSettings.textures));
+                    f.push_back(toggle("lighting", "Light from the craft, and distance haze", graphicsSettings.lighting));
+                    if (graphicsSettings.preset != HoverNetGfx::Preset::eModernLite) {
+                        f.push_back(button("gfxmore", gfxMore ? "Fewer graphics options" : "More graphics options"));
+                        if (gfxMore) {
+                            f.push_back(toggle("occlusion", "Walls block light", graphicsSettings.occlusion));
+                            f.push_back(toggle("atmosphere", "Sky-tinted ambient light, mist and horizon glow", graphicsSettings.atmosphere));
+                            f.push_back(toggle("edges", "Anti-aliased edges", graphicsSettings.edges));
+                            f.push_back(toggle("craft", "Craft shine, rim light and reflection (high quality)", graphicsSettings.craft));
+                            f.push_back(toggle("halos", "Glows on missiles, mines and power-ups", graphicsSettings.halos));
+                            f.push_back(toggle("sharpen", "Sharper textures (high quality)", graphicsSettings.sharpen));
+                            f.push_back(toggle("exposure", "Automatic exposure", graphicsSettings.exposure));
+                            f.push_back(toggle("adaptive", "Lower the quality automatically when it is too slow", graphicsSettings.adaptive));
+                        }
+                    }
+                    f.push_back(toggle("effects", "Engine glow, trail, sparks, exhaust and dust", graphicsSettings.effects));
+                    f.push_back(toggle("grade", "Richer colour and vignette", graphicsSettings.grade));
+                    f.push_back(slider("brightness", "Brightness", graphicsSettings.brightness * 100.0f, 70.0f, 140.0f, "%"));
+                    f.push_back(note("Only how the race looks: it never changes how it plays. High needs a fast processor; Light suits phones and older machines."));
+                }
+                else {
+                    if (!HoverNetIsTouchDevice()) f.push_back(select("raceview", "Race view", {raceViewLabels[0], raceViewLabels[1], raceViewLabels[2]}, static_cast<int>(raceView), "The shape of the picture while racing. Takes effect the next time you start HoverNet."));
+#ifdef HOVERNET_WEB
+                    if (!HoverNetIsTouchDevice()) {
+                        const int browserWindow = hovernet_js_window_size();
+                        const int browserW = browserWindow >> 16, browserH = browserWindow & 0xffff;
+                        const int currentSize = hovernet_js_get_game_size();
+                        std::vector<std::string> labels; int at = 0;
+                        static const int sizes[][2] = {{0, 0}, {800, 600}, {1024, 768}, {1280, 720}, {1600, 900}, {1920, 1080}};
+                        for (const auto& size : sizes) {
+                            if (size[0] > browserW || size[1] > browserH) continue;
+                            if ((size[0] << 16 | size[1]) == currentSize) at = static_cast<int>(labels.size());
+                            labels.push_back(size[0] == 0 ? std::string("Fit browser window") : std::to_string(size[0]) + " x " + std::to_string(size[1]));
+                        }
+                        f.push_back(select("gamesize", "Game Size", labels, at, "Sizes only the game area; the browser window stays as it is."));
+                    }
+#else
+                    std::vector<std::string> labels;
+                    for (int i = 0; i < static_cast<int>(sizeof(resolutions) / sizeof(resolutions[0])); ++i) labels.push_back(resolutionLabel(i));
+                    f.push_back(select("resolution", "Window Resolution", labels, std::max(0, selectedResolution)));
+#endif
+                    f.push_back(toggle("fullscreen", "Fullscreen", fullscreen));
+                    f.push_back(button("defaults", "Restore all defaults"));
+                    f.push_back(note("Preview only until Save is selected."));
+                }
+                return f;
+            };
+            auto show = [&]() { form->SetTabs(tabNames, tab); form->SetFields(fieldsFor(tab)); std::string a, b; form->SetSaveEnabled(validate(a, b)); };
+            show();
+            int frame = 0;
+            const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
+            bool closeRequested = false;
+            while (running && (limit < 0 || frame < limit)) {
+                ++frame;
+                std::vector<HoverNetRml::FormEvent> events;
+                const HoverNetRml::FormOutcome outcome = form->Frame(events, frame, limit);
+                bool refresh = false;
+                for (const HoverNetRml::FormEvent& e : events) {
+                    const std::string& id = e.id;
+                    if (id == "tab") { tab = e.index; show(); continue; }
+                    if (id == "name") std::snprintf(usernameBuf, sizeof(usernameBuf), "%s", e.text.c_str());
+                    else if (id == "host") std::snprintf(hostBuf, sizeof(hostBuf), "%s", e.text.c_str());
+                    else if (id == "port") port = std::atoi(e.text.c_str());
+                    else if (id == "resetserver") { std::snprintf(hostBuf, sizeof(hostBuf), "%s", kDefaultLobbyHost); port = static_cast<int>(kDefaultLobbyPort); refresh = true; }
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+                    else if (id == "authaddr") std::snprintf(authAddressBuf, sizeof(authAddressBuf), "%s", e.text.c_str());
+                    else if (id == "authkey") std::snprintf(authKeyBuf, sizeof(authKeyBuf), "%s", e.text.c_str());
+                    else if (id == "useofficial") { authAddressBuf[0] = '\0'; authKeyBuf[0] = '\0'; refresh = true; }
+#endif
+                    else if (id == "mute") { muted = e.on; MR_SoundServer::SetMasterVolume(muted ? 0.0 : volumePercent / 100.0); }
+                    else if (id == "volume") { volumePercent = e.value; MR_SoundServer::SetMasterVolume(muted ? 0.0 : volumePercent / 100.0); }
+                    else if (id == "music") { musicPercent = e.value; MR_SoundServer::MusicSetVolume(musicPercent / 100.0); SaveMusicVolume(musicPercent / 100.0); }
+                    else if (id == "uiscale") uiScalePercent = e.value;
+                    else if (id == "largehud") largeHudText = e.on;
+                    else if (id == "reduced") reducedMotion = e.on;
+                    else if (id == "ghost") showGhost = e.on;
+                    else if (id == "contrast") highContrast = e.on;
+                    else if (id == "preset") { graphicsSettings.preset = presets[std::max(0, std::min(2, e.index))]; refresh = true; }
+                    else if (id == "gfxmore") { gfxMore = !gfxMore; refresh = true; }
+                    else if (id == "gpu") graphicsSettings.gpu = e.on;
+                    else if (id == "shadows") graphicsSettings.shadows = e.on;
+                    else if (id == "deband") graphicsSettings.deband = e.on;
+                    else if (id == "smoothing") graphicsSettings.smoothing = e.on;
+                    else if (id == "bloom") graphicsSettings.bloom = e.on;
+                    else if (id == "textures") graphicsSettings.textures = e.on;
+                    else if (id == "lighting") graphicsSettings.lighting = e.on;
+                    else if (id == "occlusion") graphicsSettings.occlusion = e.on;
+                    else if (id == "atmosphere") graphicsSettings.atmosphere = e.on;
+                    else if (id == "edges") graphicsSettings.edges = e.on;
+                    else if (id == "craft") graphicsSettings.craft = e.on;
+                    else if (id == "halos") graphicsSettings.halos = e.on;
+                    else if (id == "sharpen") graphicsSettings.sharpen = e.on;
+                    else if (id == "exposure") graphicsSettings.exposure = e.on;
+                    else if (id == "adaptive") graphicsSettings.adaptive = e.on;
+                    else if (id == "effects") graphicsSettings.effects = e.on;
+                    else if (id == "grade") graphicsSettings.grade = e.on;
+                    else if (id == "brightness") graphicsSettings.brightness = e.value / 100.0f;
+                    else if (id == "raceview") raceView = static_cast<RaceView>(std::max(0, std::min(2, e.index)));
+#ifdef HOVERNET_WEB
+                    else if (id == "gamesize") {
+                        static const int sizes[][2] = {{0, 0}, {800, 600}, {1024, 768}, {1280, 720}, {1600, 900}, {1920, 1080}};
+                        const int browserWindow = hovernet_js_window_size();
+                        int shown = 0;
+                        for (const auto& size : sizes) { if (size[0] > (browserWindow >> 16) || size[1] > (browserWindow & 0xffff)) continue; if (shown++ == e.index) hovernet_js_set_game_size(size[0], size[1]); }
+                    }
+#else
+                    else if (id == "resolution") {
+                        selectedResolution = std::max(0, std::min(static_cast<int>(sizeof(resolutions) / sizeof(resolutions[0])) - 1, e.index));
+                        windowWidth = resolutions[selectedResolution].width;
+                        windowHeight = resolutions[selectedResolution].height;
+                        if (!fullscreen) {
+                            SDL_SetWindowSize(graphics.GetWindow(), windowWidth, windowHeight);
+                            SDL_SetWindowPosition(graphics.GetWindow(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+                        }
+                    }
+#endif
+                    else if (id == "fullscreen") {
+                        fullscreen = e.on;
+                        SDL_SetWindowFullscreen(graphics.GetWindow(), fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+                        if (!fullscreen) {
+                            SDL_SetWindowSize(graphics.GetWindow(), windowWidth, windowHeight);
+                            SDL_SetWindowPosition(graphics.GetWindow(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+                        }
+                    }
+                    else if (id == "defaults") {
+                        std::snprintf(usernameBuf, sizeof(usernameBuf), "%s", "Player");
+                        std::snprintf(hostBuf, sizeof(hostBuf), "%s", kDefaultLobbyHost);
+                        port = static_cast<int>(kDefaultLobbyPort);
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+                        authAddressBuf[0] = '\0'; authKeyBuf[0] = '\0';
+#endif
+                        volumePercent = 100.0f; muted = false; uiScalePercent = 100.0f; largeHudText = false; raceView = RaceView::eClassic; showGhost = true;
+                        reducedMotion = false; highContrast = false; selectedResolution = 0; windowWidth = resolutions[0].width; windowHeight = resolutions[0].height; fullscreen = false;
+#ifdef HOVERNET_WEB
+                        hovernet_js_set_game_size(0, 0);
+#endif
+                        MR_SoundServer::SetMasterVolume(1.0);   // a live preview, like changing the controls one by one; Cancel restores the entry state
+                        SDL_SetWindowFullscreen(graphics.GetWindow(), 0);
+                        SDL_SetWindowSize(graphics.GetWindow(), windowWidth, windowHeight);
+                        SDL_SetWindowPosition(graphics.GetWindow(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+                        refresh = true;
+                    }
+                }
+                if (refresh) show();
+                else if (!events.empty()) { std::string a, b; form->SetSaveEnabled(validate(a, b)); }
+                if (outcome == HoverNetRml::FormOutcome::eSave) running = false;
+                else if (outcome == HoverNetRml::FormOutcome::eCancel) { cancelled = true; running = false; }
+                else if (outcome == HoverNetRml::FormOutcome::eClose) { cancelled = true; running = false; closeRequested = true; }
+            }
+            form.reset();   // the screen is closed before anything else is shown
+            if (closeRequested && ConfirmQuit(graphics, buffer, viewport, font)) g_QuitConfirmed = true;
+        }
+        else form.reset();
+    }
+#endif
+
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
         SDL_Event event;

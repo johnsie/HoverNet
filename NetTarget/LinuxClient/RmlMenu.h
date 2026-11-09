@@ -80,4 +80,56 @@ struct ChoiceInfo
 // Returns the index of the option chosen; kBack for Esc / B / Start; kClose when the window was closed; kNone when a bounded run ended or the screen could not load.
 constexpr int kChoiceBack = -1, kChoiceClose = -2, kChoiceNone = -3;
 int RunChoiceMenu(SDL_Window* window, SDL_Renderer* renderer, const ChoiceInfo& info, int frameLimit, int restoreW, int restoreH);
+
+// ---- Forms: tabs of labelled controls with Save and Cancel (Settings, and screens like it) -----------------------------------------------------------------
+// The caller keeps its own state and side effects: it describes the fields, and every frame hears what the player changed.
+struct FormField
+{
+    enum class Type { eHeading, eNote, eText, eToggle, eSlider, eSelect, eButton };
+    Type type = Type::eNote;
+    std::string id;                  // events and updates name a field by this
+    std::string label;               // the label (a heading's or note's own text)
+    std::string hint;                // a small line under the control, updated in place with SetHint
+    std::string text;                // eText: the value
+    bool on = false;                 // eToggle
+    float value = 0.0f, min = 0.0f, max = 100.0f, step = 1.0f;   // eSlider
+    std::string suffix;              // eSlider: shown after the number, for example "%"
+    std::vector<std::string> options; int selected = 0;           // eSelect
+    bool quiet = false;              // eButton: the quieter style
+};
+
+struct FormEvent
+{
+    std::string id;                  // the field, or "tab" for a tab chosen (index = the tab)
+    std::string text;
+    bool on = false;
+    float value = 0.0f;
+    int index = 0;
+};
+
+enum class FormOutcome { eNone, eSave, eCancel, eClose };
+
+class FormScreen
+{
+public:
+    FormScreen(SDL_Window* window, SDL_Renderer* renderer, const std::string& assetDir, const std::string& title, bool reducedMotion, std::function<void(Sound)> sound,
+               int restoreW, int restoreH);
+    ~FormScreen();
+    FormScreen(const FormScreen&) = delete;
+    FormScreen& operator=(const FormScreen&) = delete;
+    bool Ok() const;                                                  // false: the screen could not load (use the older one)
+    void SetTabs(const std::vector<std::string>& names, int selected);
+    void SetFields(const std::vector<FormField>& fields);             // replaces the controls (a tab changed, or a section opened)
+    void SetHint(const std::string& id, const std::string& text);
+    void SetSaveEnabled(bool enabled);
+    void SetText(const std::string& id, const std::string& text);
+    void SetToggle(const std::string& id, bool on);
+    void SetSlider(const std::string& id, float value);
+    void SetSelect(const std::string& id, int index, const std::string& shown);
+    // One frame: input, update, drawing. Fills `events` with what the player changed.
+    FormOutcome Frame(std::vector<FormEvent>& events, int frameNumber, int frameLimit);
+private:
+    struct Impl;
+    Impl* mImpl;
+};
 }

@@ -29,5 +29,11 @@ if [ "$pick" = "1" ]; then echo "ok   the pause menu opens in a race and the sec
 # The Settings hub is the same kind of screen: Up from the main menu's first button reaches Settings; in the hub Up wraps to Back (the fifth button).
 hub=$(HOVERNET_TEST_RML="up,enter" timeout -s KILL 40 "$client" --play --frames 100000 2>&1 | grep -a "^RMLTEST choice" | head -1 | sed 's/^RMLTEST choice //')
 if [ "$hub" = "4" ]; then echo "ok   Settings opens the hub, and its Back button is the fifth: 4"; else echo "FAIL: settings hub: wanted choice 4, got '${hub:-nothing}'"; fail=1; fi
+# The Settings form (main menu > Settings > Game settings): tabs, a toggle, a text field, all through the real event path, each reported with its new value.
+form=$(HOVERNET_TEST_RML="up,enter;enter;tab:1,click:f_mute,tab:0,text:name=Tester" timeout -s KILL 50 "$client" --play --frames 100000 2>&1 | grep -a "^RMLTEST form" | head -6 | tr '\n' '|')
+case "$form" in
+  *"form tab "*"index=1"*"form mute "*"on=1"*"form tab "*"index=0"*"form name text=[Tester]"*) echo "ok   the Settings form: a tab, the Mute toggle and the name field each report their change";;
+  *) echo "FAIL: settings form events were: $form"; fail=1;;
+esac
 [ $fail -eq 0 ] && echo "RmlUi main menu, results screen, pause menu and Settings hub: keyboard and mouse reach every door"
 exit $fail

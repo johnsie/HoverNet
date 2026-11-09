@@ -1,11 +1,14 @@
 #include "RmlMenu.h"
 
 #include <RmlUi/Core.h>
+#include <RmlUi/Core/Elements/ElementFormControl.h>
 
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -39,6 +42,25 @@ private:
     Choice* mResult;
     std::function<void(Sound)> mSound;
 };
+
+// Test hook HOVERNET_TEST_RML: scripted input for the screen that is opening. One list ("down,enter") serves every screen; "list1;list2;list3" gives each screen, in the order
+// they open, its own list (the last list serves any later screen).
+std::vector<std::string> ScriptSteps()
+{
+    std::vector<std::string> steps;
+    const char* env = std::getenv("HOVERNET_TEST_RML");
+    if (env == nullptr) return steps;
+    const std::string all = env;
+    std::vector<std::string> sections;
+    for (size_t at = 0;;) { const size_t cut = all.find(';', at); sections.push_back(all.substr(at, cut == std::string::npos ? std::string::npos : cut - at)); if (cut == std::string::npos) break; at = cut + 1; }
+    static size_t opened = 0;
+    const std::string& mine = sections.size() == 1 ? sections[0] : sections[std::min(opened, sections.size() - 1)];
+    ++opened;
+    std::string step;
+    for (char c : mine) { if (c == ',') { if (!step.empty()) steps.push_back(step); step.clear(); } else step += c; }
+    if (!step.empty()) steps.push_back(step);
+    return steps;
+}
 
 const char* const kButtons[] = {"online", "offline", "leaderboards", "garage", "tutorial", "settings"};   // in the order the arrow keys walk them
 constexpr int kButtonCount = 6;
@@ -98,7 +120,7 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
 
     // Test hook HOVERNET_TEST_RML="down,down,enter" or "click:garage": scripted input through the real event path, one step every few frames once the opening animation is over.
     std::vector<std::string> script;
-    if (const char* steps = std::getenv("HOVERNET_TEST_RML")) for (std::string step; *steps != 0; ++steps) { if (*steps == ',') { script.push_back(step); step.clear(); } else step += *steps; if (steps[1] == 0) script.push_back(step); }
+    script = ScriptSteps();
     bool craftShown = false;
     Uint32 craftStart = 0;
     int frames = 0;
@@ -281,7 +303,7 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
     Uint32 rewardAt = 0;
 
     std::vector<std::string> script;   // test hook HOVERNET_TEST_RML, as in the main menu: scripted keys through the real event path
-    if (const char* steps = std::getenv("HOVERNET_TEST_RML")) for (std::string step; *steps != 0; ++steps) { if (*steps == ',') { script.push_back(step); step.clear(); } else step += *steps; if (steps[1] == 0) script.push_back(step); }
+    script = ScriptSteps();
     int frames = 0;
     while (result == ResultsChoice::eNone && (pFrameLimit < 0 || frames < pFrameLimit)) {
         ++frames;
@@ -449,7 +471,7 @@ int RunChoiceMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const ChoiceInfo
         if (Rml::Element* button = document->GetElementById("opt" + std::to_string(next))) button->Focus();
     };
     std::vector<std::string> script;
-    if (const char* steps = std::getenv("HOVERNET_TEST_RML")) for (std::string step; *steps != 0; ++steps) { if (*steps == ',') { script.push_back(step); step.clear(); } else step += *steps; if (steps[1] == 0) script.push_back(step); }
+    script = ScriptSteps();
     bool decided = false;
     int frames = 0;
     while (!decided && (pFrameLimit < 0 || frames < pFrameLimit)) {
@@ -503,5 +525,313 @@ int RunChoiceMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const ChoiceInfo
     document->Close();
     Rml::Shutdown();
     return leave(result);
+}
+
+// ---- FormScreen ----------------------------------------------------------------------------------------------------------------------------------------------
+namespace
+{
+// Every control reports to one listener, which turns the DOM event into a FormEvent for the caller.
+class FormListener : public Rml::EventListener
+{
+public:
+    std::vector<FormEvent> pending;
+    FormOutcome outcome = FormOutcome::eNone;
+    bool saveEnabled = true;
+    std::function<void(Sound)> sound;
+    // select options, so the arrows can step through them: id -> (current index, count)
+    std::map<std::string, std::pair<int, int>> selects;
+
+    void ProcessEvent(Rml::Event& pEvent) override
+    {
+        Rml::Element* element = pEvent.GetCurrentElement();
+        const Rml::String id = element->GetId();
+        if (pEvent.GetId() == Rml::EventId::Mouseover) { if (sound && (element->IsClassSet("act") || element->IsClassSet("tab") || element->IsClassSet("toggle") || element->IsClassSet("arrow"))) sound(Sound::eHover); return; }
+        if (pEvent.GetId() == Rml::EventId::Change) {
+            FormEvent e;
+            e.id = id.size() > 2 && id.compare(0, 2, "f_") == 0 ? id.substr(2) : id;
+            if (element->GetTagName() == "input" && element->GetAttribute<Rml::String>("type", "") == "range") {
+                e.value = pEvent.GetParameter<float>("value", element->GetAttribute<float>("value", 0.0f));
+                if (Rml::Element* shown = element->GetOwnerDocument()->GetElementById("v_" + e.id)) shown->SetInnerRML(FormatNumber(e.value) + element->GetAttribute<Rml::String>("data-suffix", ""));
+            }
+            else e.text = pEvent.GetParameter<Rml::String>("value", "");
+            pending.push_back(e);
+            return;
+        }
+        // clicks
+        if (id == "save") { if (saveEnabled) { if (sound) sound(Sound::eClick); outcome = FormOutcome::eSave; } return; }
+        if (id == "cancel") { if (sound) sound(Sound::eBack); outcome = FormOutcome::eCancel; return; }
+        if (id.compare(0, 3, "tab") == 0 && id.size() > 3 && std::isdigit(static_cast<unsigned char>(id[3]))) {
+            if (sound) sound(Sound::eClick);
+            FormEvent e; e.id = "tab"; e.index = std::atoi(id.c_str() + 3); pending.push_back(e);
+            return;
+        }
+        if (sound) sound(Sound::eClick);
+        if (element->IsClassSet("toggle")) {
+            const bool on = !element->IsClassSet("on");
+            element->SetClass("on", on);
+            FormEvent e; e.id = id.substr(2); e.on = on; pending.push_back(e);
+        }
+        else if (element->IsClassSet("arrow")) {   // f_<id>_prev / f_<id>_next
+            const bool next = id.size() > 5 && id.compare(id.size() - 5, 5, "_next") == 0;
+            const std::string base = id.substr(2, id.size() - 2 - (next ? 5 : 5));
+            auto found = selects.find(base);
+            if (found != selects.end() && found->second.second > 0) {
+                const int count = found->second.second;
+                const int index = (found->second.first + (next ? 1 : -1) + count) % count;
+                found->second.first = index;
+                FormEvent e; e.id = base; e.index = index; pending.push_back(e);
+            }
+        }
+        else if (element->IsClassSet("act")) { FormEvent e; e.id = id.substr(2); pending.push_back(e); }
+    }
+
+    static std::string FormatNumber(float pValue)
+    {
+        char text[32];
+        if (pValue == static_cast<float>(static_cast<int>(pValue))) std::snprintf(text, sizeof text, "%d", static_cast<int>(pValue)); else std::snprintf(text, sizeof text, "%.1f", pValue);
+        return text;
+    }
+};
+}  // namespace
+
+struct FormScreen::Impl
+{
+    SystemInterface_SDL system;
+    std::unique_ptr<RenderInterface_SDL> render;
+    SDL_Window* window = nullptr;
+    SDL_Renderer* renderer = nullptr;
+    Rml::Context* context = nullptr;
+    Rml::ElementDocument* document = nullptr;
+    FormListener listener;
+    bool ok = false, initialised = false;
+    int width = 0, height = 0, restoreW = 0, restoreH = 0;
+    std::vector<std::string> script;     // test hook HOVERNET_TEST_RML: "tab:2", "click:name", "text:name=Tester", "enter", "down" ...
+    int tabCount = 0;
+};
+
+FormScreen::FormScreen(SDL_Window* pWindow, SDL_Renderer* pRenderer, const std::string& pAssetDir, const std::string& pTitle, bool, std::function<void(Sound)> pSound,
+                       int pRestoreW, int pRestoreH)
+    : mImpl(new Impl)
+{
+    Impl& m = *mImpl;
+    m.window = pWindow; m.renderer = pRenderer; m.restoreW = pRestoreW; m.restoreH = pRestoreH;
+    m.listener.sound = std::move(pSound);
+    SDL_RenderSetLogicalSize(pRenderer, 0, 0);
+    m.system.SetWindow(pWindow);
+    m.render.reset(new RenderInterface_SDL(pRenderer));
+    Rml::SetSystemInterface(&m.system);
+    Rml::SetRenderInterface(m.render.get());
+    if (!Rml::Initialise()) return;
+    m.initialised = true;
+    SDL_GetRendererOutputSize(pRenderer, &m.width, &m.height);
+    m.context = Rml::CreateContext("hovernet-form", Rml::Vector2i(m.width, m.height));
+    Rml::LoadFontFace(pAssetDir + "/Inter-Variable.ttf", true);
+    Rml::LoadFontFace(pAssetDir + "/Oxanium-Variable.ttf", false);
+    m.document = m.context != nullptr ? m.context->LoadDocument(pAssetDir + "/ui/form.rml") : nullptr;
+    if (m.document == nullptr) { std::fprintf(stderr, "RmlUi form: could not load %s/ui/form.rml\n", pAssetDir.c_str()); return; }
+    if (Rml::Element* title = m.document->GetElementById("title")) title->SetInnerRML(Escaped(pTitle));
+    for (const char* id : {"save", "cancel"}) if (Rml::Element* button = m.document->GetElementById(id)) { button->AddEventListener("click", &m.listener); button->AddEventListener("mouseover", &m.listener); }
+    m.document->Show();
+    m.script = ScriptSteps();
+    m.ok = true;
+}
+
+FormScreen::~FormScreen()
+{
+    Impl& m = *mImpl;
+    if (m.document != nullptr) m.document->Close();
+    if (m.initialised) Rml::Shutdown();
+    SDL_RenderSetLogicalSize(m.renderer, m.restoreW, m.restoreH);
+    delete mImpl;
+}
+
+bool FormScreen::Ok() const { return mImpl->ok; }
+
+void FormScreen::SetTabs(const std::vector<std::string>& pNames, int pSelected)
+{
+    Impl& m = *mImpl;
+    Rml::Element* tabs = m.document->GetElementById("tabs");
+    if (tabs == nullptr) return;
+    m.tabCount = static_cast<int>(pNames.size());
+    Rml::String html;
+    for (size_t i = 0; i < pNames.size(); ++i) html += "<button id=\"tab" + std::to_string(i) + "\" class=\"tab" + (static_cast<int>(i) == pSelected ? " sel" : "") + "\">" + Escaped(pNames[i]) + "</button>";
+    tabs->SetInnerRML(html);
+    for (size_t i = 0; i < pNames.size(); ++i) if (Rml::Element* tab = m.document->GetElementById("tab" + std::to_string(i))) { tab->AddEventListener("click", &m.listener); tab->AddEventListener("mouseover", &m.listener); }
+}
+
+void FormScreen::SetFields(const std::vector<FormField>& pFields)
+{
+    Impl& m = *mImpl;
+    Rml::Element* host = m.document->GetElementById("fields");
+    if (host == nullptr) return;
+    m.listener.selects.clear();
+    Rml::String html;
+    for (const FormField& f : pFields) {
+        const Rml::String id = Escaped(f.id);
+        switch (f.type) {
+        case FormField::Type::eHeading: html += "<p class=\"heading\">" + Escaped(f.label) + "</p>"; break;
+        case FormField::Type::eNote: html += "<p class=\"note\">" + Escaped(f.label) + "</p>"; break;
+        case FormField::Type::eText:
+            html += "<div class=\"field\"><p class=\"label\">" + Escaped(f.label) + "</p><input type=\"text\" class=\"text\" id=\"f_" + id + "\" value=\"" + Escaped(f.text) + "\"/><p class=\"hint\" id=\"h_" + id + "\">" + Escaped(f.hint) + "</p></div>";
+            break;
+        case FormField::Type::eToggle:
+            html += "<div class=\"toggle" + Rml::String(f.on ? " on" : "") + "\" id=\"f_" + id + "\"><span class=\"box\"></span><span class=\"tlabel\">" + Escaped(f.label) + "</span></div>";
+            if (!f.hint.empty()) html += "<p class=\"note\">" + Escaped(f.hint) + "</p>";
+            break;
+        case FormField::Type::eSlider:
+            html += "<div class=\"field\"><p class=\"label\">" + Escaped(f.label) + "<span class=\"val\" id=\"v_" + id + "\">" + FormListener::FormatNumber(f.value) + Escaped(f.suffix) + "</span></p><input type=\"range\" class=\"range\" id=\"f_" + id + "\" min=\"" +
+                    std::to_string(f.min) + "\" max=\"" + std::to_string(f.max) + "\" step=\"" + std::to_string(f.step) + "\" value=\"" + std::to_string(f.value) + "\" data-suffix=\"" + Escaped(f.suffix) + "\"/>" +
+                    (f.hint.empty() ? Rml::String() : "<p class=\"note\">" + Escaped(f.hint) + "</p>") + "</div>";
+            break;
+        case FormField::Type::eSelect: {
+            const int count = static_cast<int>(f.options.size());
+            const int at = count > 0 ? std::max(0, std::min(count - 1, f.selected)) : 0;
+            m.listener.selects[f.id] = std::make_pair(at, count);
+            html += "<div class=\"field\"><p class=\"label\">" + Escaped(f.label) + "</p><div class=\"select\" id=\"f_" + id + "\"><button class=\"arrow\" id=\"f_" + id + "_prev\">&lt;</button><span class=\"sval\" id=\"v_" + id + "\">" +
+                    Escaped(count > 0 ? f.options[static_cast<size_t>(at)] : "") + "</span><button class=\"arrow\" id=\"f_" + id + "_next\">&gt;</button></div>" +
+                    (f.hint.empty() ? Rml::String() : "<p class=\"note\">" + Escaped(f.hint) + "</p>") + "</div>";
+            break;
+        }
+        case FormField::Type::eButton:
+            html += "<button class=\"act" + Rml::String(f.quiet ? " quiet" : "") + "\" id=\"f_" + id + "\">" + Escaped(f.label) + "</button>";
+            break;
+        }
+    }
+    host->SetInnerRML(html);
+    for (const FormField& f : pFields) {
+        Rml::Element* e = m.document->GetElementById("f_" + f.id);
+        if (e == nullptr) continue;
+        switch (f.type) {
+        case FormField::Type::eText: case FormField::Type::eSlider: e->AddEventListener("change", &m.listener); break;
+        case FormField::Type::eToggle: case FormField::Type::eButton: e->AddEventListener("click", &m.listener); e->AddEventListener("mouseover", &m.listener); break;
+        case FormField::Type::eSelect:
+            for (const char* suffix : {"_prev", "_next"}) if (Rml::Element* arrow = m.document->GetElementById("f_" + f.id + suffix)) { arrow->AddEventListener("click", &m.listener); arrow->AddEventListener("mouseover", &m.listener); }
+            break;
+        default: break;
+        }
+    }
+    host->SetScrollTop(0.0f);
+}
+
+void FormScreen::SetHint(const std::string& pId, const std::string& pText)
+{
+    if (Rml::Element* e = mImpl->document->GetElementById("h_" + pId)) e->SetInnerRML(Escaped(pText));
+}
+
+void FormScreen::SetSaveEnabled(bool pEnabled)
+{
+    mImpl->listener.saveEnabled = pEnabled;
+    if (Rml::Element* save = mImpl->document->GetElementById("save")) save->SetClass("disabled", !pEnabled);
+}
+
+void FormScreen::SetText(const std::string& pId, const std::string& pText)
+{
+    if (Rml::Element* e = mImpl->document->GetElementById("f_" + pId)) if (auto* control = dynamic_cast<Rml::ElementFormControl*>(e)) control->SetValue(pText);
+}
+
+void FormScreen::SetToggle(const std::string& pId, bool pOn)
+{
+    if (Rml::Element* e = mImpl->document->GetElementById("f_" + pId)) e->SetClass("on", pOn);
+}
+
+void FormScreen::SetSlider(const std::string& pId, float pValue)
+{
+    if (Rml::Element* e = mImpl->document->GetElementById("f_" + pId)) {
+        e->SetAttribute("value", pValue);
+        if (Rml::Element* shown = mImpl->document->GetElementById("v_" + pId)) shown->SetInnerRML(FormListener::FormatNumber(pValue) + e->GetAttribute<Rml::String>("data-suffix", ""));
+    }
+}
+
+void FormScreen::SetSelect(const std::string& pId, int pIndex, const std::string& pShown)
+{
+    Impl& m = *mImpl;
+    auto found = m.listener.selects.find(pId);
+    if (found != m.listener.selects.end()) found->second.first = pIndex;
+    if (Rml::Element* shown = m.document->GetElementById("v_" + pId)) shown->SetInnerRML(Escaped(pShown));
+}
+
+FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int pFrameLimit)
+{
+    Impl& m = *mImpl;
+    // scripted input (tests): steps start after the opening animation, four frames apart
+    if (pFrame >= 60 && (pFrame - 60) % 4 == 0 && static_cast<size_t>((pFrame - 60) / 4) < m.script.size()) {
+        const std::string& step = m.script[static_cast<size_t>((pFrame - 60) / 4)];
+        SDL_Event scripted; SDL_zero(scripted);
+        if (step.compare(0, 4, "tab:") == 0) { if (Rml::Element* e = m.document->GetElementById("tab" + step.substr(4))) e->Click(); }
+        else if (step.compare(0, 6, "click:") == 0) { if (Rml::Element* e = m.document->GetElementById(step.substr(6))) e->Click(); }
+        else if (step.compare(0, 5, "text:") == 0) {
+            const size_t eq = step.find('=');
+            if (eq != std::string::npos) if (Rml::Element* e = m.document->GetElementById("f_" + step.substr(5, eq - 5))) if (auto* control = dynamic_cast<Rml::ElementFormControl*>(e)) {
+                control->SetValue(step.substr(eq + 1));
+                FormEvent event; event.id = step.substr(5, eq - 5); event.text = step.substr(eq + 1); m.listener.pending.push_back(event);
+            }
+        }
+        else {
+            scripted.type = SDL_KEYDOWN; scripted.key.state = SDL_PRESSED;
+            scripted.key.keysym.sym = step == "down" ? SDLK_DOWN : step == "up" ? SDLK_UP : step == "enter" ? SDLK_RETURN : SDLK_ESCAPE;
+            SDL_PushEvent(&scripted);
+        }
+    }
+    auto focusStep = [&](bool pBackwards) {
+        if (m.listener.sound) m.listener.sound(Sound::eHover);
+        m.context->ProcessKeyDown(Rml::Input::KI_TAB, pBackwards ? Rml::Input::KM_SHIFT : 0);
+        m.context->ProcessKeyUp(Rml::Input::KI_TAB, pBackwards ? Rml::Input::KM_SHIFT : 0);
+    };
+    auto arrowOnSelect = [&](bool pNext) -> bool {   // Left and Right on a focused select choose the neighbouring option
+        Rml::Element* focused = m.document->GetFocusLeafNode();
+        if (focused == nullptr || !focused->IsClassSet("select")) return false;
+        if (Rml::Element* arrow = m.document->GetElementById(focused->GetId() + (pNext ? "_next" : "_prev"))) arrow->Click();
+        return true;
+    };
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) return FormOutcome::eClose;
+        if (event.type == SDL_KEYDOWN) {
+            const SDL_Keycode key = event.key.keysym.sym;
+            Rml::Element* focused = m.document->GetFocusLeafNode();
+            const bool typing = focused != nullptr && focused->GetTagName() == "input" && focused->GetAttribute<Rml::String>("type", "text") == "text";
+            if (key == SDLK_ESCAPE) { if (m.listener.sound) m.listener.sound(Sound::eBack); return FormOutcome::eCancel; }
+            if (key == SDLK_DOWN) { focusStep(false); continue; }
+            if (key == SDLK_UP) { focusStep(true); continue; }
+            if (!typing && key == SDLK_LEFT && arrowOnSelect(false)) continue;
+            if (!typing && key == SDLK_RIGHT && arrowOnSelect(true)) continue;
+            if (!typing && (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_SPACE)) { if (focused != nullptr) focused->Click(); continue; }
+        }
+        if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+            const int b = event.cbutton.button;
+            if (b == SDL_CONTROLLER_BUTTON_B) { if (m.listener.sound) m.listener.sound(Sound::eBack); return FormOutcome::eCancel; }
+            if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN) { focusStep(false); continue; }
+            if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) { focusStep(true); continue; }
+            if (b == SDL_CONTROLLER_BUTTON_DPAD_LEFT && arrowOnSelect(false)) continue;
+            if (b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT && arrowOnSelect(true)) continue;
+            if (b == SDL_CONTROLLER_BUTTON_A) { if (Rml::Element* f = m.document->GetFocusLeafNode()) f->Click(); continue; }
+        }
+        RmlSDL::InputEventHandler(m.context, event);
+    }
+    int w = 0, h = 0;
+    SDL_GetRendererOutputSize(m.renderer, &w, &h);
+    if (w != m.width || h != m.height) { m.width = w; m.height = h; m.context->SetDimensions(Rml::Vector2i(w, h)); }
+    m.context->Update();
+    DrawGridBackdrop(m.renderer, m.width, m.height);
+    m.context->Render();
+    if (const char* shot = std::getenv("HOVERNET_CAPTURE_RML")) {
+        if ((pFrameLimit >= 0 && pFrame == pFrameLimit) || (pFrameLimit < 0 && pFrame == 62)) {
+            if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, m.width, m.height, 32, SDL_PIXELFORMAT_ARGB8888)) {
+                SDL_RenderReadPixels(m.renderer, nullptr, SDL_PIXELFORMAT_ARGB8888, surface->pixels, surface->pitch);
+                SDL_SaveBMP(surface, shot);
+                SDL_FreeSurface(surface);
+            }
+        }
+    }
+    SDL_RenderPresent(m.renderer);
+    SDL_Delay(pFrameLimit >= 0 ? 16 : 4);
+    for (const FormEvent& e : m.listener.pending) {
+        if (std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST form %s text=[%s] on=%d value=%g index=%d\n", e.id.c_str(), e.text.c_str(), e.on ? 1 : 0, e.value, e.index); std::fflush(stdout); }
+        pEvents.push_back(e);
+    }
+    m.listener.pending.clear();
+    const FormOutcome out = m.listener.outcome;
+    m.listener.outcome = FormOutcome::eNone;
+    return out;
 }
 }  // namespace HoverNetRml
