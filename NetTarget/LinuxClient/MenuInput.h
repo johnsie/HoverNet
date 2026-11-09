@@ -61,6 +61,9 @@ inline int MenuSliderStep()
     return step;
 }
 
+// Set by the game to play a soft tick when a slider's value changes (null in tools and tests that have no sound).
+inline void (*gMenuSliderChanged)() = nullptr;
+
 inline bool MenuSliderInt(const char* label, int* value, int lo, int hi, const char* format = "%d", ImGuiSliderFlags flags = 0)
 {
     bool changed = ImGui::SliderInt(label, value, lo, hi, format, flags);
@@ -68,6 +71,7 @@ inline bool MenuSliderInt(const char* label, int* value, int lo, int hi, const c
         const int next = *value + step < lo ? lo : (*value + step > hi ? hi : *value + step);
         if (next != *value) { *value = next; changed = true; }
     }
+    if (changed && gMenuSliderChanged != nullptr) gMenuSliderChanged();
     return changed;
 }
 
@@ -79,5 +83,6 @@ inline bool MenuSliderFloat(const char* label, float* value, float lo, float hi,
         const float clamped = next < lo ? lo : (next > hi ? hi : next);
         if (clamped != *value) { *value = clamped; changed = true; }
     }
+    if (changed && gMenuSliderChanged != nullptr) gMenuSliderChanged();
     return changed;
 }

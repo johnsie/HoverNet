@@ -2324,9 +2324,11 @@ struct SfxBank
 {
     MR_ShortSound* sounds[static_cast<int>(Sfx::eCount)] = {};
     bool built = false;
-    ImGuiID lastHovered = 0;
-    int hoverSeenFrame = -100;   // the last frame a button was hovered or focused
+    ImGuiID hovered = 0, focused = 0;           // the button under the pointer and the button holding focus, in the frame being drawn
+    ImGuiID lastHovered = 0, lastFocused = 0;   // the same, a frame earlier
+    int collectFrame = -100;
     Uint32 hoverSoundAt = 0;     // when the hover tick last played
+    int hoverTicks = 0;          // how many ticks have played (reported by the test hook)
     bool quiet = false;   // the button being drawn is a secondary one (Back, Cancel): its click is the "back" sound
 };
 SfxBank gSfx;
@@ -2438,23 +2440,50 @@ void UpdateSpeedSounds(double speed)
     }
 }
 
+// A soft tick as a slider moves (at most every 45 ms, so a drag is a stream of ticks and not a buzz), and a click when another tab is chosen.
+void SliderTick()
+{
+    static Uint32 last = 0;
+    const Uint32 now = SDL_GetTicks();
+    if (now - last < 45) return;
+    last = now;
+    PlaySfx(Sfx::eHover, -500, 1.5);
+}
+
+void NoteTabSound(const char* name)
+{
+    static const char* lastTab = nullptr;
+    static int lastFrame = -100;
+    const int frame = ImGui::GetFrameCount();
+    if (frame == lastFrame + 1 && lastTab != nullptr && lastTab != name) PlaySfx(Sfx::eClick, -400, 1.2);   // only a change while the screen is open; opening one is silent
+    if (frame != lastFrame) lastFrame = frame;
+    lastTab = name;
+}
+
 bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
 {
     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
     const bool pressed = ImGui::Button(label, size);
     ImGui::PopStyleColor();
     // sounds: a tick as the pointer or the keyboard focus arrives on a button, and a click (or the lower "back" tone for a secondary button) when it is pressed
-    // The tick plays once when the pointer or the focus arrives on a button and not again while it stays there: even when another button shares its ID (the
-    // same label twice), or the hover flickers for a frame, it is forgotten only after no button has been hovered for a few frames, and never twice within 150 ms.
+    // The tick plays once when the pointer arrives on a button, and once when keyboard or controller focus moves to one: never while either stays put. The hovered
+    // button and the focused button are two separate things (the mouse can be over one while the focus rests on another), so each is followed on its own, once a
+    // frame, and the tick plays only when that one changes. The first frame of a screen only learns where they are, so opening a menu is silent.
     {
         const int frame = ImGui::GetFrameCount();
-        if (gSfx.lastHovered != 0 && frame > gSfx.hoverSeenFrame + 3) gSfx.lastHovered = 0;
-        if (ImGui::IsItemHovered() || ImGui::IsItemFocused()) {
-            gSfx.hoverSeenFrame = frame;
-            const Uint32 now = SDL_GetTicks();
-            if (gSfx.lastHovered != ImGui::GetItemID() && now - gSfx.hoverSoundAt >= 150) { gSfx.lastHovered = ImGui::GetItemID(); gSfx.hoverSoundAt = now; PlaySfx(Sfx::eHover); }
-            else gSfx.lastHovered = ImGui::GetItemID();
+        if (frame != gSfx.collectFrame) {
+            if (frame == gSfx.collectFrame + 1) {
+                const Uint32 now = SDL_GetTicks();
+                const bool hoverMoved = gSfx.hovered != 0 && gSfx.hovered != gSfx.lastHovered;
+                const bool focusMoved = gSfx.focused != 0 && gSfx.focused != gSfx.lastFocused && gSfx.focused != gSfx.hovered;
+                if ((hoverMoved || focusMoved) && now - gSfx.hoverSoundAt >= 70) { gSfx.hoverSoundAt = now; PlaySfx(Sfx::eHover); ++gSfx.hoverTicks; }
+            }
+            gSfx.lastHovered = gSfx.hovered; gSfx.lastFocused = gSfx.focused;
+            gSfx.hovered = 0; gSfx.focused = 0;
+            gSfx.collectFrame = frame;
         }
+        if (ImGui::IsItemHovered()) gSfx.hovered = ImGui::GetItemID();
+        if (ImGui::IsItemFocused()) gSfx.focused = ImGui::GetItemID();
     }
     if (pressed) PlaySfx(gSfx.quiet ? Sfx::eBack : Sfx::eClick);
     // a little depth: a soft highlight across the top half and a shade along the bottom, so a button reads as a button and not a flat block
@@ -4998,6 +5027,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         auto settingsTabFlag = [&](int index) { return testTab != nullptr && std::atoi(testTab) == index && framesShown <= 2 ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None; };
         const bool tabsOpen = ImGui::BeginTabBar("##settingsTabs");
         bool tabOpen = tabsOpen && ImGui::BeginTabItem("Player", nullptr, settingsTabFlag(0));
+        if (tabOpen) NoteTabSound("Player");
         if (tabOpen) {
         HoverNetSectionHeading("Display Name");
         ImGui::PushItemWidth(-1.0f);
@@ -5062,6 +5092,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         if (tabOpen) ImGui::EndTabItem();
         tabOpen = tabsOpen && ImGui::BeginTabItem("Sound", nullptr, settingsTabFlag(1));
+        if (tabOpen) NoteTabSound("Sound");
         if (tabOpen) {
         HoverNetSectionHeading("Audio");
         if (ImGui::Checkbox("Mute all sound", &muted)) {
@@ -5092,6 +5123,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         if (tabOpen) ImGui::EndTabItem();
         tabOpen = tabsOpen && ImGui::BeginTabItem("Access", nullptr, settingsTabFlag(4));
+        if (tabOpen) NoteTabSound("Access");
         if (tabOpen) {
         ImGui::TextUnformatted("UI Scale");
         ImGui::PushItemWidth(-1.0f);
@@ -5121,6 +5153,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         if (tabOpen) ImGui::EndTabItem();
         tabOpen = tabsOpen && ImGui::BeginTabItem("Graphics", nullptr, settingsTabFlag(3));
+        if (tabOpen) NoteTabSound("Graphics");
         if (tabOpen) {
         ImGui::TextUnformatted("Graphics");
         {
@@ -5177,6 +5210,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         if (tabOpen) ImGui::EndTabItem();
         tabOpen = tabsOpen && ImGui::BeginTabItem("Display", nullptr, settingsTabFlag(4));
+        if (tabOpen) NoteTabSound("Display");
         if (tabOpen) {
         if (!HoverNetIsTouchDevice()) {   // phones and tablets always use a picture shaped like their screen
             ImGui::TextUnformatted("Race view");
@@ -6431,6 +6465,13 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
     bool strokeActive = false;
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
+        if (const char* hoverTest = std::getenv("HOVERNET_TEST_HOVER")) {   // test hook: keyboard focus on one button and the pointer held over another; reports how many ticks played
+            SDL_Event motion; SDL_zero(motion);
+            if (framesShown == 5) { motion.type = SDL_KEYDOWN; motion.key.keysym.sym = SDLK_DOWN; motion.key.keysym.scancode = SDL_SCANCODE_DOWN; motion.key.state = SDL_PRESSED; SDL_PushEvent(&motion); }
+            SDL_zero(motion);
+            motion.type = SDL_MOUSEMOTION; motion.motion.x = framesShown < 10 ? 20 : std::atoi(hoverTest) / 10000; motion.motion.y = framesShown < 10 ? 20 : std::atoi(hoverTest) % 10000; SDL_PushEvent(&motion);
+            if (framesShown == pFrameLimit) { std::printf("hover ticks played: %d\n", gSfx.hoverTicks); std::fflush(stdout); }
+        }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             MenuProcessEvent(event);
@@ -6623,8 +6664,8 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
             if (ImGui::Button("Clear paint")) { pushUndo(); design.paint.fill(0); }
         }
         {
-            // Ready-made patterns: each paints its cells with the selected paint colour on top of what is there (Undo takes it back; Mirror keeps it symmetrical).
-            ImGui::TextUnformatted("Patterns, in the selected colour");
+            // Ready-made patterns: each clears the paint and fills its cells with the selected paint colour (Undo takes it back; Mirror keeps it symmetrical).
+            ImGui::TextUnformatted("Patterns (replace the paint, in the selected colour)");
             const int perRow = ImGui::GetContentRegionAvail().x > 470.0f ? 4 : 3;
             const float buttonWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * (perRow - 1)) / perRow;
             for (int p = 0; p < HoverNetCraft::kPatternCount; ++p) {
@@ -6638,6 +6679,7 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
                 if (locked) { ImGui::EndDisabled(); if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s: opens at level %d", HoverNetCraft::PatternName(p), HoverNetCraft::PatternLevel(p)); }
                 if (patternPressed && !locked) {
                     pushUndo();
+                    design.paint.fill(0);   // a pattern replaces the paint (Undo brings it back); decals are the thing that goes on top
                     const int last = Authority::kPaintSize - 1;
                     for (int y = 0; y < Authority::kPaintSize; ++y)
                         for (int x = 0; x < Authority::kPaintSize; ++x)
@@ -9185,6 +9227,7 @@ int RunClient(int argc, char** argv)
     } factoryCleanup;
 #ifdef HOVERNET_GAME2_PLAYER
     MR_SoundServer::Init(nullptr);
+    gMenuSliderChanged = &SliderTick;
     MR_SoundServer::SetMasterVolume(LoadMute() ? 0.0 : LoadVolume());
     struct SoundServerCleanup
     {

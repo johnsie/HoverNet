@@ -7,6 +7,8 @@ and how to roll one back.
 ## Unreleased
 
 ### Fixed
+- **Garage patterns now replace the paint** instead of drawing over what was there (clicking several piled them up); Undo brings the old paint back. Decals still go on top.
+- **The button hover tick no longer repeats** while the pointer rests on a button, including when keyboard or controller focus is on a different button (the likely cause: the two alternated every frame). Checked with a scripted run (focus on one button, pointer held on another, 200 frames): 2 ticks played.
 - **Web: the music no longer goes crazy when the page is not in the foreground.** The browser throttles a hidden page's timers and the audio is mixed on the page's own thread, so it starved and stuttered; audio now pauses while the page is hidden and carries on from the same place when it is shown again. The web build compiles with the change; I could not test a real hidden tab here, so please check it in your browser. A window that is visible but not focused is not paused.
 
 ## 2.3.39 - 2026-11-09
