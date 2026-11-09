@@ -1199,6 +1199,7 @@ if(BUILD_TESTING AND NOT WIN32)
             add_test(NAME HoverNetRmlMenu
                 COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-rml-menu.sh $<TARGET_FILE:HoverNetGame2Player>
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+            set_tests_properties(HoverNetRmlMenu PROPERTIES TIMEOUT 900)   # it drives a dozen screens, each of which waits for its opening animation
         endif()
         add_test(NAME HoverNetGarageDecals
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-garage-decals.sh $<TARGET_FILE:HoverNetGame2Player>
