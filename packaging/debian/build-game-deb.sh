@@ -61,6 +61,10 @@ sed -i "s/^Version: .*/Version: ${version}/; s/^Architecture: .*/Architecture: $
 # Licence inventory and release history travel with the package.
 install -Dm644 LICENSE "$package_root/usr/share/doc/hovernet-game/copyright"
 install -Dm644 THIRD_PARTY_NOTICES.md "$package_root/usr/share/doc/hovernet-game/THIRD_PARTY_NOTICES.md"
+# The licence texts of the libraries built into the game (their notices must accompany binaries): Dear ImGui (MIT), RmlUi (MIT), FreeType (the FreeType Licence).
+install -Dm644 NetTarget/ThirdParty/imgui/LICENSE.txt "$package_root/usr/share/doc/hovernet-game/licenses/imgui-LICENSE.txt"
+install -Dm644 NetTarget/ThirdParty/rmlui/LICENSE.txt "$package_root/usr/share/doc/hovernet-game/licenses/rmlui-LICENSE.txt"
+install -Dm644 NetTarget/ThirdParty/freetype/docs/FTL.TXT "$package_root/usr/share/doc/hovernet-game/licenses/freetype-FTL.txt"
 install -Dm644 CHANGELOG.md "$package_root/usr/share/doc/hovernet-game/CHANGELOG.md"
 # shellcheck source=packaging/debian/reproducible.sh
 source "$(dirname "$0")/reproducible.sh"
