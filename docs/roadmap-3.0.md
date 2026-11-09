@@ -352,6 +352,23 @@ DOM is work; a larger attack surface than a native toolkit (mitigated by local-o
 **Exit gate (for this idea only):** the first slice runs in the browser and in a desktop web view with measured numbers inside the budgets above and is fully usable with a gamepad,
 and the owner decides to proceed or to stay with the improved SDL2 UI.
 
+### Making it feel like a modern, big-budget game (added 2026-11-09)
+
+Rules for all of this: **no change to physics or the race camera** (CLAUDE.md rule 7; physics frozen as of Friday 2026-11-06), nothing that blurs the HUD, and everything works on desktop and in the browser.
+
+| # | Item | Status | How, and what is open |
+| --- | --- | --- | --- |
+| 1 | Music | **Done** | Two OpenGameArt tracks under free licences (*Hard Left* in menus and results, *Asphalt* in races; `NetTarget/Music/CREDITS.md`), streamed as Ogg Vorbis (stb_vorbis) by the sound server, crossfaded, ducked under the pause menu, own volume setting, credited on screen. Open: a track per mood (final lap, results), more tracks to rotate, and a licensing review of the GPL track (see CREDITS.md). |
+| 2 | Interface sounds | **Done** | Hover, click and back tones on every button, made in code (no files). Open: sounds for tabs and sliders. |
+| 3 | Race sounds | **Partly** | Countdown beeps, GO, lap chime, finish fanfare, new-best sting (code-made). The engine already follows speed. Open: wind and surface sounds; ducking the music under impacts; a voice announcer (needs recorded or licensed voice: not started). |
+| 4 | Start sequence | **Done** | 3-2-1-GO numbers that pop and fade, with the beeps and a controller rumble. |
+| 5 | Feedback in the HUD | **Partly** | Edge flashes for impacts (red), fuel (green) and pickups (gold); controller rumble on impacts. Open: a "new best lap" banner during the race; animated HUD numbers. |
+| 6 | Menus | **Partly** | Main menu without scrollbars, Settings in tabs, a loading screen with tips, the results screen with XP. Open: animated screen transitions, a rotating menu craft wearing the player's own design. |
+| 7 | Progression | **Done (local)** | XP and levels, nine achievements, a level bar on the main menu and the results screen, kept in `<config>/profile` (`Profile.cpp`, test `HoverNetProfile`). Open: unlockable Garage parts and decals; daily or weekly challenges; seasons; an account-synced profile and a profile page listing achievements. |
+| 8 | Garage | **Done (paint and shape)** | Open: free-form shape editing, more hulls. |
+| 9 | Visual fidelity | **Not started** | The software rasteriser and its CPU picture passes are the ceiling. **Recommendation: a GPU path through OpenGL ES 3 / WebGL2 on SDL2** (one code path for desktop and browser, the browser build already asks for WebGL2), not Vulkan or a new engine: it keeps the C++ simulation and every test, and moves the picture passes (grade, bloom, edge smoothing, lighting) to fragment shaders first, then the walls, floors and craft. It needs ImGui's OpenGL backend in place of the SDL renderer one. This is a project of its own (weeks), and it must pass the render golden frames and the camera rule before anything else changes. Skyboxes, environment reflections and new models follow it. |
+| 10 | Production quality | **Open** | A steady frame rate (the GPU path), full gamepad navigation audit, localisation, crash reporting, automatic updates, first-run setup. |
+
 ## Stage 4: Content pipeline and the HoverCad successor
 
 **Months 4 to 14, in parallel with the networking stages**

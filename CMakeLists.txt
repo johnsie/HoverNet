@@ -596,6 +596,7 @@ add_executable(HoverNetTutorialTest NetTarget/LinuxClient/TutorialTest.cpp NetTa
 target_link_libraries(HoverNetTutorialTest PRIVATE HoverNetSim)
 add_executable(HoverNetMusicTest NetTarget/LinuxClient/MusicTest.cpp)
 target_link_libraries(HoverNetMusicTest PRIVATE HoverNetResourceCore)
+add_executable(HoverNetProfileTest NetTarget/LinuxClient/ProfileTest.cpp NetTarget/LinuxClient/Profile.cpp)
 add_executable(HoverNetCraftDesignTest NetTarget/LinuxClient/CraftDesignTest.cpp)
 target_link_libraries(HoverNetCraftDesignTest PRIVATE HoverNetSim)
 add_executable(HoverNetCraftLookTest NetTarget/LinuxClient/CraftLookTest.cpp NetTarget/LinuxClient/CraftPreview.cpp)
@@ -612,6 +613,7 @@ if(NOT EMSCRIPTEN)
     add_test(NAME HoverNetViewportThreads COMMAND HoverNetViewportThreadsTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetViewportColour COMMAND HoverNetViewportColourTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetMusic COMMAND HoverNetMusicTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetProfile COMMAND HoverNetProfileTest)
     add_test(NAME HoverNetTutorial COMMAND HoverNetTutorialTest)
     add_test(NAME HoverNetCraftDesign COMMAND HoverNetCraftDesignTest)
     add_test(NAME HoverNetCraftLook COMMAND HoverNetCraftLookTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
@@ -780,6 +782,7 @@ endif()
 
 add_executable(HoverNetTrack3DViewer
     NetTarget/LinuxClient/Track3DViewer.cpp
+    NetTarget/LinuxClient/Profile.cpp
     NetTarget/LinuxClient/Tutorial.cpp
     NetTarget/LinuxClient/CraftStore.cpp
     NetTarget/LinuxClient/CraftPreview.cpp
@@ -794,6 +797,7 @@ target_link_libraries(HoverNetTrack3DViewer PRIVATE HoverNetClientSession HoverN
 
 add_executable(HoverNetGame2Player
     NetTarget/LinuxClient/Track3DViewer.cpp
+    NetTarget/LinuxClient/Profile.cpp
     NetTarget/LinuxClient/Tutorial.cpp
     NetTarget/LinuxClient/CraftStore.cpp
     NetTarget/LinuxClient/CraftPreview.cpp

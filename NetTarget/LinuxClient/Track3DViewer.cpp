@@ -5,6 +5,7 @@
 
 #include "CraftStore.h"
 #include "Tutorial.h"
+#include "Profile.h"
 #include "CraftPreview.h"
 #include "../ObjFacTools/CraftLook.h"
 #include "TrackCatalog.h"
@@ -1601,6 +1602,12 @@ struct MusicState
     Uint32 toastAt = 0;
 };
 MusicState gMusicState;
+
+// What the last race earned, for the results screen: set when a race finishes, read by RunPostRaceScreen.
+struct RewardView { bool valid = false; HoverNetProfile::Reward reward; HoverNetProfile::Profile profile; };
+RewardView gRewardView;
+
+std::string ProfilePath() { return ConfigDirPath() + "/profile"; }
 
 void PlayMusic(MusicTrack track)
 {
@@ -4248,13 +4255,13 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
 
         const float cardWidth = std::min(680.0f, workSize.x - 48.0f);
-        const float cardHeight = std::min((pBests != nullptr && pBests->Any() ? 690.0f : 620.0f), workSize.y - 48.0f);
+        const float cardHeight = std::min((pBests != nullptr && pBests->Any() ? 690.0f : 620.0f) + (gRewardView.valid ? 150.0f + (gRewardView.reward.unlocked.empty() ? 0.0f : 26.0f * (1.0f + static_cast<float>(gRewardView.reward.unlocked.size() / 3))) : 0.0f), workSize.y - 24.0f);
         ImGui::SetCursorPos(ImVec2((workSize.x - cardWidth) * 0.5f,
                                    (workSize.y - cardHeight) * 0.5f));
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.065f, 0.065f, 0.085f, 0.97f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 12.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
-        MenuBeginChild("ResultsCard", ImVec2(cardWidth, cardHeight), true);
+        MenuBeginChild("ResultsCard", ImVec2(cardWidth, cardHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
         ImGui::SetWindowFontScale(2.0f);
@@ -4325,6 +4332,41 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             }
         }
 
+        if (gRewardView.valid && gRewardView.reward.xp > 0) {
+            // Progress: the XP this race earned, and the level bar (which fills as the screen opens).
+            const HoverNetProfile::Reward& reward = gRewardView.reward;
+            const HoverNetProfile::Profile& profile = gRewardView.profile;
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            char line[160];
+            std::snprintf(line, sizeof line, "+%d XP", reward.xp);
+            if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
+            ImGui::TextColored(ImVec4(0.55f, 0.95f, 0.65f, 1.0f), "%s", line);
+            if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
+            ImGui::SameLine();
+            ImGui::TextDisabled("  %s", reward.breakdown.c_str());
+            const bool levelUp = reward.levelAfter > reward.levelBefore;
+            std::snprintf(line, sizeof line, levelUp ? "LEVEL UP!  Level %d" : "Level %d", reward.levelAfter);
+            ImGui::TextColored(levelUp ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImVec4(0.92f, 0.93f, 0.97f, 1.0f), "%s", line);
+            {
+                const float width = ImGui::GetContentRegionAvail().x;
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                const float fill = std::min(1.0f, profile.LevelProgress() * std::min(1.0f, static_cast<float>(framesShown) / 40.0f));
+                ImDrawList* draw = ImGui::GetWindowDrawList();
+                draw->AddRectFilled(at, ImVec2(at.x + width, at.y + 8.0f), IM_COL32(48, 51, 66, 255), 4.0f);
+                draw->AddRectFilled(at, ImVec2(at.x + width * fill, at.y + 8.0f), levelUp ? IM_COL32(255, 210, 90, 255) : IM_COL32(250, 115, 122, 255), 4.0f);
+                ImGui::Dummy(ImVec2(width, 12.0f));
+            }
+            if (!reward.unlocked.empty()) {
+                std::string names;
+                for (int achievement : reward.unlocked) names += (names.empty() ? "" : ", ") + std::string(HoverNetProfile::AchievementName(achievement));
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.35f, 1.0f), "Unlocked: %s", names.c_str());
+                ImGui::PopTextWrapPos();
+            }
+        }
+
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
@@ -4342,7 +4384,8 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         actions.push_back({"QUIT HOVERNET", PostRaceChoice::eQuit});
 #endif
         for (std::size_t index = 0; index < actions.size(); ++index) {
-            if ((index == 0 ? HoverNetButton(actions[index].label, ImVec2(-FLT_MIN, 54.0f)) : HoverNetQuietButton(actions[index].label, ImVec2(-FLT_MIN, 44.0f)))) {
+            const float rowRoom = (ImGui::GetContentRegionAvail().y - 34.0f) / static_cast<float>(actions.size()) - ImGui::GetStyle().ItemSpacing.y;
+            if ((index == 0 ? HoverNetButton(actions[index].label, ImVec2(-FLT_MIN, std::max(34.0f, std::min(54.0f, rowRoom + 8.0f)))) : HoverNetQuietButton(actions[index].label, ImVec2(-FLT_MIN, std::max(30.0f, std::min(44.0f, rowRoom)))))) {
                 choice = actions[index].choice;
                 running = false;
             }
@@ -5971,6 +6014,79 @@ void DrawGameOverlay(SDL2GraphicsBackend& graphics, SDL_Renderer* renderer, cons
 }
 
 
+// ---- The loading screen: one frame with the track's name and a tip, shown before a race is loaded (the load itself blocks) --------------------------------
+void ShowLoadingScreen(SDL2GraphicsBackend& graphics, const std::string& trackName)
+{
+    static const char* const tips[] = {
+        "Hold the brake before a bend, not in it: a hard turn scrubs off your speed.",
+        "Fuel pads refill your tank. Running dry leaves you stranded.",
+        "Jump over gaps and obstacles, and watch where you land.",
+        "A missile takes a moment to recharge. The HUD says when it is ready.",
+        "Design your own craft in the Garage: other players see it in online races.",
+        "Your best run on each track is kept as a ghost you can race against.",
+        "Press Enter after the finish line for your results and race options.",
+        "The Tutorial in the main menu teaches every control in one short lap.",
+    };
+    if (std::getenv("HOVERNET_NO_LOADING_SCREEN") != nullptr || graphics.GetRenderer() == nullptr) return;
+    const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
+    if (ownsImGuiContext) {
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        LoadHoverNetMenuFonts(io);
+        ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
+        ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+        ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+    }
+    else if (!gTutorialOverlayOwnsContext) return;   // a menu has the context: leave it alone
+    SDL_Renderer* renderer = graphics.GetRenderer();
+    int logicalW = 0, logicalH = 0;
+    SDL_RenderGetLogicalSize(renderer, &logicalW, &logicalH);
+    SDL_RenderSetLogicalSize(renderer, 0, 0);
+    ImGui_ImplSDLRenderer2_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
+    ImGui::NewFrame();
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(display);
+    ImGui::Begin("##loading", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilledMultiColor(ImVec2(0, 0), display, IM_COL32(10, 11, 18, 255), IM_COL32(26, 10, 18, 255), IM_COL32(8, 8, 13, 255), IM_COL32(10, 6, 10, 255));
+    ImFont* big = gHoverNetDisplayFont != nullptr ? gHoverNetDisplayFont : ImGui::GetIO().Fonts->Fonts[0];
+    ImFont* body = ImGui::GetIO().Fonts->Fonts[0];
+    const float scale = std::max(0.8f, std::min(1.6f, display.y / 768.0f));
+    const std::string name = trackName.empty() ? "THE TRACK" : trackName;
+    const float titleSize = 54.0f * scale;
+    const ImVec2 titleBox = big->CalcTextSizeA(titleSize, FLT_MAX, 0.0f, name.c_str());
+    draw->AddText(big, 20.0f * scale, ImVec2((display.x - big->CalcTextSizeA(20.0f * scale, FLT_MAX, 0.0f, "LOADING").x) * 0.5f, display.y * 0.36f), IM_COL32(250, 125, 132, 255), "LOADING");
+    draw->AddText(big, titleSize, ImVec2((display.x - titleBox.x) * 0.5f, display.y * 0.36f + 30.0f * scale), IM_COL32(255, 255, 255, 255), name.c_str());
+    // a spinner of dots
+    const Uint32 ticks = SDL_GetTicks();
+    for (int i = 0; i < 8; ++i) {
+        const float angle = static_cast<float>(i) * 0.785398f - static_cast<float>(ticks % 1000) / 1000.0f * 6.2831853f;
+        const float strength = 0.25f + 0.75f * static_cast<float>(i) / 7.0f;
+        draw->AddCircleFilled(ImVec2(display.x * 0.5f + std::cos(angle) * 26.0f * scale, display.y * 0.36f + 150.0f * scale + std::sin(angle) * 26.0f * scale), 4.5f * scale, IM_COL32(250, 115, 122, static_cast<int>(255 * strength)));
+    }
+    const char* tip = tips[(ticks / 1000 + static_cast<Uint32>(name.size())) % (sizeof(tips) / sizeof(tips[0]))];
+    const float tipSize = 19.0f * scale;
+    const ImVec2 tipBox = body->CalcTextSizeA(tipSize, display.x * 0.7f, display.x * 0.7f, tip);
+    draw->AddText(body, tipSize, ImVec2((display.x - tipBox.x) * 0.5f, display.y * 0.78f), IM_COL32(190, 194, 208, 255), tip, nullptr, display.x * 0.7f);
+    draw->AddText(body, tipSize * 0.8f, ImVec2((display.x - body->CalcTextSizeA(tipSize * 0.8f, FLT_MAX, 0.0f, "TIP").x) * 0.5f, display.y * 0.78f - 26.0f * scale), IM_COL32(250, 125, 132, 255), "TIP");
+    ImGui::End();
+    ImGui::Render();
+    SDL_SetRenderDrawColor(renderer, 10, 11, 18, 255);
+    SDL_RenderClear(renderer);
+    ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+    CaptureFrameIfRequested(renderer, 1, 1, "HOVERNET_CAPTURE_LOADING");   // test hook
+    SDL_RenderPresent(renderer);
+    SDL_RenderSetLogicalSize(renderer, logicalW, logicalH);
+    if (ownsImGuiContext) {
+        ImGui_ImplSDLRenderer2_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+    }
+}
+
 // ---- The Settings hub: everything that is not racing, behind one button on the main menu ---------------------------------------------------------------
 enum class HubChoice { eBack, eGame, eControls, eReplays, eTutorial };
 
@@ -6339,6 +6455,11 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
             }
             if (HoverNetButton("Save to this slot and use it in races", ImVec2(-FLT_MIN, 40))) {
                 const CraftDesign clean = Authority::SanitiseCraftDesign(design);
+                if (store.Save(slot, clean) && store.SetActive(slot)) {
+                    HoverNetProfile::Profile profile;
+                    profile.Load(ProfilePath());
+                    if (profile.Unlock(HoverNetProfile::eGarageDesigner).xp > 0) profile.Save(ProfilePath());
+                }
                 if (store.Save(slot, clean) && store.SetActive(slot)) status = "Saved in slot " + std::to_string(slot + 1) + ". Other players see it in online races.";
                 else status = "Could not save the craft on this device.";
             }
@@ -8188,6 +8309,21 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         ImGui::Spacing();
         ImGui::TextDisabled("FAST, FUN, FREE!");
         ImGui::PopStyleColor();
+        {
+            // The player's level and progress to the next one (see Profile.h).
+            static HoverNetProfile::Profile menuProfile;
+            static bool menuProfileLoaded = false;
+            if (!menuProfileLoaded || framesShown == 1) { menuProfile.Load(ProfilePath()); menuProfileLoaded = true; }
+            if (menuProfile.xp > 0 || menuProfile.races > 0) {
+                ImGui::Spacing();
+                ImGui::TextColored(kHoverNetCoral, "LEVEL %d", menuProfile.Level());
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                ImDrawList* chip = ImGui::GetWindowDrawList();
+                chip->AddRectFilled(at, ImVec2(at.x + 150.0f, at.y + 6.0f), IM_COL32(48, 51, 66, 255), 3.0f);
+                chip->AddRectFilled(at, ImVec2(at.x + 150.0f * menuProfile.LevelProgress(), at.y + 6.0f), IM_COL32(250, 115, 122, 255), 3.0f);
+                ImGui::Dummy(ImVec2(150.0f, 8.0f));
+            }
+        }
         ImGui::EndGroup();
 
         ImGui::SetCursorPos(panelPos);
@@ -8393,6 +8529,12 @@ public:
     bool Button(SDL_GameControllerButton button) const
     {
         return mController != nullptr && SDL_GameControllerGetButton(mController, button) != 0;
+    }
+
+    // A short rumble (strengths 0..1, milliseconds), for impacts and the start. A controller without rumble, or none, ignores it.
+    void Rumble(float low, float high, Uint32 milliseconds) const
+    {
+        if (mController != nullptr) SDL_GameControllerRumble(mController, static_cast<Uint16>(low * 65535.0f), static_cast<Uint16>(high * 65535.0f), milliseconds);
     }
 
     Sint16 Axis(SDL_GameControllerAxis axis) const
@@ -9114,6 +9256,7 @@ int RunClient(int argc, char** argv)
             tutorial.Stop();
             ShutdownTutorialOverlay();
         }
+        ShowLoadingScreen(graphics, newTrackName);
         session.SetElementCreationBroadcastHook(nullptr, nullptr);
         onlineClient.Disconnect();
         remotePlayers.clear();
@@ -9697,6 +9840,13 @@ int RunClient(int argc, char** argv)
                 const bool fresh = std::strcmp(bestsMode, "new") == 0;
                 sample.newRaceBest = fresh; sample.hadRaceBest = true; sample.previousRace = 88123; sample.raceBest = fresh ? 83456 : 80100;
                 sample.newLapBest = fresh; sample.hadLapBest = true; sample.previousLap = 29870; sample.lapBest = fresh ? 27341 : 26500;
+            }
+            if (std::getenv("HOVERNET_TEST_RESULTS_REWARD") != nullptr) {   // screenshot test: what a good race looks like
+                HoverNetProfile::RaceResult shot; shot.finished = true; shot.rank = 1; shot.players = 4; shot.laps = 3; shot.newRaceBest = true; shot.online = true;
+                HoverNetProfile::Profile profile; profile.xp = 540;
+                gRewardView.reward = profile.Apply(shot);
+                gRewardView.profile = profile;
+                gRewardView.valid = true;
             }
             RunPostRaceScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
                               83456, 27341, 1, 4, frameLimit, bestsMode != nullptr ? &sample : nullptr);
@@ -10587,10 +10737,14 @@ int RunClient(int argc, char** argv)
                 }
                 else {
                     if (lastSecond != -1) {
-                        if (lastSecond >= 1) { PlaySfx(Sfx::eGo); gGoShownAt = SDL_GetTicks(); }
+                        if (lastSecond >= 1) { PlaySfx(Sfx::eGo); gGoShownAt = SDL_GetTicks(); gameController.Rumble(0.3f, 0.5f, 220); }
                         lastSecond = -1;
                         gCountdownNumber = 0;
                     }
+                    static bool wasOutOfControl = false;
+                    const bool outOfControl = mainCharacter->IsOutOfControl() != FALSE;
+                    if (outOfControl && !wasOutOfControl) gameController.Rumble(0.9f, 0.6f, 350);   // an impact: the pad kicks
+                    wasOutOfControl = outOfControl;
                     const int lap = mainCharacter->GetLap();
                     if (lastLap >= 0 && lap > lastLap && lap < mainCharacter->GetTotalLap()) PlaySfx(Sfx::eLap);
                     lastLap = lap;
@@ -10915,6 +11069,33 @@ int RunClient(int argc, char** argv)
                     }
                 }
                 PlaySfx(finishBests.newRaceBest || finishBests.newLapBest ? Sfx::eBest : Sfx::eFinish);   // a sting for a new best, the fanfare otherwise
+                {   // progress: XP, level and achievements (a count of what happened; nothing here touches the race)
+                    HoverNetProfile::Profile profile;
+                    profile.Load(ProfilePath());
+                    HoverNetProfile::RaceResult result;
+                    result.finished = true;
+                    result.rank = std::max(1, session.GetRank(mainCharacter));
+                    result.players = std::max(1, session.GetNbPlayers());
+                    result.laps = std::max(1, session.GetNbLap());
+                    result.newRaceBest = finishBests.newRaceBest;
+                    result.newLapBest = finishBests.newLapBest;
+                    result.online = raceWasOnline;
+#if defined(HOVERNET_AUTH)
+                    result.online = result.online || (auth.active && !auth.spectator);
+#endif
+                    result.tutorial = tutorial.Active();
+                    gRewardView.reward = profile.Apply(result);
+                    if (tutorial.Active()) {
+                        const HoverNetProfile::Reward graduate = profile.Unlock(HoverNetProfile::eTutorialGraduate);
+                        gRewardView.reward.unlocked.insert(gRewardView.reward.unlocked.end(), graduate.unlocked.begin(), graduate.unlocked.end());
+                        gRewardView.reward.xp += graduate.xp;
+                        gRewardView.reward.levelAfter = profile.Level();
+                        if (gRewardView.reward.breakdown.empty() && graduate.xp > 0) gRewardView.reward.breakdown = "Tutorial complete";
+                    }
+                    profile.Save(ProfilePath());
+                    gRewardView.profile = profile;
+                    gRewardView.valid = true;
+                }
                 lastResultsHint = SDL_GetTicks();
                 if (testResults) {
                     openResults = true;   // the browser smoke test opens the screen directly
