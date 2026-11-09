@@ -2717,6 +2717,16 @@ void DrawHoverNetScreenBackdrop(const ImGuiViewport* viewport)
         const float y = horizon + (end.y - horizon) * amount;
         draw->AddLine(ImVec2(start.x, y), ImVec2(end.x, y), IM_COL32(224, 42, 67, 28), 1.0f);
     }
+    // A soft vignette: the edges darken, which pulls the eye to the middle and gives the flat backdrop some depth.
+    {
+        const float w = end.x - start.x, h = end.y - start.y;
+        const float sideBand = w * 0.16f, topBand = h * 0.20f;
+        const ImU32 dark = IM_COL32(0, 0, 0, 120), clear = IM_COL32(0, 0, 0, 0);
+        draw->AddRectFilledMultiColor(start, ImVec2(start.x + sideBand, end.y), dark, clear, clear, dark);
+        draw->AddRectFilledMultiColor(ImVec2(end.x - sideBand, start.y), end, clear, dark, dark, clear);
+        draw->AddRectFilledMultiColor(start, ImVec2(end.x, start.y + topBand), dark, dark, clear, clear);
+        draw->AddRectFilledMultiColor(ImVec2(start.x, end.y - topBand), end, clear, clear, dark, dark);
+    }
 }
 
 // A screen's title: the display face straight on the dark backdrop, with a thin accent rule that fades out under it. It replaces the solid red slab the older
