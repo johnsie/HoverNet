@@ -4,6 +4,16 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.35 - 2026-11-09
+
+### Added
+- **Music.** *Hard Left* (Dan Knoflicek, used under its CC-BY 3.0 option) in the menus and results, *Asphalt* (Sygil, GPL 3.0) in races: streamed Ogg Vorbis, crossfaded, softer under the pause menu, with its own volume in Settings > Sound and a "Now playing" credit. Credits, licences and what they ask of you: `NetTarget/Music/CREDITS.md`.
+- **Sounds made in code**: hover, click and back on every button; countdown beeps, GO, a chime each lap, a finish fanfare and a new-best sting.
+- **A start sequence**: 3, 2, 1, GO! on screen, with controller rumble; edge flashes for impacts, fuel and pickups; rumble on impacts.
+- **Progression**: XP, levels and nine achievements, shown on the results screen and as a level bar on the main menu. Saving a craft and finishing the tutorial earn achievements.
+- **A loading screen** with the track's name and a tip.
+- Roadmap: "Making it feel like a modern, big-budget game" (`docs/roadmap-3.0.md`), including the recommendation for a GPU renderer.
+
 ## 2.3.34 - 2026-11-09
 
 ### Changed
