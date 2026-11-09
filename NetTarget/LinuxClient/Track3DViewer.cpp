@@ -1289,6 +1289,19 @@ void SaveLocalRacePrefs(const HostPrefs& prefs)
 // screenshot hooks and with HOVERNET_NO_FADE, so the regression captures stay what they were.
 bool LoadReducedMotion();   // defined with the other settings below
 
+#ifdef HOVERNET_HAVE_RMLUI
+// Which interface draws the main menu and the results screen: the RmlUi one for real play, the ImGui one when HOVERNET_IMGUI_MENU is set (or HOVERNET_RML_MENU=0), and for the
+// bounded runs the tests make (they were written against the ImGui screens) unless HOVERNET_RML_MENU=1 asks for the new ones. A screen that cannot load falls back to ImGui.
+bool UseRmlUi(int pFrameLimit)
+{
+    const char* force = std::getenv("HOVERNET_RML_MENU");
+    if (force != nullptr) return std::string(force) != "0";
+    if (std::getenv("HOVERNET_IMGUI_MENU") != nullptr) return false;
+    return pFrameLimit < 0;
+}
+#endif
+
+
 void ScreenFadeFrame(const void* pKey)
 {
     static const void* lastKey = nullptr;
@@ -4371,7 +4384,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 {
     if (std::getenv("HOVERNET_TEST_FINISH") != nullptr) { std::printf("FINISHTEST results screen opened\n"); std::fflush(stdout); }
 #ifdef HOVERNET_HAVE_RMLUI
-    if (std::getenv("HOVERNET_RML_MENU") != nullptr) {   // the RmlUi version of this screen (docs/rmlui.md)
+    if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this screen (docs/rmlui.md)
         HoverNetRml::ResultsInfo info;
         info.assetDir = SourcePath("NetTarget/LinuxClient/assets");
         const bool podium = pRank >= 2 && pRank <= 3 && pPlayerCount >= 3;
@@ -8729,7 +8742,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     StartMarketCatalogueRefresh(pFrameLimit >= 0);   // the Track Market's list of tracks, fetched in the background
     ApplyMarketCatalogueUpdate();
 #ifdef HOVERNET_HAVE_RMLUI
-    if (std::getenv("HOVERNET_RML_MENU") != nullptr) {   // the RmlUi prototype of this menu (docs/rmlui.md); anything it cannot do falls back to the menu below
+    if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this menu (docs/rmlui.md); anything it cannot do falls back to the menu below
         HoverNetRml::MainMenuInfo info;
         info.assetDir = SourcePath("NetTarget/LinuxClient/assets");
         info.version = HOVERNET_VERSION;

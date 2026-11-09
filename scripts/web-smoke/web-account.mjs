@@ -62,7 +62,7 @@ async function session(caseMode, body) {
     const send = (method, params = {}) => new Promise((r) => { const n = ++id; pending.set(n, r); ws.send(JSON.stringify({ id: n, method, params })); });
     const evalJs = async (e) => (await send('Runtime.evaluate', { expression: e, returnByValue: true })).result?.value;
     await send('Runtime.enable'); await send('Page.enable');
-    await send('Page.navigate', { url: base });
+    await send('Page.navigate', { url: base + '?menu=classic' });
     const started = Date.now();
     const waitFor = async (fn, ms) => { for (const end = Date.now() + ms; Date.now() < end;) { if (await fn()) return true; await sleep(400); } return false; };
     const frames = () => evalJs("(window.Module&&Module.ccall)?Module.ccall('hovernet_frames','number',[],[]):-1");

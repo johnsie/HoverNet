@@ -1,4 +1,4 @@
-// The RmlUi main menu prototype (docs/rmlui.md) running in the browser build, in headless Chrome: the page is opened with ?rml=1, the game starts, the new menu is
+// The RmlUi main menu prototype (docs/rmlui.md) running in the browser build, in headless Chrome: the page is opened (the new menus are the default), the game starts, the new menu is
 // drawn (no RmlUi error in the console, the picture is not blank) and the picture is saved when HN_KEEP_PICTURES=1.
 //   node web-rml-menu.mjs <web-dir>        (the folder holding HoverNet.html/.js/.wasm/.data, built with -DHOVERNET_RMLUI=ON)
 // Exits 0 on success, 1 on a failed check, 77 without Chrome.
@@ -44,11 +44,11 @@ try {
   };
   const send = (method, params = {}) => new Promise((r) => { const n = ++id; pending.set(n, r); ws.send(JSON.stringify({ id: n, method, params })); });
   await send('Runtime.enable'); await send('Page.enable');
-  await send('Page.navigate', { url: base + '?rml=1' });
+  await send('Page.navigate', { url: base });
   const started = async () => (await send('Runtime.evaluate', { expression: "typeof Module !== 'undefined' && !!Module.calledRun", returnByValue: true })).result?.value === true;
   let up = false;
   for (const end = Date.now() + 90000; Date.now() < end && !up;) { up = await started(); if (!up) await sleep(500); }
-  check(up, 'the browser build starts with ?rml=1');
+  check(up, 'the browser build starts with the new menus');
   // The page hides its loading screen (body.running) once the game has drawn a frame; then the menu's opening animations need a moment.
   let running = false;
   for (const end = Date.now() + 90000; Date.now() < end && !running;) { running = (await send('Runtime.evaluate', { expression: "document.body.classList.contains('running')", returnByValue: true })).result?.value === true; if (!running) await sleep(500); }

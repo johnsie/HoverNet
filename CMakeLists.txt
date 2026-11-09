@@ -140,8 +140,14 @@ target_link_libraries(HoverNetImGui PUBLIC SDL2::SDL2)
 set_target_properties(HoverNetImGui PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # RmlUi (HTML/CSS-style user interface with real layout, transitions and animation), vendored with FreeType for its fonts (THIRD_PARTY_NOTICES.md).
-# Off by default while the new main menu is a prototype: -DHOVERNET_RMLUI=ON builds it, HOVERNET_RML_MENU=1 shows it at run time (docs/rmlui.md).
-option(HOVERNET_RMLUI "Build the RmlUi user interface prototype" OFF)
+# On by default (Linux, the browser build): the new main menu and results screen are what players see; the old ImGui menus remain the fallback (HOVERNET_IMGUI_MENU=1, a
+# bounded test run, or if the files cannot be loaded). Off on Windows until that build has been checked there (docs/rmlui.md).
+if(WIN32)
+    set(HOVERNET_RMLUI_DEFAULT OFF)
+else()
+    set(HOVERNET_RMLUI_DEFAULT ON)
+endif()
+option(HOVERNET_RMLUI "Build the RmlUi user interface (the new menus)" ${HOVERNET_RMLUI_DEFAULT})
 if(HOVERNET_RMLUI)
     set(FT_DISABLE_ZLIB ON CACHE BOOL "" FORCE)
     set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)

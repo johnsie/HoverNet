@@ -143,7 +143,7 @@ async function scenario(name, players, withBot, spectate = false, typeChat = fal
   if (name !== 'first') {
     await send('Storage.clearDataForOrigin', { origin: new URL(url).origin, storageTypes: 'all' });   // the briefing shows again
   }
-  await send('Page.navigate', { url });
+  await send('Page.navigate', { url: url + (url.includes('?') ? '&' : '?') + 'menu=classic' });
   check(await waitFor(async () => (await frames()) >= 5, 120000), 'the game draws its first frames');
   await sleep(1500);
   // The test switches (the same ones the native tests use) are set while the driver briefing is on screen; the main menu then opens the
@@ -210,7 +210,7 @@ async function menuClick() {
   console.log('-- menu-click');
   consoleLines.length = 0;
   await send('Storage.clearDataForOrigin', { origin: new URL(url).origin, storageTypes: 'all' });
-  await send('Page.navigate', { url });
+  await send('Page.navigate', { url: url + (url.includes('?') ? '&' : '?') + 'menu=classic' });
   check(await waitFor(async () => (await frames()) >= 5, 120000), 'the game draws its first frames');
   await sleep(1500);
   await click(phone ? 95 : 135, phone ? 331 : 636); await sleep(900);

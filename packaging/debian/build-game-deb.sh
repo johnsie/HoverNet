@@ -40,6 +40,12 @@ install -Dm644 NetTarget/LinuxClient/assets/menu-banner.bmp \
 for music in NetTarget/Music/*; do
   install -Dm644 "$music" "$package_root/usr/share/games/hovernet/NetTarget/Music/$(basename "$music")"
 done
+# The new menus (RmlUi): their markup and style sheets and the main menu's picture (without them the game falls back to the older menus).
+install -Dm644 NetTarget/LinuxClient/assets/menu-hovercraft-source.png \
+  "$package_root/usr/share/games/hovernet/NetTarget/LinuxClient/assets/menu-hovercraft-source.png"
+for ui in NetTarget/LinuxClient/assets/ui/*; do
+  install -Dm644 "$ui" "$package_root/usr/share/games/hovernet/NetTarget/LinuxClient/assets/ui/$(basename "$ui")"
+done
 for asset in NetTarget/LinuxClient/assets/*.ttf NetTarget/LinuxClient/assets/*-OFL.txt; do
   install -Dm644 "$asset" \
     "$package_root/usr/share/games/hovernet/NetTarget/LinuxClient/assets/$(basename "$asset")"

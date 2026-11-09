@@ -88,7 +88,7 @@ async function waitFor(fn, ms) { for (let t = 0; t < ms; t += 500) { if (await f
 await send('Runtime.enable'); await send('Page.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 1, mobile: true });
 await send('Emulation.setTouchEmulationEnabled', { enabled: true });
-await send('Page.navigate', { url });
+await send('Page.navigate', { url: url + (url.includes('?') ? '&' : '?') + 'menu=classic' });   // the old menus: this test clicks their layout
 
 check(await waitFor(async () => (await frames()) >= 5, 120000), 'the game draws its first frames');
 await sleep(1500); await shot('1-briefing');
