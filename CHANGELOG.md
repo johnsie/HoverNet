@@ -4,7 +4,7 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## Unreleased
+## 2.3.37 - 2026-11-09
 
 ### Added
 - **The main menu shows your own craft**, turning slowly, with the design from your active Garage slot (it stands still with reduced motion). Checked by a screenshot of the menu on Linux; a changed design shows after the next visit to the menu.
