@@ -131,6 +131,10 @@ constexpr float kMusicHeadroom = 0.60f;   // music sits under the sounds
 void MixMusic(Sint16* out, size_t frames)
 {
     static std::vector<short> decoded;
+    // The music volume glides to a new setting (about a tenth of a second) instead of stepping, so ducking under the pause menu or an impact does not click.
+    static double shownVolume = -1.0;
+    if (shownVolume < 0.0) shownVolume = gMusicVolume;
+    shownVolume += (gMusicVolume - shownVolume) * std::min(1.0, static_cast<double>(frames) / (0.10 * 44100.0));
     for (MusicVoice& voice : gMusic) {
         if (!voice.active || voice.vorbis == nullptr) continue;
         decoded.resize(frames * 2);
@@ -144,7 +148,7 @@ void MixMusic(Sint16* out, size_t frames)
             }
             done += static_cast<size_t>(got);
         }
-        const float master = static_cast<float>(gMasterVolume) * kMusicHeadroom * static_cast<float>(gMusicVolume);
+        const float master = static_cast<float>(gMasterVolume) * kMusicHeadroom * static_cast<float>(shownVolume);
         for (size_t i = 0; i < frames; ++i) {
             if (voice.gain != voice.target) {
                 voice.gain = voice.gain < voice.target ? std::min(voice.target, voice.gain + voice.perFrame) : std::max(voice.target, voice.gain - voice.perFrame);

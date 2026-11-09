@@ -4,6 +4,11 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## Unreleased
+
+### Added
+- **The music steps back for a heavy hit** (to under half for about a second, then returns), and the music volume now glides to a new setting over about a tenth of a second instead of stepping, so the pause menu's ducking no longer clicks. Checked that the audio output still plays normally in a recorded run; the dip itself is not visible in the levels (the motor is louder than the music's change) and has not been listened to by a person.
+
 ## 2.3.40 - 2026-11-09
 
 ### Added

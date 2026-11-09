@@ -1650,6 +1650,20 @@ void PlayMusic(MusicTrack track)
 }
 
 // The music steps back while a menu is over the race (pause), and comes back after.
+// A heavy hit makes the music step back for a moment so the impact is felt, then it returns (the volume glides, see MixMusic).
+void ImpactDuckMusic(bool hitNow)
+{
+    static Uint32 until = 0;
+    static bool active = false;
+    const Uint32 now = SDL_GetTicks();
+    if (hitNow) until = now + 900;
+    const bool want = now < until && !gMusicState.ducked;
+    if (want != active) {
+        active = want;
+        MR_SoundServer::MusicSetVolume(LoadMusicVolume() * (want ? 0.45 : 1.0));
+    }
+}
+
 void DuckMusic(bool duck)
 {
     if (gMusicState.ducked == duck) return;
@@ -11102,6 +11116,7 @@ int RunClient(int argc, char** argv)
                     static bool wasOutOfControl = false;
                     const bool outOfControl = mainCharacter->IsOutOfControl() != FALSE;
                     if (outOfControl && !wasOutOfControl) gameController.Rumble(0.9f, 0.6f, 350);   // an impact: the pad kicks
+                    ImpactDuckMusic(outOfControl && !wasOutOfControl);
                     wasOutOfControl = outOfControl;
                     const int lap = mainCharacter->GetLap();
                     static MR_SimulationTime lapStartedAt = 0, bestSoFar = 0;
