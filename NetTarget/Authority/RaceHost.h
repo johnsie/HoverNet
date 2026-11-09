@@ -98,6 +98,7 @@ private:
     void StartNow(std::int64_t nowMs);                    // sends Start: the race runs from here
     void HostStart(Connection& c, std::int64_t nowMs);    // the host presses Start Race: start with the players who are here
     void SendRosterIfChanged();
+    void SendCraftDesigns(Connection& to);   // everyone's look, to a client that asked (kCapCraftDesign)
     void SendSnapshot(Connection& c, std::uint32_t id);
     void Broadcast(const std::vector<std::uint8_t>& frame);
     void FinishRace();

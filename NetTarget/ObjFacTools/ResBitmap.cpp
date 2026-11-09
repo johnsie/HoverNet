@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
 // See repository history for authorship and detailed changes.
 // ResBitmap.cpp
 //
@@ -376,6 +376,10 @@ bool MR_ResBitmap::EnsureColour()const
          }
       }
       HoverNetTex::AddSurfaceDetail( lTopColour.data(), mAiWidth, mAiHeight, 1 );
+      if( mRecolour )
+      {
+         mRecolour( lTopColour, mAiWidth, mAiHeight );
+      }
       for( int lIndex = 0; lIndex < mSubBitmapCount; lIndex++ )
       {
          SubBitmap& lSub = mSubBitmapList[ lIndex ];
@@ -395,6 +399,10 @@ bool MR_ResBitmap::EnsureColour()const
 
    std::vector<MR_UInt32> lTopColour( (size_t)lBase.mXRes*lBase.mYRes );
    HoverNetTex::EnhanceBase( lBase.mBuffer, lBase.mXRes, lBase.mYRes, lPalette, lTopColour.data(), true, 1 );
+   if( mRecolour )
+   {
+      mRecolour( lTopColour, lBase.mXRes, lBase.mYRes );
+   }
    for( int lIndex = 0; lIndex < mSubBitmapCount; lIndex++ )
    {
       SubBitmap& lSub = mSubBitmapList[ lIndex ];
@@ -411,6 +419,46 @@ bool MR_ResBitmap::EnsureColour()const
    }
    mColourVersion.store( lVersion, std::memory_order_release );
    return true;
+}
+
+MR_ResBitmap* MR_ResBitmap::CloneWithRecolour( const Recolour& pRecolour )const
+{
+   MR_ResBitmap* lCopy = new MR_ResBitmap( mResourceId );
+   lCopy->mWidth = mWidth;
+   lCopy->mHeight = mHeight;
+   lCopy->mXRes = mXRes;
+   lCopy->mYRes = mYRes;
+   lCopy->mPlainColor = mPlainColor;
+   lCopy->mSubBitmapCount = mSubBitmapCount;
+   if( mSubBitmapCount > 0 )
+   {
+      lCopy->mSubBitmapList = new SubBitmap[ mSubBitmapCount ];
+      for( int lIndex = 0; lIndex < mSubBitmapCount; lIndex++ )
+      {
+         const SubBitmap& lFrom = mSubBitmapList[ lIndex ];
+         SubBitmap& lTo = lCopy->mSubBitmapList[ lIndex ];
+         delete []lTo.mBuffer;
+         delete []lTo.mColumnPtr;
+         lTo.mXRes = lFrom.mXRes;
+         lTo.mYRes = lFrom.mYRes;
+         lTo.mXResShiftFactor = lFrom.mXResShiftFactor;
+         lTo.mYResShiftFactor = lFrom.mYResShiftFactor;
+         lTo.mHaveTransparent = lFrom.mHaveTransparent;
+         lTo.mBuffer = new MR_UInt8[ lFrom.mXRes*lFrom.mYRes ];
+         memcpy( lTo.mBuffer, lFrom.mBuffer, (size_t)lFrom.mXRes*lFrom.mYRes );
+         lTo.mColumnPtr = new MR_UInt8*[ lFrom.mXRes ];
+         for( int lColumn = 0; lColumn < lFrom.mXRes; lColumn++ )
+         {
+            lTo.mColumnPtr[ lColumn ] = lTo.mBuffer + (size_t)lColumn*lFrom.mYRes;
+         }
+      }
+   }
+   {
+      // The AI-enhanced image is not carried over: a customised craft is small on screen, and its copies at 2x take a quarter of the memory.
+   }
+   lCopy->mRecolour = pRecolour;
+   lCopy->mColourVersion = -1;
+   return lCopy;
 }
 
 void MR_ResBitmap::SetEnhancedImage( int pWidth, int pHeight, std::vector<MR_UInt32>& pWords )

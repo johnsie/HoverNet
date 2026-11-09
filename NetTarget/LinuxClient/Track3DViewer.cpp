@@ -3,6 +3,9 @@
 #include <afxtempl.h>
 #endif
 
+#include "CraftStore.h"
+#include "CraftPreview.h"
+#include "../ObjFacTools/CraftLook.h"
 #include "TrackCatalog.h"
 #include "TrackDownloader.h"
 #include <atomic>
@@ -1774,7 +1777,8 @@ HoverNetGfx::Preset DefaultGraphicsPreset()
 struct GraphicsSettings
 {
     HoverNetGfx::Preset preset = DefaultGraphicsPreset();
-    bool shadows = true, deband = true, smoothing = true, bloom = true, grade = true, effects = true, lighting = true, textures = true;
+    // Off by default (2026-11-09, the owner's choice): soft craft shadows, light from the craft and haze, engine/trail/spark effects, richer colour and vignette.
+    bool shadows = false, deband = true, smoothing = true, bloom = true, grade = false, effects = false, lighting = false, textures = true;
     bool atmosphere = true, occlusion = true, edges = true, craft = true, halos = true, sharpen = true, exposure = true, adaptive = true;
     float brightness = 1.0f;   // 0.7 .. 1.4
 };
@@ -1790,8 +1794,10 @@ GraphicsSettings LoadGraphicsSettings()
     std::ifstream in(GraphicsSettingsPath());
     std::string key;
     std::string value;
+    int defaultsVersion = 0;
     while (in >> key >> value) {
-        if (key == "preset") {
+        if (key == "defaults") defaultsVersion = std::atoi(value.c_str());
+        else if (key == "preset") {
             settings.preset = value == "modern" ? HoverNetGfx::Preset::eModern : value == "high" ? HoverNetGfx::Preset::eModernHigh : value == "lite" ? HoverNetGfx::Preset::eModernLite : DefaultGraphicsPreset();
         }
         else if (key == "shadows") settings.shadows = value != "0";
@@ -1812,13 +1818,16 @@ GraphicsSettings LoadGraphicsSettings()
         else if (key == "adaptive") settings.adaptive = value != "0";
         else if (key == "brightness") { const float b = static_cast<float>(std::atof(value.c_str())); if (b >= 0.7f && b <= 1.4f) settings.brightness = b; }
     }
+    if (defaultsVersion < 2) {   // a file from before the four extras went off by default: they start off for everyone, and stay as chosen after that
+        settings.shadows = false; settings.lighting = false; settings.effects = false; settings.grade = false;
+    }
     return settings;
 }
 
 void SaveGraphicsSettings(const GraphicsSettings& settings)
 {
     std::ofstream out(GraphicsSettingsPath());
-    out << "preset " << (settings.preset == HoverNetGfx::Preset::eModern ? "modern" : settings.preset == HoverNetGfx::Preset::eModernHigh ? "high" : settings.preset == HoverNetGfx::Preset::eModernLite ? "lite" : "modern") << '\n'
+    out << "defaults 2\n" << "preset " << (settings.preset == HoverNetGfx::Preset::eModern ? "modern" : settings.preset == HoverNetGfx::Preset::eModernHigh ? "high" : settings.preset == HoverNetGfx::Preset::eModernLite ? "lite" : "modern") << '\n'
         << "shadows " << settings.shadows << '\n' << "deband " << settings.deband << '\n' << "smooth " << settings.smoothing << '\n' << "bloom " << settings.bloom << '\n'
         << "grade " << settings.grade << '\n' << "effects " << settings.effects << '\n' << "lighting " << settings.lighting << '\n' << "textures " << settings.textures << '\n' << "atmosphere " << settings.atmosphere << '\n' << "occlusion " << settings.occlusion << '\n' << "edges " << settings.edges << '\n'
         << "craft " << settings.craft << '\n' << "halos " << settings.halos << '\n' << "sharpen " << settings.sharpen << '\n' << "exposure " << settings.exposure << '\n' << "adaptive " << settings.adaptive << '\n' << "brightness " << settings.brightness << '\n';
@@ -5648,6 +5657,276 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
 }
 
 
+// A player's craft designs reach the renderer by slot (docs/craft-designer.md); these keep the table in step with the race being driven.
+void ApplyRelayedCraftDesign(int slot, const std::vector<std::uint8_t>& bytes)
+{
+    Authority::CraftDesign design;
+    if (slot >= 0 && slot < 16 && Authority::DecodeCraftDesign(bytes.data(), bytes.size(), design)) HoverNetCraft::SetSlotDesign(slot, &design);
+}
+
+
+// ---- The Garage: design your own craft (docs/craft-designer.md) -------------------------------------------------------------------------------------------
+// Shape, colours and a painted livery for the hovercraft, kept on this device (and, when signed in, on the account). A look only: the hull still decides how
+// the craft drives, and nothing here is read by the simulation. Other players see the design through the race server.
+void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, int pFrameLimit)
+{
+    using Authority::CraftDesign;
+    const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
+    if (ownsImGuiContext) {
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+        LoadHoverNetMenuFonts(io);
+        ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
+        ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+        ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+    }
+
+    // The preview is drawn in true colour, so the textures need the palette's true-colour copies (set again, unchanged, by the race when it starts).
+    const MR_UInt8* palette768 = graphics.GetRenderPalette();
+    std::array<std::uint32_t, 256> paletteWords{};
+    if (palette768 != nullptr) {
+        for (int i = 0; i < 256; ++i) paletteWords[i] = (static_cast<std::uint32_t>(palette768[i * 3]) << 16) | (static_cast<std::uint32_t>(palette768[i * 3 + 1]) << 8) | palette768[i * 3 + 2];
+        MR_ResBitmap::SetColourPalette(palette768, 1.0f, false);
+    }
+
+    constexpr int kPreviewW = 480, kPreviewH = 360;
+    SDL_Texture* previewTexture = SDL_CreateTexture(graphics.GetRenderer(), SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, kPreviewW, kPreviewH);
+
+    const HoverNetCraft::CraftStore store(ConfigDirPath());
+    CraftDesign design;
+    int slot = store.Active();
+    if (slot < 0) slot = 0;
+    if (!store.Load(slot, design)) design = CraftDesign();
+    if (std::getenv("HOVERNET_GARAGE_DEMO") != nullptr) {   // test hook: a sample design, to look at the screen
+        design.length = 8; design.taper = 10; design.body = {{200, 25, 30}}; design.bodyStrength = 200; design.accent = {{30, 170, 70}}; design.accentStrength = 255; design.name = "Demo";
+        for (int y = 0; y < Authority::kPaintSize; ++y) for (int x = 12; x < 16; ++x) design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x] = 5;
+    }
+    std::vector<std::array<std::uint8_t, Authority::kPaintSize * Authority::kPaintSize>> undo;
+    int tool = 0, colour = 3;
+    bool mirror = false, spin = true;
+    float yaw = 25.0f;
+    std::string status;
+    std::vector<std::uint32_t> rgba;
+    std::uint64_t shownHash = 0;
+    int shownYaw = -1000, shownCraft = -1;
+    Uint32 lastBuild = 0;
+    bool previewOk = false;
+    Uint32 lastTick = SDL_GetTicks();
+
+    auto floodFill = [&](int sx, int sy, std::uint8_t to) {
+        auto& p = design.paint;
+        const std::uint8_t from = p[static_cast<size_t>(sy) * Authority::kPaintSize + sx];
+        if (from == to) return;
+        std::vector<std::pair<int, int>> stack{{sx, sy}};
+        while (!stack.empty()) {
+            const auto [x, y] = stack.back(); stack.pop_back();
+            if (x < 0 || y < 0 || x >= Authority::kPaintSize || y >= Authority::kPaintSize) continue;
+            std::uint8_t& cell = p[static_cast<size_t>(y) * Authority::kPaintSize + x];
+            if (cell != from) continue;
+            cell = to;
+            stack.push_back({x + 1, y}); stack.push_back({x - 1, y}); stack.push_back({x, y + 1}); stack.push_back({x, y - 1});
+        }
+    };
+    auto pushUndo = [&]() { undo.push_back(design.paint); if (undo.size() > 30) undo.erase(undo.begin()); };
+
+    bool running = true;
+    int framesShown = 0;
+    bool strokeActive = false;
+    while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
+        ++framesShown;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            MenuProcessEvent(event);
+            if (event.type == SDL_QUIT) { g_QuitConfirmed = true; running = false; }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE && !ImGui::GetIO().WantTextInput) running = false;
+        }
+        const Uint32 now = SDL_GetTicks();
+        if (spin) yaw = std::fmod(yaw + 30.0f * static_cast<float>(now - lastTick) / 1000.0f, 360.0f);
+        lastTick = now;
+
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_RenderSetLogicalSize(renderer, 0, 0);
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::Begin("HoverNet Garage", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+        DrawHoverNetScreenBackdrop(mainViewport);
+        const bool narrow = mainViewport->WorkSize.x < 900.0f;
+        HoverNetScreenHeader("GARAGE", mainViewport->WorkSize.x < 640.0f || mainViewport->WorkSize.y < 460.0f);
+        ImGui::TextDisabled("Design the shape, colours and paint of your craft. It changes how it looks, never how it drives.");
+        MenuBeginChild("GaragePanel", ImVec2(-FLT_MIN, -52.0f), true);
+
+        const bool twoColumns = !narrow && ImGui::BeginTable("GarageColumns", 2, ImGuiTableFlags_SizingStretchProp);
+        if (twoColumns) { ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); }
+
+        // ---- the preview, hull, shape, colours
+        const float previewWidth = std::min(static_cast<float>(kPreviewW), ImGui::GetContentRegionAvail().x);
+        if (previewTexture != nullptr && previewOk) ImGui::Image(reinterpret_cast<ImTextureID>(previewTexture), ImVec2(previewWidth, previewWidth * kPreviewH / kPreviewW));
+        ImGui::Checkbox("Turn the craft", &spin);
+        if (!spin) { ImGui::SameLine(); ImGui::SetNextItemWidth(-FLT_MIN); ImGui::SliderFloat("##yaw", &yaw, 0.0f, 359.0f, "%.0f deg"); }
+        HoverNetSectionHeading("HULL");
+        for (int c = 0; c < Authority::kCraftCount; ++c) {
+            if (c > 0) ImGui::SameLine();
+            const bool picked = design.craft == c;
+            if (picked) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.12f, 0.16f, 1.0f));
+            if (ImGui::Button(Authority::CraftName(c))) design.craft = static_cast<std::uint8_t>(c);
+            if (picked) ImGui::PopStyleColor();
+        }
+        ImGui::PushTextWrapPos(0.0f);
+        HoverNetHint("Speed, weight and handling come from the craft you pick before the race, never from this design.");
+        ImGui::PopTextWrapPos();
+        HoverNetSectionHeading("SHAPE");
+        int length = design.length, width = design.width, height = design.height, taper = design.taper;
+        ImGui::SetNextItemWidth(-FLT_MIN); MenuSliderInt("Length", &length, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, "%d%%");
+        ImGui::SetNextItemWidth(-FLT_MIN); MenuSliderInt("Width", &width, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, "%d%%");
+        ImGui::SetNextItemWidth(-FLT_MIN); MenuSliderInt("Height", &height, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, "%d%%");
+        ImGui::SetNextItemWidth(-FLT_MIN); MenuSliderInt("Nose (narrow to wide)", &taper, -Authority::kMaxTaperPercent, Authority::kMaxTaperPercent, "%d%%");
+        design.length = static_cast<std::int8_t>(length); design.width = static_cast<std::int8_t>(width); design.height = static_cast<std::int8_t>(height); design.taper = static_cast<std::int8_t>(taper);
+        if (HoverNetQuietButton("Reset shape", ImVec2(-FLT_MIN, 30))) design.length = design.width = design.height = design.taper = 0;
+        HoverNetSectionHeading("COLOURS");
+        float body[3] = {design.body[0] / 255.0f, design.body[1] / 255.0f, design.body[2] / 255.0f};
+        float accent[3] = {design.accent[0] / 255.0f, design.accent[1] / 255.0f, design.accent[2] / 255.0f};
+        if (ImGui::ColorEdit3("Body", body, ImGuiColorEditFlags_NoInputs)) for (int i = 0; i < 3; ++i) design.body[i] = static_cast<std::uint8_t>(body[i] * 255.0f + 0.5f);
+        ImGui::SameLine(); int bodyStrength = design.bodyStrength * 100 / 255;
+        ImGui::SetNextItemWidth(-FLT_MIN); if (MenuSliderInt("##bodyStrength", &bodyStrength, 0, 100, "body colour %d%%")) design.bodyStrength = static_cast<std::uint8_t>(bodyStrength * 255 / 100);
+        if (ImGui::ColorEdit3("Cockpit and trim", accent, ImGuiColorEditFlags_NoInputs)) for (int i = 0; i < 3; ++i) design.accent[i] = static_cast<std::uint8_t>(accent[i] * 255.0f + 0.5f);
+        ImGui::SameLine(); int accentStrength = design.accentStrength * 100 / 255;
+        ImGui::SetNextItemWidth(-FLT_MIN); if (MenuSliderInt("##accentStrength", &accentStrength, 0, 100, "trim colour %d%%")) design.accentStrength = static_cast<std::uint8_t>(accentStrength * 255 / 100);
+
+        // ---- the livery canvas, saved designs
+        if (twoColumns) ImGui::TableSetColumnIndex(1);
+        HoverNetSectionHeading("PAINT");
+        {
+            const float cell = std::max(6.0f, std::min(12.0f, (ImGui::GetContentRegionAvail().x - 8.0f) / Authority::kPaintSize));
+            const float side = cell * Authority::kPaintSize;
+            const ImVec2 origin = ImGui::GetCursorScreenPos();
+            ImGui::InvisibleButton("##canvas", ImVec2(side, side));
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+            for (int y = 0; y < Authority::kPaintSize; ++y)
+                for (int x = 0; x < Authority::kPaintSize; ++x) {
+                    const std::uint8_t index = design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x];
+                    const bool dark = ((x + y) & 1) != 0;
+                    ImU32 fill = dark ? IM_COL32(52, 52, 60, 255) : IM_COL32(66, 66, 76, 255);
+                    if (index != 0) fill = IM_COL32(design.palette[index][0], design.palette[index][1], design.palette[index][2], 255);
+                    draw->AddRectFilled(ImVec2(origin.x + x * cell, origin.y + y * cell), ImVec2(origin.x + (x + 1) * cell, origin.y + (y + 1) * cell), fill);
+                }
+            draw->AddRect(origin, ImVec2(origin.x + side, origin.y + side), IM_COL32(200, 200, 210, 255));
+            const bool down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+            if (ImGui::IsItemHovered() && down) {
+                const ImVec2 m = ImGui::GetIO().MousePos;
+                const int x = std::max(0, std::min(Authority::kPaintSize - 1, static_cast<int>((m.x - origin.x) / cell)));
+                const int y = std::max(0, std::min(Authority::kPaintSize - 1, static_cast<int>((m.y - origin.y) / cell)));
+                if (!strokeActive) { pushUndo(); strokeActive = true; }
+                const std::uint8_t value = tool == 1 ? 0 : static_cast<std::uint8_t>(colour);
+                if (tool == 3) { const std::uint8_t picked = design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x]; if (picked != 0) colour = picked; tool = 0; }
+                else if (tool == 2) { floodFill(x, y, value); if (mirror) floodFill(Authority::kPaintSize - 1 - x, y, value); }
+                else { design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x] = value; if (mirror) design.paint[static_cast<size_t>(y) * Authority::kPaintSize + (Authority::kPaintSize - 1 - x)] = value; }
+            }
+            if (!down) strokeActive = false;
+        }
+        {
+            const char* tools[] = {"Pencil", "Eraser", "Fill", "Pick"};
+            for (int t = 0; t < 4; ++t) {
+                if (t > 0) ImGui::SameLine();
+                const bool on = tool == t;
+                if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.12f, 0.16f, 1.0f));
+                if (ImGui::Button(tools[t])) tool = t;
+                if (on) ImGui::PopStyleColor();
+            }
+            ImGui::Checkbox("Mirror left and right", &mirror);
+            ImGui::SameLine();
+            if (ImGui::Button("Undo") && !undo.empty()) { design.paint = undo.back(); undo.pop_back(); }
+            ImGui::SameLine();
+            if (ImGui::Button("Clear paint")) { pushUndo(); design.paint.fill(0); }
+        }
+        for (int i = 1; i < Authority::kPaintColours; ++i) {
+            if (i > 1 && (i - 1) % 8 != 0) ImGui::SameLine();
+            char id[16]; std::snprintf(id, sizeof id, "##sw%d", i);
+            const ImVec4 c(design.palette[i][0] / 255.0f, design.palette[i][1] / 255.0f, design.palette[i][2] / 255.0f, 1.0f);
+            if (ImGui::ColorButton(id, c, ImGuiColorEditFlags_NoTooltip, ImVec2(26, 26))) { colour = i; if (tool == 1) tool = 0; }
+            if (colour == i) { const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax(); ImGui::GetWindowDrawList()->AddRect(a, b, IM_COL32(255, 255, 255, 255), 0.0f, 0, 2.5f); }
+        }
+        {
+            float c[3] = {design.palette[colour][0] / 255.0f, design.palette[colour][1] / 255.0f, design.palette[colour][2] / 255.0f};
+            if (ImGui::ColorEdit3("Change this paint colour", c, ImGuiColorEditFlags_NoInputs)) for (int i = 0; i < 3; ++i) design.palette[colour][i] = static_cast<std::uint8_t>(c[i] * 255.0f + 0.5f);
+        }
+        ImGui::PushTextWrapPos(0.0f);
+        HoverNetHint("The paint wraps round the hull panels; use Mirror for symmetrical stripes.");
+        ImGui::PopTextWrapPos();
+
+        HoverNetSectionHeading("MY CRAFT");
+        {
+            char nameBuffer[Authority::kMaxDesignNameBytes + 1];
+            std::snprintf(nameBuffer, sizeof nameBuffer, "%s", design.name.c_str());
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::InputText("##designName", nameBuffer, sizeof nameBuffer)) design.name = Authority::SanitiseCraftDesign([&] { CraftDesign d = design; d.name = nameBuffer; return d; }()).name;
+            const int active = store.Active();
+            for (int i = 0; i < HoverNetCraft::kSavedDesigns; ++i) {
+                CraftDesign saved;
+                const bool have = store.Load(i, saved);
+                char label[96];
+                std::snprintf(label, sizeof label, "%d  %s%s##slot%d", i + 1, have ? (saved.name.empty() ? "(unnamed)" : saved.name.c_str()) : "(empty)", active == i ? "   - used in races" : "", i);
+                const bool on = slot == i;
+                if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.12f, 0.16f, 1.0f));
+                if (ImGui::Button(label, ImVec2(-FLT_MIN, 0))) { slot = i; if (have) { design = saved; undo.clear(); status = "Loaded the craft in slot " + std::to_string(i + 1) + "."; } }
+                if (on) ImGui::PopStyleColor();
+            }
+            if (HoverNetButton("Save to this slot and use it in races", ImVec2(-FLT_MIN, 40))) {
+                const CraftDesign clean = Authority::SanitiseCraftDesign(design);
+                if (store.Save(slot, clean) && store.SetActive(slot)) status = "Saved in slot " + std::to_string(slot + 1) + ". Other players see it in online races.";
+                else status = "Could not save the craft on this device.";
+            }
+            if (HoverNetQuietButton("Race with the standard paint (stock craft)", ImVec2(-FLT_MIN, 32))) { store.SetActive(-1); status = "Your races use the stock craft."; }
+            if (HoverNetQuietButton("Delete this slot", ImVec2(-FLT_MIN, 32))) { store.Delete(slot); design = CraftDesign(); undo.clear(); status = "Deleted."; }
+        }
+        if (!status.empty()) ImGui::TextColored(ImVec4(0.55f, 0.95f, 0.65f, 1.0f), "%s", status.c_str());
+        if (twoColumns) ImGui::EndTable();
+        ImGui::EndChild();
+        ImGui::Spacing();
+        if (HoverNetQuietButton("Back", ImVec2(-FLT_MIN, 40))) running = false;
+        ImGui::End();
+
+        // Redraw the preview when the design, the hull or the angle changed (the design at most every 80 ms: each change builds new textures).
+        const std::uint64_t hash = Authority::CraftDesignHash(design);
+        const int yawNow = static_cast<int>(yaw) / 2 * 2;
+        if (previewTexture != nullptr && (hash != shownHash || yawNow != shownYaw || design.craft != shownCraft) && (now - lastBuild >= 80 || !previewOk)) {
+            const CraftDesign shown = Authority::SanitiseCraftDesign(design);
+            previewOk = HoverNetCraft::RenderCraftPreview(resources, shown.IsPlain() ? nullptr : &shown, shown.craft, yawNow, paletteWords.data(), kPreviewW, kPreviewH, rgba);
+            if (previewOk) SDL_UpdateTexture(previewTexture, nullptr, rgba.data(), kPreviewW * 4);
+            shownHash = hash; shownYaw = yawNow; shownCraft = design.craft; lastBuild = now;
+        }
+
+        ImGui::Render();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        if (pFrameLimit > 0 && framesShown == pFrameLimit && std::getenv("HOVERNET_CAPTURE_FRAME") != nullptr) {   // test hook: the last frame of a bounded run, as a BMP
+            int w = 0, h = 0;
+            SDL_GetRendererOutputSize(renderer, &w, &h);
+            if (SDL_Surface* shot = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888)) {
+                SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888, shot->pixels, shot->pitch);
+                SDL_SaveBMP(shot, std::getenv("HOVERNET_CAPTURE_FRAME"));
+                SDL_FreeSurface(shot);
+            }
+        }
+        SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
+        HoverNetFrameDelay();
+    }
+    if (previewTexture != nullptr) SDL_DestroyTexture(previewTexture);
+    if (ownsImGuiContext) {
+        ImGui_ImplSDLRenderer2_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+    }
+}
+
+
 // A time as people write it in the UK: "18 Oct 2026, 21:11" (the device's own time zone).
 std::string UkDateTime(std::uint32_t unixSeconds)
 {
@@ -7182,6 +7461,7 @@ enum class MenuChoice
     eSettings,
     eControls,
     eHowToPlay,
+    eGarage,
 };
 
 // The first player screen. A bounded/headless run still defaults to Local Play
@@ -7229,7 +7509,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         }
     }
 
-    const char* options[] = {"Local Play", "Online Lobby", "Watch a Replay", "Leaderboards", "Settings", "Controls", "How to Play"};
+    const char* options[] = {"Local Play", "Online Lobby", "Watch a Replay", "Leaderboards", "Settings", "Controls", "How to Play", "Garage"};
     constexpr int optionCount = sizeof(options) / sizeof(options[0]);
     MenuChoice choice = MenuChoice::eLocalPlay;
 #if defined(HOVERNET_AUTH)
@@ -8276,6 +8556,7 @@ int RunClient(int argc, char** argv)
     auto endAuthRace = [&]() {
         if (!auth.active && !auth.conn.IsOpen()) return;
         auth.active = false;
+        HoverNetCraft::ClearSlotDesigns();
         auth.conn.Close();
         auth.world.reset();
         auth.craft.clear();
@@ -8324,6 +8605,15 @@ int RunClient(int argc, char** argv)
         }
         level = session.GetCurrentLevel();
         mainCharacter = session.GetMainCharacter();
+#if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
+        if (!keepAuthForLoad)
+#endif
+        {
+            // A local race: the player's own craft design (a look only), on the craft they drive.
+            HoverNetCraft::ClearSlotDesigns();
+            Authority::CraftDesign mine;
+            if (mainCharacter != nullptr && HoverNetCraft::CraftStore(ConfigDirPath()).LoadActive(mine)) HoverNetCraft::SetSlotDesign(mainCharacter->GetHoverId(), &mine);
+        }
         currentTrackName = newTrackName;
         if (rememberLocal) { lastLocal.track = newTrackName; lastLocal.laps = newLaps; lastLocal.weapons = newWeapons; lastLocal.valid = true; }
         else lastLocal.valid = false;
@@ -8522,6 +8812,8 @@ int RunClient(int argc, char** argv)
     auto tryAuthServer = [&]() -> AuthScreenResult {
         endAuthRace();
         OnlineLobby lobby;
+        lobby.SetCraftDesign(HoverNetCraft::CraftStore(ConfigDirPath()).ActiveBytes());   // the player's craft design, sent once the race is joined
+        lobby.OnCraftDesign(ApplyRelayedCraftDesign);
         const AuthScreenResult screen = RunAuthServerScreen(graphics, lobby, frameLimit);
         if (screen != AuthScreenResult::eRace) return screen;
         auth.ack = lobby.Ack();
@@ -8641,7 +8933,7 @@ int RunClient(int argc, char** argv)
     bool pickingMode = true;
         while (pickingMode) {
             pickingMode = false;
-            const MenuChoice choice = RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
+            const MenuChoice choice = std::getenv("HOVERNET_OPEN_GARAGE") != nullptr ? MenuChoice::eGarage : RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
                                                   frameLimit);
             if (g_QuitConfirmed) {
                 // Confirmed quit from the main menu itself -- skip straight to
@@ -8695,6 +8987,10 @@ int RunClient(int argc, char** argv)
             }
 #if defined(HOVERNET_AUTH)
 #endif
+            else if (choice == MenuChoice::eGarage) {
+                RunGarageScreen(graphics, resources, frameLimit);
+                pickingMode = !g_QuitConfirmed;
+            }
             else if (choice == MenuChoice::eControls) {
                 RunControlsScreen(graphics, frameLimit);
                 pickingMode = !g_QuitConfirmed;
@@ -9031,6 +9327,9 @@ int RunClient(int argc, char** argv)
                     }
                     else if (std::getenv("HOVERNET_TEST_REPLAY_LIBRARY") != nullptr) { std::printf("REPLAYTEST not saved (the race was not followed from its first tick)\n"); std::fflush(stdout); }
                 }
+            }
+            else if (f.type == kCraftDesign) {
+                if (f.payload.size() > 1) ApplyRelayedCraftDesign(f.payload[0], std::vector<std::uint8_t>(f.payload.begin() + 1, f.payload.end()));
             }
             else if (f.type == kChatMessage) {
                 ChatMessage m;

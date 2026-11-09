@@ -167,8 +167,9 @@ sudo apachectl configtest && sudo systemctl reload apache2   # after installing 
 curl -s -o /dev/null -w '%{http_code}\n' https://hovernet.outiva.com/account/me     # 204 = running, guest
 ```
 
-Without the service `/account/me` fails and the game starts as a guest. `scripts/test-web-account.py` tests the service against a stand-in
-Keycloak (the whole round trip and every failure, which must end as a guest). The outiva.com console launches the sign-in with the
+Without the service `/account/me` fails and the game starts as a guest. The service keeps account craft-design API data in
+`/var/lib/hovernet-account/craft.json` (mode 0600); the Garage currently keeps its designs in browser storage and does not sync them to the
+account. `scripts/test-web-account.py` tests the service against a stand-in Keycloak (the whole round trip and every failure, which must end as a guest). The outiva.com console launches the sign-in with the
 `ssoLogin` field of the game's entry in its `web/games.json`.
 
 ## Never serving an older build

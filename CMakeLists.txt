@@ -145,6 +145,7 @@ add_library(HoverNetPortableUtil STATIC
     NetTarget/Util/StrRes.cpp
     NetTarget/Util/RecordFile.cpp
     NetTarget/Util/WorldCoordinates.cpp
+    NetTarget/Authority/CraftDesign.cpp
 )
 
 target_include_directories(HoverNetPortableUtil PUBLIC NetTarget/Util)
@@ -245,6 +246,7 @@ set_target_properties(HoverNetHeadlessObjFac1 PROPERTIES
 add_library(HoverNetResourceCore STATIC
     NetTarget/ObjFacTools/ResActor.cpp
     NetTarget/ObjFacTools/ResBitmap.cpp
+    NetTarget/ObjFacTools/CraftLook.cpp
     NetTarget/ObjFacTools/TexturePack.cpp
     NetTarget/ObjFacTools/ResSound.cpp
     NetTarget/ObjFacTools/ResSprite.cpp
@@ -468,6 +470,9 @@ else()
     )
     target_link_libraries(HoverNetTrackPack PRIVATE HoverNetSim)
 
+    add_executable(HoverNetCraftDesignNetTest NetTarget/LinuxClient/CraftDesignNetTest.cpp)
+    target_link_libraries(HoverNetCraftDesignNetTest PRIVATE HoverNetSim)
+
     add_executable(HoverNetModerationTest
         NetTarget/LinuxClient/ModerationTest.cpp
     )
@@ -586,6 +591,10 @@ add_executable(HoverNetViewportSmoke
 target_link_libraries(HoverNetViewportSmoke PRIVATE HoverNetVideoCore HoverNetResourceCore)
 add_executable(HoverNetTextureExport NetTarget/LinuxClient/TextureExport.cpp)
 target_link_libraries(HoverNetTextureExport PRIVATE HoverNetVideoCore HoverNetResourceCore)
+add_executable(HoverNetCraftDesignTest NetTarget/LinuxClient/CraftDesignTest.cpp)
+target_link_libraries(HoverNetCraftDesignTest PRIVATE HoverNetSim)
+add_executable(HoverNetCraftLookTest NetTarget/LinuxClient/CraftLookTest.cpp NetTarget/LinuxClient/CraftPreview.cpp)
+target_link_libraries(HoverNetCraftLookTest PRIVATE HoverNetVideoCore HoverNetResourceCore)
 add_executable(HoverNetTexturePackTest NetTarget/LinuxClient/TexturePackTest.cpp)
 target_link_libraries(HoverNetTexturePackTest PRIVATE HoverNetVideoCore HoverNetResourceCore)
 add_executable(HoverNetViewportColourTest NetTarget/LinuxClient/ViewportColourTest.cpp)
@@ -597,6 +606,8 @@ if(NOT EMSCRIPTEN)
     target_link_libraries(HoverNetViewportThreadsTest PRIVATE Threads::Threads)
     add_test(NAME HoverNetViewportThreads COMMAND HoverNetViewportThreadsTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetViewportColour COMMAND HoverNetViewportColourTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetCraftDesign COMMAND HoverNetCraftDesignTest)
+    add_test(NAME HoverNetCraftLook COMMAND HoverNetCraftLookTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetTexturePack COMMAND HoverNetTexturePackTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     set_tests_properties(HoverNetTexturePack PROPERTIES SKIP_RETURN_CODE 77)
 endif()
@@ -762,6 +773,8 @@ endif()
 
 add_executable(HoverNetTrack3DViewer
     NetTarget/LinuxClient/Track3DViewer.cpp
+    NetTarget/LinuxClient/CraftStore.cpp
+    NetTarget/LinuxClient/CraftPreview.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
     NetTarget/VideoServices/ModernGraphics.cpp
     NetTarget/VideoServices/ColourGrade.cpp
@@ -773,6 +786,8 @@ target_link_libraries(HoverNetTrack3DViewer PRIVATE HoverNetClientSession HoverN
 
 add_executable(HoverNetGame2Player
     NetTarget/LinuxClient/Track3DViewer.cpp
+    NetTarget/LinuxClient/CraftStore.cpp
+    NetTarget/LinuxClient/CraftPreview.cpp
     NetTarget/LinuxClient/TrackCatalog.cpp
     NetTarget/LinuxClient/TrackDownloader.cpp
     NetTarget/LinuxClient/Gunzip.cpp
@@ -1041,6 +1056,7 @@ if(BUILD_TESTING AND NOT WIN32)
     add_test(NAME HoverNetCrypto COMMAND HoverNetCryptoTest)
     set_tests_properties(HoverNetCrypto PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
     add_test(NAME HoverNetModeration COMMAND HoverNetModerationTest)
+    add_test(NAME HoverNetCraftDesignNet COMMAND HoverNetCraftDesignNetTest)
     set_tests_properties(HoverNetModeration PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetLoad COMMAND HoverNetLoadTest 4 8 0.5 2)
     set_tests_properties(HoverNetLoad PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

@@ -1,3 +1,5 @@
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
+// See repository history for authorship and detailed changes.
 // HoverRender.cpp
 //
 // Copyright (c) 1995-1998 - Richard Langlois and Grokksoft Inc.
@@ -22,6 +24,7 @@
 #include "stdafx.h"
 
 #include "HoverRender.h"
+#include "../ObjFacTools/CraftLook.h"
 #include "ObjFac1Res.h"
 #include "../ObjFacTools/ObjectFactoryData.h"
 #include "../Util/FuzzyLogic.h"
@@ -241,7 +244,9 @@ void MR_HoverRender::Render( MR_3DViewPort* pDest,
             lCockpitBitmap = mCockpitBitmap[ pHoverId%10 ];
          }
 
-         MR_ResActorFriend::Draw( lActor, pDest, lMatrix, lSeq, mFrame, lCockpitBitmap );
+         // A player's own craft design (a look only; modification by HoverNet, 2026-11-09): the reshaped, tinted, painted copy of the model, when the slot has one.
+         const HoverNetCraft::Look lLook = HoverNetCraft::Resolve( lHoverId, lActor, (const MR_ResBitmap*)lCockpitBitmap );
+         MR_ResActorFriend::Draw( lLook.actor, pDest, lMatrix, lSeq, mFrame, lLook.cockpit );
       }
    }
    else

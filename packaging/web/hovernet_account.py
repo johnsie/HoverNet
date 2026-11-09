@@ -8,6 +8,8 @@ hovernet.outiva.com. The page (and the copy framed inside outiva.com, which is t
     GET  /account/login?prompt=none&mode=redirect   start the sign-in (silent when the user already has an Outiva session)
     GET  /account/callback                          Keycloak returns here; sets the cookie, then goes back to outiva.com (mode=redirect)
                                                     or to the game
+    GET  /account/craft                             the signed-in account's saved craft designs: {"designs": [base64 or null] * 8, "active": -1..7}
+    PUT  /account/craft                             the same document, to keep the designs on the account (each design is checked, see valid_craft_design)
     GET  /account/me                                200 {sub,name,preferred_username,email,callsign} or 204 for a guest
     GET  /outiva-status.json                        {"status":"available"|"degraded","players":N} for the Outiva games console (no sign-in needed)
     PUT  /account/callsign                          {"callsign": "..."} remembers the display name for this account
@@ -25,6 +27,7 @@ Configuration (environment, normally /etc/hovernet/account.env, written by confi
     HOVERNET_ORIGIN                https://hovernet.outiva.com
     HOVERNET_OUTIVA_ORIGIN         https://outiva.com
     HOVERNET_CALLSIGN_FILE         /var/lib/hovernet-account/callsigns.json
+    HOVERNET_CRAFT_FILE            /var/lib/hovernet-account/craft.json   (the craft designs each account saved)
     HOVERNET_ACCOUNT_HOST / HOVERNET_ACCOUNT_PORT   127.0.0.1 / 9602
     HOVERNET_STATUS_URL            http://127.0.0.1:9612   (the race server's loopback monitoring port; only loopback addresses are accepted)
 """
@@ -81,6 +84,82 @@ def safe_profile(profile):
             "callsign": callsign if CALLSIGN.match(callsign) else ""}
 
 
+CRAFT_SLOTS = 8
+CRAFT_MAX_BYTES = 640
+CRAFT_PALETTE = 16
+CRAFT_PAINT = 32 * 32 // 2
+
+
+def valid_craft_design(data):
+    """True when `data` is exactly what Authority/CraftDesign.cpp would decode: the HCD1 layout, ranges and checksum. A craft design is a look only."""
+    fixed = 4 + 1 + 4 + 3 + 1 + 3 + 1 + CRAFT_PALETTE * 3 + CRAFT_PAINT + 1
+    if not isinstance(data, (bytes, bytearray)) or len(data) < fixed + 4 or len(data) > CRAFT_MAX_BYTES or data[:4] != b"HCD1":
+        return False
+    h = 2166136261
+    for byte in data[:-4]:
+        h = ((h ^ byte) * 16777619) & 0xFFFFFFFF
+    if h != int.from_bytes(data[-4:], "little"):
+        return False
+    if data[4] >= 5:   # the hull
+        return False
+    shape = [b - 256 if b > 127 else b for b in data[5:9]]
+    if any(abs(v) > 25 for v in shape[:3]) or abs(shape[3]) > 30:
+        return False
+    name_at = fixed - 1
+    name_length = data[name_at]
+    if name_length > 24 or name_at + 1 + name_length + 4 != len(data):
+        return False
+    return all(32 <= c <= 126 for c in data[name_at + 1:name_at + 1 + name_length])
+
+
+class CraftDesigns:
+    """The craft designs each account saved (up to 8 and which one is used in races), by the immutable OIDC subject, in one JSON file."""
+
+    def __init__(self, filename):
+        self.filename = filename
+        self.lock = threading.Lock()
+        self.players = {}
+        if filename:
+            try:
+                with open(filename, encoding="utf-8") as handle:
+                    for sub, entry in (json.load(handle).get("players") or {}).items():
+                        if isinstance(entry, dict):
+                            self.players[sub] = self._clean(entry)
+            except FileNotFoundError:
+                pass
+
+    @staticmethod
+    def _clean(entry):
+        designs = []
+        for item in (entry.get("designs") or [])[:CRAFT_SLOTS]:
+            try:
+                data = base64.b64decode(item, validate=True) if isinstance(item, str) else None
+            except ValueError:
+                data = None
+            designs.append(item if data is not None and valid_craft_design(data) else None)
+        designs += [None] * (CRAFT_SLOTS - len(designs))
+        active = entry.get("active", -1)
+        active = active if isinstance(active, int) and 0 <= active < CRAFT_SLOTS and designs[active] else -1
+        return {"designs": designs, "active": active}
+
+    def get(self, sub):
+        with self.lock:
+            return dict(self.players.get(sub, {"designs": [None] * CRAFT_SLOTS, "active": -1}))
+
+    def set(self, sub, entry):
+        with self.lock:
+            self.players[sub] = self._clean(entry)
+            if not self.filename:
+                return
+            os.makedirs(os.path.dirname(self.filename), mode=0o750, exist_ok=True)
+            temporary = "%s.%d.tmp" % (self.filename, os.getpid())
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump({"version": 1, "players": self.players}, handle)
+                handle.write("\n")
+            os.replace(temporary, self.filename)
+
+
 class Callsigns:
     """The display name each account chose, kept by the immutable OIDC subject, in one small JSON file."""
 
@@ -123,7 +202,7 @@ class Callsigns:
 
 class Account:
     def __init__(self, issuer, client_id, client_secret, session_secret, origin, outiva_origin="https://outiva.com",
-                 backchannel_url=None, callsign_file=None, opener=None, clock=time.time):
+                 backchannel_url=None, callsign_file=None, opener=None, clock=time.time, craft_file=None):
         if len(session_secret.encode()) < 32:
             raise ValueError("HOVERNET_SESSION_SECRET must be at least 32 bytes.")
         self.issuer = issuer.rstrip("/")
@@ -135,6 +214,7 @@ class Account:
         self.outiva_origin = outiva_origin.rstrip("/")
         self.redirect_uri = self.origin + "/account/callback"
         self.callsigns = Callsigns(callsign_file)
+        self.craft = CraftDesigns(craft_file)
         self.opener = opener or (lambda request: urllib.request.urlopen(request, timeout=8))
         self.clock = clock
         self.pending = {}
@@ -327,6 +407,11 @@ def make_handler(account, status=None, console_origin="https://outiva.com"):
                 current["accountCallsign"] = current.get("callsign", "")
                 current["callsign"] = account.callsigns.custom(current["sub"]) or current["accountCallsign"] or account.callsigns.get(current["sub"])
                 return self.send(200, {"Content-Type": "application/json; charset=utf-8"}, json.dumps(current).encode())
+            if url.path == "/account/craft":
+                current = account.profile(self.headers.get("Cookie"))
+                if not current:
+                    return self.send(401)
+                return self.send(200, {"Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store"}, json.dumps(account.craft.get(current["sub"])).encode())
             if url.path == "/account/login":
                 return self.send(302, {"Location": account.login_url(query)})
             if url.path == "/account/callback":
@@ -338,13 +423,29 @@ def make_handler(account, status=None, console_origin="https://outiva.com"):
             return self.send(404)
 
         def do_PUT(self):
-            if self.path != "/account/callsign" or account is None:
+            if self.path not in ("/account/callsign", "/account/craft") or account is None:
                 return self.send(404)
             current = account.profile(self.headers.get("Cookie"))
             if not current:
                 return self.send(401)
             if self.headers.get("Origin") != account.origin or not (self.headers.get("Content-Type") or "").startswith("application/json"):
                 return self.send(403)
+            if self.path == "/account/craft":
+                try:
+                    length = int(self.headers.get("Content-Length") or 0)
+                    if length > CRAFT_SLOTS * 1100 + 200:
+                        return self.send(413)
+                    document = json.loads(self.rfile.read(length))
+                    designs = document.get("designs")
+                    if not isinstance(designs, list) or len(designs) > CRAFT_SLOTS:
+                        return self.send(400)
+                    for item in designs:   # a design that is not exactly the format is refused outright, not dropped
+                        if item is not None and not (isinstance(item, str) and valid_craft_design(base64.b64decode(item, validate=True))):
+                            return self.send(400)
+                except (ValueError, AttributeError, TypeError):
+                    return self.send(400)
+                account.craft.set(current["sub"], document)
+                return self.send(204)
             try:
                 length = int(self.headers.get("Content-Length") or 0)
                 if length > 1024:
@@ -378,7 +479,8 @@ def account_from_environment(env=os.environ):
     return Account(env["HOVERNET_OIDC_ISSUER"], env["HOVERNET_OIDC_CLIENT_ID"], env["HOVERNET_OIDC_CLIENT_SECRET"],
                    env["HOVERNET_SESSION_SECRET"], env.get("HOVERNET_ORIGIN", "https://hovernet.outiva.com"),
                    env.get("HOVERNET_OUTIVA_ORIGIN", "https://outiva.com"), env.get("HOVERNET_OIDC_BACKCHANNEL_URL"),
-                   env.get("HOVERNET_CALLSIGN_FILE", "/var/lib/hovernet-account/callsigns.json"))
+                   env.get("HOVERNET_CALLSIGN_FILE", "/var/lib/hovernet-account/callsigns.json"),
+                   craft_file=env.get("HOVERNET_CRAFT_FILE", "/var/lib/hovernet-account/craft.json"))
 
 
 def main():

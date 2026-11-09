@@ -55,10 +55,11 @@ bool OnlineLobby::Connect(const std::string& host, int port, const std::string& 
     if (!mConn.Connect(host, port, error, serverKey.empty() ? nullptr : serverKey.data())) { Fail(error.empty() ? "Could not connect to the server." : error); return false; }
     Hello hello;
     hello.name = name.substr(0, 32);
-    hello.capabilities = kCapRaceId | kCapLobbyChat | kCapHostStart | kCapRoster;   // race number, lobby chat/users, host-controlled start, and final racer names
+    hello.capabilities = kCapRaceId | kCapLobbyChat | kCapHostStart | kCapRoster | kCapCraftDesign;   // race number, lobby chat/users, host-controlled start, and final racer names
     if (gHasDevice) { hello.capabilities |= kCapDeviceId; hello.hasDevice = true; hello.deviceHigh = gDeviceHigh; hello.deviceLow = gDeviceLow; }
     mRaces.clear(); mBacklog.clear(); mUsers.clear(); mUsersTotal = 0; mChat.clear(); mRoster = Roster(); mIsHost = false;
     mGotAck = mGotStart = mSpectating = false;
+    mDesignSent = false;
     mQueuedWatchId = 0;
     mState = State::eIdle;
     mMessage = "Connecting...";
@@ -163,7 +164,13 @@ void OnlineLobby::Pump()
                 while (mChat.size() > 200) mChat.pop_front();
             }
         }
-        else if (f.type == kHelloAck) { mGotAck = Decode(f.payload, mAck); }
+        else if (f.type == kHelloAck) {
+            mGotAck = Decode(f.payload, mAck);
+            if (mGotAck && !mDesign.empty() && !mDesignSent && !mSpectating) { mDesignSent = true; mConn.Send(kSetCraftDesign, mDesign); }   // the race is joined: tell it how this craft looks
+        }
+        else if (f.type == kCraftDesign) {
+            if (mOnDesign && f.payload.size() > 1) mOnDesign(f.payload[0], std::vector<std::uint8_t>(f.payload.begin() + 1, f.payload.end()));
+        }
         else if (f.type == kStart) { mGotStart = true; }
         else if (mGotAck) mBacklog.push_back(f);   // ticks that arrive while the race is being set up
     }

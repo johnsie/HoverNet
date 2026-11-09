@@ -1,4 +1,5 @@
 #include "RaceHost.h"
+#include "CraftDesign.h"
 
 #include <algorithm>
 #include <set>
@@ -25,6 +26,8 @@ struct RaceHost::Connection
     double chatTokens = 3;
     std::int64_t lastChatMs = 0;
     std::vector<std::int64_t> reportTimes;
+    std::vector<std::uint8_t> design;   // the craft design this player sent (kSetCraftDesign), already checked; empty = none. A look only: nothing in the race reads it
+    int designsSent = 0;
     std::uint32_t specCursor = 0;       // the next Tick a spectator is owed
     bool specResultSent = false;
     std::int64_t connectedMs = 0;
@@ -146,6 +149,7 @@ void RaceHost::SendHelloAck(Connection& c)
     a.raceId = mConfig.raceId;
     a.includeRaceId = (c.caps & Protocol3::kCapRaceId) != 0;
     Send(c, Protocol3::EncodeFrame(Protocol3::kHelloAck, Protocol3::Encode(a)));
+    SendCraftDesigns(c);   // the looks already set (and, after the host renumbers the seats, everyone's again under their new slots)
 }
 
 void RaceHost::Send(Connection& c, const std::vector<std::uint8_t>& frame)
@@ -252,6 +256,18 @@ void RaceHost::HostStart(Connection& c, std::int64_t nowMs)
     StartNow(nowMs);
 }
 
+// Craft designs are looks and nothing else: they are validated, kept, and relayed to the players and spectators who asked for them (kCapCraftDesign); the race never reads them.
+void RaceHost::SendCraftDesigns(Connection& to)
+{
+    if ((to.caps & Protocol3::kCapCraftDesign) == 0) return;
+    for (const auto& o : mConnections) {
+        if (o->closed || !o->helloDone || o->player < 0 || o->spectator || o->design.empty()) continue;
+        std::vector<std::uint8_t> payload(1, static_cast<std::uint8_t>(o->player));
+        payload.insert(payload.end(), o->design.begin(), o->design.end());
+        Send(to, Protocol3::EncodeFrame(Protocol3::kCraftDesign, payload));
+    }
+}
+
 void RaceHost::SendRosterIfChanged()
 {
     if (!mHostStarts || mStarted) return;
@@ -353,6 +369,19 @@ void RaceHost::Handle(Connection& c, std::uint8_t type, const std::vector<std::u
             else if (r == InputResult::Late && i + 1 == in.controls.size()) ++mMetrics.inputsLate;
             else if (r == InputResult::TooFarAhead) ++mMetrics.inputsTooFar;
         }
+        return;
+    }
+    case kSetCraftDesign: {
+        if ((c.caps & kCapCraftDesign) == 0 || c.player < 0 || c.spectator) { Invalid(c, nowMs, "craft design"); return; }
+        if (c.designsSent >= 4) return;   // a player changes their craft a few times at most in one race: more is ignored, not an error
+        Authority::CraftDesign design;
+        if (!Authority::DecodeCraftDesign(payload.data(), payload.size(), design)) { Invalid(c, nowMs, "craft design"); return; }
+        ++c.designsSent;
+        c.design = payload;
+        std::vector<std::uint8_t> out(1, static_cast<std::uint8_t>(c.player));
+        out.insert(out.end(), payload.begin(), payload.end());
+        const std::vector<std::uint8_t> frame = EncodeFrame(kCraftDesign, out);
+        for (auto& o : mConnections) if (!o->closed && o->helloDone && (o->caps & kCapCraftDesign) != 0) Send(*o, frame);
         return;
     }
     case kStartRace: {
@@ -485,6 +514,7 @@ void RaceHost::StartSpectator(Connection& c, std::int64_t)
                 if (!mSlotNames[slot].empty()) roster.members.push_back(std::make_pair(static_cast<std::uint8_t>(slot), mSlotNames[slot]));
             Send(c, EncodeFrame(kRoster, Encode(roster)));
         }
+        SendCraftDesigns(c);
     }
     const std::size_t per = 900;
     const std::size_t count = (key->second.size() + per - 1) / per;

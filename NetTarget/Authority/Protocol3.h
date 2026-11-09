@@ -23,6 +23,7 @@ constexpr std::uint32_t kCapDeviceId = 16;    // the Hello ends with the client'
 constexpr std::uint32_t kCapHostStart = 4;    // the host of a race starts it (StartRace) instead of it starting when the last seat fills; the server sends Roster while it waits
 constexpr std::uint32_t kCapLobbyChat = 2;   // the lobby carries chat (Chat / ChatMessage before a race is joined) and sends LobbyUsers   // HelloAck carries the number of the race (so a host can tell friends which private race to join)
 constexpr std::uint32_t kCapRoster = 8;      // the server sends the final slot/name roster before Start (and to a spectator), without changing who starts the race
+constexpr std::uint32_t kCapCraftDesign = 32;   // the client sends its craft design (kSetCraftDesign) and is sent everyone's (kCraftDesign): looks only, see CraftDesign.h and docs/craft-designer.md
 constexpr std::uint16_t kMinMaxFrame = 64;
 constexpr int kMaxInputsPerMessage = 32;
 
@@ -51,6 +52,8 @@ enum Type : std::uint8_t
     kChatMessage = 31,     // server to client: someone said something
     kBlock = 32,           // client to server: stop showing me this name
     kReport = 33,          // client to server: report a name to the moderators
+    kSetCraftDesign = 36,  // client to server (kCapCraftDesign, in a race): the player's craft design, the bytes of EncodeCraftDesign; a design that does not decode is ignored
+    kCraftDesign = 37,     // server to client (kCapCraftDesign): one slot's design: the slot (1 byte) then the design bytes; sent when a design is set and to everyone who joins
     kRoster = 35,          // server to client with kCapHostStart or kCapRoster: slot/name pairs and the number of seats
     kListRecords = 44,     // client to server (lobby): the track records of one track; see ListRecords
     kRecordList = 45,      // server to client: the answer, see RecordList

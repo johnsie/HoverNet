@@ -56,7 +56,7 @@ tmp = tempfile.mkdtemp()
 callsign_file = os.path.join(tmp, "callsigns.json")
 now = [time.time()]
 account = ha.Account(ISSUER, "hovernet-web", "s3cret", "x" * 40, ORIGIN, "https://outiva.com",
-                     "http://127.0.0.1:%d" % kc.server_address[1], callsign_file, clock=lambda: now[0])
+                     "http://127.0.0.1:%d" % kc.server_address[1], callsign_file, clock=lambda: now[0], craft_file=os.path.join(tmp, "craft.json"))
 app = serve(ha.make_handler(account))
 guest_app = serve(ha.make_handler(None))
 
@@ -124,6 +124,31 @@ check(put(session, ORIGIN, '{"callsign":"bad<name>"}')[0] == 400 and put(session
 check(put(session, ORIGIN, '{"callsign":"Pat R"}')[0] == 204, "callsign: a valid name is saved")
 check(json.loads(call(app, "GET", "/account/me", {"Cookie": session})[2])["callsign"] == "Pat R", "callsign comes back on /account/me")
 check(ha.Callsigns(callsign_file).get("sub-1") == "Pat R" and oct(os.stat(callsign_file).st_mode & 0o777) == "0o600", "callsign survives a restart and the file is private (0600)")
+
+# 4b. craft designs (a look only; each one is checked against the same format the game decodes)
+def make_design(**changes):
+    fields = dict(craft=2, shape=[10, -5, 25, -30], name=b"Racer")
+    fields.update(changes)
+    out = bytearray(b"HCD1") + bytes([fields["craft"]]) + bytes(v & 255 for v in fields["shape"]) + bytes([200, 30, 40, 180, 10, 20, 250, 255]) + bytes(range(48)) + bytes(512)
+    out += bytes([len(fields["name"])]) + fields["name"]
+    h = 2166136261
+    for b in out:
+        h = ((h ^ b) * 16777619) & 0xFFFFFFFF
+    return bytes(out + h.to_bytes(4, "little"))
+good = base64.b64encode(make_design()).decode()
+put_craft = lambda cookie_header, origin, doc: call(app, "PUT", "/account/craft", {k: v for k, v in {"Cookie": cookie_header, "Origin": origin, "Content-Type": "application/json"}.items() if v}, json.dumps(doc))
+check(ha.valid_craft_design(make_design()) and not ha.valid_craft_design(make_design(craft=9)) and not ha.valid_craft_design(make_design(shape=[90, 0, 0, 0])) and not ha.valid_craft_design(make_design(name=b"bad\x01")), "craft: the checker accepts a good design and refuses a wrong hull, shape or name")
+damaged = bytearray(make_design()); damaged[30] ^= 1
+check(not ha.valid_craft_design(bytes(damaged)) and not ha.valid_craft_design(make_design()[:-1]) and not ha.valid_craft_design(b"HCD1"), "craft: a damaged or truncated design is refused")
+check(call(app, "GET", "/account/craft")[0] == 401, "craft: signed-out has none")
+check(put_craft(None, ORIGIN, {"designs": [good], "active": 0})[0] == 401, "craft: signed-out cannot save")
+check(put_craft(session, "https://evil.example", {"designs": [good], "active": 0})[0] == 403, "craft: a foreign Origin is refused")
+check(put_craft(session, ORIGIN, {"designs": [base64.b64encode(bytes(damaged)).decode()], "active": 0})[0] == 400, "craft: a damaged design is refused outright")
+check(put_craft(session, ORIGIN, {"designs": [good] * 9, "active": 0})[0] == 400 and put_craft(session, ORIGIN, {"designs": "x"})[0] == 400, "craft: too many designs or the wrong shape of document is refused")
+check(put_craft(session, ORIGIN, {"designs": [good, None, good], "active": 2})[0] == 204, "craft: valid designs are saved")
+saved = json.loads(call(app, "GET", "/account/craft", {"Cookie": session})[2])
+check(saved["designs"][0] == good and saved["designs"][1] is None and saved["designs"][2] == good and len(saved["designs"]) == 8 and saved["active"] == 2, "craft: they come back, with the one used in races")
+check(ha.CraftDesigns(os.path.join(tmp, "craft.json")).get("sub-1")["active"] == 2 and oct(os.stat(os.path.join(tmp, "craft.json")).st_mode & 0o777) == "0o600", "craft: they survive a restart and the file is private (0600)")
 
 # 5. every failure ends as a guest
 def guest(what, status_expected=302, **kw):

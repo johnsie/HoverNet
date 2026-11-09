@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
 // See repository history for authorship and detailed changes.
 // ResBitmap.h
 //
@@ -27,6 +27,7 @@
 #ifndef MR_RES_BITMAP_H
 #define MR_RES_BITMAP_H
 
+#include <functional>
 #include "../VideoServices/Bitmap.h"
 
 #include <atomic>
@@ -45,6 +46,9 @@
 
 class MR_ResBitmap: public MR_Bitmap
 {
+   public:
+      // Changes the colours of the largest true-colour level (column-major 0x00RRGGBB, width x height) before the smaller levels are made from it.
+      typedef std::function<void( std::vector<MR_UInt32>& pWords, int pWidth, int pHeight )> Recolour;
    protected:
       class SubBitmap
       {
@@ -83,6 +87,7 @@ class MR_ResBitmap: public MR_Bitmap
       std::vector<MR_UInt32>   mAiWords;        // column-major, 0x00RRGGBB
       int                      mAiWidth;
       int                      mAiHeight;
+      Recolour                 mRecolour;       // set on a craft-design variant (CloneWithRecolour); empty on the game's own textures
       mutable int              mColourShift;    // the scale of the true-colour copy as built: 1 (2x) or more
       mutable std::atomic<int> mColourVersion;
       mutable std::mutex       mColourMutex;
@@ -126,6 +131,10 @@ class MR_ResBitmap: public MR_Bitmap
       MR_DllDeclare static void SetColourPalette( const MR_UInt8* pPalette768, float pBrightness = 1.0f, bool pGradeAiImages = false );
 
       // Gives this texture an AI-enhanced image (the words are column-major 0x00RRGGBB). Ignored unless its size is the texture's times 2, 4 or 8.
+      // A copy of this texture whose true-colour version is changed by pRecolour (a player's craft design). The 8-bit copy is unchanged, so a client that
+      // draws in 8-bit shows the stock look. The caller owns the copy and must keep it alive while it is drawn.
+      MR_DllDeclare MR_ResBitmap* CloneWithRecolour( const Recolour& pRecolour )const;
+
       MR_DllDeclare void SetEnhancedImage( int pWidth, int pHeight, std::vector<MR_UInt32>& pWords );
 
 };

@@ -18,6 +18,8 @@
    #define MR_DllDeclare
 #endif
 
+#include <functional>
+
 class MR_ResourceLib;
 class MR_3DViewPort;
 class MR_PositionMatrix;
@@ -109,6 +111,12 @@ class MR_ResActor
 
       MR_DllDeclare void Serialize( CArchive& pArchive, MR_ResourceLib* pLib=NULL );
       MR_DllDeclare void Draw( MR_3DViewPort* pDest, const MR_PositionMatrix& pMatrix, int pSequence, int pFrame )const;
+
+      // A reshaped copy for a player's craft design (a look only: the simulation never sees it). Percent changes of the length (x, the way the craft points),
+      // width (y) and height (z, about the craft's lowest point); pTaper widens (+) or narrows (-) the front against the back. pBitmap, when set, gives the
+      // bitmap each patch uses (the copy does not own what it returns). The bounds used are those of the whole actor, so every frame is scaled alike.
+      MR_DllDeclare MR_ResActor* CreateVariant( int pLength, int pWidth, int pHeight, int pTaper, const std::function<const MR_ResBitmap*( const MR_ResBitmap* )>& pBitmap )const;
+      MR_DllDeclare void GetBounds( MR_3DCoordinate& pMin, MR_3DCoordinate& pMax )const;
 
 };
 

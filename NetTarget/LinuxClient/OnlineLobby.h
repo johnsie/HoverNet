@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -54,6 +55,10 @@ public:
     // The host of a race that has not started: who has joined (slot, name; slot 0 is the host) and how many seats, and the button that starts it.
     bool IsHost() const { return mIsHost; }
     const Protocol3::Roster& GetRoster() const { return mRoster; }
+    // The player's craft design (EncodeCraftDesign bytes; empty = stock): sent to the race once it is joined, and every design the server relays is passed to the callback (slot, bytes).
+    // A look only: see docs/craft-designer.md. Set before Connect.
+    void SetCraftDesign(const std::vector<std::uint8_t>& design) { mDesign = design; }
+    void OnCraftDesign(std::function<void(int, const std::vector<std::uint8_t>&)> callback) { mOnDesign = std::move(callback); }
     void StartRace();
     const std::string& Notice() const { return mNotice; }                    // why the last host/join/watch was refused (cleared by the next request)
     bool Spectating() const { return mSpectating; }
@@ -115,6 +120,9 @@ private:
     std::deque<std::string> mChat;
     Protocol3::Roster mRoster;
     bool mIsHost = false;
+    std::vector<std::uint8_t> mDesign;
+    bool mDesignSent = false;
+    std::function<void(int, const std::vector<std::uint8_t>&)> mOnDesign;
     std::string mHost, mName;
     int mPort = 0;
     std::vector<std::uint8_t> mKey;
