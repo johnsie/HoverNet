@@ -85,6 +85,7 @@
     <ClCompile Include="VideoBuffer2DDraw.cpp" />
     <ClCompile Include="RenderingEngine.cpp" />
     <ClCompile Include="GraphicsUtilities.cpp" />
+    <ClCompile Include="GpuFinisher.cpp" />
     <ClCompile Include="ModernVideoBuffer.cpp" />
     <ClCompile Include="ModernRenderer.cpp" />
     <ClCompile Include="ModernActorRenderer.cpp" />
