@@ -93,6 +93,8 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
     // Test hook HOVERNET_TEST_RML="down,down,enter" or "click:garage": scripted input through the real event path, one step every few frames once the opening animation is over.
     std::vector<std::string> script;
     if (const char* steps = std::getenv("HOVERNET_TEST_RML")) for (std::string step; *steps != 0; ++steps) { if (*steps == ',') { script.push_back(step); step.clear(); } else step += *steps; if (steps[1] == 0) script.push_back(step); }
+    bool craftShown = false;
+    Uint32 craftStart = 0;
     int frames = 0;
     while (result == Choice::eNone && (pFrameLimit < 0 || frames < pFrameLimit)) {
         ++frames;
@@ -137,8 +139,35 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
         SDL_GetRendererOutputSize(pRenderer, &w, &h);
         if (w != width || h != height) { width = w; height = h; context->SetDimensions(Rml::Vector2i(width, height)); }
         context->Update();
-        SDL_SetRenderDrawColor(pRenderer, 18, 20, 28, 255);
-        SDL_RenderClear(pRenderer);
+        // Under the interface: the background (a gradient the renderer draws itself, so the craft can sit between it and the markup) and the player's craft.
+        {
+            SDL_SetRenderDrawColor(pRenderer, 18, 20, 28, 255);
+            SDL_RenderClear(pRenderer);
+            const SDL_Color top = {18, 20, 28, 255}, bottom = {38, 16, 26, 255};
+            const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, top, {0, 0}}, {{static_cast<float>(width), 0.0f}, top, {0, 0}},
+                                        {{0.0f, static_cast<float>(height)}, bottom, {0, 0}}, {{static_cast<float>(width), static_cast<float>(height)}, bottom, {0, 0}}};
+            const int order[6] = {0, 1, 2, 1, 3, 2};
+            SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
+            if (pInfo.craftFrame) {
+                const Uint32 now = SDL_GetTicks();
+                const int yaw = pInfo.reducedMotion ? 28 : static_cast<int>(now / 1000.0 * 22.0) % 360 / 2 * 2;
+                SDL_Rect crop = {0, 0, 0, 0};
+                SDL_Texture* craft = pInfo.craftFrame(yaw, crop);
+                Rml::Element* hero = document->GetElementById("hero");
+                if (craft != nullptr && hero != nullptr && crop.w > 0 && crop.h > 0) {
+                    if (!craftShown) { craftShown = true; craftStart = now; if (Rml::Element* img = hero->GetFirstChild()) img->SetProperty("display", "none"); }
+                    const Rml::Vector2f origin = hero->GetAbsoluteOffset(Rml::Box::BORDER), size = hero->GetBox().GetSize(Rml::Box::BORDER);
+                    const float aspect = static_cast<float>(crop.w) / static_cast<float>(crop.h);
+                    float w = size.x, h = w / aspect;
+                    if (h > size.y) { h = size.y; w = h * aspect; }
+                    const float t = pInfo.reducedMotion ? 1.0f : std::min(1.0f, static_cast<float>(now - craftStart) / 900.0f);
+                    const float ease = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);   // the same curve as the markup's cubic-out
+                    SDL_FRect to = {origin.x + (size.x - w) * 0.5f - 70.0f * (1.0f - ease), origin.y + (size.y - h) * 0.5f, w, h};
+                    SDL_SetTextureAlphaMod(craft, static_cast<Uint8>(255.0f * ease));
+                    SDL_RenderCopyF(pRenderer, craft, &crop, &to);
+                }
+            }
+        }
         context->Render();
         if (const char* shot = std::getenv("HOVERNET_CAPTURE_MENU")) {   // the same capture hook as the ImGui menu: the last frame of a bounded run
             if (pFrameLimit >= 0 && frames == pFrameLimit) {

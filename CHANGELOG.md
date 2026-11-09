@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **RmlUi main menu: your own craft turns in it**, the saved Garage design drawn by the same preview code as the ImGui menu, easing in with the layout (still with Reduced motion). Seen in a screenshot of the stock craft; a custom design was not tried.
+
 ## 2.3.41 - 2026-11-09
 
 ### Changed

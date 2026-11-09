@@ -5,6 +5,7 @@
 
 #include <SDL.h>
 
+#include <functional>
 #include <string>
 
 namespace HoverNetRml
@@ -17,6 +18,10 @@ struct MainMenuInfo
     std::string levelTitle;
     float levelProgress = 0.0f;  // 0..1 towards the next level
     bool tutorialDone = false;   // the Tutorial button is quiet once it has been done
+    // The player's own craft, turning: called every frame with the angle in degrees, it returns the picture to draw (null = none, and the stock picture in the markup
+    // is shown instead) and sets cropOut to the part of it to show. The caller owns the texture. reducedMotion keeps the entrance animations of the pictures still.
+    std::function<SDL_Texture*(int, SDL_Rect&)> craftFrame;
+    bool reducedMotion = false;
 };
 
 enum class Choice { eNone, eOnline, eOffline, eLeaderboards, eGarage, eTutorial, eSettings, eBack, eQuitRequested };

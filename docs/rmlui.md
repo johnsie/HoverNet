@@ -29,7 +29,9 @@ compile option instead of editing the file.
 Done: the layout (brand and level bar top left, the craft, the panel with RACE ONLINE first and its pitch), the craft drifting in, the panel sliding in from the
 right, the button hover and press feel, the RACE ONLINE pulse, keyboard, mouse and controller focus, Esc and B, closing the window with the quit confirmation.
 
-Not done, and not checked: the turning craft in the player's own colours (it shows the stock picture), phone and touch layouts, high-contrast and UI-scale
+Also done: the player's own craft (the saved Garage design, drawn by the Garage's preview code) turns in the hero area, drawn by the game under the interface layer and following the markup's hero box.
+
+Not done, and not checked: phone and touch layouts, high-contrast and UI-scale
 settings, the Track Market refresh, the web build (RmlUi builds with Emscripten and FreeType, which the web toolchain provides, but this was not tried),
 Windows, the controller (the code maps D-pad and A and B, but no pad was tried), and any other screen. Rounded corners on buttons drew a ragged top edge in
 the software renderer, so the buttons are square for now (the panel's rounded corners are fine). Small text is softer than ImGui's because of the unhinted

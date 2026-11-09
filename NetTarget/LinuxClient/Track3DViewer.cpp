@@ -8555,7 +8555,43 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         profile.Load(ProfilePath());
         if (profile.xp > 0 || profile.races > 0) { info.level = profile.Level(); info.levelTitle = HoverNetCraft::LevelTitle(profile.Level()); info.levelProgress = profile.LevelProgress(); }
         info.tutorialDone = HoverNetTutorial::HasCompleted(ConfigDirPath());
+        info.reducedMotion = LoadReducedMotion();
+        // The player's own craft, as on the ImGui menu: the saved design from the Garage, drawn by the Garage's preview code into a texture that is redrawn as it turns.
+        constexpr int kCraftW = 560, kCraftH = 420;
+        SDL_Texture* rmlCraftTexture = nullptr;
+        std::vector<std::uint32_t> rmlCraftPixels, rmlPalette(256, 0);
+        Authority::CraftDesign rmlCraftDesign;
+        bool rmlCraftReady = false;
+        int rmlCraftYaw = -1000;
+        Uint32 rmlCraftBuilt = 0;
+        if (gMenuCraftResources != nullptr && graphics.GetRenderPalette() != nullptr && std::getenv("HOVERNET_NO_MENU_CRAFT") == nullptr) {
+            const MR_UInt8* palette768 = graphics.GetRenderPalette();
+            for (int i = 0; i < 256; ++i) rmlPalette[i] = (static_cast<std::uint32_t>(palette768[i * 3]) << 16) | (static_cast<std::uint32_t>(palette768[i * 3 + 1]) << 8) | palette768[i * 3 + 2];
+            MR_ResBitmap::SetColourPalette(palette768, 1.0f, false);
+            MR_ResBitmap::SetBakePalette(palette768);
+            const HoverNetCraft::CraftStore store(ConfigDirPath());
+            int slot = store.Active();
+            if (slot < 0) slot = 0;
+            if (!store.Load(slot, rmlCraftDesign)) rmlCraftDesign = Authority::CraftDesign();
+            rmlCraftDesign = Authority::SanitiseCraftDesign(rmlCraftDesign);
+            rmlCraftTexture = SDL_CreateTexture(graphics.GetRenderer(), SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, kCraftW, kCraftH);
+            if (rmlCraftTexture != nullptr) SDL_SetTextureBlendMode(rmlCraftTexture, SDL_BLENDMODE_BLEND);
+        }
+        if (rmlCraftTexture != nullptr) {
+            info.craftFrame = [&](int yaw, SDL_Rect& crop) -> SDL_Texture* {
+                const Uint32 now = SDL_GetTicks();
+                if (yaw != rmlCraftYaw && (now - rmlCraftBuilt >= 40 || !rmlCraftReady)) {
+                    rmlCraftReady = HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, yaw,
+                                                                      rmlPalette.data(), kCraftW, kCraftH, rmlCraftPixels, true);
+                    if (rmlCraftReady) SDL_UpdateTexture(rmlCraftTexture, nullptr, rmlCraftPixels.data(), kCraftW * 4);
+                    rmlCraftYaw = yaw; rmlCraftBuilt = now;
+                }
+                crop = SDL_Rect{kCraftW / 10, kCraftH * 22 / 100, kCraftW * 8 / 10, kCraftH * 64 / 100};   // the craft sits in the lower middle of its picture
+                return rmlCraftReady ? rmlCraftTexture : nullptr;
+            };
+        }
         const HoverNetRml::Choice picked = HoverNetRml::RunMainMenu(graphics.GetWindow(), graphics.GetRenderer(), info, pFrameLimit, kWidth, kHeight);
+        if (rmlCraftTexture != nullptr) SDL_DestroyTexture(rmlCraftTexture);
         switch (picked) {
         case HoverNetRml::Choice::eOnline: return MenuChoice::eOnlineLobby;
         case HoverNetRml::Choice::eOffline: return MenuChoice::eLocalPlay;
