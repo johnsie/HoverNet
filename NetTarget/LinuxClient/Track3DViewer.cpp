@@ -6,6 +6,7 @@
 #include "CraftStore.h"
 #include "Tutorial.h"
 #include "Profile.h"
+#include "CraftPatterns.h"
 #include "CraftPreview.h"
 #include "../ObjFacTools/CraftLook.h"
 #include "TrackCatalog.h"
@@ -2323,6 +2324,8 @@ struct SfxBank
     MR_ShortSound* sounds[static_cast<int>(Sfx::eCount)] = {};
     bool built = false;
     ImGuiID lastHovered = 0;
+    int hoverSeenFrame = -100;   // the last frame a button was hovered or focused
+    Uint32 hoverSoundAt = 0;     // when the hover tick last played
     bool quiet = false;   // the button being drawn is a secondary one (Back, Cancel): its click is the "back" sound
 };
 SfxBank gSfx;
@@ -2417,8 +2420,8 @@ void UpdateSpeedSounds(double speed)
     static double smooth = 0.0;
     if (!built) {
         built = true;
-        const std::vector<char> windBlob = MakeNoiseLoop(2.5, 0.22, 0.55, 7), rumbleBlob = MakeNoiseLoop(2.5, 0.035, 0.80, 11);
-        wind = MR_SoundServer::CreateContinuousSound(windBlob.data(), 1);
+        // (the original wind, the craft's friction sound, plays through the craft itself now that the object library shares the game's sound server, so only the rumble is added here)
+        const std::vector<char> rumbleBlob = MakeNoiseLoop(2.5, 0.035, 0.80, 11);
         rumble = MR_SoundServer::CreateContinuousSound(rumbleBlob.data(), 1);
     }
     if (std::getenv("HOVERNET_NO_SPEED_SOUNDS") != nullptr) return;
@@ -2430,7 +2433,7 @@ void UpdateSpeedSounds(double speed)
     }
     if (rumble != nullptr) {
         const double t = std::min(1.0, smooth / 1.0);
-        MR_SoundServer::Play(rumble, 0, static_cast<int>(-2600 + 1500 * t), 0.8 + 0.4 * t, 0);
+        MR_SoundServer::Play(rumble, 0, static_cast<int>(-3200 + 1500 * t), 0.8 + 0.4 * t, 0);
     }
 }
 
@@ -2440,10 +2443,18 @@ bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
     const bool pressed = ImGui::Button(label, size);
     ImGui::PopStyleColor();
     // sounds: a tick as the pointer or the keyboard focus arrives on a button, and a click (or the lower "back" tone for a secondary button) when it is pressed
-    if (ImGui::IsItemHovered() || ImGui::IsItemFocused()) {
-        if (gSfx.lastHovered != ImGui::GetItemID()) { gSfx.lastHovered = ImGui::GetItemID(); PlaySfx(Sfx::eHover); }
+    // The tick plays once when the pointer or the focus arrives on a button and not again while it stays there: even when another button shares its ID (the
+    // same label twice), or the hover flickers for a frame, it is forgotten only after no button has been hovered for a few frames, and never twice within 150 ms.
+    {
+        const int frame = ImGui::GetFrameCount();
+        if (gSfx.lastHovered != 0 && frame > gSfx.hoverSeenFrame + 3) gSfx.lastHovered = 0;
+        if (ImGui::IsItemHovered() || ImGui::IsItemFocused()) {
+            gSfx.hoverSeenFrame = frame;
+            const Uint32 now = SDL_GetTicks();
+            if (gSfx.lastHovered != ImGui::GetItemID() && now - gSfx.hoverSoundAt >= 150) { gSfx.lastHovered = ImGui::GetItemID(); gSfx.hoverSoundAt = now; PlaySfx(Sfx::eHover); }
+            else gSfx.lastHovered = ImGui::GetItemID();
+        }
     }
-    else if (gSfx.lastHovered == ImGui::GetItemID()) gSfx.lastHovered = 0;
     if (pressed) PlaySfx(gSfx.quiet ? Sfx::eBack : Sfx::eClick);
     // a little depth: a soft highlight across the top half and a shade along the bottom, so a button reads as a button and not a flat block
     const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
@@ -6336,8 +6347,13 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
 #ifdef HOVERNET_WEB
     int accountCraftRevision = hovernet_js_account_craft_revision();
 #endif
+    const char* patternDemo = std::getenv("HOVERNET_GARAGE_PATTERN");   // test hook: a pattern painted into the demo design
     if (std::getenv("HOVERNET_GARAGE_DEMO") != nullptr) {   // test hook: a sample design, to look at the screen
         design.length = 8; design.taper = 10; design.body = {{200, 25, 30}}; design.bodyStrength = 200; design.accent = {{30, 170, 70}}; design.accentStrength = 255; design.name = "Demo";
+        if (patternDemo != nullptr) {
+            design.paint.fill(0);
+            for (int y = 0; y < Authority::kPaintSize; ++y) for (int x = 0; x < Authority::kPaintSize; ++x) if (HoverNetCraft::PatternCovers(std::atoi(patternDemo), x, y)) design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x] = 5;
+        }
         for (int y = 0; y < Authority::kPaintSize; ++y) for (int x = 12; x < 16; ++x) design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x] = 5;
     }
     std::vector<std::array<std::uint8_t, Authority::kPaintSize * Authority::kPaintSize>> undo;
@@ -6545,6 +6561,23 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
             ImGui::SameLine();
             if (ImGui::Button("Clear paint")) { pushUndo(); design.paint.fill(0); }
         }
+        {
+            // Ready-made patterns: each paints its cells with the selected paint colour on top of what is there (Undo takes it back; Mirror keeps it symmetrical).
+            ImGui::TextUnformatted("Patterns, in the selected colour");
+            const int perRow = ImGui::GetContentRegionAvail().x > 330.0f ? 4 : 3;
+            const float buttonWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * (perRow - 1)) / perRow;
+            for (int p = 0; p < HoverNetCraft::kPatternCount; ++p) {
+                if (p % perRow != 0) ImGui::SameLine();
+                char label[48]; std::snprintf(label, sizeof label, "%s##pattern%d", HoverNetCraft::PatternName(p), p);
+                if (ImGui::Button(label, ImVec2(buttonWidth, 0))) {
+                    pushUndo();
+                    const int last = Authority::kPaintSize - 1;
+                    for (int y = 0; y < Authority::kPaintSize; ++y)
+                        for (int x = 0; x < Authority::kPaintSize; ++x)
+                            if (HoverNetCraft::PatternCovers(p, x, y) || (mirror && HoverNetCraft::PatternCovers(p, last - x, y))) design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x] = static_cast<std::uint8_t>(colour);
+                }
+            }
+        }
         for (int i = 1; i < Authority::kPaintColours; ++i) {
             if (i > 1 && (i - 1) % 8 != 0) ImGui::SameLine();
             char id[16]; std::snprintf(id, sizeof id, "##sw%d", i);
@@ -6560,6 +6593,7 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         HoverNetHint("The paint wraps round the hull panels; use Mirror for symmetrical stripes.");
         ImGui::PopTextWrapPos();
 
+        if (std::getenv("HOVERNET_GARAGE_SCROLL") != nullptr) ImGui::SetScrollHereY(0.0f);   // test hook: scroll the panel to show what is below the canvas
         HoverNetSectionHeading("MY CRAFT");
         {
             char nameBuffer[Authority::kMaxDesignNameBytes + 1];

@@ -4,10 +4,16 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## Unreleased
+## 2.3.38 - 2026-11-09
 
 ### Added
-- **The sound of speed**: wind and a low air rumble, made in code, rise in volume and pitch with the craft's speed. Checked by recording the game's audio output and comparing it with and without them (a small, steady rise while moving, nothing near clipping); not listened to by a person, and the autoplay bot only moves briefly. `HOVERNET_NO_SPEED_SOUNDS=1` turns them off.
+- **Garage patterns**: 14 ready-made patterns for the paint (racing stripe, twin stripes, hoops, checker, chevrons, diamonds, dots, zigzag, diagonals, flames, rings, pinstripes, bars, fade dots) in the selected paint colour, on top of what is painted; Mirror keeps them symmetrical and Undo takes them back. They are ordinary paint, so nothing new is stored or sent and other players see them as before. Test `HoverNetCraftPatterns`; checked by screenshots of the paint canvas and the preview craft (the button grid itself was not looked at on screen).
+- **A low air rumble** under the craft that follows its speed (`HOVERNET_NO_SPEED_SOUNDS=1` turns it off). Checked by recording the audio output, not by listening.
+
+### Fixed
+- **The motor and wind sounds were silent in the Linux client** (the web client was fine). The object library carries its own copy of the sound server on Linux, so the craft's motor and friction sounds were registered with a mixer nothing played. The game now exports its sound server so the library uses the game's. Checked by recording the audio output of a bounded run: it now has sound from the first frame where it was silent before; not listened to by a person.
+- **The button hover tick could repeat** while the pointer stayed on a button (when another button shared its identity, or the hover flickered): it now plays once on arrival and at most every 150 ms. Fixed from reading the code; I did not reproduce it with a real mouse.
+- **The Windows build** failed in `3DViewportScene.cpp` (`Polygon` clashed with the GDI function); renamed. The v2.3.36 and v2.3.37 Windows jobs failed because of it. Not confirmed on Windows until its job runs.
 
 ## 2.3.37 - 2026-11-09
 

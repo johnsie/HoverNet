@@ -597,6 +597,7 @@ add_executable(HoverNetTutorialTest NetTarget/LinuxClient/TutorialTest.cpp NetTa
 target_link_libraries(HoverNetTutorialTest PRIVATE HoverNetSim)
 add_executable(HoverNetMusicTest NetTarget/LinuxClient/MusicTest.cpp)
 target_link_libraries(HoverNetMusicTest PRIVATE HoverNetResourceCore)
+add_executable(HoverNetCraftPatternsTest NetTarget/LinuxClient/CraftPatternsTest.cpp)
 add_executable(HoverNetProfileTest NetTarget/LinuxClient/ProfileTest.cpp NetTarget/LinuxClient/Profile.cpp)
 add_executable(HoverNetGpuFinishTest NetTarget/LinuxClient/GpuFinishTest.cpp NetTarget/VideoServices/GpuFinisher.cpp NetTarget/VideoServices/ModernGraphics.cpp NetTarget/VideoServices/ColourGrade.cpp)
 target_link_libraries(HoverNetGpuFinishTest PRIVATE SDL2::SDL2)
@@ -619,6 +620,7 @@ if(NOT EMSCRIPTEN)
     add_test(NAME HoverNetViewportColour COMMAND HoverNetViewportColourTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetMusic COMMAND HoverNetMusicTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetProfile COMMAND HoverNetProfileTest)
+    add_test(NAME HoverNetCraftPatterns COMMAND HoverNetCraftPatternsTest)
     add_test(NAME HoverNetGpuFinish COMMAND HoverNetGpuFinishTest)
     set_tests_properties(HoverNetGpuFinish PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME HoverNetGpuScene COMMAND HoverNetGpuSceneTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
@@ -890,6 +892,11 @@ else()
 endif()
 target_compile_definitions(HoverNetGame2Player PRIVATE _HAVE_SDL2 HOVERNET_GAME2_PLAYER HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}" HOVERNET_VERSION="${HOVERNET_VERSION}")
 target_link_libraries(HoverNetGame2Player PRIVATE HoverNetObserver HoverNetClientSession HoverNetResourceCore HoverNetVideoCore HoverNetRaceServerClient HoverNetImGui SDL2::SDL2)
+# The object library (ObjFac1.so) carries its own copy of the sound server (it links the resource code), so on Linux its sounds, such as the craft's motor, would be
+# registered in a second mixer that nothing plays. The game exports its sound server's symbols so the library uses the game's one.
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
+    target_link_options(HoverNetGame2Player PRIVATE "LINKER:--dynamic-list=${CMAKE_SOURCE_DIR}/NetTarget/LinuxClient/soundserver.dynlist")
+endif()
 # SDL rewrites main() to SDL_main() on Windows. Its small platform entry-point
 # library supplies WinMain and forwards into that shared client entry point;
 # Linux deliberately has no equivalent dependency.
