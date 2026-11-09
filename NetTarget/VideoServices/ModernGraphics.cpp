@@ -196,7 +196,8 @@ void Presenter::Process(std::uint8_t* rgb, int width, int height, const Options&
     PassContext context{rgb, width, height, options, hints, mask, *this};
     // The picture passes a finisher can take over (names of built-in passes); the others need the scene's depth and stay here.
     auto isFinishingPass = [](const char* name) {
-        return std::strcmp(name, "filter") == 0 || std::strcmp(name, "sharpen") == 0 || std::strcmp(name, "bloom") == 0 || std::strcmp(name, "exposure") == 0 ||
+        return std::strcmp(name, "filter") == 0 || std::strcmp(name, "edge-aa") == 0 || std::strcmp(name, "atmosphere") == 0 || std::strcmp(name, "lighting") == 0 || std::strcmp(name, "craft") == 0 ||
+               std::strcmp(name, "reflection") == 0 || std::strcmp(name, "halos") == 0 || std::strcmp(name, "sharpen") == 0 || std::strcmp(name, "bloom") == 0 || std::strcmp(name, "exposure") == 0 ||
                std::strcmp(name, "hud-outline") == 0 || std::strcmp(name, "vignette") == 0;
     };
     const bool useFinisher = options.gpuFinish && FinisherActive();
