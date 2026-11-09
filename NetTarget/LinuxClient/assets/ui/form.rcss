@@ -71,3 +71,32 @@ button.act.quiet:hover, button.act.quiet:focus { background-color: #3a3e54; }
 #footer button:hover, #footer button:focus { background-color: #f04a5b; transform: scale(1.02); }
 #footer button.quiet:hover, #footer button.quiet:focus { background-color: #3a3e54; }
 #footer button.disabled { background-color: #3a2a30; color: #8b8fa3; cursor: default; transform: none; }
+
+/* wide layout: controls on the left, a picture on the right; no tab bar */
+#card.wide { width: 920dp; margin-left: -460dp; }
+#card.wide #fields { right: 360dp; }
+#side { position: absolute; right: 22dp; top: 62dp; bottom: 14dp; width: 320dp; display: none; }
+#card.wide #side { display: block; }
+#card.notabs #tabs { display: none; }
+#card.notabs #fields, #card.notabs #side { top: 16dp; }
+#footer.wide { width: 920dp; margin-left: -460dp; }
+
+/* the chooser: a button showing the choice, a filter box and a list under it */
+.chooserbtn { text-align: left; padding: 11dp 12dp; }
+.choosepanel { display: none; margin-top: 6dp; padding: 8dp; background-color: #0b0c11; border-width: 1dp; border-color: #303342; border-radius: 6dp; }
+.choosepanel.open { display: block; }
+.chooselist { height: 230dp; overflow-y: auto; margin-top: 8dp; }
+.item { display: block; box-sizing: border-box; width: 100%; padding: 8dp 10dp; text-align: left; color: #e6e8f0; background-color: #13151d; margin-bottom: 3dp; tab-index: auto; cursor: pointer; }
+.item:hover, .item:focus { background-color: #2b3046; color: #ffffff; }
+.item.cur { background-color: #dc3546; color: #ffffff; }
+.itemnote { color: #8b8fa3; font-size: 13dp; padding: 6dp 10dp; }
+
+/* the busy box (a download) */
+#busy { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: #000000b8; display: none; }
+#busy.show { display: block; }
+#busybox { position: absolute; left: 50%; top: 50%; width: 460dp; margin-left: -230dp; margin-top: -110dp; padding: 24dp; background-color: #13131a; border-radius: 12dp; text-align: center; }
+#busytitle { font-family: Oxanium; font-size: 22dp; font-weight: bold; margin: 0 0 6dp 0; }
+#busyline { color: #8b8fa3; margin: 4dp 0 12dp 0; }
+#busybar { height: 10dp; background-color: #303342; }
+#busyfill { height: 10dp; width: 0%; background-color: #fa737a; }
+#busybutton { margin-top: 18dp; }

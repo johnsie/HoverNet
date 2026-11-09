@@ -82,6 +82,8 @@
     <ClCompile Include="TexturePack.cpp" />
     <ClCompile Include="CraftLook.cpp" />
     <ClCompile Include="..\Authority\CraftDesign.cpp" />
+    <ClCompile Include="..\VideoServices\ColourGrade.cpp" />
+    <ClCompile Include="..\VideoServices\TextureEnhance.cpp" />
     <ClCompile Include="ResSound.cpp" />
     <ClCompile Include="ResSprite.cpp" />
     <ClCompile Include="ResourceLib.cpp" />

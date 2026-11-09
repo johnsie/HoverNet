@@ -1,4 +1,4 @@
-// The RmlUi main menu prototype (docs/rmlui.md) running in the browser build, in headless Chrome: the page is opened (the new menus are the default), the game starts, the new menu is
+// The RmlUi main menu prototype (docs/rmlui.md) running in the browser build, in headless Chrome: the page is opened (with ?menu=rml), the game starts, the new menu is
 // drawn (no RmlUi error in the console, the picture is not blank) and the picture is saved when HN_KEEP_PICTURES=1.
 //   node web-rml-menu.mjs <web-dir>        (the folder holding HoverNet.html/.js/.wasm/.data, built with -DHOVERNET_RMLUI=ON)
 // Exits 0 on success, 1 on a failed check, 77 without Chrome.
@@ -44,15 +44,16 @@ try {
   };
   const send = (method, params = {}) => new Promise((r) => { const n = ++id; pending.set(n, r); ws.send(JSON.stringify({ id: n, method, params })); });
   await send('Runtime.enable'); await send('Page.enable');
-  await send('Page.navigate', { url: base });
+  await send('Page.navigate', { url: base + '?menu=rml' });
   const started = async () => (await send('Runtime.evaluate', { expression: "typeof Module !== 'undefined' && !!Module.calledRun", returnByValue: true })).result?.value === true;
   let up = false;
   for (const end = Date.now() + 90000; Date.now() < end && !up;) { up = await started(); if (!up) await sleep(500); }
   check(up, 'the browser build starts with the new menus');
   // The page hides its loading screen (body.running) once the game has drawn a frame; then the menu's opening animations need a moment.
-  let running = false;
+  let running = false; const waitStart = Date.now();
   for (const end = Date.now() + 90000; Date.now() < end && !running;) { running = (await send('Runtime.evaluate', { expression: "document.body.classList.contains('running')", returnByValue: true })).result?.value === true; if (!running) await sleep(500); }
   check(running, 'the loading screen goes away: the game has drawn a frame');
+  check(Date.now() - waitStart < 40000, `the page saw a drawn frame promptly (${Math.round((Date.now() - waitStart) / 1000)} s; the page gives up and reloads in compatibility mode after 25 s with none)`);
   await sleep(3000);
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   const png = Buffer.from(shot.data, 'base64');

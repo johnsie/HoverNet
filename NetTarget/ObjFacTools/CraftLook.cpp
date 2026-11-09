@@ -29,7 +29,7 @@ std::map<std::uint64_t, std::unique_ptr<Variant>> gVariants;
 inline int R(std::uint32_t c) { return (c >> 16) & 255; }
 inline int G(std::uint32_t c) { return (c >> 8) & 255; }
 inline int B(std::uint32_t c) { return c & 255; }
-inline std::uint32_t Pack(int r, int g, int b) { return (static_cast<std::uint32_t>(std::max(0, std::min(255, r))) << 16) | (static_cast<std::uint32_t>(std::max(0, std::min(255, g))) << 8) | static_cast<std::uint32_t>(std::max(0, std::min(255, b))); }
+inline std::uint32_t Pack(int r, int g, int b) { return (static_cast<std::uint32_t>((std::max)(0, (std::min)(255, r))) << 16) | (static_cast<std::uint32_t>((std::max)(0, (std::min)(255, g))) << 8) | static_cast<std::uint32_t>((std::max)(0, (std::min)(255, b))); }
 inline int Luma(std::uint32_t c) { return (R(c) * 299 + G(c) * 587 + B(c) * 114) / 1000; }
 
 // The tinted colour for a pixel: the shading of the pixel kept, the hue of the colour, highlights going towards white.
@@ -46,7 +46,7 @@ std::uint32_t TintColour(std::uint32_t pixel, const std::uint8_t rgb[3], int str
 {
     if (strength <= 0) return pixel;
     const std::uint32_t t = Shaded(rgb, Luma(pixel));
-    const int s = std::min(255, strength);
+    const int s = (std::min)(255, strength);
     return Pack((R(pixel) * (255 - s) + R(t) * s) / 255, (G(pixel) * (255 - s) + G(t) * s) / 255, (B(pixel) * (255 - s) + B(t) * s) / 255);
 }
 

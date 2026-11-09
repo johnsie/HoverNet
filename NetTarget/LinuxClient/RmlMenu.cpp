@@ -62,6 +62,13 @@ std::vector<std::string> ScriptSteps()
     return steps;
 }
 
+void (*gFrameHook)() = nullptr;
+void EndFrame(int pFrameLimit)
+{
+    if (gFrameHook != nullptr) gFrameHook();
+    else SDL_Delay(pFrameLimit >= 0 ? 16 : 4);
+}
+
 const char* const kButtons[] = {"online", "offline", "leaderboards", "garage", "tutorial", "settings"};   // in the order the arrow keys walk them
 constexpr int kButtonCount = 6;
 
@@ -207,7 +214,7 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
             }
         }
         SDL_RenderPresent(pRenderer);
-        SDL_Delay(pFrameLimit >= 0 ? 16 : 4);
+        EndFrame(pFrameLimit);
     }
     document->Close();
     Rml::Shutdown();
@@ -382,7 +389,7 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
             }
         }
         SDL_RenderPresent(pRenderer);
-        SDL_Delay(pFrameLimit >= 0 ? 16 : 4);
+        EndFrame(pFrameLimit);
     }
     document->Close();
     Rml::Shutdown();
@@ -520,7 +527,7 @@ int RunChoiceMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const ChoiceInfo
             }
         }
         SDL_RenderPresent(pRenderer);
-        SDL_Delay(pFrameLimit >= 0 ? 16 : 4);
+        EndFrame(pFrameLimit);
     }
     document->Close();
     Rml::Shutdown();
@@ -824,7 +831,7 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
         }
     }
     SDL_RenderPresent(m.renderer);
-    SDL_Delay(pFrameLimit >= 0 ? 16 : 4);
+    EndFrame(pFrameLimit);
     for (const FormEvent& e : m.listener.pending) {
         if (std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST form %s text=[%s] on=%d value=%g index=%d\n", e.id.c_str(), e.text.c_str(), e.on ? 1 : 0, e.value, e.index); std::fflush(stdout); }
         pEvents.push_back(e);
@@ -834,4 +841,5 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
     m.listener.outcome = FormOutcome::eNone;
     return out;
 }
+void SetFrameHook(void (*pHook)()) { gFrameHook = pHook; }
 }  // namespace HoverNetRml

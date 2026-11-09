@@ -95,6 +95,7 @@
     <ClCompile Include="ModernGraphics.cpp" />
     <ClCompile Include="ColourGrade.cpp" />
     <ClCompile Include="TextureEnhance.cpp" />
+    <ClCompile Include="GpuFinisher.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="*.h" />

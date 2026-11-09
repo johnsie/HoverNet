@@ -565,7 +565,7 @@ struct GpuFinisher::Impl
     {
         if (w == width && h == height) return true;
         width = w; height = h;
-        const int w1 = std::max(1, w / 2), h1 = std::max(1, h / 2), w2 = std::max(1, w / 4), h2 = std::max(1, h / 4);
+        const int w1 = (std::max)(1, w / 2), h1 = (std::max)(1, h / 2), w2 = (std::max)(1, w / 4), h2 = (std::max)(1, h / 4);
         MakeTarget(texMain, fboMain, w, h, kRGBA8);
         MakeTarget(texScene, fboScene, w, h, kRGBA8);
         MakeTarget(texA1, fboA1, w1, h1, kRGBA8); MakeTarget(texB1, fboB1, w1, h1, kRGBA8);
@@ -842,7 +842,7 @@ bool GpuFinisher::Process(std::uint8_t* rgb, int width, int height, const Option
         g.ClearBufferfv(kDepth, 0, &depthOne);
         g.Enable(kDepthTest); g.DepthFunc(kLequal); g.DepthMask(1);
         g.Enable(kScissorTest);
-        g.Scissor(std::max(0, hints.depthX0), std::max(0, hints.depthY0), hints.depthWidth > 0 ? hints.depthWidth : width, hints.depthHeight > 0 ? hints.depthHeight : height);
+        g.Scissor((std::max)(0, hints.depthX0), (std::max)(0, hints.depthY0), hints.depthWidth > 0 ? hints.depthWidth : width, hints.depthHeight > 0 ? hints.depthHeight : height);
         g.UseProgram(m.progGeo);
         g.Uniform2f(g.GetUniformLocation(m.progGeo, "uFrame"), static_cast<float>(width), static_cast<float>(height));
         g.Uniform4f(g.GetUniformLocation(m.progGeo, "uProj"), hints.projKx, hints.projKz, static_cast<float>(hints.projCenterX), static_cast<float>(hints.projCenterY));
@@ -898,11 +898,11 @@ bool GpuFinisher::Process(std::uint8_t* rgb, int width, int height, const Option
     GLuint pictureTexture = baseTexture;
     const bool scene = hints.valid && (m.sceneDrawn || (hints.depth != nullptr && hints.depthWidth > 0 && hints.depthHeight > 0)) && flags != 0 && hints.projKx > 0.0f && hints.projKz > 0.0f;
     if (scene) {
-        const int wx0 = m.sceneDrawn && hints.depthWidth <= 0 ? 0 : std::max(0, hints.depthX0), wy0 = m.sceneDrawn && hints.depthHeight <= 0 ? 0 : std::max(0, hints.depthY0);
+        const int wx0 = m.sceneDrawn && hints.depthWidth <= 0 ? 0 : (std::max)(0, hints.depthX0), wy0 = m.sceneDrawn && hints.depthHeight <= 0 ? 0 : (std::max)(0, hints.depthY0);
         const int wW = hints.depthWidth > 0 ? hints.depthWidth : width, wH = hints.depthHeight > 0 ? hints.depthHeight : height;
         // the sky's colour, from sky pixels of the upper half of the view, smoothed from frame to frame (as the processor does)
         {
-            const int x0 = wx0, y0 = wy0, x1 = std::min(width, wx0 + wW), y1 = std::min(height, wy0 + wH);
+            const int x0 = wx0, y0 = wy0, x1 = (std::min)(width, wx0 + wW), y1 = (std::min)(height, wy0 + wH);
             int sr = 0, sg = 0, sb = 0, count = 0;
             for (int y = y0; y < y0 + (y1 - y0) / 2; y += 6)
                 for (int x = x0; x < x1; x += 9) {
@@ -957,7 +957,7 @@ bool GpuFinisher::Process(std::uint8_t* rgb, int width, int height, const Option
         g.Uniform4f(g.GetUniformLocation(m.progScene, "uProj"), hints.projKx, hints.projKz, static_cast<float>(hints.projCenterX), static_cast<float>(hints.projCenterY));
         g.Uniform3f(g.GetUniformLocation(m.progScene, "uSky"), m.skyKnown ? m.skyR : 150.0f, m.skyKnown ? m.skyG : 180.0f, m.skyKnown ? m.skyB : 220.0f);
         g.Uniform4f(g.GetUniformLocation(m.progScene, "uCraft"), static_cast<float>(hints.craftX), static_cast<float>(hints.craftY), static_cast<float>(hints.craftRadius), static_cast<float>(hints.craftGroundY));
-        const int lightCount = std::min(hints.lightCount, static_cast<int>(kMaxLights));
+        const int lightCount = (std::min)(hints.lightCount, static_cast<int>(kMaxLights));
         float la[kMaxLights * 4] = {0}, lb[kMaxLights * 4] = {0}, lc[kMaxLights * 4] = {0};
         GLint lk[kMaxLights] = {0};
         for (int i = 0; i < lightCount; ++i) {
@@ -985,7 +985,7 @@ bool GpuFinisher::Process(std::uint8_t* rgb, int width, int height, const Option
     m.Draw(m.progMain, m.fboMain, width, height);
 
     // 2: bloom at half and quarter size, blurred
-    const int w1 = std::max(1, width / 2), h1 = std::max(1, height / 2), w2 = std::max(1, width / 4), h2 = std::max(1, height / 4);
+    const int w1 = (std::max)(1, width / 2), h1 = (std::max)(1, height / 2), w2 = (std::max)(1, width / 4), h2 = (std::max)(1, height / 4);
     if (bloom) {
         g.UseProgram(m.progDown);
         m.Set1i(m.progDown, "uTex", 0);

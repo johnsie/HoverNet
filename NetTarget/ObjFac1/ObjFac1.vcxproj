@@ -71,6 +71,12 @@
     </ClCompile>
     <ClCompile Include="TestElement.cpp" />
     <ClCompile Include="WoodSurface.cpp" />
+    <ClCompile Include="..\ObjFacTools\CraftLook.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\Authority\CraftDesign.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BallElement.h" />

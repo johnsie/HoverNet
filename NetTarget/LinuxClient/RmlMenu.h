@@ -14,6 +14,9 @@ namespace HoverNetRml
 {
 enum class Sound { eHover, eClick, eBack };
 
+// Called once at the end of every frame of every screen here (the game's own frame counter and pacing; without it a screen paces itself with a short delay).
+void SetFrameHook(void (*hook)());
+
 struct MainMenuInfo
 {
     std::string assetDir;        // NetTarget/LinuxClient/assets, with the ui/ folder and the fonts and pictures in it
@@ -85,7 +88,7 @@ int RunChoiceMenu(SDL_Window* window, SDL_Renderer* renderer, const ChoiceInfo& 
 // The caller keeps its own state and side effects: it describes the fields, and every frame hears what the player changed.
 struct FormField
 {
-    enum class Type { eHeading, eNote, eText, eToggle, eSlider, eSelect, eButton };
+    enum class Type { eHeading, eNote, eText, eToggle, eSlider, eSelect, eButton, eChooser };
     Type type = Type::eNote;
     std::string id;                  // events and updates name a field by this
     std::string label;               // the label (a heading's or note's own text)
@@ -96,6 +99,7 @@ struct FormField
     std::string suffix;              // eSlider: shown after the number, for example "%"
     std::vector<std::string> options; int selected = 0;           // eSelect
     bool quiet = false;              // eButton: the quieter style
+    std::vector<std::string> items;  // eChooser: every choice (a filter box narrows a long list to the first 60 matches); `selected` is the current one, `label` above it
 };
 
 struct FormEvent
@@ -126,6 +130,12 @@ public:
     void SetToggle(const std::string& id, bool on);
     void SetSlider(const std::string& id, float value);
     void SetSelect(const std::string& id, int index, const std::string& shown);
+    void SetLayout(bool wide, bool tabs);                                // wide: a second column on the right for a picture; tabs: show the tab bar
+    void SetFooter(const std::string& saveLabel, const std::string& cancelLabel);
+    // A picture beside the controls (the track map): called every frame, returns the texture to draw (null = none) and sets crop to the part to show. The caller owns it.
+    void SetSideImage(std::function<SDL_Texture*(SDL_Rect&)> image);
+    // A box over everything with a message, an optional progress bar (fraction < 0: none) and one button (a "busy" event when pressed); empty title hides it.
+    void SetBusy(const std::string& title, const std::string& line, float fraction, const std::string& buttonLabel);
     // One frame: input, update, drawing. Fills `events` with what the player changed.
     FormOutcome Frame(std::vector<FormEvent>& events, int frameNumber, int frameLimit);
 private:

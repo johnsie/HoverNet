@@ -90,8 +90,8 @@ class MR_2DViewPort
       MR_DllDeclare void DrawHorizontalMeter( int pX0, int pXLen, int pY0, int pYHeight, int pXM, MR_UInt8 pColor, MR_UInt8 pBackColor );
 
       // Buffer access functions
-      MR_UInt8*    GetBuffer();
-      int          GetLineLen()const;
+      MR_DllDeclare MR_UInt8*    GetBuffer();
+      MR_DllDeclare int          GetLineLen()const;
 
 
 };

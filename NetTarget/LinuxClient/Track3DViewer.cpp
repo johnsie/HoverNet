@@ -1290,14 +1290,15 @@ void SaveLocalRacePrefs(const HostPrefs& prefs)
 bool LoadReducedMotion();   // defined with the other settings below
 
 #ifdef HOVERNET_HAVE_RMLUI
-// Which interface draws the main menu and the results screen: the RmlUi one for real play, the ImGui one when HOVERNET_IMGUI_MENU is set (or HOVERNET_RML_MENU=0), and for the
-// bounded runs the tests make (they were written against the ImGui screens) unless HOVERNET_RML_MENU=1 asks for the new ones. A screen that cannot load falls back to ImGui.
-bool UseRmlUi(int pFrameLimit)
+// Which interface draws the main menu and the other converted screens: the older ImGui screens by default (they look better than the RmlUi ones so far), the RmlUi ones when
+// HOVERNET_RML_MENU is set (and not "0"; on the web page: ?menu=rml). A screen that cannot load falls back to ImGui.
+void HoverNetFrameDelayForRml() { HoverNetFrameDelay(); }
+bool UseRmlUi(int)
 {
+    static bool hooked = false;
+    if (!hooked) { hooked = true; HoverNetRml::SetFrameHook(&HoverNetFrameDelayForRml); }   // the RmlUi screens count and pace their frames like the others (the web page waits for the count)
     const char* force = std::getenv("HOVERNET_RML_MENU");
-    if (force != nullptr) return std::string(force) != "0";
-    if (std::getenv("HOVERNET_IMGUI_MENU") != nullptr) return false;
-    return pFrameLimit < 0;
+    return force != nullptr && std::string(force) != "0";
 }
 #endif
 

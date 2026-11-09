@@ -8,10 +8,12 @@
 	<div id="card">
 		<div id="tabs"></div>
 		<div id="fields"></div>
+		<div id="side"></div>
 	</div>
 	<div id="footer">
 		<button id="save" class="primary">Save</button>
 		<button id="cancel" class="quiet">Cancel</button>
 	</div>
+	<div id="busy"><div id="busybox"><p id="busytitle"></p><p id="busyline"></p><div id="busybar"><div id="busyfill"></div></div><button id="busybutton" class="act quiet">Cancel</button></div></div>
 </body>
 </rml>

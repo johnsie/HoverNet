@@ -6,6 +6,15 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.43 - 2026-11-09
+
+### Fixed
+- **The website looped on "Starting HoverNet..." (2.3.42).** The new RmlUi menus were the default and never reported their frames to the page, so after 25 seconds the page decided the browser was stuck, switched to "compatibility mode" and reloaded, over and over. The older (ImGui) menus are the default again, `?menu=rml` on the page (or `HOVERNET_RML_MENU=1`) tries the new ones, and the new screens now count their frames like the others. The browser test for the new menu now fails if the page does not see a frame within 40 seconds (it passed before only because the page gives up waiting after 60 seconds, which is how this was missed). Checked on a fresh WebAssembly build in headless Chrome; not yet on the live site.
+- **The Windows client failed to link** (`VideoServices.dll`: unresolved `GpuFinisher` methods). The legacy Visual Studio projects were missing sources the CMake build has (`GpuFinisher.cpp` in VideoServices; `ColourGrade.cpp` and `TextureEnhance.cpp` in ObjFacTools; `CraftLook.cpp` and `CraftDesign.cpp` in ObjFac1), two `MR_2DViewPort` methods were not exported, and `std::min` and `std::max` clashed with the Windows macros in `GpuFinisher.cpp` and `CraftLook.cpp`. Reproduced and fixed on the Windows runner: `VideoServices`, `ObjFacTools`, `ObjFac1` and `Game2` (Win32, Release) now build and link. The full GitHub Actions run has not been seen.
+
+### Changed
+- **The new RmlUi menus are opt-in again.** They looked worse than the older menus (text small and soft on a large window, blocky craft picture), so the ImGui menus stay the default until that is fixed.
+
 ## 2.3.42 - 2026-11-09
 
 ### Fixed
