@@ -17,6 +17,9 @@
 
 #include "SoftMixer.h"
 
+#define STB_VORBIS_HEADER_ONLY
+#include "../ThirdParty/stb/stb_vorbis.c"   // the declarations; the decoder itself is compiled in StbVorbis.cpp
+
 namespace
 {
 SDL_AudioDeviceID audioDevice = 0;
@@ -107,10 +110,58 @@ std::vector<MR_ContinuousSound*>& ContinuousSounds()
     return *sounds;
 }
 
+// ---- music: Ogg Vorbis streamed through the audio callback ---------------------------------------------------------------------------------------------
+struct MusicVoice
+{
+    std::shared_ptr<std::vector<unsigned char>> data;   // the file, kept for as long as the decoder reads it
+    stb_vorbis* vorbis = nullptr;
+    float gain = 0.0f;           // 0..1 now
+    float target = 0.0f;         // 0..1 wanted
+    float perFrame = 0.0f;       // how much the gain moves each frame toward the target
+    bool active = false;
+    void Close() { if (vorbis != nullptr) { stb_vorbis_close(vorbis); vorbis = nullptr; } data.reset(); active = false; gain = target = 0.0f; }
+};
+MusicVoice gMusic[2];          // [0] the track that is wanted; [1] the one fading out
+double gMusicVolume = 0.7;     // 0..1
+constexpr float kMusicHeadroom = 0.60f;   // music sits under the sounds
+
+void MixMusic(Sint16* out, size_t frames)
+{
+    static std::vector<short> decoded;
+    for (MusicVoice& voice : gMusic) {
+        if (!voice.active || voice.vorbis == nullptr) continue;
+        decoded.resize(frames * 2);
+        size_t done = 0;
+        int restarts = 0;
+        while (done < frames) {
+            const int got = stb_vorbis_get_samples_short_interleaved(voice.vorbis, 2, decoded.data() + done * 2, static_cast<int>((frames - done) * 2));
+            if (got <= 0) {
+                if (++restarts > 2 || !stb_vorbis_seek_start(voice.vorbis)) break;   // the end of the track: round again
+                continue;
+            }
+            done += static_cast<size_t>(got);
+        }
+        const float master = static_cast<float>(gMasterVolume) * kMusicHeadroom * static_cast<float>(gMusicVolume);
+        for (size_t i = 0; i < frames; ++i) {
+            if (voice.gain != voice.target) {
+                voice.gain = voice.gain < voice.target ? std::min(voice.target, voice.gain + voice.perFrame) : std::max(voice.target, voice.gain - voice.perFrame);
+            }
+            if (i < done) {
+                for (int c = 0; c < 2; ++c) {
+                    const int mixed = out[i * 2 + static_cast<size_t>(c)] + static_cast<int>(decoded[i * 2 + static_cast<size_t>(c)] * voice.gain * master);
+                    out[i * 2 + static_cast<size_t>(c)] = static_cast<Sint16>(std::max(-32768, std::min(32767, mixed)));
+                }
+            }
+        }
+        if (voice.target == 0.0f && voice.gain == 0.0f) voice.Close();
+    }
+}
+
 void SDLCALL MixAudio(void*, Uint8* stream, int length)
 {
     const size_t frameCount = static_cast<size_t>(length) / (2 * sizeof(Sint16));
     gMixer.Mix(reinterpret_cast<Sint16*>(stream), frameCount, gMasterVolume);
+    MixMusic(reinterpret_cast<Sint16*>(stream), frameCount);
 }
 }
 
@@ -233,6 +284,58 @@ namespace MR_SoundServer
         }
         gMixer.EndUpdate();
         SDL_UnlockAudioDevice(audioDevice);
+    }
+
+    void MusicPlay( const unsigned char* pOgg, unsigned long pSize, double pVolume, double pFadeSeconds )
+    {
+        if (audioDevice == 0 || pOgg == nullptr || pSize < 64) return;
+        std::shared_ptr<std::vector<unsigned char>> copy(new std::vector<unsigned char>(pOgg, pOgg + pSize));
+        int error = 0;
+        stb_vorbis* vorbis = stb_vorbis_open_memory(copy->data(), static_cast<int>(copy->size()), &error, nullptr);
+        if (vorbis == nullptr) return;
+        const stb_vorbis_info info = stb_vorbis_get_info(vorbis);
+        if (info.sample_rate != 44100 || info.channels < 1 || info.channels > 2) { stb_vorbis_close(vorbis); return; }
+        SDL_LockAudioDevice(audioDevice);
+        // the track that was wanted fades out (a second one still fading is cut)
+        gMusic[1].Close();
+        if (gMusic[0].active) {
+            gMusic[1] = gMusic[0];
+            gMusic[1].target = 0.0f;
+            gMusic[1].perFrame = pFadeSeconds > 0.01 ? 1.0f / static_cast<float>(pFadeSeconds * 44100.0) : 1.0f;
+            gMusic[0] = MusicVoice();
+        }
+        gMusic[0].data = copy;
+        gMusic[0].vorbis = vorbis;
+        gMusic[0].active = true;
+        gMusic[0].gain = pFadeSeconds > 0.01 ? 0.0f : 1.0f;
+        gMusic[0].target = 1.0f;
+        gMusic[0].perFrame = pFadeSeconds > 0.01 ? 1.0f / static_cast<float>(pFadeSeconds * 44100.0) : 1.0f;
+        gMusicVolume = std::min(1.0, std::max(0.0, pVolume));
+        SDL_UnlockAudioDevice(audioDevice);
+    }
+
+    void MusicStop( double pFadeSeconds )
+    {
+        if (audioDevice == 0) return;
+        SDL_LockAudioDevice(audioDevice);
+        for (MusicVoice& voice : gMusic) {
+            if (!voice.active) continue;
+            voice.target = 0.0f;
+            voice.perFrame = pFadeSeconds > 0.01 ? 1.0f / static_cast<float>(pFadeSeconds * 44100.0) : 1.0f;
+        }
+        SDL_UnlockAudioDevice(audioDevice);
+    }
+
+    void MusicSetVolume( double pVolume )
+    {
+        if (audioDevice != 0) SDL_LockAudioDevice(audioDevice);
+        gMusicVolume = std::min(1.0, std::max(0.0, pVolume));
+        if (audioDevice != 0) SDL_UnlockAudioDevice(audioDevice);
+    }
+
+    bool MusicPlaying()
+    {
+        return gMusic[0].active && gMusic[0].target > 0.0f;
     }
 
     void SetMasterVolume( double pVolume )

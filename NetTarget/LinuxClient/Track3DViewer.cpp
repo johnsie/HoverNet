@@ -1574,6 +1574,57 @@ void SaveVolume(double volume)
     out << volume << '\n';
 }
 
+// ---- Music -------------------------------------------------------------------------------------------------------------------------------------------
+// Two tracks from OpenGameArt (NetTarget/Music, credits and licences in NetTarget/Music/CREDITS.md): "Hard Left" in the menus and results, "Asphalt" in races.
+// Ogg Vorbis files streamed by the sound server; the music volume is its own setting (<config>/music_volume, 0 to 1).
+enum class MusicTrack { eNone, eMenu, eRace };
+
+double LoadMusicVolume()
+{
+    std::ifstream in(ConfigDirPath() + "/music_volume");
+    double volume = 0.6;
+    if (in >> volume && volume >= 0.0 && volume <= 1.0) return volume;
+    return 0.6;
+}
+
+void SaveMusicVolume(double volume)
+{
+    std::ofstream out(ConfigDirPath() + "/music_volume");
+    out << volume << '\n';
+}
+
+struct MusicState
+{
+    MusicTrack current = MusicTrack::eNone;
+    bool ducked = false;
+    std::string toast;            // "Asphalt - Sygil", shown for a few seconds when a track starts
+    Uint32 toastAt = 0;
+};
+MusicState gMusicState;
+
+void PlayMusic(MusicTrack track)
+{
+    if (track == gMusicState.current) return;
+    if (std::getenv("HOVERNET_NO_MUSIC") != nullptr) { gMusicState.current = track; return; }
+    gMusicState.current = track;
+    if (track == MusicTrack::eNone) { MR_SoundServer::MusicStop(1.0); return; }
+    const char* file = track == MusicTrack::eMenu ? "HardLeft.ogg" : "Asphalt.ogg";
+    std::ifstream in(SourcePath((std::string("NetTarget/Music/") + file).c_str()), std::ios::binary);
+    if (!in) return;   // a package without the music is simply quiet
+    const std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    MR_SoundServer::MusicPlay(reinterpret_cast<const unsigned char*>(bytes.data()), static_cast<unsigned long>(bytes.size()), LoadMusicVolume() * (gMusicState.ducked ? 0.35 : 1.0), 1.6);
+    gMusicState.toast = track == MusicTrack::eMenu ? "Hard Left - Dan Knoflicek" : "Asphalt - Sygil";
+    gMusicState.toastAt = SDL_GetTicks();
+}
+
+// The music steps back while a menu is over the race (pause), and comes back after.
+void DuckMusic(bool duck)
+{
+    if (gMusicState.ducked == duck) return;
+    gMusicState.ducked = duck;
+    MR_SoundServer::MusicSetVolume(LoadMusicVolume() * (duck ? 0.35 : 1.0));
+}
+
 std::string MutePath()
 {
     return ConfigDirPath() + "/mute";
@@ -3739,6 +3790,8 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
                          MR_3DViewPort& viewport, const MR_Sprite& font, bool pIsOnline,
                          int pFrameLimit, bool pOfferReplays, bool pCanRestart)
 {
+    DuckMusic(true);   // the music steps back while the pause menu is up
+    struct Unduck { ~Unduck() { DuckMusic(false); } } unduck;
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
     if (ownsImGuiContext) {
         ImGui::CreateContext();
@@ -4802,6 +4855,20 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         ImGui::PopItemWidth();
 
+        {
+            // The music has its own level, and it changes (and is kept) at once.
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Music volume");
+            static float musicPercent = -1.0f;
+            if (musicPercent < 0.0f) musicPercent = static_cast<float>(LoadMusicVolume() * 100.0);
+            ImGui::PushItemWidth(-1.0f);
+            if (MenuSliderFloat("##MusicVolume", &musicPercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
+                MR_SoundServer::MusicSetVolume(musicPercent / 100.0);
+                SaveMusicVolume(musicPercent / 100.0);
+            }
+            ImGui::PopItemWidth();
+            ImGui::TextDisabled("Music: Hard Left by Dan Knoflicek, Asphalt by Sygil (open licences, see NetTarget/Music/CREDITS.md).");
+        }
         }
         if (tabOpen) ImGui::EndTabItem();
         tabOpen = tabsOpen && ImGui::BeginTabItem("Access", nullptr, settingsTabFlag(4));
@@ -5578,6 +5645,18 @@ void DrawRaceHud(const HudText& hud, const ImVec2& origin, const ImVec2& display
         const std::vector<HudSegment> lap = SplitHudLine(hud.lapLine);
         const float panelHeight = 44.0f * scale;
         DrawHudPanel(draw, lap, centreX, origin.y + display.y - panelHeight - display.y * 0.025f, scale, display_font, body);
+    }
+    // the track that has just started, credited for a few seconds (bottom right)
+    if (!gMusicState.toast.empty() && SDL_GetTicks() - gMusicState.toastAt < 6000) {
+        const float age = static_cast<float>(SDL_GetTicks() - gMusicState.toastAt);
+        const float alpha = age < 400.0f ? age / 400.0f : age > 5200.0f ? std::max(0.0f, (6000.0f - age) / 800.0f) : 1.0f;
+        const std::string text = "Now playing: " + gMusicState.toast;
+        const float size = 17.0f * scale;
+        const ImVec2 box = body->CalcTextSizeA(size, FLT_MAX, 0.0f, text.c_str());
+        const ImVec2 hi(origin.x + display.x - 16.0f * scale, origin.y + display.y - display.y * 0.17f);
+        const ImVec2 lo(hi.x - box.x - 26.0f * scale, hi.y - box.y - 14.0f * scale);
+        draw->AddRectFilled(lo, hi, IM_COL32(8, 10, 16, static_cast<int>(150 * alpha)), 9.0f * scale);
+        draw->AddText(body, size, ImVec2(lo.x + 13.0f * scale, lo.y + 7.0f * scale), IM_COL32(235, 238, 245, static_cast<int>(255 * alpha)), text.c_str());
     }
     // chat and messages, bottom left, newest at the bottom
     {
@@ -8930,6 +9009,7 @@ int RunClient(int argc, char** argv)
             if (mainCharacter != nullptr && HoverNetCraft::CraftStore(ConfigDirPath()).LoadActive(mine)) SetRaceCraftDesign(mainCharacter->GetHoverId(), &mine);
         }
         currentTrackName = newTrackName;
+        PlayMusic(MusicTrack::eRace);
         if (rememberLocal) { lastLocal.track = newTrackName; lastLocal.laps = newLaps; lastLocal.weapons = newWeapons; lastLocal.valid = true; }
         else lastLocal.valid = false;
         session.SetSimulationTime(-6000);
@@ -9249,6 +9329,7 @@ int RunClient(int argc, char** argv)
     bool mainMenuFailed = false;
     bool playtestPending = !gPlaytestPath.empty();
     auto showMainMenu = [&]() -> bool {
+        PlayMusic(MusicTrack::eMenu);
         tutorial.Stop();   // back at the menu: the lesson card goes, and its ImGui context with it (the menus make their own)
         ShutdownTutorialOverlay();
         replay.active = false;
@@ -10694,6 +10775,7 @@ int RunClient(int argc, char** argv)
 #ifdef HOVERNET_WEB
                 gHoverNetInRace = 0;
 #endif
+                PlayMusic(MusicTrack::eMenu);
                 const PostRaceChoice resultChoice = RunPostRaceScreen(
                     graphics, buffer, viewport, *menuFontHandle->GetSprite(),
                     finishTotalTime, finishBestLap,

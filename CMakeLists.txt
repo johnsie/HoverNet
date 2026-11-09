@@ -253,6 +253,7 @@ add_library(HoverNetResourceCore STATIC
     NetTarget/ObjFacTools/ResourceLib.cpp
     NetTarget/ObjFacTools/SpriteHandle.cpp
     NetTarget/LinuxClient/HeadlessSoundServer.cpp
+    NetTarget/LinuxClient/StbVorbis.cpp
     NetTarget/LinuxClient/HeadlessSprite.cpp
 )
 
@@ -593,6 +594,8 @@ add_executable(HoverNetTextureExport NetTarget/LinuxClient/TextureExport.cpp)
 target_link_libraries(HoverNetTextureExport PRIVATE HoverNetVideoCore HoverNetResourceCore)
 add_executable(HoverNetTutorialTest NetTarget/LinuxClient/TutorialTest.cpp NetTarget/LinuxClient/Tutorial.cpp)
 target_link_libraries(HoverNetTutorialTest PRIVATE HoverNetSim)
+add_executable(HoverNetMusicTest NetTarget/LinuxClient/MusicTest.cpp)
+target_link_libraries(HoverNetMusicTest PRIVATE HoverNetResourceCore)
 add_executable(HoverNetCraftDesignTest NetTarget/LinuxClient/CraftDesignTest.cpp)
 target_link_libraries(HoverNetCraftDesignTest PRIVATE HoverNetSim)
 add_executable(HoverNetCraftLookTest NetTarget/LinuxClient/CraftLookTest.cpp NetTarget/LinuxClient/CraftPreview.cpp)
@@ -608,6 +611,7 @@ if(NOT EMSCRIPTEN)
     target_link_libraries(HoverNetViewportThreadsTest PRIVATE Threads::Threads)
     add_test(NAME HoverNetViewportThreads COMMAND HoverNetViewportThreadsTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetViewportColour COMMAND HoverNetViewportColourTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetMusic COMMAND HoverNetMusicTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetTutorial COMMAND HoverNetTutorialTest)
     add_test(NAME HoverNetCraftDesign COMMAND HoverNetCraftDesignTest)
     add_test(NAME HoverNetCraftLook COMMAND HoverNetCraftLookTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
@@ -858,6 +862,7 @@ if(EMSCRIPTEN)
         --pre-js "${CMAKE_SOURCE_DIR}/packaging/web/web-pre.js"
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/ObjFac1.dat@/NetTarget/ObjFac1.dat"
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/Tracks@/NetTarget/Tracks"
+        "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/Music@/NetTarget/Music"
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/CommunityTracks.tsv@/NetTarget/CommunityTracks.tsv"
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/LinuxClient/assets@/NetTarget/LinuxClient/assets"
     )

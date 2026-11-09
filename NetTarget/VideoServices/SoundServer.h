@@ -78,6 +78,13 @@ namespace MR_SoundServer
    // "audio and volume settings" item). pVolume is clamped to [0.0, 1.0];
    // defaults to 1.0 (unchanged from before this existed) until a caller sets
    // it, so existing callers that never touch this see no behavior change.
+   // Music: an Ogg Vorbis stream (44.1 kHz stereo), decoded a little at a time and mixed under the sounds, looping until it is stopped or replaced. A track that is
+   // already playing is faded out as the new one fades in. pVolume is 0..1 (relative: the master volume still applies). The data is copied.
+   MR_DllDeclare void                MusicPlay( const unsigned char* pOgg, unsigned long pSize, double pVolume, double pFadeSeconds );
+   MR_DllDeclare void                MusicStop( double pFadeSeconds );
+   MR_DllDeclare void                MusicSetVolume( double pVolume );
+   MR_DllDeclare bool                MusicPlaying();
+
    MR_DllDeclare void                SetMasterVolume( double pVolume );
    MR_DllDeclare double              GetMasterVolume();
 

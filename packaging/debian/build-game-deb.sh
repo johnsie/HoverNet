@@ -37,6 +37,9 @@ install -Dm644 NetTarget/LinuxClient/assets/menu-hovercraft.bmp \
   "$package_root/usr/share/games/hovernet/NetTarget/LinuxClient/assets/menu-hovercraft.bmp"
 install -Dm644 NetTarget/LinuxClient/assets/menu-banner.bmp \
   "$package_root/usr/share/games/hovernet/NetTarget/LinuxClient/assets/menu-banner.bmp"
+for music in NetTarget/Music/*; do
+  install -Dm644 "$music" "$package_root/usr/share/games/hovernet/NetTarget/Music/$(basename "$music")"
+done
 for asset in NetTarget/LinuxClient/assets/*.ttf NetTarget/LinuxClient/assets/*-OFL.txt; do
   install -Dm644 "$asset" \
     "$package_root/usr/share/games/hovernet/NetTarget/LinuxClient/assets/$(basename "$asset")"

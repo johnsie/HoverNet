@@ -12,6 +12,7 @@ $required = @(
     "SDL2.dll",
     "NetTarget\ObjFac1.dat",
     "NetTarget\ObjFac1.textures",
+    "NetTarget\Music\CREDITS.md",
     "NetTarget\LinuxClient\assets\menu-hovercraft.bmp",
     "NetTarget\LinuxClient\assets\menu-banner.bmp",
     "NetTarget\LinuxClient\assets\Inter-Variable.ttf",
