@@ -2281,11 +2281,80 @@ void ApplyHoverNetLobbyStyle(float scale, bool highContrast)
 // Buttons use a solid red fill (see ApplyHoverNetLobbyStyle), so they need white
 // label text -- the style's default text color, while readable on dark panels,
 // has less contrast against the red fill than pure white.
+// ---- Interface and race sounds, made in code -------------------------------------------------------------------------------------------------------
+// Short synthesised tones (no sound files, nothing to license): menu hover, click and back, the race countdown and start, a lap chime, a finish fanfare and a
+// new-best sting. They are built once, as the sound server's own resource format, the first time one is wanted.
+enum class Sfx { eHover, eClick, eBack, eCountdown, eGo, eLap, eFinish, eBest, eCount };
+
+struct SfxBank
+{
+    MR_ShortSound* sounds[static_cast<int>(Sfx::eCount)] = {};
+    bool built = false;
+    ImGuiID lastHovered = 0;
+    bool quiet = false;   // the button being drawn is a secondary one (Back, Cancel): its click is the "back" sound
+};
+SfxBank gSfx;
+
+std::vector<char> MakeToneSound(const std::vector<std::pair<double, double>>& notes /* start seconds, frequency */, double length, double decay, double amplitude, bool harmonic)
+{
+    const int rate = 44100;
+    const int frames = static_cast<int>(length * rate);
+    std::vector<short> pcm(static_cast<std::size_t>(frames), 0);
+    for (const auto& note : notes) {
+        const int first = static_cast<int>(note.first * rate);
+        for (int i = first; i < frames; ++i) {
+            const double t = static_cast<double>(i - first) / rate;
+            const double envelope = std::exp(-t * decay) * std::min(1.0, t * 400.0);   // a quick attack, then a decay
+            double v = std::sin(6.283185307 * note.second * t);
+            if (harmonic) v = 0.75 * v + 0.2 * std::sin(6.283185307 * note.second * 2.0 * t) + 0.08 * std::sin(6.283185307 * note.second * 3.0 * t);
+            pcm[static_cast<std::size_t>(i)] = static_cast<short>(std::max(-32767.0, std::min(32767.0, pcm[static_cast<std::size_t>(i)] + v * envelope * amplitude * 32767.0)));
+        }
+    }
+    // the sound server's resource layout: u32 length, a WAVEFORMATEX (tag, channels, rate, bytes per second, block, bits, extra), then the samples
+    std::vector<char> blob(22 + pcm.size() * 2);
+    auto put32 = [&](std::size_t at, std::uint32_t v) { for (int b = 0; b < 4; ++b) blob[at + static_cast<std::size_t>(b)] = static_cast<char>((v >> (8 * b)) & 255); };
+    auto put16 = [&](std::size_t at, std::uint16_t v) { blob[at] = static_cast<char>(v & 255); blob[at + 1] = static_cast<char>(v >> 8); };
+    put32(0, static_cast<std::uint32_t>(pcm.size() * 2));
+    put16(4, 1); put16(6, 1); put32(8, rate); put32(12, rate * 2); put16(16, 2); put16(18, 16); put16(20, 0);
+    std::memcpy(blob.data() + 22, pcm.data(), pcm.size() * 2);
+    return blob;
+}
+
+void PlaySfx(Sfx which, int decibels = 0, double pitch = 1.0)
+{
+    if (!gSfx.built) {
+        gSfx.built = true;
+        struct Def { Sfx id; std::vector<std::pair<double, double>> notes; double length, decay, amplitude; bool harmonic; };
+        const Def defs[] = {
+            {Sfx::eHover, {{0.0, 1900.0}}, 0.05, 90.0, 0.10, false},
+            {Sfx::eClick, {{0.0, 880.0}, {0.035, 1320.0}}, 0.14, 30.0, 0.28, true},
+            {Sfx::eBack, {{0.0, 990.0}, {0.035, 660.0}}, 0.14, 30.0, 0.26, true},
+            {Sfx::eCountdown, {{0.0, 660.0}}, 0.22, 14.0, 0.40, true},
+            {Sfx::eGo, {{0.0, 1320.0}, {0.0, 1980.0}}, 0.65, 5.5, 0.38, true},
+            {Sfx::eLap, {{0.0, 880.0}, {0.09, 1108.0}, {0.18, 1318.0}}, 0.75, 7.0, 0.30, true},
+            {Sfx::eFinish, {{0.0, 523.0}, {0.14, 659.0}, {0.28, 784.0}, {0.42, 1046.0}, {0.62, 784.0}, {0.62, 1046.0}, {0.62, 1318.0}}, 1.9, 2.6, 0.30, true},
+            {Sfx::eBest, {{0.0, 784.0}, {0.1, 988.0}, {0.2, 1175.0}, {0.3, 1568.0}}, 1.2, 4.0, 0.30, true},
+        };
+        for (const Def& d : defs) {
+            const std::vector<char> blob = MakeToneSound(d.notes, d.length, d.decay, d.amplitude, d.harmonic);
+            gSfx.sounds[static_cast<int>(d.id)] = MR_SoundServer::CreateShortSound(blob.data(), 4);
+        }
+    }
+    MR_ShortSound* sound = gSfx.sounds[static_cast<int>(which)];
+    if (sound != nullptr) MR_SoundServer::Play(sound, decibels, pitch, 0);
+}
+
 bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
 {
     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
     const bool pressed = ImGui::Button(label, size);
     ImGui::PopStyleColor();
+    // sounds: a tick as the pointer or the keyboard focus arrives on a button, and a click (or the lower "back" tone for a secondary button) when it is pressed
+    if (ImGui::IsItemHovered() || ImGui::IsItemFocused()) {
+        if (gSfx.lastHovered != ImGui::GetItemID()) { gSfx.lastHovered = ImGui::GetItemID(); PlaySfx(Sfx::eHover); }
+    }
+    else if (gSfx.lastHovered == ImGui::GetItemID()) gSfx.lastHovered = 0;
+    if (pressed) PlaySfx(gSfx.quiet ? Sfx::eBack : Sfx::eClick);
     // a little depth: a soft highlight across the top half and a shade along the bottom, so a button reads as a button and not a flat block
     const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
     const float rounding = ImGui::GetStyle().FrameRounding;
@@ -2305,7 +2374,9 @@ bool HoverNetQuietButton(const char* label, const ImVec2& size = ImVec2(0, 0))
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.28f, 0.10f, 0.15f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.31f, 0.33f, 0.41f, 1.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+    gSfx.quiet = true;
     const bool pressed = HoverNetButton(label, size);
+    gSfx.quiet = false;
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(4);
     return pressed;
@@ -5508,6 +5579,9 @@ bool gTutorialOverlayOwnsContext = false;
 std::string gReplayLabel;            // who is being watched and how far through (replays and spectating), drawn by the overlay
 std::string gChatPrompt;            // the chat line being typed, drawn by the overlay (empty when not typing)
 bool gHudTextInOverlay = false;      // the HUD's words (and the chat line) are drawn by the overlay, not in the bitmap font
+int gCountdownNumber = 0;             // 3, 2, 1 while the start is counted down (0 = none)
+Uint32 gCountdownTickAt = 0;          // when that number appeared
+Uint32 gGoShownAt = 0;                // when GO appeared (0 = not showing)
 bool gFinishPromptVisible = false;
 bool gFinishPromptTouch = false;
 
@@ -5677,6 +5751,62 @@ void DrawRaceHud(const HudText& hud, const ImVec2& origin, const ImVec2& display
 }
 }
 
+// The start: 3, 2, 1, GO! as big numbers that pop in and fade (the matching beeps are played by the race loop).
+void DrawStartSequence(const ImVec2& origin, const ImVec2& display)
+{
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    ImFont* big = gHoverNetDisplayFont != nullptr ? gHoverNetDisplayFont : ImGui::GetIO().Fonts->Fonts[0];
+    const float scale = std::max(0.7f, std::min(1.6f, display.y / 768.0f));
+    const Uint32 now = SDL_GetTicks();
+    std::string text;
+    float age;
+    ImU32 colour;
+    if (gGoShownAt != 0) {
+        age = static_cast<float>(now - gGoShownAt);
+        if (age > 1000.0f) { gGoShownAt = 0; return; }
+        text = "GO!"; colour = IM_COL32(130, 235, 150, 255);
+    }
+    else {
+        age = static_cast<float>(now - gCountdownTickAt);
+        text = std::to_string(gCountdownNumber); colour = IM_COL32(255, 255, 255, 255);
+    }
+    const float pop = std::min(1.0f, age / 260.0f);                       // grows in over a quarter of a second
+    const float size = (150.0f + 90.0f * (1.0f - pop)) * scale * (gGoShownAt != 0 ? 1.15f : 1.0f);
+    const float fade = std::max(0.0f, std::min(1.0f, (1000.0f - age) / 300.0f));
+    const ImVec2 box = big->CalcTextSizeA(size, FLT_MAX, 0.0f, text.c_str());
+    const ImVec2 at(origin.x + (display.x - box.x) * 0.5f, origin.y + display.y * 0.30f - box.y * 0.5f);
+    draw->AddText(big, size, ImVec2(at.x + 4.0f * scale, at.y + 5.0f * scale), IM_COL32(0, 0, 0, static_cast<int>(130 * fade)), text.c_str());
+    const ImU32 faded = (colour & 0x00FFFFFF) | (static_cast<ImU32>(255 * fade) << 24);
+    draw->AddText(big, size, at, faded, text.c_str());
+}
+
+// A flash round the edges of the picture when something happens to the craft: red for an impact, green for fuel, gold for a pickup. The picture itself does not move.
+void DrawImpactFlash(const HudText& hud, const ImVec2& origin, const ImVec2& display)
+{
+    static std::string lastCallout;
+    static Uint32 flashAt = 0;
+    static ImU32 flashColour = 0;
+    if (hud.callout[0] != 0 && lastCallout != hud.callout) {
+        flashAt = SDL_GetTicks();
+        const std::string text = hud.callout;
+        flashColour = text.find("IMPACT") != std::string::npos ? IM_COL32(235, 40, 50, 0) : text.find("FUEL") != std::string::npos ? IM_COL32(60, 220, 110, 0) : IM_COL32(255, 200, 70, 0);
+    }
+    lastCallout = hud.callout;
+    if (flashAt == 0) return;
+    const float age = static_cast<float>(SDL_GetTicks() - flashAt);
+    if (age > 600.0f) { flashAt = 0; return; }
+    const float strength = (1.0f - age / 600.0f) * 0.55f;
+    const ImU32 solid = (flashColour & 0x00FFFFFF) | (static_cast<ImU32>(255 * strength) << 24);
+    const ImU32 clear = flashColour & 0x00FFFFFF;
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const float band = std::min(display.x, display.y) * 0.18f;
+    const ImVec2 a = origin, b(origin.x + display.x, origin.y + display.y);
+    draw->AddRectFilledMultiColor(a, ImVec2(a.x + band, b.y), solid, clear, clear, solid);                       // left
+    draw->AddRectFilledMultiColor(ImVec2(b.x - band, a.y), b, clear, solid, solid, clear);                       // right
+    draw->AddRectFilledMultiColor(a, ImVec2(b.x, a.y + band), solid, solid, clear, clear);                       // top
+    draw->AddRectFilledMultiColor(ImVec2(a.x, b.y - band), b, clear, clear, solid, solid);                       // bottom
+}
+
 void DrawReplayLabel(const ImVec2& origin, const ImVec2& display, const std::string& text)
 {
     ImDrawList* draw = ImGui::GetForegroundDrawList();
@@ -5749,7 +5879,7 @@ void DrawFinishPrompt(const ImVec2& origin, const ImVec2& display, bool touch)
 void DrawGameOverlay(SDL2GraphicsBackend& graphics, SDL_Renderer* renderer, const HudText* hud)
 {
     const bool hudVisible = hud != nullptr && hud->valid;
-    if (!gTutorialCard.visible && !hudVisible && !gFinishPromptVisible && gChatPrompt.empty() && gReplayLabel.empty()) return;
+    if (!gTutorialCard.visible && !hudVisible && !gFinishPromptVisible && gChatPrompt.empty() && gReplayLabel.empty() && gCountdownNumber == 0 && gGoShownAt == 0) return;
     if (ImGui::GetCurrentContext() == nullptr) {
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
@@ -5777,6 +5907,8 @@ void DrawGameOverlay(SDL2GraphicsBackend& graphics, SDL_Renderer* renderer, cons
         display = size;
     }
     if (hudVisible) DrawRaceHud(*hud, origin, display);
+    if (gCountdownNumber > 0 || gGoShownAt != 0) DrawStartSequence(origin, display);
+    if (hudVisible) DrawImpactFlash(*hud, origin, display);
     if (gFinishPromptVisible) DrawFinishPrompt(origin, display, gFinishPromptTouch);
     if (!gChatPrompt.empty()) DrawChatPrompt(origin, display, gChatPrompt);
     if (!gReplayLabel.empty()) DrawReplayLabel(origin, display, gReplayLabel);
@@ -10438,6 +10570,33 @@ int RunClient(int argc, char** argv)
 #endif
             session.SetControlState(controlState, 0);
 #ifdef HOVERNET_GAME2_PLAYER
+            // Race sounds and the start sequence: the countdown beeps, GO, a chime at each lap (a race only: never a replay).
+            if (!replay.active) {
+                static int lastSecond = -1;
+                static int lastLap = -1;
+                const MR_SimulationTime clock = session.GetSimulationTime();
+                if (clock < 0) {
+                    const int second = static_cast<int>((-clock + 999) / 1000);   // 3, 2, 1 for the last three seconds
+                    if (second <= 3 && second != lastSecond) {
+                        lastSecond = second;
+                        gCountdownNumber = second;
+                        gCountdownTickAt = SDL_GetTicks();
+                        PlaySfx(Sfx::eCountdown, 0, 1.0);
+                    }
+                    lastLap = -1;
+                }
+                else {
+                    if (lastSecond != -1) {
+                        if (lastSecond >= 1) { PlaySfx(Sfx::eGo); gGoShownAt = SDL_GetTicks(); }
+                        lastSecond = -1;
+                        gCountdownNumber = 0;
+                    }
+                    const int lap = mainCharacter->GetLap();
+                    if (lastLap >= 0 && lap > lastLap && lap < mainCharacter->GetTotalLap()) PlaySfx(Sfx::eLap);
+                    lastLap = lap;
+                }
+            }
+            else { gCountdownNumber = 0; gGoShownAt = 0; }
             // The tutorial: watch what the player does and show the current lesson (a local race only: never a replay or an online race).
             if (tutorial.Active() && observer != nullptr && !replay.active
 #if defined(HOVERNET_AUTH)
@@ -10755,6 +10914,7 @@ int RunClient(int argc, char** argv)
                         if (std::getenv("HOVERNET_TEST_GHOST") != nullptr) { std::printf("GHOSTTEST %s %zu samples\n", saved ? "saved" : "not saved", ghostRecording.samples.size()); std::fflush(stdout); }
                     }
                 }
+                PlaySfx(finishBests.newRaceBest || finishBests.newLapBest ? Sfx::eBest : Sfx::eFinish);   // a sting for a new best, the fanfare otherwise
                 lastResultsHint = SDL_GetTicks();
                 if (testResults) {
                     openResults = true;   // the browser smoke test opens the screen directly
