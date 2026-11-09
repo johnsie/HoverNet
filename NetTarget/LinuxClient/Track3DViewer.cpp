@@ -4388,6 +4388,10 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         info.online = pWasOnline;
         info.reducedMotion = LoadReducedMotion();
+        info.sound = [](HoverNetRml::Sound sound) {
+            if (std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST sound %s\n", sound == HoverNetRml::Sound::eHover ? "hover" : sound == HoverNetRml::Sound::eClick ? "click" : "back"); std::fflush(stdout); }
+            PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack);
+        };
         const char* testPick = std::getenv("HOVERNET_TEST_RESULTS_CHOICE");
         if (testPick != nullptr && std::string(testPick) == "main") return PostRaceChoice::eMainMenu;
         const HoverNetRml::ResultsChoice picked = HoverNetRml::RunResults(graphics.GetWindow(), graphics.GetRenderer(), info, std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit, kWidth, kHeight);   // the scripted-input test lets the screen run until its script has acted
@@ -7839,6 +7843,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
     HostPrefs prefs = LoadLocalRacePrefs();
     const int players = 8;   // a race always has seats for 8; the host starts it with whoever is there
     int laps = std::max(1, std::min(10, prefs.mLaps));
+    if (const char* lapsHook = std::getenv("HOVERNET_TEST_HOST_LAPS")) laps = std::max(1, std::min(10, std::atoi(lapsHook)));   // test hook: as if the player had moved the slider
     bool weapons = prefs.mWeapons;
     int selectedRace = -1;
     // The name: asked once ("Welcome, racer"), remembered. The tests have no saved name and are not asked.
@@ -8049,7 +8054,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             // Connected on its own (nothing typed); then HOST A RACE (which opens the dialog), then the dialog's create button: two real clicks.
             if (clickStep == 0 && st == OnlineLobby::State::eBrowsing && clickFrame > 8) { clickStep = 2; clickHold = 0; clickFrame = 0; std::printf("CLICKTEST connected by itself: no address was typed\n"); }
             else if (clickStep == 2 && clickFrame > 5) click(hostOpenCenter, 3);
-            else if (clickStep == 3 && hostPopupOpen && clickFrame > 8) { clickStep = 4; clickHold = 0; clickFrame = 0; std::printf("CLICKTEST host dialog opened by a click\n"); }
+            else if (clickStep == 3 && hostPopupOpen && clickFrame > 8) { clickStep = 4; clickHold = 0; clickFrame = 0; std::printf("CLICKTEST host dialog opened by a click\n"); std::printf("CLICKTEST host dialog laps %d\n", laps); }
             else if (clickStep == 4 && clickFrame > 5) click(createCenter, 5);
             else if (clickStep == 5 && st == OnlineLobby::State::eWaiting) { std::printf("CLICKTEST ok: Host clicked, the race is being set up\n"); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
             if (clickFrame > 600) { std::printf("CLICKTEST FAIL at step %d (state %d)\n", clickStep, static_cast<int>(st)); std::fflush(stdout); running = false; g_QuitConfirmed = true; }
@@ -8499,6 +8504,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 hostedCode = hostCode;
                 prefs.mLaps = laps;
                 prefs.mWeapons = weapons;
+                SaveLocalRacePrefs(prefs);   // remembered: the next race starts with these laps, weapons and track (it was kept in memory only before, so the laps went back to 1)
                 hostPopupOpen = false;
                 ImGui::CloseCurrentPopup();
             };
@@ -8614,6 +8620,10 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         if (profile.xp > 0 || profile.races > 0) { info.level = profile.Level(); info.levelTitle = HoverNetCraft::LevelTitle(profile.Level()); info.levelProgress = profile.LevelProgress(); }
         info.tutorialDone = HoverNetTutorial::HasCompleted(ConfigDirPath());
         info.reducedMotion = LoadReducedMotion();
+        info.sound = [](HoverNetRml::Sound sound) {
+            if (std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST sound %s\n", sound == HoverNetRml::Sound::eHover ? "hover" : sound == HoverNetRml::Sound::eClick ? "click" : "back"); std::fflush(stdout); }
+            PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack);
+        };
         // The player's own craft, as on the ImGui menu: the saved design from the Garage, drawn by the Garage's preview code into a texture that is redrawn as it turns.
         constexpr int kCraftW = 560, kCraftH = 420;
         SDL_Texture* rmlCraftTexture = nullptr;

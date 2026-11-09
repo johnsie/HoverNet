@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -20,10 +21,12 @@ namespace
 class ChooseListener : public Rml::EventListener
 {
 public:
-    explicit ChooseListener(Choice* pResult) : mResult(pResult) {}
+    ChooseListener(Choice* pResult, std::function<void(Sound)> pSound) : mResult(pResult), mSound(std::move(pSound)) {}
     void ProcessEvent(Rml::Event& pEvent) override
     {
         const Rml::String id = pEvent.GetCurrentElement()->GetId();
+        if (pEvent.GetId() == Rml::EventId::Mouseover) { if (mSound) mSound(Sound::eHover); return; }
+        if (mSound) mSound(Sound::eClick);
         if (id == "online") *mResult = Choice::eOnline;
         else if (id == "offline") *mResult = Choice::eOffline;
         else if (id == "leaderboards") *mResult = Choice::eLeaderboards;
@@ -34,13 +37,15 @@ public:
     }
 private:
     Choice* mResult;
+    std::function<void(Sound)> mSound;
 };
 
 const char* const kButtons[] = {"online", "offline", "leaderboards", "garage", "tutorial", "settings"};   // in the order the arrow keys walk them
 constexpr int kButtonCount = 6;
 
-void MoveFocus(Rml::ElementDocument* pDocument, int pStep)
+void MoveFocus(Rml::ElementDocument* pDocument, int pStep, const std::function<void(Sound)>& pSound)
 {
+    if (pSound) pSound(Sound::eHover);
     int at = -1;
     Rml::Element* focused = pDocument->GetFocusLeafNode();
     for (int i = 0; i < kButtonCount; ++i) {
@@ -85,8 +90,8 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
     }
     if (pInfo.tutorialDone) if (Rml::Element* tutorial = document->GetElementById("tutorial")) tutorial->SetClass("quiet", true);
 
-    ChooseListener listener(&result);
-    for (const char* id : kButtons) if (Rml::Element* button = document->GetElementById(id)) button->AddEventListener("click", &listener);
+    ChooseListener listener(&result, pInfo.sound);
+    for (const char* id : kButtons) if (Rml::Element* button = document->GetElementById(id)) { button->AddEventListener("click", &listener); button->AddEventListener("mouseover", &listener); }
     document->Show();
     if (Rml::Element* first = document->GetElementById("online")) first->Focus();
 
@@ -121,16 +126,16 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
             if (event.type == SDL_QUIT) { result = Choice::eQuitRequested; break; }
             if (event.type == SDL_KEYDOWN) {
                 const SDL_Keycode key = event.key.keysym.sym;
-                if (key == SDLK_ESCAPE) { result = Choice::eBack; break; }
-                if (key == SDLK_DOWN) { MoveFocus(document, 1); continue; }
-                if (key == SDLK_UP) { MoveFocus(document, -1); continue; }
+                if (key == SDLK_ESCAPE) { if (pInfo.sound) pInfo.sound(Sound::eBack); result = Choice::eBack; break; }
+                if (key == SDLK_DOWN) { MoveFocus(document, 1, pInfo.sound); continue; }
+                if (key == SDLK_UP) { MoveFocus(document, -1, pInfo.sound); continue; }
                 if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_SPACE) { if (Rml::Element* f = document->GetFocusLeafNode()) f->Click(); continue; }
             }
             if (event.type == SDL_CONTROLLERBUTTONDOWN) {
                 const int b = event.cbutton.button;
                 if (b == SDL_CONTROLLER_BUTTON_B) { result = Choice::eBack; break; }
-                if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN) { MoveFocus(document, 1); continue; }
-                if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) { MoveFocus(document, -1); continue; }
+                if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN) { MoveFocus(document, 1, pInfo.sound); continue; }
+                if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) { MoveFocus(document, -1, pInfo.sound); continue; }
                 if (b == SDL_CONTROLLER_BUTTON_A) { if (Rml::Element* f = document->GetFocusLeafNode()) f->Click(); continue; }
             }
             RmlSDL::InputEventHandler(context, event);
@@ -193,16 +198,19 @@ namespace
 class ResultsListener : public Rml::EventListener
 {
 public:
-    explicit ResultsListener(ResultsChoice* pResult) : mResult(pResult) {}
+    ResultsListener(ResultsChoice* pResult, std::function<void(Sound)> pSound) : mResult(pResult), mSound(std::move(pSound)) {}
     void ProcessEvent(Rml::Event& pEvent) override
     {
         const Rml::String id = pEvent.GetCurrentElement()->GetId();
+        if (pEvent.GetId() == Rml::EventId::Mouseover) { if (mSound) mSound(Sound::eHover); return; }
+        if (mSound) mSound(Sound::eClick);
         if (id == "lobby") *mResult = ResultsChoice::eLobby;
         else if (id == "menu") *mResult = ResultsChoice::eMainMenu;
         if (*mResult != ResultsChoice::eNone && std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST results chose %s\n", id.c_str()); std::fflush(stdout); }
     }
 private:
     ResultsChoice* mResult;
+    std::function<void(Sound)> mSound;
 };
 
 Rml::String Escaped(const std::string& pText)
@@ -257,8 +265,8 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
     set("unlocked", pInfo.unlocked);
     if (!pInfo.online) if (Rml::Element* lobby = document->GetElementById("lobby")) lobby->SetProperty("display", "none");
 
-    ResultsListener listener(&result);
-    for (const char* id : {"lobby", "menu"}) if (Rml::Element* button = document->GetElementById(id)) button->AddEventListener("click", &listener);
+    ResultsListener listener(&result, pInfo.sound);
+    for (const char* id : {"lobby", "menu"}) if (Rml::Element* button = document->GetElementById(id)) { button->AddEventListener("click", &listener); button->AddEventListener("mouseover", &listener); }
     document->Show();
     if (Rml::Element* first = document->GetElementById(pInfo.online ? "lobby" : "menu")) first->Focus();
 
@@ -308,7 +316,7 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
             if (event.type == SDL_QUIT) { result = ResultsChoice::eQuitRequested; break; }
             if (event.type == SDL_KEYDOWN) {
                 const SDL_Keycode key = event.key.keysym.sym;
-                if (key == SDLK_ESCAPE) { result = ResultsChoice::eMainMenu; break; }
+                if (key == SDLK_ESCAPE) { if (pInfo.sound) pInfo.sound(Sound::eBack); result = ResultsChoice::eMainMenu; break; }
                 if ((key == SDLK_DOWN || key == SDLK_UP) && pInfo.online) {
                     Rml::Element* focused = document->GetFocusLeafNode();
                     const char* other = (focused != nullptr && focused->GetId() == "lobby") ? "menu" : "lobby";

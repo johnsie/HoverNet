@@ -6,7 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **Online: the number of laps you choose is remembered.** Creating a race in the online lobby kept your laps, weapons and track in memory only, so the next session went back to 1 lap. They are now saved, and the dialog opens with them. Checked by `HoverNetOnlineScreenClicks`: a new player starts at 1, hosting with 4 laps makes the next session start at 4. (The local race setup already remembered them.)
+
 ### Added
+- **The RmlUi screens make the game's interface sounds**: a tick as the focus or pointer moves to a button, a click when one is chosen, the back sound on Esc. Checked from the log of the sounds triggered (`HoverNetRmlMenu`), not by listening.
 - **RmlUi results screen (prototype, with `HOVERNET_RML_MENU=1`)**: the card eases in, its parts appear one after another, the XP counts up and the level bar fills; VICTORY! in gold. Both RmlUi screens are kept light on text. Checked: renders in a screenshot, and a scripted run after a real autoplay race presses its button (`HoverNetRmlMenu`). Not checked: an online race's RETURN TO LOBBY button, the counting and staggering in motion.
 - **RmlUi works in the browser build**: the whole game builds as WebAssembly with RmlUi, and in headless Chrome (`?rml=1` on the page) the new menu is drawn with the turning craft (`scripts/web-smoke/web-rml-menu.mjs`). Not tried on a phone or in a real browser.
 - **RmlUi main menu: your own craft turns in it**, the saved Garage design drawn by the same preview code as the ImGui menu, easing in with the layout (still with Reduced motion). Seen in a screenshot of the stock craft; a custom design was not tried.

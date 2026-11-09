@@ -17,6 +17,9 @@ check "down,enter" offline "Down, Enter"
 check "down,down,enter" leaderboards "Down, Down, Enter"
 check "up,enter" settings "Up from the first button wraps to the last"
 for id in online offline leaderboards garage tutorial settings; do check "click:$id" "$id" "a real mouse click on $id"; done
+# The interface sounds: moving with the keys ticks, choosing clicks (the sounds are the game's own; the hook logs each one).
+snd=$(HOVERNET_TEST_RML="down,down,enter" timeout -s KILL 25 "$client" --play --frames 150 2>&1 | grep -a "^RMLTEST sound" | sed 's/^RMLTEST sound //' | head -3 | tr '\n' ' ')
+if [ "$snd" = "hover hover click " ]; then echo "ok   two keystrokes tick twice and Enter clicks: $snd"; else echo "FAIL: sounds were '$snd', wanted 'hover hover click'"; fail=1; fi
 # The results screen after a race (the real client, an autoplay race that finishes): Down then Enter chooses the one button an offline race offers, MAIN MENU.
 got=$(HOVERNET_TEST_FINISH=1 HOVERNET_TEST_RML="down,enter" timeout -s KILL 60 "$client" --play --track "The River" --autoplay --frames 100000 2>&1 | grep -a -m1 "^RMLTEST results chose" | sed 's/^RMLTEST results chose //')
 if [ "$got" = "menu" ]; then echo "ok   the results screen opens after a race and its button works: menu"; else echo "FAIL: results screen: wanted 'menu', got '${got:-nothing}'"; fail=1; fi

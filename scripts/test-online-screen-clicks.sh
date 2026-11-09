@@ -16,4 +16,11 @@ HOVERNET_TEST_MENU=authserver HOVERNET_TEST_AUTH_CLICKS="127.0.0.1:$port" timeou
 grep -q "CLICKTEST connected by itself" "$dir/client.txt" || { echo "FAIL: the screen did not connect by itself"; grep CLICKTEST "$dir/client.txt"; exit 1; }
 grep -q "CLICKTEST host dialog opened by a click" "$dir/client.txt" || { echo "FAIL: clicking HOST A RACE did not open the dialog"; grep CLICKTEST "$dir/client.txt"; exit 1; }
 grep -q "CLICKTEST ok" "$dir/client.txt" || { echo "FAIL: clicking Host did not start hosting"; grep CLICKTEST "$dir/client.txt"; exit 1; }
+# The laps chosen for a hosted race are remembered: a second session starts the dialog with the same number (it used to go back to 1).
+grep -q "CLICKTEST host dialog laps 1$" "$dir/client.txt" || { echo "FAIL: a new player's dialog did not start at 1 lap"; grep CLICKTEST "$dir/client.txt"; exit 1; }
+HOVERNET_TEST_HOST_LAPS=4 HOVERNET_TEST_MENU=authserver HOVERNET_TEST_AUTH_CLICKS="127.0.0.1:$port" timeout 120 "$client" --frames 100000 > "$dir/client2.txt" 2>&1
+grep -q "CLICKTEST ok" "$dir/client2.txt" || { echo "FAIL: the second run did not host"; grep CLICKTEST "$dir/client2.txt"; exit 1; }
+HOVERNET_TEST_MENU=authserver HOVERNET_TEST_AUTH_CLICKS="127.0.0.1:$port" timeout 120 "$client" --frames 100000 > "$dir/client3.txt" 2>&1
+grep -q "CLICKTEST host dialog laps 4$" "$dir/client3.txt" || { echo "FAIL: after hosting with 4 laps the next dialog did not start at 4"; grep CLICKTEST "$dir/client3.txt"; exit 1; }
+echo "ok   hosting with 4 laps is remembered: the next session starts at 4"
 echo "online lobby: it connected by itself, a real click on HOST A RACE opened the dialog and a real click on create started a race"

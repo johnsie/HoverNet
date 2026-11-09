@@ -12,6 +12,8 @@
 
 namespace HoverNetRml
 {
+enum class Sound { eHover, eClick, eBack };
+
 struct MainMenuInfo
 {
     std::string assetDir;        // NetTarget/LinuxClient/assets, with the ui/ folder and the fonts and pictures in it
@@ -24,6 +26,7 @@ struct MainMenuInfo
     // is shown instead) and sets cropOut to the part of it to show. The caller owns the texture. reducedMotion keeps the entrance animations of the pictures still.
     std::function<SDL_Texture*(int, SDL_Rect&)> craftFrame;
     bool reducedMotion = false;
+    std::function<void(Sound)> sound;   // the game's interface sounds (null = silent)
 };
 
 enum class Choice { eNone, eOnline, eOffline, eLeaderboards, eGarage, eTutorial, eSettings, eBack, eQuitRequested };
@@ -47,6 +50,7 @@ struct ResultsInfo
     float levelProgress = 0.0f;                           // 0..1 on the level bar
     bool online = false;                                  // offers RETURN TO LOBBY as well
     bool reducedMotion = false;
+    std::function<void(Sound)> sound;
 };
 
 enum class ResultsChoice { eNone, eLobby, eMainMenu, eQuitRequested };
