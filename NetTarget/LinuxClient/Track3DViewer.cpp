@@ -4338,6 +4338,9 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     FormatRaceTime(pFinishTime, finishTime, sizeof(finishTime));
     FormatRaceTime(pBestLap, bestLap, sizeof(bestLap));
     PostRaceChoice choice = PostRaceChoice::eContinue;
+    // The card eases up into place over about a third of a second (not with reduced motion, and not for the screenshot hooks, so the regression captures stay what they were).
+    const Uint32 openedAt = SDL_GetTicks();
+    const bool slideIn = !LoadReducedMotion() && std::getenv("HOVERNET_NO_FADE") == nullptr && std::getenv("HOVERNET_CAPTURE_FRAME") == nullptr && std::getenv("HOVERNET_CAPTURE_MENU") == nullptr;
     bool focusFirstButton = true;
     bool running = true;
     int framesShown = 0;
@@ -4401,8 +4404,13 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         const float cardHeight = std::min((pBests != nullptr && pBests->Any() ? 440.0f : 360.0f) + (pWasOnline ? 54.0f : 0.0f) +
                                           (gRewardView.valid ? 150.0f + (gRewardView.reward.unlocked.empty() ? 0.0f : 26.0f * (1.0f + static_cast<float>(gRewardView.reward.unlocked.size() / 3))) : 0.0f),
                                           workSize.y - 24.0f);
+        float slideOffset = 0.0f;
+        if (slideIn) {
+            const float t = std::min(1.0f, static_cast<float>(SDL_GetTicks() - openedAt) / 360.0f);
+            slideOffset = 46.0f * (1.0f - t) * (1.0f - t) * (1.0f - t);   // ease out: fast at first, settling softly
+        }
         ImGui::SetCursorPos(ImVec2((workSize.x - cardWidth) * 0.5f,
-                                   (workSize.y - cardHeight) * 0.5f));
+                                   (workSize.y - cardHeight) * 0.5f + slideOffset));
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.065f, 0.065f, 0.085f, 0.97f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 12.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
@@ -4410,13 +4418,14 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
         ImGui::SetWindowFontScale(2.0f);
-        const char* heading = pRank == 1 ? "VICTORY!" : "RACE COMPLETE";
+        const bool podium = pRank >= 2 && pRank <= 3 && pPlayerCount >= 3;   // 2nd or 3rd in a field of three or more
+        const char* heading = pRank == 1 ? "VICTORY!" : podium ? "PODIUM FINISH" : "RACE COMPLETE";
         const float headingWidth = ImGui::CalcTextSize(heading).x;
         ImGui::SetCursorPosX((ImGui::GetContentRegionAvail().x - headingWidth) * 0.5f);
         ImGui::TextUnformatted(heading);
         ImGui::SetWindowFontScale(1.0f);
         ImGui::PopStyleColor();
-        const char* subtitle = pRank == 1 ? "You owned the track." : "Finish line crossed.";
+        const char* subtitle = pRank == 1 ? "You owned the track." : podium ? "On the podium. Now go and win it." : "Finish line crossed.";
         const float subtitleWidth = ImGui::CalcTextSize(subtitle).x;
         ImGui::SetCursorPosX((ImGui::GetContentRegionAvail().x - subtitleWidth) * 0.5f);
         ImGui::TextColored(kHoverNetCoral, "%s", subtitle);
