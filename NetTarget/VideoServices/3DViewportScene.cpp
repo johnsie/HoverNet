@@ -10,10 +10,10 @@
 
 namespace
 {
-typedef std::vector<MR_SceneVertex> Polygon;
+typedef std::vector<MR_SceneVertex> ScenePolygon;
 
 // Clips a convex polygon against the projection plane (x >= pNear), keeping the texture coordinates in step.
-void ClipNear( const Polygon& pIn, float pNear, Polygon& pOut )
+void ClipNear( const ScenePolygon& pIn, float pNear, ScenePolygon& pOut )
 {
    pOut.clear();
    const size_t lCount = pIn.size();
@@ -40,7 +40,7 @@ void ClipNear( const Polygon& pIn, float pNear, Polygon& pOut )
    }
 }
 
-void Fan( const Polygon& pPolygon, std::vector<MR_SceneVertex>& pTriangles )
+void Fan( const ScenePolygon& pPolygon, std::vector<MR_SceneVertex>& pTriangles )
 {
    for( size_t lIndex = 1; lIndex + 1 < pPolygon.size(); lIndex++ )
    {
@@ -84,7 +84,7 @@ void MR_3DViewPort::EmitWall( const MR_3DCoordinate& pUpperLeft, const MR_3DCoor
    }
    MR_3DCoordinate lTopA = lRotated0, lTopB = lRotated1, lBottomB = lRotated1, lBottomA = lRotated0;
    lTopB.mZ = lRotated0.mZ; lBottomB.mZ = lRotated1.mZ; lBottomA.mZ = lRotated1.mZ;
-   Polygon lQuad, lClipped;
+   ScenePolygon lQuad, lClipped;
    lQuad.push_back( Vertex( lTopA, 0.0f, 0.0f ) );
    lQuad.push_back( Vertex( lTopB, lU1, 0.0f ) );
    lQuad.push_back( Vertex( lBottomB, lU1, lV1 ) );
@@ -109,7 +109,7 @@ void MR_3DViewPort::EmitHorizontal( int pNbVertex, const MR_2DCoordinate* pVerte
    {
       return;   // the far side of the surface
    }
-   Polygon lPolygon, lClipped;
+   ScenePolygon lPolygon, lClipped;
    for( int lIndex = 0; lIndex < pNbVertex; lIndex++ )
    {
       MR_2DCoordinate lRotated;
@@ -144,7 +144,7 @@ void MR_3DViewPort::EmitPatch( const MR_Patch& pPatch, const MR_PositionMatrix& 
       ApplyPositionMatrix( pMatrix, lNodes[ lNode ], lCamera[ lNode ] );
    }
    std::vector<MR_SceneVertex> lTriangles;
-   Polygon lTriangle, lClipped;
+   ScenePolygon lTriangle, lClipped;
    for( int lV = 0; lV < lVRes - 1; lV++ )
    {
       for( int lU = 0; lU < lURes - 1; lU++ )
