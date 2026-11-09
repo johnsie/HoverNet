@@ -44,7 +44,8 @@ try {
   };
   const send = (method, params = {}) => new Promise((r) => { const n = ++id; pending.set(n, r); ws.send(JSON.stringify({ id: n, method, params })); });
   await send('Runtime.enable'); await send('Page.enable');
-  await send('Page.navigate', { url: base + '?menu=rml' });
+  const query = process.env.HN_WEB_QUERY ?? '?menu=rml';   // HN_WEB_QUERY= (empty) opens the default page, which shows the older menus
+  await send('Page.navigate', { url: base + query });
   const started = async () => (await send('Runtime.evaluate', { expression: "typeof Module !== 'undefined' && !!Module.calledRun", returnByValue: true })).result?.value === true;
   let up = false;
   for (const end = Date.now() + 90000; Date.now() < end && !up;) { up = await started(); if (!up) await sleep(500); }

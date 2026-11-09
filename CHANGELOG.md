@@ -15,7 +15,7 @@ and how to roll one back.
 ### Added
 - **The loading screen shows the course's style, difficulty and suggested laps under the track's name, with the track's map faint behind the title.** Seen in one screenshot (the first track loaded at start-up); the map is loaded for that one frame and released. Not checked: a community track whose map is downloaded, the browser and Windows builds.
 ### Added
-- **Buttons ease between their colours on the older (ImGui) screens**: a button's fill fades to its hover colour over about a tenth of a second when the pointer or focus arrives, and back when it leaves, instead of snapping. Off with Reduced motion. Built, and the menu, camera-rule, garage, online-screen click and restart tests pass; I have not watched the fade itself.
+- **Buttons ease between their colours on the older (ImGui) screens**: a button's fill fades to its hover colour over about a tenth of a second when the pointer arrives, and back when it leaves, instead of snapping (keyboard focus is unchanged). Off with Reduced motion. Built, and the menu, camera-rule, garage, online-screen click and restart tests pass; I have not watched the fade itself.
 
 ### Changed
 - **The Linux package and the Windows installer now include the licence texts of the libraries built into the game**: Dear ImGui (MIT), RmlUi (MIT) and FreeType (the FreeType Licence), in `licenses/` beside the notices file, because those licences ask for their notices to accompany binaries. The Windows package check expects them. Not run: building either package here (the Debian script and installer script were edited, not executed).

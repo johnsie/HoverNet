@@ -2583,7 +2583,7 @@ bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
 {
     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
     // The fill eases between its resting and hovered colours (about a tenth of a second, in both directions) instead of snapping. Each button keeps how hovered it is in ImGui's own
-    // per-widget storage; the colour it draws this frame is the blend, for the resting, hovered and focused looks alike (a press still shows the active colour). Skipped with Reduced motion.
+    // per-widget storage; the colour it draws this frame is the blend of the resting and hovered colours (a press still shows the active colour). Skipped with Reduced motion.
     static int reducedCached = 0;
     static int reducedAt = -1000;
     {
@@ -2602,7 +2602,7 @@ bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
     const bool pressed = ImGui::Button(label, size);
     if (!reducedCached) ImGui::PopStyleColor(2);
     {
-        const float target = (ImGui::IsItemHovered() || ImGui::IsItemFocused()) ? 1.0f : 0.0f;
+        const float target = ImGui::IsItemHovered() ? 1.0f : 0.0f;   // the pointer only: a button that merely has keyboard focus keeps its usual look
         const float step = std::min(1.0f, ImGui::GetIO().DeltaTime / 0.10f);
         easeStore->SetFloat(easeId, eased + (target - eased) * step);
     }
