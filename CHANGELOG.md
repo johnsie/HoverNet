@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **Sounds for sliders and tabs**: a soft tick as a slider moves (at most every 45 ms) and a click when another Settings tab is chosen. Not listened to by a person.
+
 ### Fixed
 - **Garage patterns now replace the paint** instead of drawing over what was there (clicking several piled them up); Undo brings the old paint back. Decals still go on top.
 - **The button hover tick no longer repeats** while the pointer rests on a button, including when keyboard or controller focus is on a different button (the likely cause: the two alternated every frame). Checked with a scripted run (focus on one button, pointer held on another, 200 frames): 2 ticks played.
