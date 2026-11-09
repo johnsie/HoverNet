@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
 // See repository history for authorship and detailed changes.
 // DllObjectFactory.cpp
 //
@@ -60,6 +60,8 @@ class MR_FactoryDll
       CString               (*mGetObjectDescription)( MR_UInt16 pClassId );
       MR_ObjectFromFactory* (*mGetObject)( MR_UInt16 pClassId );
       void                  (*mSetTexturePalette)( const MR_UInt8* pPalette768, float pBrightness, int pGradeAiImages );   // optional
+      void                  (*mSetCraftDesign)( int pSlot, const MR_UInt8* pDesign, int pSize );                              // optional
+      void                  (*mSetCraftPalette)( const MR_UInt8* pPalette768 );                                                // optional
 
 
       // Initialisation
@@ -149,6 +151,42 @@ void MR_DllObjectFactory::SetTexturePalette( const MR_UInt8* pPalette768, float 
       if( lDllPtr != NULL && lDllPtr->mSetTexturePalette != NULL )
       {
          lDllPtr->mSetTexturePalette( pPalette768, pBrightness, pGradeAiImages ? 1 : 0 );
+      }
+   }
+}
+
+void MR_DllObjectFactory::SetCraftPalette( const MR_UInt8* pPalette768 )
+{
+   POSITION lNextPos = gsDllList.GetStartPosition();
+
+   while( lNextPos != NULL )
+   {
+      MR_UInt16      lDllId;
+      MR_FactoryDll* lDllPtr;
+
+      gsDllList.GetNextAssoc( lNextPos, lDllId, lDllPtr );
+
+      if( lDllPtr != NULL && lDllPtr->mSetCraftPalette != NULL )
+      {
+         lDllPtr->mSetCraftPalette( pPalette768 );
+      }
+   }
+}
+
+void MR_DllObjectFactory::SetCraftDesign( int pSlot, const MR_UInt8* pDesign, int pSize )
+{
+   POSITION lNextPos = gsDllList.GetStartPosition();
+
+   while( lNextPos != NULL )
+   {
+      MR_UInt16      lDllId;
+      MR_FactoryDll* lDllPtr;
+
+      gsDllList.GetNextAssoc( lNextPos, lDllId, lDllPtr );
+
+      if( lDllPtr != NULL && lDllPtr->mSetCraftDesign != NULL )
+      {
+         lDllPtr->mSetCraftDesign( pSlot, pDesign, pSize );
       }
    }
 }
@@ -391,6 +429,8 @@ MR_FactoryDll::MR_FactoryDll()
    mGetObjectDescription = NULL;
    mGetObject            = NULL;
    mSetTexturePalette    = NULL;
+   mSetCraftDesign       = NULL;
+   mSetCraftPalette      = NULL;
 
 
 }
@@ -475,6 +515,12 @@ BOOL MR_FactoryDll::Open( MR_UInt16 pDllId )
       mSetTexturePalette    = ( void (*)( const MR_UInt8*, float, int ))
                               GetProcAddress( mHandle,
                                               "MR_SetTexturePalette" );
+      mSetCraftPalette      = ( void (*)( const MR_UInt8* ))
+                              GetProcAddress( mHandle,
+                                              "MR_SetCraftPalette" );
+      mSetCraftDesign       = ( void (*)( int, const MR_UInt8*, int ))
+                              GetProcAddress( mHandle,
+                                              "MR_SetCraftDesign" );
 
       if( mInitModule == NULL || mCleanModule == NULL ||
           mGetObjectTypeCount == NULL || mGetObjectFamily == NULL ||

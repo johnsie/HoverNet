@@ -5357,10 +5357,27 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
 
 
 // A player's craft designs reach the renderer by slot (docs/craft-designer.md); these keep the table in step with the race being driven.
+// The craft is drawn by the object library (a separate shared library on desktop, with its own copy of the craft look code), so every change goes to both copies.
+void SetRaceCraftDesign(int slot, const Authority::CraftDesign* design)
+{
+    HoverNetCraft::SetSlotDesign(slot, design);
+    if (design != nullptr) {
+        const std::vector<std::uint8_t> bytes = Authority::EncodeCraftDesign(Authority::SanitiseCraftDesign(*design));
+        MR_DllObjectFactory::SetCraftDesign(slot, bytes.data(), static_cast<int>(bytes.size()));
+    }
+    else MR_DllObjectFactory::SetCraftDesign(slot, nullptr, 0);
+}
+
+void ClearRaceCraftDesigns()
+{
+    HoverNetCraft::ClearSlotDesigns();
+    MR_DllObjectFactory::SetCraftDesign(-1, nullptr, 0);
+}
+
 void ApplyRelayedCraftDesign(int slot, const std::vector<std::uint8_t>& bytes)
 {
     Authority::CraftDesign design;
-    if (slot >= 0 && slot < 16 && Authority::DecodeCraftDesign(bytes.data(), bytes.size(), design)) HoverNetCraft::SetSlotDesign(slot, &design);
+    if (slot >= 0 && slot < 16 && Authority::DecodeCraftDesign(bytes.data(), bytes.size(), design)) SetRaceCraftDesign(slot, &design);
 }
 
 
@@ -5372,7 +5389,7 @@ HoverNetTutorial::Labels TutorialLabels()
     auto button = [](SDL_GameControllerButton b) { const char* name = SDL_GameControllerGetStringForButton(b); return std::string(name != nullptr ? name : "a button"); };
     if (HoverNetIsTouchDevice()) {
         labels.accelerate = "the gas button"; labels.brake = "the brake button"; labels.left = "the left side of the stick"; labels.right = "the right side of the stick";
-        labels.jump = "JUMP"; labels.fire = "FIRE"; labels.skip = "SKIP"; labels.pause = "MENU";
+        labels.jump = "JUMP"; labels.fire = "FIRE"; labels.skip = "SKIP"; labels.pause = "MENU"; labels.results = "MENU";
         return labels;
     }
     labels.accelerate = key(gKeyboardBindings.accelerate) + " (or right trigger)";
@@ -5394,6 +5411,9 @@ struct TutorialCard
 };
 TutorialCard gTutorialCard;
 bool gTutorialOverlayOwnsContext = false;
+// Set while a finished race waits for the player to open the results screen: the overlay then says so, in big letters, until they do.
+bool gFinishPromptVisible = false;
+bool gFinishPromptTouch = false;
 
 void ShutdownTutorialOverlay()
 {
@@ -5480,16 +5500,16 @@ float DrawHudPanel(ImDrawList* draw, const std::vector<HudSegment>& segments, fl
     return hi.y;
 }
 
-void DrawRaceHud(const HudText& hud, const ImVec2& display)
+void DrawRaceHud(const HudText& hud, const ImVec2& origin, const ImVec2& display)
 {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     ImFont* body = ImGui::GetIO().Fonts->Fonts[0];
     ImFont* display_font = gHoverNetDisplayFont != nullptr ? gHoverNetDisplayFont : body;
     const float scale = std::max(0.7f, std::min(1.5f, display.y / 768.0f));
-    const float centreX = display.x * 0.5f;
+    const float centreX = origin.x + display.x * 0.5f;
 
     // top: the race clock and lap, then a row of status chips under it
-    float y = display.y * 0.095f;
+    float y = origin.y + display.y * 0.095f;
     y = DrawHudPanel(draw, SplitHudLine(hud.mainLine), centreX, y, scale, display_font, body);
     {
         struct Chip { std::string text; ImU32 colour; };
@@ -5520,7 +5540,7 @@ void DrawRaceHud(const HudText& hud, const ImVec2& display)
     if (hud.callout[0] != 0) {
         const float size = 30.0f * scale;
         const ImVec2 box = display_font->CalcTextSizeA(size, FLT_MAX, 0.0f, hud.callout);
-        const ImVec2 at(centreX - box.x * 0.5f, display.y * 0.30f);
+        const ImVec2 at(centreX - box.x * 0.5f, origin.y + display.y * 0.30f);
         draw->AddRectFilled(ImVec2(at.x - 18.0f * scale, at.y - 6.0f * scale), ImVec2(at.x + box.x + 18.0f * scale, at.y + box.y + 6.0f * scale), IM_COL32(8, 10, 16, 170), 10.0f * scale);
         draw->AddText(display_font, size, at, IM_COL32(255, 205, 110, 255), hud.callout);
     }
@@ -5528,16 +5548,17 @@ void DrawRaceHud(const HudText& hud, const ImVec2& display)
     if (hud.lapLine[0] != 0) {
         const std::vector<HudSegment> lap = SplitHudLine(hud.lapLine);
         const float panelHeight = 44.0f * scale;
-        DrawHudPanel(draw, lap, centreX, display.y - panelHeight - display.y * 0.025f, scale, display_font, body);
+        DrawHudPanel(draw, lap, centreX, origin.y + display.y - panelHeight - display.y * 0.025f, scale, display_font, body);
     }
     // chat and messages, bottom left, newest at the bottom
     {
         const float size = 18.0f * scale;
-        float y2 = display.y - display.y * 0.20f;
+        const float left = origin.x + display.x * 0.02f;
+        float y2 = origin.y + display.y - display.y * 0.20f;
         auto line = [&](const std::string& text, ImU32 colour) {
             const ImVec2 box = body->CalcTextSizeA(size, display.x * 0.5f, display.x * 0.5f, text.c_str());
-            draw->AddRectFilled(ImVec2(display.x * 0.02f - 8.0f, y2 - 3.0f), ImVec2(display.x * 0.02f + box.x + 8.0f, y2 + box.y + 3.0f), IM_COL32(8, 10, 16, 140), 7.0f);
-            draw->AddText(body, size, ImVec2(display.x * 0.02f, y2), colour, text.c_str(), nullptr, display.x * 0.5f);
+            draw->AddRectFilled(ImVec2(left - 8.0f, y2 - 3.0f), ImVec2(left + box.x + 8.0f, y2 + box.y + 3.0f), IM_COL32(8, 10, 16, 140), 7.0f);
+            draw->AddText(body, size, ImVec2(left, y2), colour, text.c_str(), nullptr, display.x * 0.5f);
             y2 -= box.y + 10.0f;
         };
         if (!hud.typing.empty()) line(hud.typing + "_", IM_COL32(255, 255, 255, 255));
@@ -5546,10 +5567,49 @@ void DrawRaceHud(const HudText& hud, const ImVec2& display)
 }
 }
 
+void DrawFinishPrompt(const ImVec2& origin, const ImVec2& display, bool touch)
+{
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    ImFont* body = ImGui::GetIO().Fonts->Fonts[0];
+    ImFont* big = gHoverNetDisplayFont != nullptr ? gHoverNetDisplayFont : body;
+    const float scale = std::max(0.7f, std::min(1.5f, display.y / 768.0f));
+    const char* title = "RACE COMPLETE";
+    const char* before = touch ? "Tap " : "Press ";
+    const char* key = touch ? "MENU" : "ENTER";
+    const char* after = touch ? " for your results" : " for your results";
+    const char* note = touch ? "" : "Esc opens the pause menu, not your results.";
+    const float titleSize = 38.0f * scale, lineSize = 24.0f * scale, noteSize = 16.0f * scale;
+    const ImVec2 titleBox = big->CalcTextSizeA(titleSize, FLT_MAX, 0.0f, title);
+    const float beforeW = body->CalcTextSizeA(lineSize, FLT_MAX, 0.0f, before).x, keyW = big->CalcTextSizeA(lineSize, FLT_MAX, 0.0f, key).x, afterW = body->CalcTextSizeA(lineSize, FLT_MAX, 0.0f, after).x;
+    const float keyPad = 12.0f * scale;
+    const float lineW = beforeW + keyW + keyPad * 2.0f + afterW;
+    const float noteW = body->CalcTextSizeA(noteSize, FLT_MAX, 0.0f, note).x;
+    const float width = std::max(std::max(titleBox.x, lineW), noteW) + 56.0f * scale;
+    const float height = titleBox.y + lineSize + 30.0f * scale + (note[0] != 0 ? noteSize + 14.0f * scale : 0.0f) + 26.0f * scale;
+    const float cx = origin.x + display.x * 0.5f;
+    const float top = origin.y + display.y * 0.30f;
+    draw->AddRectFilled(ImVec2(cx - width * 0.5f, top), ImVec2(cx + width * 0.5f, top + height), IM_COL32(8, 10, 16, 215), 16.0f * scale);
+    draw->AddRect(ImVec2(cx - width * 0.5f, top), ImVec2(cx + width * 0.5f, top + height), IM_COL32(120, 215, 140, 170), 16.0f * scale, 0, 2.0f);
+    float y = top + 14.0f * scale;
+    draw->AddText(big, titleSize, ImVec2(cx - titleBox.x * 0.5f, y), IM_COL32(130, 230, 155, 255), title);
+    y += titleBox.y + 10.0f * scale;
+    float x = cx - lineW * 0.5f;
+    const float lineH = lineSize;
+    draw->AddText(body, lineSize, ImVec2(x, y + 2.0f * scale), IM_COL32(240, 242, 248, 255), before);
+    x += beforeW;
+    // the key, drawn as a key cap
+    draw->AddRectFilled(ImVec2(x, y - 3.0f * scale), ImVec2(x + keyW + keyPad * 2.0f, y + lineH + 5.0f * scale), IM_COL32(250, 115, 122, 255), 8.0f * scale);
+    draw->AddText(big, lineSize, ImVec2(x + keyPad, y + 1.0f * scale), IM_COL32(20, 12, 16, 255), key);
+    x += keyW + keyPad * 2.0f;
+    draw->AddText(body, lineSize, ImVec2(x, y + 2.0f * scale), IM_COL32(240, 242, 248, 255), after);
+    y += lineH + 18.0f * scale;
+    if (note[0] != 0) draw->AddText(body, noteSize, ImVec2(cx - noteW * 0.5f, y), IM_COL32(160, 164, 178, 255), note);
+}
+
 void DrawGameOverlay(SDL2GraphicsBackend& graphics, SDL_Renderer* renderer, const HudText* hud)
 {
     const bool hudVisible = hud != nullptr && hud->valid;
-    if (!gTutorialCard.visible && !hudVisible) return;
+    if (!gTutorialCard.visible && !hudVisible && !gFinishPromptVisible) return;
     if (ImGui::GetCurrentContext() == nullptr) {
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
@@ -5568,12 +5628,20 @@ void DrawGameOverlay(SDL2GraphicsBackend& graphics, SDL_Renderer* renderer, cons
     ImGui_ImplSDLRenderer2_NewFrame();
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
-    const ImVec2 display = ImGui::GetIO().DisplaySize;
-    if (hudVisible) DrawRaceHud(*hud, display);
+    // The picture is scaled to fit the window and centred (with bars at the sides if the window is wider): the words go on the picture, not on the window.
+    ImVec2 origin(0.0f, 0.0f), display = ImGui::GetIO().DisplaySize;
+    if (logicalW > 0 && logicalH > 0) {
+        const float fit = std::min(display.x / static_cast<float>(logicalW), display.y / static_cast<float>(logicalH));
+        const ImVec2 size(logicalW * fit, logicalH * fit);
+        origin = ImVec2(std::floor((display.x - size.x) * 0.5f), std::floor((display.y - size.y) * 0.5f));
+        display = size;
+    }
+    if (hudVisible) DrawRaceHud(*hud, origin, display);
+    if (gFinishPromptVisible) DrawFinishPrompt(origin, display, gFinishPromptTouch);
     if (gTutorialCard.visible) {
-    const float margin = std::max(12.0f, display.x * 0.02f);
-    const float width = std::max(300.0f, std::min(420.0f, display.x * 0.38f));
-    ImGui::SetNextWindowPos(ImVec2(margin, display.y - margin - 54.0f), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+    // Top right, just under the weapon meter.
+    const float width = std::max(270.0f, std::min(380.0f, display.x * 0.30f));
+    ImGui::SetNextWindowPos(ImVec2(origin.x + display.x * 0.975f, origin.y + display.y * 0.105f), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
@@ -5740,6 +5808,7 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
     if (palette768 != nullptr) {
         for (int i = 0; i < 256; ++i) paletteWords[i] = (static_cast<std::uint32_t>(palette768[i * 3]) << 16) | (static_cast<std::uint32_t>(palette768[i * 3 + 1]) << 8) | palette768[i * 3 + 2];
         MR_ResBitmap::SetColourPalette(palette768, 1.0f, false);
+        MR_ResBitmap::SetBakePalette(palette768);
     }
 
     constexpr int kPreviewW = 480, kPreviewH = 360;
@@ -8584,6 +8653,17 @@ int RunClient(int argc, char** argv)
             observer->SetModernLighting(options.enabled && options.lighting ? TRUE : FALSE);
             // Filtered true-colour textures cost the rasteriser; when the passes have had to drop to the lowest quality they are switched off too.
             const bool trueColourNow = options.enabled && options.trueColour && graphics.GetEffectiveQuality() >= 1;
+            {   // The 8-bit palette, so a player's craft design is baked into the craft's 8-bit pixels and shows whether or not true-colour textures are on.
+                static std::uint8_t bakedPalette[768];
+                static bool bakedKnown = false;
+                const std::uint8_t* shown = graphics.GetRenderPalette();
+                if (shown != nullptr && (!bakedKnown || std::memcmp(bakedPalette, shown, sizeof bakedPalette) != 0)) {
+                    std::memcpy(bakedPalette, shown, sizeof bakedPalette);
+                    bakedKnown = true;
+                    MR_ResBitmap::SetBakePalette(bakedPalette);
+                    MR_DllObjectFactory::SetCraftPalette(bakedPalette);
+                }
+            }
             observer->SetModernTextures(trueColourNow ? TRUE : FALSE, graphics.GetRenderPalette());
             {   // Textures in true colour, with the dither and banding of the palette smoothed away: told to this program and to the object library.
                 static std::uint8_t lastTexturePalette[768];
@@ -8723,7 +8803,7 @@ int RunClient(int argc, char** argv)
     auto endAuthRace = [&]() {
         if (!auth.active && !auth.conn.IsOpen()) return;
         auth.active = false;
-        HoverNetCraft::ClearSlotDesigns();
+        ClearRaceCraftDesigns();
         auth.conn.Close();
         auth.world.reset();
         auth.craft.clear();
@@ -8783,9 +8863,9 @@ int RunClient(int argc, char** argv)
 #endif
         {
             // A local race: the player's own craft design (a look only), on the craft they drive.
-            HoverNetCraft::ClearSlotDesigns();
+            ClearRaceCraftDesigns();
             Authority::CraftDesign mine;
-            if (mainCharacter != nullptr && HoverNetCraft::CraftStore(ConfigDirPath()).LoadActive(mine)) HoverNetCraft::SetSlotDesign(mainCharacter->GetHoverId(), &mine);
+            if (mainCharacter != nullptr && HoverNetCraft::CraftStore(ConfigDirPath()).LoadActive(mine)) SetRaceCraftDesign(mainCharacter->GetHoverId(), &mine);
         }
         currentTrackName = newTrackName;
         if (rememberLocal) { lastLocal.track = newTrackName; lastLocal.laps = newLaps; lastLocal.weapons = newWeapons; lastLocal.valid = true; }
@@ -10546,6 +10626,8 @@ int RunClient(int argc, char** argv)
                 lastResultsHint = SDL_GetTicks();
                 session.AddMessage(HoverNetIsTouchDevice() ? "Press MENU for race options" : "Press Enter for your results and race options");
             }
+            gFinishPromptVisible = resultsPending && !resultsSeen && !openResults && !replay.active;
+            gFinishPromptTouch = HoverNetIsTouchDevice();
             if (openResults && resultsPending) {
 #ifdef HOVERNET_WEB
                 gHoverNetInRace = 0;

@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
 // See repository history for authorship and detailed changes.
 // DllObjectFactory.h
 //
@@ -124,6 +124,11 @@ namespace MR_DllObjectFactory
    // True-colour textures: tells every loaded object library (a separate shared library has its own copy of the bitmap code) what palette indices mean,
    // 256 RGB triples; NULL switches true-colour textures off. A library without the entry point is skipped.
    MR_DllDeclare void SetTexturePalette( const MR_UInt8* pPalette768, float pBrightness = 1.0f, bool pGradeAiImages = false );
+
+   // A player's craft design (a look only, Authority/CraftDesign.h): told to every loaded object library, because the craft is drawn by the library (a separate shared
+   // library has its own copy of the craft look code). pSlot < 0 clears every slot; pSize 0 clears one; otherwise pDesign is the encoded design.
+   MR_DllDeclare void SetCraftPalette( const MR_UInt8* pPalette768 );   // the 8-bit picture's palette, so designs can be baked into 8-bit pixels (NULL forgets it)
+   MR_DllDeclare void SetCraftDesign( int pSlot, const MR_UInt8* pDesign, int pSize );
 
    // Fast Object Creation function
    MR_DllDeclare MR_ObjectFromFactory* CreateObject( const MR_ObjectFromFactoryId& pId );

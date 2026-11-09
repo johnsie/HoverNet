@@ -97,6 +97,7 @@ Look Resolve(int slot, const MR_ResActor* stockActor, const MR_ResBitmap* stockC
     const Authority::CraftDesign& d = found->second;
 
     std::uint64_t key = Authority::CraftDesignHash(d) * 1099511628211ULL;
+    key ^= static_cast<std::uint64_t>(MR_ResBitmap::GetBakePaletteVersion()) * 0x2545F4914F6CDD1DULL;   // a new palette makes new copies
     key ^= reinterpret_cast<std::uintptr_t>(stockActor) * 0x9e3779b97f4a7c15ULL;
     key ^= reinterpret_cast<std::uintptr_t>(stockCockpit) * 0xc2b2ae3d27d4eb4fULL;
     auto at = gVariants.find(key);

@@ -23,10 +23,12 @@
 
 #include "StdAfx.h"
 #include "ResBitmap.h"
+#include "../VideoServices/ColorPalette.h"
 #include "../VideoServices/ColourGrade.h"
 #include "../VideoServices/TextureEnhance.h"
 
 #include <cstring>
+#include <map>
 #include <thread>
 #include <vector>
 
@@ -421,6 +423,33 @@ bool MR_ResBitmap::EnsureColour()const
    return true;
 }
 
+static std::mutex  gsBakeMutex;
+static MR_UInt8    gsBakePalette[ 768 ];
+static bool        gsBakeOn = false;
+static std::atomic<int> gsBakeVersion( 0 );
+
+void MR_ResBitmap::SetBakePalette( const MR_UInt8* pPalette768 )
+{
+   std::lock_guard<std::mutex> lLock( gsBakeMutex );
+   if( pPalette768 == NULL )
+   {
+      if( gsBakeOn ) gsBakeVersion++;
+      gsBakeOn = false;
+      return;
+   }
+   if( !gsBakeOn || memcmp( gsBakePalette, pPalette768, sizeof( gsBakePalette ) ) != 0 )
+   {
+      memcpy( gsBakePalette, pPalette768, sizeof( gsBakePalette ) );
+      gsBakeOn = true;
+      gsBakeVersion++;
+   }
+}
+
+int MR_ResBitmap::GetBakePaletteVersion()
+{
+   return gsBakeVersion.load();
+}
+
 MR_ResBitmap* MR_ResBitmap::CloneWithRecolour( const Recolour& pRecolour )const
 {
    MR_ResBitmap* lCopy = new MR_ResBitmap( mResourceId );
@@ -456,7 +485,61 @@ MR_ResBitmap* MR_ResBitmap::CloneWithRecolour( const Recolour& pRecolour )const
    {
       // The AI-enhanced image is not carried over: a customised craft is small on screen, and its copies at 2x take a quarter of the memory.
    }
-   lCopy->mRecolour = pRecolour;
+   // With the 8-bit palette known, the design is baked into the clone's indices: every pixel goes through the recolouring and becomes the nearest palette colour
+   // (index 0 is transparent and stays). Then the 8-bit picture shows it, and so does true colour, which is made from these indices.
+   MR_UInt8 lPalette[ 768 ];
+   bool lBake = false;
+   {
+      std::lock_guard<std::mutex> lLock( gsBakeMutex );
+      if( gsBakeOn )
+      {
+         memcpy( lPalette, gsBakePalette, sizeof( lPalette ) );
+         lBake = true;
+      }
+   }
+   if( lBake && pRecolour )
+   {
+      std::map< MR_UInt32, MR_UInt8 > lNearest;
+      for( int lIndex = 0; lIndex < lCopy->mSubBitmapCount; lIndex++ )
+      {
+         SubBitmap& lSub = lCopy->mSubBitmapList[ lIndex ];
+         const int lW = lSub.mXRes, lH = lSub.mYRes;
+         std::vector<MR_UInt32> lWords( (size_t)lW*lH );
+         for( size_t lPixel = 0; lPixel < lWords.size(); lPixel++ )
+         {
+            const MR_UInt8* lRgb = &lPalette[ lSub.mBuffer[ lPixel ]*3 ];
+            lWords[ lPixel ] = ((MR_UInt32)lRgb[ 0 ] << 16) | ((MR_UInt32)lRgb[ 1 ] << 8) | lRgb[ 2 ];
+         }
+         pRecolour( lWords, lW, lH );
+         for( size_t lPixel = 0; lPixel < lWords.size(); lPixel++ )
+         {
+            if( lSub.mBuffer[ lPixel ] == 0 )
+            {
+               continue;   // transparent
+            }
+            const MR_UInt32 lWanted = lWords[ lPixel ] & 0xFFFFFF;
+            std::map< MR_UInt32, MR_UInt8 >::const_iterator lFound = lNearest.find( lWanted );
+            if( lFound == lNearest.end() )
+            {
+               int lBestDistance = 1 << 30;
+               MR_UInt8 lBest = lSub.mBuffer[ lPixel ];
+               const int lR = (lWanted >> 16) & 255, lG = (lWanted >> 8) & 255, lB = lWanted & 255;
+               for( int lCandidate = MR_RESERVED_COLORS_BEGINNING; lCandidate < MR_RESERVED_COLORS_BEGINNING + MR_BASIC_COLORS; lCandidate++ )
+               {
+                  const int lDR = lR - lPalette[ lCandidate*3 ], lDG = lG - lPalette[ lCandidate*3 + 1 ], lDB = lB - lPalette[ lCandidate*3 + 2 ];
+                  const int lDistance = 3*lDR*lDR + 4*lDG*lDG + 2*lDB*lDB;   // the eye is most sensitive to green, least to blue
+                  if( lDistance < lBestDistance ) { lBestDistance = lDistance; lBest = (MR_UInt8)lCandidate; }
+               }
+               lFound = lNearest.insert( std::make_pair( lWanted, lBest ) ).first;
+            }
+            lSub.mBuffer[ lPixel ] = lFound->second;
+         }
+      }
+   }
+   else
+   {
+      lCopy->mRecolour = pRecolour;   // no 8-bit palette known: true colour only
+   }
    lCopy->mColourVersion = -1;
    return lCopy;
 }

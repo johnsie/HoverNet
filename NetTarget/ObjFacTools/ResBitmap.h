@@ -135,6 +135,11 @@ class MR_ResBitmap: public MR_Bitmap
       // draws in 8-bit shows the stock look. The caller owns the copy and must keep it alive while it is drawn.
       MR_DllDeclare MR_ResBitmap* CloneWithRecolour( const Recolour& pRecolour )const;
 
+      // The palette the 8-bit pictures are shown through (256 RGB triples, copied; NULL forgets it). With it, CloneWithRecolour also changes the clone's 8-bit
+      // pixels (to the nearest palette colour), so a craft design shows in the plain 8-bit picture as well as in true colour. Safe to call from any thread.
+      MR_DllDeclare static void SetBakePalette( const MR_UInt8* pPalette768 );
+      MR_DllDeclare static int  GetBakePaletteVersion();
+
       MR_DllDeclare void SetEnhancedImage( int pWidth, int pHeight, std::vector<MR_UInt32>& pWords );
 
 };

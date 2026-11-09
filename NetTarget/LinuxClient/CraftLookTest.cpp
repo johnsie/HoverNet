@@ -64,6 +64,7 @@ int main()
     setenv("HOVERNET_NO_AI_TEXTURES", "1", 1);
     MR_ResourceLib lib("NetTarget/ObjFac1.dat");
     MR_ResBitmap::SetColourPalette(palette.data(), 1.0f, false);
+    MR_ResBitmap::SetBakePalette(palette.data());   // designs are baked into the 8-bit pixels too
 
     if (std::getenv("HOVERNET_FONT_DUMP")) {
         const MR_ResSprite* font = lib.GetSprite(1);

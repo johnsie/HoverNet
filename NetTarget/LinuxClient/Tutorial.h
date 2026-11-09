@@ -30,7 +30,7 @@ struct Frame
 // What each lesson calls the controls, for the player's own keys or controller or touch screen.
 struct Labels
 {
-    std::string accelerate = "Up", brake = "Down", left = "Left", right = "Right", jump = "Space", fire = "Ctrl", skip = "N", pause = "Esc";
+    std::string accelerate = "Up", brake = "Down", left = "Left", right = "Right", jump = "Space", fire = "Ctrl", skip = "N", pause = "Esc", results = "Enter";
 };
 
 class Tutorial

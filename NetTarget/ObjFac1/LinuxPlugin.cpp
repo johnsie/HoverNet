@@ -14,6 +14,7 @@
 #include "../Model/RaceEffects.h"
 #include "../Model/ShapeCollisions.h"
 #include "../MainCharacter/MainCharacterRenderer.h"
+#include "../ObjFacTools/CraftLook.h"
 #include "../ObjFacTools/ResourceLib.h"
 #include "../ObjFacTools/ResSound.h"
 #include "../ObjFacTools/SpriteHandle.h"
@@ -179,8 +180,9 @@ public:
         frame = motorOn ? (frame + 1) % frameCount : 0;
         const int cockpitId = (actorId == MR_HITECH_CAR ? MR_CAR_COCKPIT21 : MR_CAR_COCKPIT1) +
                       (hoverId % 10 + 10) % 10;
-        MR_ResActorFriend::Draw(actor, destination, matrix, sequence, frame,
-                                resourceLib->GetBitmap(cockpitId));
+        // A player's own craft design (a look only), when this slot has one: the reshaped, tinted, painted model and cockpit.
+        const HoverNetCraft::Look look = HoverNetCraft::Resolve((hoverId % 16 + 16) % 16, actor, resourceLib->GetBitmap(cockpitId));
+        MR_ResActorFriend::Draw(look.actor, destination, matrix, sequence, frame, look.cockpit);
     }
 
     MR_ShortSound* GetLineCrossingSound() override { return ShortSound(MR_SND_LINE_CROSSING); }
@@ -446,6 +448,21 @@ extern "C"
 HOVERNET_PLUGIN_EXPORT void MR_SetTexturePalette(const MR_UInt8* palette768, float brightness, int gradeAiImages)
 {
     MR_ResBitmap::SetColourPalette(palette768, brightness, gradeAiImages != 0);
+}
+
+// The palette the 8-bit picture is shown through, so a craft design can be baked into the craft's 8-bit pixels (see MR_ResBitmap::SetBakePalette).
+HOVERNET_PLUGIN_EXPORT void MR_SetCraftPalette(const MR_UInt8* palette768)
+{
+    MR_ResBitmap::SetBakePalette(palette768);
+}
+
+// A player's craft design for a slot (a look only): pSlot < 0 clears every slot, pSize 0 clears one, otherwise pDesign is an encoded Authority::CraftDesign.
+HOVERNET_PLUGIN_EXPORT void MR_SetCraftDesign(int slot, const MR_UInt8* design, int size)
+{
+    if (slot < 0) { HoverNetCraft::ClearSlotDesigns(); return; }
+    if (design == nullptr || size <= 0) { HoverNetCraft::SetSlotDesign(slot, nullptr); return; }
+    Authority::CraftDesign decoded;
+    if (Authority::DecodeCraftDesign(design, static_cast<std::size_t>(size), decoded)) HoverNetCraft::SetSlotDesign(slot, &decoded);
 }
 
 HOVERNET_PLUGIN_EXPORT void MR_InitModule(HMODULE module)

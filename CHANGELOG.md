@@ -4,6 +4,14 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## Unreleased
+
+### Fixed
+- **Your craft design now shows in races on desktop** (the craft is drawn by the object library, which kept its own copy of the designs, and it only showed in true colour: the design is now sent to the library and baked into the craft's 8-bit pixels too).
+- Chat lines in the HUD were shown in the bitmap font's code and in the wrong place; the HUD words now sit on the picture, not the window.
+- **Finishing a race (or the tutorial) now says so in big letters: "Press ENTER for your results"**, and that Esc is the pause menu. It stays up until the results screen has been opened.
+- The tutorial's lesson card is at the top right, under the weapon meter.
+
 ## 2.3.32 - 2026-11-09
 
 ### Changed

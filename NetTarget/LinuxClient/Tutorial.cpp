@@ -133,9 +133,9 @@ std::string Tutorial::Text(const Labels& l) const
     case Step::eHud:
         return "The bars at the top are your speed and your fuel: running dry leaves you stranded, so grab the fuel pads. Under them: your position, weapon and race time. The lap time is at the bottom.";
     case Step::eLap:
-        return "Drive a full lap and cross the finish line. Follow the arrows on the walls. Pick up fuel and power-ups as you go.";
+        return "Drive a full lap and cross the finish line. Follow the arrows on the walls. Pick up fuel and power-ups as you go. When you finish, press " + l.results + " for your results.";
     case Step::eDone:
-        return "Well done: you know the controls. Keep racing, or press " + l.pause + " for the pause menu. You can run this tutorial again from Settings.";
+        return "Well done: you know the controls! Press " + l.results + " to see your results. You can run this tutorial again from Settings.";
     }
     return "";
 }

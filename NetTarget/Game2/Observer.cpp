@@ -73,6 +73,18 @@ CString gFirstLapTimeStr = "Lap time %d:%02d.%02d";
 CString gFinalLapStr     = "Race %d:%02d.%02d  FINAL LAP";
 
 
+// The chat lines are kept in the bitmap font's own code (Ascii2Simple: ASCII minus 31); this turns one back into text.
+static std::string SimpleToAscii( const char* pSimple )
+{
+   std::string lText;
+   for( ; pSimple != NULL && *pSimple != 0; pSimple++ )
+   {
+      const int lCode = (unsigned char)*pSimple;
+      lText.push_back( lCode >= 1 && lCode <= 95 ? (char)( lCode + 31 ) : '?' );
+   }
+   return lText;
+}
+
 // Draws HUD text in the bitmap font, unless the client draws the words itself (SetExternalHudText).
 static void HudStr( bool pDraw, const MR_Sprite* pFont, int pX, int pY, const char* pStr, MR_2DViewPort* pDest, MR_Sprite::eAlignment pH, MR_Sprite::eAlignment pV, int pScaling )
 {
@@ -2421,7 +2433,7 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       pSession->GetCurrentMessage( lChatLineBuffer );
       if( lChatLineBuffer[0] != 0 )
       {
-         mHudText.typing = lChatLineBuffer;
+         mHudText.typing = SimpleToAscii( lChatLineBuffer );
          HudStr( !mExternalHudText, lChatFont, lChatXMargin, lChatYMargin, lChatLineBuffer, &m3DView,
                             MR_Sprite::eLeft, MR_Sprite::eTop, lChatFontScaling );
       }
@@ -2434,7 +2446,7 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       while( pSession->GetMessageStack( lChatStackLevel++, lChatLineBuffer, kChatMessageLifeSeconds ) &&
              lChatLineCount < kChatMaxLines && lChatYMargin > lYRes/4 )
       {
-         mHudText.chat.push_back( lChatLineBuffer );
+         mHudText.chat.push_back( SimpleToAscii( lChatLineBuffer ) );
          const int lChatStrLen = static_cast<int>( strlen( lChatLineBuffer ) );
          if( lChatStrLen > lChatPrintLen )
          {
