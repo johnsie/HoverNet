@@ -4,6 +4,11 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## Unreleased
+
+### Added
+- **A lap banner** when you complete a lap: the lap, its time, and "BEST LAP" in gold when it beats your earlier laps in that race. Checked by a screenshot with a test hook (`HOVERNET_TEST_LAPBANNER`); not yet seen after a real lap, because the autoplay bot gets stuck on a wall before finishing one.
+
 ## 2.3.36 - 2026-11-09
 
 ### Added

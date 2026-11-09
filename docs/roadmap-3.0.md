@@ -362,7 +362,7 @@ Rules for all of this: **no change to physics or the race camera** (CLAUDE.md ru
 | 2 | Interface sounds | **Done** | Hover, click and back tones on every button, made in code (no files). Open: sounds for tabs and sliders. |
 | 3 | Race sounds | **Partly** | Countdown beeps, GO, lap chime, finish fanfare, new-best sting (code-made). The engine already follows speed. Open: wind and surface sounds; ducking the music under impacts; a voice announcer (needs recorded or licensed voice: not started). |
 | 4 | Start sequence | **Done** | 3-2-1-GO numbers that pop and fade, with the beeps and a controller rumble. |
-| 5 | Feedback in the HUD | **Partly** | Edge flashes for impacts (red), fuel (green) and pickups (gold); controller rumble on impacts. Open: a "new best lap" banner during the race; animated HUD numbers. |
+| 5 | Feedback in the HUD | **Partly** | Edge flashes for impacts (red), fuel (green) and pickups (gold); controller rumble on impacts. A lap banner (lap done, its time, "BEST LAP" in gold when it beats the race's earlier laps). Open: animated HUD numbers. |
 | 6 | Menus | **Partly** | Main menu without scrollbars, Settings in tabs, a loading screen with tips, the results screen with XP. Open: animated screen transitions, a rotating menu craft wearing the player's own design. |
 | 7 | Progression | **Done (local)** | XP and levels, nine achievements, a level bar on the main menu and the results screen, kept in `<config>/profile` (`Profile.cpp`, test `HoverNetProfile`). Open: unlockable Garage parts and decals; daily or weekly challenges; seasons; an account-synced profile and a profile page listing achievements. |
 | 8 | Garage | **Done (paint and shape)** | Open: free-form shape editing, more hulls. |

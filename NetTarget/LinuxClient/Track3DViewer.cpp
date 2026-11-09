@@ -5826,6 +5826,36 @@ void DrawStartSequence(const ImVec2& origin, const ImVec2& display)
     draw->AddText(big, size, at, faded, text.c_str());
 }
 
+// A banner under the start numbers' place when a lap is completed: the lap just finished, its time, and "BEST LAP" when it beat the lap record of this race.
+std::string gLapBannerText;
+std::string gLapBannerSub;
+bool gLapBannerBest = false;
+Uint32 gLapBannerAt = 0;
+
+void DrawLapBanner(const ImVec2& origin, const ImVec2& display)
+{
+    if (gLapBannerAt == 0) return;
+    const float age = static_cast<float>(SDL_GetTicks() - gLapBannerAt);
+    if (age > 2600.0f) { gLapBannerAt = 0; return; }
+    const float slide = std::min(1.0f, age / 250.0f), fade = std::max(0.0f, std::min(1.0f, (2600.0f - age) / 500.0f));
+    const float scale = std::max(0.7f, std::min(1.6f, display.y / 768.0f));
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    ImFont* big = gHoverNetDisplayFont != nullptr ? gHoverNetDisplayFont : ImGui::GetIO().Fonts->Fonts[0];
+    ImFont* body = ImGui::GetIO().Fonts->Fonts[0];
+    const float bigSize = 54.0f * scale, subSize = 24.0f * scale;
+    const ImVec2 titleBox = big->CalcTextSizeA(bigSize, FLT_MAX, 0.0f, gLapBannerText.c_str());
+    const ImVec2 subBox = body->CalcTextSizeA(subSize, FLT_MAX, 0.0f, gLapBannerSub.c_str());
+    const float width = std::max(titleBox.x, subBox.x) + 60.0f * scale, height = titleBox.y + subBox.y + 30.0f * scale;
+    const float eased = 1.0f - (1.0f - slide) * (1.0f - slide);
+    const ImVec2 lo(origin.x + (display.x - width) * 0.5f, origin.y + display.y * 0.22f - 30.0f * scale * (1.0f - eased)), hi(lo.x + width, lo.y + height);
+    const int a = static_cast<int>(255 * fade * eased);
+    const ImU32 accent = gLapBannerBest ? IM_COL32(255, 205, 70, a) : IM_COL32(90, 170, 255, a);
+    draw->AddRectFilled(lo, hi, IM_COL32(8, 10, 16, static_cast<int>(190 * fade * eased)), 12.0f * scale);
+    draw->AddRectFilled(lo, ImVec2(lo.x + 6.0f * scale, hi.y), accent, 12.0f * scale, ImDrawFlags_RoundCornersLeft);
+    draw->AddText(big, bigSize, ImVec2(lo.x + (width - titleBox.x) * 0.5f, lo.y + 8.0f * scale), IM_COL32(245, 247, 252, a), gLapBannerText.c_str());
+    draw->AddText(body, subSize, ImVec2(lo.x + (width - subBox.x) * 0.5f, lo.y + 14.0f * scale + titleBox.y), accent, gLapBannerSub.c_str());
+}
+
 // A flash round the edges of the picture when something happens to the craft: red for an impact, green for fuel, gold for a pickup. The picture itself does not move.
 void DrawImpactFlash(const HudText& hud, const ImVec2& origin, const ImVec2& display)
 {
@@ -5955,6 +5985,7 @@ void DrawGameOverlay(SDL2GraphicsBackend& graphics, SDL_Renderer* renderer, cons
     if (hudVisible) DrawRaceHud(*hud, origin, display);
     if (gCountdownNumber > 0 || gGoShownAt != 0) DrawStartSequence(origin, display);
     if (hudVisible) DrawImpactFlash(*hud, origin, display);
+    if (hudVisible) DrawLapBanner(origin, display);
     if (gFinishPromptVisible) DrawFinishPrompt(origin, display, gFinishPromptTouch);
     if (!gChatPrompt.empty()) DrawChatPrompt(origin, display, gChatPrompt);
     if (!gReplayLabel.empty()) DrawReplayLabel(origin, display, gReplayLabel);
@@ -10751,7 +10782,24 @@ int RunClient(int argc, char** argv)
                     if (outOfControl && !wasOutOfControl) gameController.Rumble(0.9f, 0.6f, 350);   // an impact: the pad kicks
                     wasOutOfControl = outOfControl;
                     const int lap = mainCharacter->GetLap();
-                    if (lastLap >= 0 && lap > lastLap && lap < mainCharacter->GetTotalLap()) PlaySfx(Sfx::eLap);
+                    static MR_SimulationTime lapStartedAt = 0, bestSoFar = 0;
+                    if (lastLap >= 0 && lap > lastLap && lap < mainCharacter->GetTotalLap()) {
+                        PlaySfx(Sfx::eLap);
+                        const MR_SimulationTime lapTime = mainCharacter->GetTotalTime() - lapStartedAt;
+                        char timeText[32];
+                        FormatRaceTime(lapTime, timeText, sizeof(timeText));
+                        const bool best = lastLap >= 1 && bestSoFar > 0 && lapTime < bestSoFar;   // the first lap has nothing to beat
+                        gLapBannerText = "LAP " + std::to_string(lastLap + 1) + " DONE";
+                        gLapBannerSub = std::string(best ? "BEST LAP  " : "Lap time  ") + timeText;
+                        gLapBannerBest = best;
+                        gLapBannerAt = SDL_GetTicks();
+                        if (bestSoFar <= 0 || lapTime < bestSoFar) bestSoFar = lapTime;
+                        lapStartedAt = mainCharacter->GetTotalTime();
+                    }
+                    else if (lastLap < 0 || lap < lastLap) { lapStartedAt = 0; bestSoFar = 0; }
+                    if (gLapBannerAt == 0 && std::getenv("HOVERNET_TEST_LAPBANNER") != nullptr) {   // test hook: show the banner without finishing a lap
+                        gLapBannerBest = std::atoi(std::getenv("HOVERNET_TEST_LAPBANNER")) == 2; gLapBannerText = "LAP 2 DONE"; gLapBannerSub = gLapBannerBest ? "BEST LAP  0:31.20" : "Lap time  0:31.20"; gLapBannerAt = SDL_GetTicks();
+                    }
                     lastLap = lap;
                 }
             }
