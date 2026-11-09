@@ -2582,7 +2582,30 @@ void NoteTabSound(const char* name)
 bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
 {
     ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
+    // The fill eases between its resting and hovered colours (about a tenth of a second, in both directions) instead of snapping. Each button keeps how hovered it is in ImGui's own
+    // per-widget storage; the colour it draws this frame is the blend, for the resting, hovered and focused looks alike (a press still shows the active colour). Skipped with Reduced motion.
+    static int reducedCached = 0;
+    static int reducedAt = -1000;
+    {
+        const int frameNow = ImGui::GetFrameCount();
+        if (frameNow - reducedAt > 120 || frameNow < reducedAt) { reducedAt = frameNow; reducedCached = LoadReducedMotion() ? 1 : 0; }
+    }
+    const ImGuiID easeId = ImGui::GetID(label);
+    ImGuiStorage* easeStore = ImGui::GetStateStorage();
+    const float eased = easeStore->GetFloat(easeId, 0.0f);
+    const ImVec4 resting = ImGui::GetStyleColorVec4(ImGuiCol_Button), hovered = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
+    if (!reducedCached) {
+        const ImVec4 blend(resting.x + (hovered.x - resting.x) * eased, resting.y + (hovered.y - resting.y) * eased, resting.z + (hovered.z - resting.z) * eased, resting.w + (hovered.w - resting.w) * eased);
+        ImGui::PushStyleColor(ImGuiCol_Button, blend);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, blend);
+    }
     const bool pressed = ImGui::Button(label, size);
+    if (!reducedCached) ImGui::PopStyleColor(2);
+    {
+        const float target = (ImGui::IsItemHovered() || ImGui::IsItemFocused()) ? 1.0f : 0.0f;
+        const float step = std::min(1.0f, ImGui::GetIO().DeltaTime / 0.10f);
+        easeStore->SetFloat(easeId, eased + (target - eased) * step);
+    }
     ImGui::PopStyleColor();
     // sounds: a tick as the pointer or the keyboard focus arrives on a button, and a click (or the lower "back" tone for a secondary button) when it is pressed
     // The tick plays once when the pointer arrives on a button, and once when keyboard or controller focus moves to one: never while either stays put. The hovered
