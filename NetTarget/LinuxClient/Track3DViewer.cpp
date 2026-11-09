@@ -7,6 +7,7 @@
 #include "Tutorial.h"
 #include "Profile.h"
 #include "CraftPatterns.h"
+#include "GarageUnlocks.h"
 #include "CraftPreview.h"
 #include "../ObjFacTools/CraftLook.h"
 #include "TrackCatalog.h"
@@ -4445,8 +4446,13 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             ImGui::SameLine();
             ImGui::TextDisabled("  %s", reward.breakdown.c_str());
             const bool levelUp = reward.levelAfter > reward.levelBefore;
-            std::snprintf(line, sizeof line, levelUp ? "LEVEL UP!  Level %d" : "Level %d", reward.levelAfter);
+            std::snprintf(line, sizeof line, levelUp ? "LEVEL UP!  Level %d  -  %s" : "Level %d  -  %s", reward.levelAfter, HoverNetCraft::LevelTitle(reward.levelAfter));
             ImGui::TextColored(levelUp ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImVec4(0.92f, 0.93f, 0.97f, 1.0f), "%s", line);
+            if (levelUp) {
+                std::string opened;
+                for (int lv = reward.levelBefore + 1; lv <= reward.levelAfter; ++lv) { const std::string here = HoverNetCraft::UnlockedAtLevel(lv); if (!here.empty()) opened += (opened.empty() ? "" : ", ") + here; }
+                if (!opened.empty()) { ImGui::PushTextWrapPos(0.0f); ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.35f, 1.0f), "New in the Garage: %s", opened.c_str()); ImGui::PopTextWrapPos(); }
+            }
             {
                 const float width = ImGui::GetContentRegionAvail().x;
                 const ImVec2 at = ImGui::GetCursorScreenPos();
@@ -6370,6 +6376,11 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
     const char* patternDemo = std::getenv("HOVERNET_GARAGE_PATTERN");   // test hook: a pattern painted into the demo design
     if (std::getenv("HOVERNET_GARAGE_DEMO") != nullptr) {   // test hook: a sample design, to look at the screen
         design.length = 8; design.taper = 10; design.body = {{200, 25, 30}}; design.bodyStrength = 200; design.accent = {{30, 170, 70}}; design.accentStrength = 255; design.name = "Demo";
+        if (const char* stampHook = std::getenv("HOVERNET_GARAGE_STAMP")) {   // test hook: a decal stamped near the middle with the same code as a click
+            const int cx = 16, cy = 16;
+            for (int dy = 0; dy < HoverNetCraft::kDecalSize; ++dy) for (int dx = 0; dx < HoverNetCraft::kDecalSize; ++dx)
+                if (HoverNetCraft::DecalCovers(std::atoi(stampHook), dx, dy)) design.paint[static_cast<size_t>(cy + dy - 4) * Authority::kPaintSize + (cx + dx - 4)] = 3;
+        }
         if (patternDemo != nullptr) {
             design.paint.fill(0);
             for (int y = 0; y < Authority::kPaintSize; ++y) for (int x = 0; x < Authority::kPaintSize; ++x) if (HoverNetCraft::PatternCovers(std::atoi(patternDemo), x, y)) design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x] = 5;
@@ -6378,6 +6389,16 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
     }
     std::vector<std::array<std::uint8_t, Authority::kPaintSize * Authority::kPaintSize>> undo;
     int tool = 0, colour = 3;
+    int decal = 0;   // the stamp chosen (tool 4)
+    // What this player has earned: patterns, colour sets and shape range by level, decals by achievement (HOVERNET_GARAGE_LEVEL=n, HOVERNET_GARAGE_ALL=1: test hooks).
+    HoverNetProfile::Profile garageProfile;
+    garageProfile.Load(ProfilePath());
+    int garageLevel = garageProfile.Level();
+    unsigned garageAchievements = garageProfile.achievements;
+    if (const char* levelHook = std::getenv("HOVERNET_GARAGE_LEVEL")) garageLevel = std::max(1, std::atoi(levelHook));
+    if (std::getenv("HOVERNET_GARAGE_ALL") != nullptr) { garageLevel = 99; garageAchievements = ~0u; }
+    const int shapeLimit = garageLevel >= 9 ? Authority::kMaxShapePercent : garageLevel >= 6 ? 20 : garageLevel >= 3 ? 15 : 10;   // how far the length, width and height sliders reach
+    const int taperLimit = shapeLimit * Authority::kMaxTaperPercent / Authority::kMaxShapePercent;
     bool mirror = false, spin = true;
     float yaw = 25.0f;
     std::string status;
@@ -6488,12 +6509,17 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         };
         HoverNetSectionHeading("SHAPE");
         int length = design.length, width = design.width, height = design.height, taper = design.taper;
-        labelledSlider("Length", "How long the craft is.", &length, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, 0, "%+d%%");
-        labelledSlider("Width", "How wide the craft is.", &width, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, 0, "%+d%%");
-        labelledSlider("Height", "How tall the craft is (it still sits on its cushion).", &height, -Authority::kMaxShapePercent, Authority::kMaxShapePercent, 0, "%+d%%");
-        labelledSlider("Nose", "Narrower (-) or wider (+) at the front than at the back.", &taper, -Authority::kMaxTaperPercent, Authority::kMaxTaperPercent, 0, "%+d%%");
+        labelledSlider("Length", "How long the craft is.", &length, -shapeLimit, shapeLimit, 0, "%+d%%");
+        labelledSlider("Width", "How wide the craft is.", &width, -shapeLimit, shapeLimit, 0, "%+d%%");
+        labelledSlider("Height", "How tall the craft is (it still sits on its cushion).", &height, -shapeLimit, shapeLimit, 0, "%+d%%");
+        labelledSlider("Nose", "Narrower (-) or wider (+) at the front than at the back.", &taper, -taperLimit, taperLimit, 0, "%+d%%");
         design.length = static_cast<std::int8_t>(length); design.width = static_cast<std::int8_t>(width); design.height = static_cast<std::int8_t>(height); design.taper = static_cast<std::int8_t>(taper);
         if (HoverNetQuietButton("Reset shape", ImVec2(-FLT_MIN, 30))) design.length = design.width = design.height = design.taper = 0;
+        if (shapeLimit < Authority::kMaxShapePercent) {
+            ImGui::PushTextWrapPos(0.0f);
+            HoverNetHint(("The sliders reach further as you level up (now +/-" + std::to_string(shapeLimit) + "%, up to +/-" + std::to_string(Authority::kMaxShapePercent) + "% at level 9).").c_str());
+            ImGui::PopTextWrapPos();
+        }
 
         // Colours: a row of ready-made swatches for the usual choices, then the full picker for anything else; the amount says how far the hull's own colours give way.
         HoverNetSectionHeading("COLOURS");
@@ -6537,6 +6563,7 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         colourRow("Trim", "cockpit and trim", design.accent, design.accentStrength);
         };
         auto drawPaint = [&]() {
+        if (const char* scrollHook = std::getenv("HOVERNET_GARAGE_SCROLL")) ImGui::SetScrollY(static_cast<float>(std::atof(scrollHook)));   // test hook: scroll the panel down by this many pixels
         HoverNetSectionHeading("PAINT");
         {
             const float cell = std::max(6.0f, std::min(12.0f, (ImGui::GetContentRegionAvail().x - 8.0f) / Authority::kPaintSize));
@@ -6558,9 +6585,23 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
                 const ImVec2 m = ImGui::GetIO().MousePos;
                 const int x = std::max(0, std::min(Authority::kPaintSize - 1, static_cast<int>((m.x - origin.x) / cell)));
                 const int y = std::max(0, std::min(Authority::kPaintSize - 1, static_cast<int>((m.y - origin.y) / cell)));
+                const bool strokeStart = !strokeActive;
                 if (!strokeActive) { pushUndo(); strokeActive = true; }
                 const std::uint8_t value = tool == 1 ? 0 : static_cast<std::uint8_t>(colour);
-                if (tool == 3) { const std::uint8_t picked = design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x]; if (picked != 0) colour = picked; tool = 0; }
+                if (tool == 4) {
+                    if (strokeStart) {   // one stamp for each press, centred on the cell
+                        for (int dy = 0; dy < HoverNetCraft::kDecalSize; ++dy)
+                            for (int dx = 0; dx < HoverNetCraft::kDecalSize; ++dx) {
+                                if (!HoverNetCraft::DecalCovers(decal, dx, dy)) continue;
+                                const int px = x + dx - HoverNetCraft::kDecalSize / 2, py = y + dy - HoverNetCraft::kDecalSize / 2;
+                                for (int pass = 0; pass < (mirror ? 2 : 1); ++pass) {
+                                    const int qx = pass == 0 ? px : Authority::kPaintSize - 1 - px;
+                                    if (qx >= 0 && py >= 0 && qx < Authority::kPaintSize && py < Authority::kPaintSize) design.paint[static_cast<size_t>(py) * Authority::kPaintSize + qx] = static_cast<std::uint8_t>(colour);
+                                }
+                            }
+                    }
+                }
+                else if (tool == 3) { const std::uint8_t picked = design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x]; if (picked != 0) colour = picked; tool = 0; }
                 else if (tool == 2) { floodFill(x, y, value); if (mirror) floodFill(Authority::kPaintSize - 1 - x, y, value); }
                 else { design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x] = value; if (mirror) design.paint[static_cast<size_t>(y) * Authority::kPaintSize + (Authority::kPaintSize - 1 - x)] = value; }
             }
@@ -6584,18 +6625,57 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         {
             // Ready-made patterns: each paints its cells with the selected paint colour on top of what is there (Undo takes it back; Mirror keeps it symmetrical).
             ImGui::TextUnformatted("Patterns, in the selected colour");
-            const int perRow = ImGui::GetContentRegionAvail().x > 330.0f ? 4 : 3;
+            const int perRow = ImGui::GetContentRegionAvail().x > 470.0f ? 4 : 3;
             const float buttonWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * (perRow - 1)) / perRow;
             for (int p = 0; p < HoverNetCraft::kPatternCount; ++p) {
                 if (p % perRow != 0) ImGui::SameLine();
-                char label[48]; std::snprintf(label, sizeof label, "%s##pattern%d", HoverNetCraft::PatternName(p), p);
-                if (ImGui::Button(label, ImVec2(buttonWidth, 0))) {
+                const bool locked = garageLevel < HoverNetCraft::PatternLevel(p);
+                char label[64];
+                if (locked) std::snprintf(label, sizeof label, "Level %d##pattern%d", HoverNetCraft::PatternLevel(p), p);
+                else std::snprintf(label, sizeof label, "%s##pattern%d", HoverNetCraft::PatternName(p), p);
+                if (locked) ImGui::BeginDisabled();
+                const bool patternPressed = ImGui::Button(label, ImVec2(buttonWidth, 0));
+                if (locked) { ImGui::EndDisabled(); if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s: opens at level %d", HoverNetCraft::PatternName(p), HoverNetCraft::PatternLevel(p)); }
+                if (patternPressed && !locked) {
                     pushUndo();
                     const int last = Authority::kPaintSize - 1;
                     for (int y = 0; y < Authority::kPaintSize; ++y)
                         for (int x = 0; x < Authority::kPaintSize; ++x)
                             if (HoverNetCraft::PatternCovers(p, x, y) || (mirror && HoverNetCraft::PatternCovers(p, last - x, y))) design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x] = static_cast<std::uint8_t>(colour);
                 }
+            }
+        }
+        {
+            // Colour sets: fifteen swatches at once (they recolour what is already painted, as the swatches are shared). The first is the Garage's own.
+            ImGui::TextUnformatted("Colour sets");
+            for (int t = 0; t < HoverNetCraft::kThemeCount; ++t) {
+                if (t > 0) ImGui::SameLine();
+                const bool locked = garageLevel < HoverNetCraft::ThemeLevel(t);
+                char label[64];
+                if (locked) std::snprintf(label, sizeof label, "Level %d##theme%d", HoverNetCraft::ThemeLevel(t), t);
+                else std::snprintf(label, sizeof label, "%s##theme%d", HoverNetCraft::ThemeName(t), t);
+                if (locked) ImGui::BeginDisabled();
+                const bool pressed = ImGui::Button(label);
+                if (locked) { ImGui::EndDisabled(); if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s: opens at level %d", HoverNetCraft::ThemeName(t), HoverNetCraft::ThemeLevel(t)); }
+                if (pressed && !locked) {
+                    for (int i = 1; i < Authority::kPaintColours; ++i) { const std::uint8_t* c = HoverNetCraft::ThemeColour(t, i); design.palette[i] = {{c[0], c[1], c[2]}}; }
+                }
+            }
+            ImGui::TextUnformatted("Decals (click the canvas to stamp, in the selected colour)");
+            const int perRow = ImGui::GetContentRegionAvail().x > 560.0f ? 5 : 3;
+            const float buttonWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * (perRow - 1)) / perRow;
+            for (int d = 0; d < HoverNetCraft::kDecalCount; ++d) {
+                if (d % perRow != 0) ImGui::SameLine();
+                const bool locked = (garageAchievements >> d & 1u) == 0;
+                const bool on = tool == 4 && decal == d;
+                char label[64];
+                std::snprintf(label, sizeof label, "%s##decal%d", locked ? "Locked" : HoverNetCraft::DecalName(d), d);
+                if (locked) ImGui::BeginDisabled();
+                if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.12f, 0.16f, 1.0f));
+                const bool pressed = ImGui::Button(label, ImVec2(buttonWidth, 0));
+                if (on) ImGui::PopStyleColor();
+                if (locked) { ImGui::EndDisabled(); if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s decal: %s", HoverNetCraft::DecalName(d), HoverNetCraft::DecalEarnedBy(d)); }
+                if (pressed && !locked) { tool = 4; decal = d; }
             }
         }
         for (int i = 1; i < Authority::kPaintColours; ++i) {
@@ -6613,7 +6693,6 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         HoverNetHint("The paint wraps round the hull panels; use Mirror for symmetrical stripes.");
         ImGui::PopTextWrapPos();
 
-        if (std::getenv("HOVERNET_GARAGE_SCROLL") != nullptr) ImGui::SetScrollHereY(0.0f);   // test hook: scroll the panel to show what is below the canvas
         HoverNetSectionHeading("MY CRAFT");
         {
             char nameBuffer[Authority::kMaxDesignNameBytes + 1];
@@ -6637,6 +6716,8 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
                     HoverNetProfile::Profile profile;
                     profile.Load(ProfilePath());
                     if (profile.Unlock(HoverNetProfile::eGarageDesigner).xp > 0) profile.Save(ProfilePath());
+                    garageProfile.Load(ProfilePath());
+                    if (std::getenv("HOVERNET_GARAGE_ALL") == nullptr) { garageAchievements = garageProfile.achievements; garageLevel = std::max(garageLevel, garageProfile.Level()); }
                 }
                 if (store.Save(slot, clean) && store.SetActive(slot)) status = "Saved in slot " + std::to_string(slot + 1) + ". Other players see it in online races.";
                 else status = "Could not save the craft on this device.";
@@ -8545,7 +8626,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             if (!menuProfileLoaded || framesShown == 1) { menuProfile.Load(ProfilePath()); menuProfileLoaded = true; }
             if (menuProfile.xp > 0 || menuProfile.races > 0) {
                 ImGui::Spacing();
-                ImGui::TextColored(kHoverNetCoral, "LEVEL %d", menuProfile.Level());
+                ImGui::TextColored(kHoverNetCoral, "LEVEL %d  -  %s", menuProfile.Level(), HoverNetCraft::LevelTitle(menuProfile.Level()));
                 const ImVec2 at = ImGui::GetCursorScreenPos();
                 ImDrawList* chip = ImGui::GetWindowDrawList();
                 chip->AddRectFilled(at, ImVec2(at.x + 150.0f, at.y + 6.0f), IM_COL32(48, 51, 66, 255), 3.0f);
