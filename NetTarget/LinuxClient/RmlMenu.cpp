@@ -40,6 +40,13 @@ private:
     std::function<void(Sound)> mSound;
 };
 
+// The interface scales with the window (the design is laid out for 1024x768): a bigger window gives bigger text and buttons, a smaller one smaller, within limits.
+float ScaleFor(int pWidth, int pHeight)
+{
+    const float byWidth = static_cast<float>(pWidth) / 1024.0f, byHeight = static_cast<float>(pHeight) / 768.0f;
+    return std::max(0.7f, std::min(2.5f, std::min(byWidth, byHeight)));
+}
+
 const char* const kButtons[] = {"online", "offline", "leaderboards", "garage", "tutorial", "settings"};   // in the order the arrow keys walk them
 constexpr int kButtonCount = 6;
 
@@ -71,6 +78,7 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
     int width = 0, height = 0;
     SDL_GetRendererOutputSize(pRenderer, &width, &height);
     Rml::Context* context = Rml::CreateContext("hovernet-main-menu", Rml::Vector2i(width, height));
+    if (context != nullptr) context->SetDensityIndependentPixelRatio(ScaleFor(width, height));
     Rml::LoadFontFace(pInfo.assetDir + "/Inter-Variable.ttf", true);       // the body face (also the fallback for any name)
     Rml::LoadFontFace(pInfo.assetDir + "/Oxanium-Variable.ttf", false);    // the display face
     Rml::ElementDocument* document = context != nullptr ? context->LoadDocument(pInfo.assetDir + "/ui/main-menu.rml") : nullptr;
@@ -142,7 +150,7 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
         }
         int w = 0, h = 0;
         SDL_GetRendererOutputSize(pRenderer, &w, &h);
-        if (w != width || h != height) { width = w; height = h; context->SetDimensions(Rml::Vector2i(width, height)); }
+        if (w != width || h != height) { width = w; height = h; context->SetDimensions(Rml::Vector2i(width, height)); context->SetDensityIndependentPixelRatio(ScaleFor(width, height)); }
         context->Update();
         // Under the interface: the background (a gradient the renderer draws itself, so the craft can sit between it and the markup) and the player's craft.
         {
@@ -236,6 +244,7 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
     int width = 0, height = 0;
     SDL_GetRendererOutputSize(pRenderer, &width, &height);
     Rml::Context* context = Rml::CreateContext("hovernet-results", Rml::Vector2i(width, height));
+    if (context != nullptr) context->SetDensityIndependentPixelRatio(ScaleFor(width, height));
     Rml::LoadFontFace(pInfo.assetDir + "/Inter-Variable.ttf", true);
     Rml::LoadFontFace(pInfo.assetDir + "/Oxanium-Variable.ttf", false);
     Rml::ElementDocument* document = context != nullptr ? context->LoadDocument(pInfo.assetDir + "/ui/results.rml") : nullptr;
@@ -339,7 +348,7 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
         }
         int w = 0, h = 0;
         SDL_GetRendererOutputSize(pRenderer, &w, &h);
-        if (w != width || h != height) { width = w; height = h; context->SetDimensions(Rml::Vector2i(width, height)); }
+        if (w != width || h != height) { width = w; height = h; context->SetDimensions(Rml::Vector2i(width, height)); context->SetDensityIndependentPixelRatio(ScaleFor(width, height)); }
         context->Update();
         SDL_SetRenderDrawColor(pRenderer, 18, 12, 20, 255);
         SDL_RenderClear(pRenderer);
@@ -350,7 +359,7 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
         SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
         context->Render();
         if (const char* shot = std::getenv("HOVERNET_CAPTURE_FRAME")) {
-            if (pFrameLimit >= 0 && frames == pFrameLimit) {
+            if ((pFrameLimit >= 0 && frames == pFrameLimit) || (pFrameLimit < 0 && frames == 62)) {   // a bounded run: its last frame; a scripted run: just before its first keystroke
                 if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888)) {
                     SDL_RenderReadPixels(pRenderer, nullptr, SDL_PIXELFORMAT_ARGB8888, surface->pixels, surface->pitch);
                     SDL_SaveBMP(surface, shot);

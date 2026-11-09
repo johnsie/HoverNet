@@ -9,6 +9,9 @@ and how to roll one back.
 ### Fixed
 - **Online: the number of laps you choose is remembered.** Creating a race in the online lobby kept your laps, weapons and track in memory only, so the next session went back to 1 lap. They are now saved, and the dialog opens with them. Checked by `HoverNetOnlineScreenClicks`: a new player starts at 1, hosting with 4 laps makes the next session start at 4. (The local race setup already remembered them.)
 
+### Changed
+- **The RmlUi screens scale with the window** (designed for 1024x768, from 0.7x to 2.5x), and the RmlUi results card is much bigger: wide card, large heading, numbers and buttons, in the size of the ImGui results screen. Seen in a 1024x768 capture only; larger windows not tried.
+
 ### Added
 - **The RmlUi screens make the game's interface sounds**: a tick as the focus or pointer moves to a button, a click when one is chosen, the back sound on Esc. Checked from the log of the sounds triggered (`HoverNetRmlMenu`), not by listening.
 - **RmlUi results screen (prototype, with `HOVERNET_RML_MENU=1`)**: the card eases in, its parts appear one after another, the XP counts up and the level bar fills; VICTORY! in gold. Both RmlUi screens are kept light on text. Checked: renders in a screenshot, and a scripted run after a real autoplay race presses its button (`HoverNetRmlMenu`). Not checked: an online race's RETURN TO LOBBY button, the counting and staggering in motion.
