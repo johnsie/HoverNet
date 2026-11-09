@@ -398,12 +398,12 @@ def make_handler(account, status=None, console_origin="https://outiva.com"):
                 return self.send(200, {"Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=15",
                                        "Access-Control-Allow-Origin": console_origin, "Vary": "Origin"},
                                  json.dumps(status.status(), separators=(",", ":")).encode())
-            if account is None:   # not configured: everyone is a guest
-                return self.send(204) if url.path == "/account/me" else self.send(404)
+            if account is None:   # not configured: everyone is a guest (and the page is told there is nothing to sign in to)
+                return self.send(204, {"X-HoverNet-Accounts": "off"}) if url.path == "/account/me" else self.send(404)
             if url.path == "/account/me":
                 current = account.profile(self.headers.get("Cookie"))
                 if not current:
-                    return self.send(204)
+                    return self.send(204, {"X-HoverNet-Accounts": "on"})   # a guest, and signing in is possible
                 current["accountCallsign"] = current.get("callsign", "")
                 current["callsign"] = account.callsigns.custom(current["sub"]) or current["accountCallsign"] or account.callsigns.get(current["sub"])
                 return self.send(200, {"Content-Type": "application/json; charset=utf-8"}, json.dumps(current).encode())

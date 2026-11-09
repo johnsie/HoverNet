@@ -10,6 +10,7 @@
 
 #include "OnlineLobby.h"
 #include "../Authority/CraftDesign.h"
+#include "GuestName.h"
 
 namespace
 {
@@ -34,6 +35,16 @@ int main(int argc, char** argv)
     const int port = std::atoi(argv[1]);
     const std::vector<std::uint8_t> noKey;
 
+    // Guests are tagged " (nonreg)" after their name; the whole name still fits 32 bytes; a signed-in player and an empty name are left alone.
+    Check(HoverNetGuest::Tagged("Skeletor", true) == "Skeletor (nonreg)", "a guest's name gets (nonreg) after it");
+    Check(HoverNetGuest::Tagged("Skeletor", false) == "Skeletor", "a signed-in player's name is left alone");
+    Check(HoverNetGuest::Tagged("", true).empty(), "no name, no tag");
+    Check(HoverNetGuest::Tagged("Skeletor (nonreg)", true) == "Skeletor (nonreg)", "a name that already has the tag is not tagged twice");
+    {
+        const std::string longName(40, 'x');
+        const std::string tagged = HoverNetGuest::Tagged(longName, true);
+        Check(tagged.size() == 32 && tagged.compare(tagged.size() - 9, 9, " (nonreg)") == 0, "a long name is cut to make room for the tag: 32 bytes in all, tag intact");
+    }
     OnlineLobby host, friendLobby, stranger, solo, watcher;
     Authority::CraftDesign hostLook;
     hostLook.body = {{220, 30, 45}};

@@ -9,6 +9,7 @@
 #include "CraftPatterns.h"
 #include "GarageUnlocks.h"
 #include "CraftPreview.h"
+#include "GuestName.h"
 #include "../ObjFacTools/CraftLook.h"
 #include "TrackCatalog.h"
 #include "TrackDownloader.h"
@@ -130,6 +131,25 @@ EM_JS(void, hovernet_js_account_craft_status, (char* out, int cap), {
 });
 EM_JS(int, hovernet_js_account_craft_revision, (), {
     return window.hoverNetCraftRevision | 0;
+});
+// The Outiva sign-in, from the page's own account service (packaging/web/hovernet_account.py): /account/me answers 200 with the profile when the browser holds the
+// sign-in cookie, and 204 for a guest, with X-HoverNet-Accounts saying whether there is anything to sign in to. Asked in the background; the game reads the answer on
+// later frames. -1 = not answered yet, 0 = a guest who can sign in, 1 = signed in, 2 = no accounts here (not configured, or the service is not reachable).
+EM_JS(void, hovernet_js_account_check, (), {
+    if (!window.hoverNetAccount) window.hoverNetAccount = { state: -1, callsign: '' };
+    fetch('/account/me', { credentials: 'same-origin' }).then(function (r) {
+        if (r.status === 200) return r.json().then(function (j) { window.hoverNetAccount = { state: 1, callsign: String(j.callsign || j.accountCallsign || '') }; });
+        window.hoverNetAccount = { state: (r.status === 204 && r.headers.get('X-HoverNet-Accounts') === 'on') ? 0 : 2, callsign: '' };
+    }).catch(function () { window.hoverNetAccount = { state: 2, callsign: '' }; });
+});
+EM_JS(int, hovernet_js_account_state, (), {
+    return window.hoverNetAccount ? window.hoverNetAccount.state : -1;
+});
+EM_JS(void, hovernet_js_account_callsign, (char* out, int cap), {
+    stringToUTF8(window.hoverNetAccount ? window.hoverNetAccount.callsign : '', out, cap);
+});
+EM_JS(void, hovernet_js_open_signin, (), {
+    window.location.href = '/account/login';   // the sign-in happens in this tab and comes back to the game page when it is done (no new tab)
 });
 EM_JS(int, hovernet_js_is_touch, (), {
     return (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 1 : 0;
@@ -1560,6 +1580,15 @@ std::string LoadUsername()
     std::string name;
     std::getline(in, name);
     return name;
+}
+
+// Whether the page offered an Outiva sign-in (browser build), and whether the player is signed in. A player who was offered it and did not sign in races as a guest:
+// other players see " (nonreg)" after the name (GuestName.h). Without an account service (the desktop build, a server with accounts off) nobody is tagged.
+bool gAccountsOffered = false;
+bool gSignedIn = false;
+std::string OnlineUsername()
+{
+    return HoverNetGuest::Tagged(LoadUsername(), gAccountsOffered && !gSignedIn);
 }
 
 void SaveUsername(const std::string& name)
@@ -6968,6 +6997,11 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
             if (HoverNetQuietButton("Delete this slot", ImVec2(-FLT_MIN, 32))) { store.Delete(slot); design = CraftDesign(); lastSavedDesign = design; undo.clear(); status = "Deleted."; }
 #ifdef HOVERNET_WEB
             HoverNetSectionHeading("OUTIVA ACCOUNT");
+            if (gAccountsOffered && !gSignedIn) {
+                ImGui::PushTextWrapPos(0.0f);
+                HoverNetHint("You are playing as a guest. Sign in with Outiva (reload the page) to keep your crafts on your account.");
+                ImGui::PopTextWrapPos();
+            }
             if (HoverNetButton("Save local slots to account", ImVec2(-FLT_MIN, 36))) hovernet_js_account_craft_save();
             if (HoverNetQuietButton("Restore account slots (replaces local)", ImVec2(-FLT_MIN, 32))) hovernet_js_account_craft_load();
             char accountStatus[160] = {};
@@ -7108,8 +7142,8 @@ bool ConnectLobbyForReplays(OnlineLobby& lobby)
     if (!SplitServerAddress(address, host, port)) return false;
     if (!key.empty() && (!Crypto::FromHex(key, serverKey) || serverKey.size() != 32)) return false;
 #endif
-    std::string name = LoadUsername();
-    if (name.empty() || !Protocol3::IsValidText(name, 32)) name = "Viewer";
+    std::string name = OnlineUsername();
+    if (name.empty() || !Protocol3::IsValidText(name, 32)) name = HoverNetGuest::Tagged("Viewer", gAccountsOffered && !gSignedIn);
     return lobby.Connect(host, port, name, serverKey);
 }
 #endif
@@ -7802,6 +7836,90 @@ enum class AuthScreenResult { eRace, eBack, eFallback };
 
 // Opens on the official server by itself: players type nothing but, the first time, their name. The technical fields (an address, a key) are
 // behind "Use another server".
+#ifdef HOVERNET_WEB
+// Before the main menu, once per visit: a player who is not signed in with Outiva chooses to sign in or to play as a guest. Signing in matters from the start because a
+// registered player's Garage crafts can be kept on their account (Garage > Outiva account), and their Outiva callsign is their name. A signed-in player never sees this; a
+// page with no account service (or accounts switched off) never shows it either. A guest races as "name (nonreg)" (GuestName.h).
+void RunSignInGate(SDL2GraphicsBackend& graphics)
+{
+    hovernet_js_account_check();
+    const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
+    if (ownsImGuiContext) {
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+        LoadHoverNetMenuFonts(io);
+        ApplyHoverNetLobbyStyle(LoadUiScale(), LoadHighContrast());
+        ImGui_ImplSDL2_InitForSDLRenderer(graphics.GetWindow(), graphics.GetRenderer());
+        ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
+    }
+    const Uint32 started = SDL_GetTicks();
+    bool running = true, focusFirst = true;
+    while (running) {
+        const int state = hovernet_js_account_state();
+        if (state == 1) {   // signed in: the Outiva callsign is the name
+            char callsign[64] = {};
+            hovernet_js_account_callsign(callsign, sizeof callsign);
+            const std::string who = callsign;
+            if (!who.empty() && Protocol3::IsValidText(who, 32)) { SaveUsername(who); std::printf("ACCOUNT signed in as %s\n", who.c_str()); std::fflush(stdout); }
+            gAccountsOffered = true; gSignedIn = true;
+            break;
+        }
+        if (state == 2 || (state == -1 && SDL_GetTicks() - started > 4000)) break;   // no accounts here, or no answer: carry on as before
+        if (state == 0) gAccountsOffered = true;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) { MenuProcessEvent(event); }
+        SDL_Renderer* renderer = graphics.GetRenderer();
+        SDL_RenderSetLogicalSize(renderer, 0, 0);
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+        const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::Begin("HoverNet Sign In", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+        DrawHoverNetScreenBackdrop(mainViewport);
+        if (state == 0) {
+            const float cardWidth = std::min(520.0f, ImGui::GetContentRegionAvail().x);
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - cardWidth) * 0.5f);
+            ImGui::SetCursorPosY(std::max(20.0f, (ImGui::GetWindowHeight() - 330.0f) * 0.4f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, kHoverNetSurface);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
+            MenuBeginChild("SignInCard", ImVec2(cardWidth, 0), ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoScrollbar);
+            HoverNetSectionHeading("WELCOME TO HOVERNET");
+            ImGui::Spacing();
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("Sign in to race under your Outiva name and keep your Garage crafts on your account.");
+            ImGui::PopTextWrapPos();
+            ImGui::Spacing();
+            if (focusFirst) { ImGui::SetKeyboardFocusHere(); focusFirst = false; }
+            if (HoverNetButton("SIGN IN WITH OUTIVA", ImVec2(-FLT_MIN, 56.0f))) hovernet_js_open_signin();
+            ImGui::Spacing();
+            if (HoverNetQuietButton("PLAY AS A GUEST", ImVec2(-FLT_MIN, 46.0f))) running = false;
+            HoverNetHint("Guests race as \"name (nonreg)\".");
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
+        }
+        ImGui::End();
+        HN_SCREEN_FADE();
+        ImGui::Render();
+        SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
+        SDL_RenderPresent(renderer);
+        SDL_RenderSetLogicalSize(renderer, kWidth, kHeight);
+        HoverNetFrameDelay();
+    }
+    if (ownsImGuiContext) {
+        ImGui_ImplSDLRenderer2_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+    }
+}
+#endif
+
 AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby& lobby, int pFrameLimit)
 {
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
@@ -10161,7 +10279,7 @@ int RunClient(int argc, char** argv)
         auth.spectator = lobby.Spectating();
         auth.conn.Swap(lobby.Connection());
         lobby.AddressOf(auth.host, auth.port, auth.serverKey);
-        auth.name = LoadUsername();
+        auth.name = OnlineUsername();
         // The browser tests set these switches after the page has started (see hovernet_test_setenv).
         if (std::getenv("HOVERNET_TEST_AUTH_VERIFY") != nullptr) auth.verify = true;
         if (std::getenv("HOVERNET_TEST_AUTH_SCRIPT") != nullptr) auth.scripted = true;
@@ -10278,6 +10396,12 @@ int RunClient(int argc, char** argv)
     bool pickingMode = true;
         while (pickingMode) {
             pickingMode = false;
+#ifdef HOVERNET_WEB
+            {   // once per visit, before the main menu: sign in with Outiva or play as a guest (bounded test runs skip it)
+                static bool gateShown = false;
+                if (!gateShown && frameLimit < 0) { gateShown = true; RunSignInGate(graphics); }
+            }
+#endif
             gMenuCraftResources = &resources;
             const MenuChoice choice = std::getenv("HOVERNET_OPEN_GARAGE") != nullptr ? MenuChoice::eGarage : RunMainMenu(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
                                                   frameLimit);
@@ -10395,8 +10519,8 @@ int RunClient(int argc, char** argv)
             const std::size_t colon = authServer.rfind(':');
             auth.host = colon == std::string::npos ? authServer : authServer.substr(0, colon);
             auth.port = colon == std::string::npos ? 9610 : std::atoi(authServer.c_str() + colon + 1);
-            auth.name = LoadUsername();
-            if (auth.name.empty()) auth.name = "Player";
+            auth.name = OnlineUsername();
+            if (auth.name.empty()) auth.name = HoverNetGuest::Tagged("Player", gAccountsOffered && !gSignedIn);
             std::string error;
             if (!auth.conn.Connect(auth.host, auth.port, error, auth.serverKey.empty() ? nullptr : auth.serverKey.data())) return FatalClientError(error);
             Protocol3::Hello hello;
