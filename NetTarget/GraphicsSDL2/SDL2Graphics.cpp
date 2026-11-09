@@ -88,6 +88,19 @@ bool SDL2GraphicsBackend::Initialize(void* windowHandle, int width, int height)
         if (!m_window) { SDL_QuitSubSystem(SDL_INIT_VIDEO); return false; }
     }
 #endif
+#ifndef __EMSCRIPTEN__
+    {
+        // The graphics card draws the menus and scales the picture when there is one (OpenGL): the picture passes and the finished picture then stay on the card
+        // (see GpuFinisher.h). HOVERNET_RENDERER=software keeps the old processor-only renderer; the dummy video driver (tests) has no accelerated renderer and falls through.
+        const char* wanted = std::getenv("HOVERNET_RENDERER");
+        if (wanted == nullptr || std::strcmp(wanted, "software") != 0) {
+            SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
+            m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+            if (!m_renderer) m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED);
+            SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
+        }
+    }
+#endif
     if (!m_renderer) m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_SOFTWARE | SDL_RENDERER_PRESENTVSYNC);
     if (!m_renderer) { 
         // Fallback: try without VSYNC
@@ -126,6 +139,7 @@ bool SDL2GraphicsBackend::Initialize(void* windowHandle, int width, int height)
 
 void SDL2GraphicsBackend::Shutdown()
 {
+    if (m_gpuTexture) { SDL_DestroyTexture(m_gpuTexture); m_gpuTexture = nullptr; }
     if (m_texture) { SDL_DestroyTexture(m_texture); m_texture = nullptr; }
     if (m_renderer) { SDL_DestroyRenderer(m_renderer); m_renderer = nullptr; }
     if (m_window) { SDL_DestroyWindow(m_window); m_window = nullptr; }
@@ -271,10 +285,18 @@ bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height)
             const char* choice = std::getenv("HOVERNET_GPU");
             if (choice == nullptr || std::strcmp(choice, "0") != 0) {
                 m_gpu.reset(new HoverNetGfx::GpuFinisher);
+                SDL_RendererInfo rendererInfo;
+                const bool glRenderer = SDL_GetRendererInfo(m_renderer, &rendererInfo) == 0 && rendererInfo.name != nullptr && std::strcmp(rendererInfo.name, "opengl") == 0;
+                if (glRenderer) SDL_RenderFlush(m_renderer);   // the renderer's context is the current one now: the finisher's shares with it
                 if (m_gpu->Init()) {
+                    if (glRenderer) {
+                        m_gpuTexture = SDL_CreateTexture(m_renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_TARGET, width, height);
+                        SDL_RenderFlush(m_renderer);
+                        if (m_gpuTexture != nullptr && !m_gpu->AdoptTarget(m_gpuTexture, width, height)) { SDL_DestroyTexture(m_gpuTexture); m_gpuTexture = nullptr; }
+                    }
                     HoverNetGfx::GpuFinisher* gpu = m_gpu.get();
                     m_presenter.SetFinisher([gpu](std::uint8_t* rgb, int w, int h, const HoverNetGfx::Options& o, const HoverNetGfx::FrameHints& hints, const std::uint8_t* mask) { return gpu->Process(rgb, w, h, o, hints, mask); });
-                    std::printf("Picture passes on the graphics card: %s\n", m_gpu->Renderer().c_str());
+                    std::printf("Picture passes on the graphics card: %s%s\n", m_gpu->Renderer().c_str(), m_gpuTexture != nullptr ? " (the picture stays on the card)" : "");
                 }
                 else std::printf("Picture passes on the processor (%s)\n", m_gpu->Error().c_str());
                 std::fflush(stdout);
@@ -285,11 +307,12 @@ bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height)
         m_presenter.Process(rgb_buffer, width, height, frameOptions, m_frameHints);
     }
 
-    SDL_UpdateTexture(m_texture, nullptr, rgb_buffer, pitch);
-    
+    const bool onCard = m_gpuTexture != nullptr && m_gpu && m_gpu->OutputIsShared() && m_modernOptions.enabled && m_gpuAllowed;
+    if (!onCard) SDL_UpdateTexture(m_texture, nullptr, rgb_buffer, pitch);   // (with the picture finished on the card it is already in its texture)
+
     SDL_RenderClear(m_renderer);
     SDL_Rect r = {0, 0, width, height};
-    SDL_RenderCopy(m_renderer, m_texture, nullptr, &r);
+    SDL_RenderCopy(m_renderer, onCard ? m_gpuTexture : m_texture, nullptr, &r);
     if (m_overlay) m_overlay(m_renderer);
     SDL_RenderPresent(m_renderer);
     return true;

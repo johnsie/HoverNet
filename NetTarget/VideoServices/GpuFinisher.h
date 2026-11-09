@@ -16,6 +16,7 @@
 #include <string>
 
 struct SDL_Window;
+struct SDL_Texture;
 
 namespace HoverNetGfx
 {
@@ -24,8 +25,14 @@ class GpuFinisher
 public:
     GpuFinisher();
     ~GpuFinisher();
-    // Makes the context and compiles the shaders. False (and Error() says why) when this machine cannot.
+    // Makes the context and compiles the shaders. False (and Error() says why) when this machine cannot. When the SDL renderer's own OpenGL context is current
+    // when this is called, the new context shares objects with it, so the finished picture can be written straight into one of the renderer's textures
+    // (AdoptTarget) and never comes back to the processor.
     bool Init();
+    // With the renderer's context current: makes this texture (RGBA, the picture's size, made by the renderer as a render target) the place the picture is written. False
+    // when the renderer is not OpenGL or the contexts do not share; the picture is then read back as before.
+    bool AdoptTarget(SDL_Texture* texture, int width, int height);
+    bool OutputIsShared() const;       // the last Process wrote into the adopted texture: the caller must not copy the CPU frame over it
     bool Ready() const { return mReady; }
     const std::string& Error() const { return mError; }
     const std::string& Renderer() const { return mRenderer; }   // the GPU's name, once ready

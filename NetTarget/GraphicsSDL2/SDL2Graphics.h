@@ -101,6 +101,7 @@ private:
     bool m_havePresentTime = false;
     float m_gradedBrightness = 1.0f;
     HoverNetGfx::Presenter m_presenter;
+    SDL_Texture* m_gpuTexture = nullptr;   // the finished picture, written by the card straight into a texture of the renderer (no read-back), when the renderer is OpenGL
     std::unique_ptr<HoverNetGfx::GpuFinisher> m_gpu;   // the finishing passes on the graphics card, when this machine has one (HOVERNET_GPU=0 turns it off)
     bool m_gpuTried = false;
     bool m_gpuAllowed = true;

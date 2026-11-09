@@ -59,6 +59,7 @@ struct Gl
     void (*Disable)(GLenum) = nullptr;
     const unsigned char* (*GetString)(GLenum) = nullptr;
     void (*Finish)() = nullptr;
+    void (*GetIntegerv)(GLenum, GLint*) = nullptr;
 };
 
 template <typename T> bool Load(T& fn, const char* name) { fn = reinterpret_cast<T>(SDL_GL_GetProcAddress(name)); return fn != nullptr; }
@@ -177,6 +178,10 @@ struct GpuFinisher::Impl
     GLuint fboMain = 0, fboA1 = 0, fboB1 = 0, fboA2 = 0, fboB2 = 0, fboOut = 0;
     int width = 0, height = 0;
     std::vector<unsigned char> readback;
+    GLuint sharedTexture = 0;      // the renderer's texture the picture is written into (0: read it back instead)
+    int sharedWidth = 0, sharedHeight = 0;
+    bool lastShared = false;
+    bool shared = false;           // this context shares objects with the renderer's
 
     GLuint Compile(GLenum type, const std::string& source, std::string& error)
     {
@@ -238,7 +243,15 @@ struct GpuFinisher::Impl
         MakeTarget(texMain, fboMain, w, h, kRGBA8);
         MakeTarget(texA1, fboA1, w1, h1, kRGBA8); MakeTarget(texB1, fboB1, w1, h1, kRGBA8);
         MakeTarget(texA2, fboA2, w2, h2, kRGBA8); MakeTarget(texB2, fboB2, w2, h2, kRGBA8);
-        MakeTarget(texOut, fboOut, w, h, kRGBA8);
+        if (sharedTexture != 0 && w == sharedWidth && h == sharedHeight) {
+            if (fboOut == 0) gl.GenFramebuffers(1, &fboOut);
+            gl.BindFramebuffer(kFramebuffer, fboOut);
+            gl.FramebufferTexture2D(kFramebuffer, kColorAttachment0, kTexture2D, sharedTexture, 0);
+        }
+        else {
+            sharedTexture = 0;
+            MakeTarget(texOut, fboOut, w, h, kRGBA8);
+        }
         if (texSrc == 0) gl.GenTextures(1, &texSrc);
         gl.BindTexture(kTexture2D, texSrc);
         gl.PixelStorei(kUnpackAlignment, 1);
@@ -260,6 +273,29 @@ struct GpuFinisher::Impl
     void Set2f(GLuint program, const char* name, float a, float b) { gl.Uniform2f(gl.GetUniformLocation(program, name), a, b); }
     void Set2i(GLuint program, const char* name, int a, int b) { gl.Uniform2i(gl.GetUniformLocation(program, name), a, b); }
 };
+
+bool GpuFinisher::OutputIsShared() const { return mImpl->lastShared; }
+
+bool GpuFinisher::AdoptTarget(SDL_Texture* texture, int width, int height)
+{
+#ifdef __EMSCRIPTEN__
+    (void)texture; (void)width; (void)height;
+    return false;
+#else
+    Impl& m = *mImpl;
+    if (!mReady || !m.shared || texture == nullptr || SDL_GL_GetCurrentContext() == nullptr || SDL_GL_GetCurrentContext() == m.context) return false;
+    float tw = 0, th = 0;
+    if (SDL_GL_BindTexture(texture, &tw, &th) != 0) return false;
+    GLint id = 0;
+    m.gl.GetIntegerv(0x8069 /* GL_TEXTURE_BINDING_2D */, &id);
+    SDL_GL_UnbindTexture(texture);
+    if (id <= 0) return false;
+    m.sharedTexture = static_cast<GLuint>(id);
+    m.sharedWidth = width; m.sharedHeight = height;
+    m.width = 0; m.height = 0;   // the targets are made again for this
+    return true;
+#endif
+}
 
 GpuFinisher::GpuFinisher() : mImpl(new Impl) {}
 
@@ -283,6 +319,7 @@ bool GpuFinisher::Init()
     if (driver != nullptr && (std::strcmp(driver, "dummy") == 0 || std::strcmp(driver, "offscreen") == 0)) { mError = "this video driver has no OpenGL"; return false; }
     SDL_Window* previousWindow = SDL_GL_GetCurrentWindow();
     SDL_GLContext previousContext = SDL_GL_GetCurrentContext();
+    const bool canShare = previousContext != nullptr;
     struct Attempt { int profile, major, minor; bool es; };
     const Attempt attempts[] = {{SDL_GL_CONTEXT_PROFILE_CORE, 3, 3, false}, {SDL_GL_CONTEXT_PROFILE_ES, 3, 0, true}};
     for (const Attempt& a : attempts) {
@@ -290,12 +327,16 @@ bool GpuFinisher::Init()
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, a.profile);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, a.major);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, a.minor);
-        SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 0);
-        m.window = SDL_CreateWindow("HoverNet GPU", 0, 0, 64, 64, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
-        if (m.window == nullptr) continue;
-        m.context = SDL_GL_CreateContext(m.window);
-        if (m.context != nullptr) { m.es = a.es; break; }
-        SDL_DestroyWindow(m.window); m.window = nullptr;
+        for (int share = canShare ? 1 : 0; share >= 0 && m.context == nullptr; --share) {   // with the renderer's context first, alone if that is not allowed
+            if (share == 1 && previousWindow != nullptr) SDL_GL_MakeCurrent(previousWindow, previousContext);
+            SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, share);
+            m.window = SDL_CreateWindow("HoverNet GPU", 0, 0, 64, 64, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+            if (m.window == nullptr) continue;
+            m.context = SDL_GL_CreateContext(m.window);
+            if (m.context != nullptr) { m.es = a.es; m.shared = share == 1; break; }
+            SDL_DestroyWindow(m.window); m.window = nullptr;
+        }
+        if (m.context != nullptr) break;
     }
     if (m.context == nullptr) { mError = std::string("no OpenGL 3.3 or ES 3.0 context: ") + SDL_GetError(); if (previousWindow != nullptr) SDL_GL_MakeCurrent(previousWindow, previousContext); return false; }
     SDL_GL_MakeCurrent(m.window, m.context);
@@ -309,7 +350,7 @@ bool GpuFinisher::Init()
               Load(g.Uniform1i, "glUniform1i") && Load(g.Uniform1f, "glUniform1f") && Load(g.Uniform2f, "glUniform2f") && Load(g.Uniform2i, "glUniform2i") && Load(g.GenFramebuffers, "glGenFramebuffers") &&
               Load(g.BindFramebuffer, "glBindFramebuffer") && Load(g.FramebufferTexture2D, "glFramebufferTexture2D") && Load(g.CheckFramebufferStatus, "glCheckFramebufferStatus") &&
               Load(g.Viewport, "glViewport") && Load(g.DrawArrays, "glDrawArrays") && Load(g.GenVertexArrays, "glGenVertexArrays") && Load(g.BindVertexArray, "glBindVertexArray") &&
-              Load(g.ActiveTexture, "glActiveTexture") && Load(g.ReadPixels, "glReadPixels") && Load(g.Disable, "glDisable") && Load(g.GetString, "glGetString") && Load(g.Finish, "glFinish");
+              Load(g.ActiveTexture, "glActiveTexture") && Load(g.ReadPixels, "glReadPixels") && Load(g.Disable, "glDisable") && Load(g.GetString, "glGetString") && Load(g.Finish, "glFinish") && Load(g.GetIntegerv, "glGetIntegerv");
     if (!ok) { mError = "OpenGL functions are missing"; }
     else {
         g.GenVertexArrays(1, &m.vao);
@@ -389,7 +430,15 @@ bool GpuFinisher::Process(std::uint8_t* rgb, int width, int height, const Option
     m.Set1f(m.progFinal, "uBloom", bloom ? 0.55f : 0.0f); m.Set1f(m.progFinal, "uVignette", vignette ? 0.25f : 0.0f); m.Set2i(m.progFinal, "uSize", width, height);
     m.Draw(m.progFinal, m.fboOut, width, height);
 
-    // back to the CPU
+    // The picture is in the renderer's own texture (no read-back), or it comes back to the processor.
+    if (m.sharedTexture != 0 && m.sharedWidth == width && m.sharedHeight == height) {
+        g.Finish();   // the renderer's context uses it next: it must be complete
+        m.lastShared = true;
+        if (previousWindow != nullptr) SDL_GL_MakeCurrent(previousWindow, previousContext);
+        mLastMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        return true;
+    }
+    m.lastShared = false;
     m.readback.resize(static_cast<std::size_t>(width) * height * 4);
     g.PixelStorei(kPackAlignment, 1);
     g.BindFramebuffer(kFramebuffer, m.fboOut);
