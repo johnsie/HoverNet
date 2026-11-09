@@ -5828,17 +5828,35 @@ void DrawRaceHud(const HudText& hud, const ImVec2& origin, const ImVec2& display
     float y = origin.y + display.y * 0.095f;
     y = DrawHudPanel(draw, SplitHudLine(hud.mainLine), centreX, y, scale, display_font, body);
     {
-        struct Chip { std::string text; ImU32 colour; };
+        struct Chip { std::string text; ImU32 colour; float pop; };
         std::vector<Chip> chips;
         const ImU32 normal = IM_COL32(235, 238, 245, 255), good = IM_COL32(130, 225, 150, 255), warn = IM_COL32(255, 196, 90, 255), bad = IM_COL32(255, 110, 110, 255);
-        if (hud.position[0] != 0) chips.push_back({hud.position, normal});
-        char speed[24]; std::snprintf(speed, sizeof speed, "Speed %d%%", hud.speedPercent);
-        chips.push_back({speed, normal});
-        if (hud.fuel[0] != 0) chips.push_back({hud.fuel, hud.fuelPercent < 15 ? bad : hud.fuelPercent < 30 ? warn : normal});
-        if (hud.weapon[0] != 0) chips.push_back({hud.weapon, std::strstr(hud.weapon, "ready") != nullptr ? good : std::strstr(hud.weapon, "charging") != nullptr ? warn : normal});
+        // Live numbers: the speed eases towards its value instead of jumping, and a change of place makes the position chip pop and flash (gold for a place gained, red for one lost).
+        static float shownSpeed = 0.0f;
+        static Uint32 lastHudTick = 0;
+        static int lastPlace = 0;
+        static Uint32 placeChangedAt = 0;
+        static bool placeGained = false;
+        const Uint32 nowTick = SDL_GetTicks();
+        const float dt = lastHudTick == 0 ? 1.0f : std::min(0.25f, (nowTick - lastHudTick) / 1000.0f);
+        lastHudTick = nowTick;
+        const float target = static_cast<float>(hud.speedPercent);
+        shownSpeed += (target - shownSpeed) * std::min(1.0f, dt * 9.0f);
+        if (std::fabs(target - shownSpeed) < 0.5f) shownSpeed = target;
+        int place = 0;
+        if (hud.position[0] != 0) std::sscanf(hud.position, "Pos %d", &place);
+        if (place > 0 && lastPlace > 0 && place != lastPlace) { placeChangedAt = nowTick; placeGained = place < lastPlace; }
+        if (place > 0) lastPlace = place;
+        const float placeAge = static_cast<float>(nowTick - placeChangedAt);
+        const bool placeFlash = placeChangedAt != 0 && placeAge < 1400.0f;
+        if (hud.position[0] != 0) chips.push_back({hud.position, placeFlash ? (placeGained ? IM_COL32(255, 205, 70, 255) : bad) : normal, placeFlash ? std::max(0.0f, 1.0f - placeAge / 500.0f) : 0.0f});
+        char speed[24]; std::snprintf(speed, sizeof speed, "Speed %d%%", static_cast<int>(shownSpeed + 0.5f));
+        chips.push_back({speed, normal, 0.0f});
+        if (hud.fuel[0] != 0) chips.push_back({hud.fuel, hud.fuelPercent < 15 ? bad : hud.fuelPercent < 30 ? warn : normal, 0.0f});
+        if (hud.weapon[0] != 0) chips.push_back({hud.weapon, std::strstr(hud.weapon, "ready") != nullptr ? good : std::strstr(hud.weapon, "charging") != nullptr ? warn : normal, 0.0f});
         std::string net = hud.network;
         if (hud.ghost[0] != 0) net += std::string("  Ghost ") + hud.ghost;
-        if (!net.empty() && net != "Local") chips.push_back({net, std::strstr(hud.network, "lost") != nullptr ? bad : normal});
+        if (!net.empty() && net != "Local") chips.push_back({net, std::strstr(hud.network, "lost") != nullptr ? bad : normal, 0.0f});
         const float size = 17.0f * scale, gap = 18.0f * scale;
         float total = 0;
         for (const Chip& c : chips) total += body->CalcTextSizeA(size, FLT_MAX, 0.0f, c.text.c_str()).x + gap;
@@ -5847,8 +5865,10 @@ void DrawRaceHud(const HudText& hud, const ImVec2& origin, const ImVec2& display
         const float rowTop = y + 7.0f * scale;
         draw->AddRectFilled(ImVec2(x - 14.0f * scale, rowTop - 3.0f * scale), ImVec2(x + total + 14.0f * scale, rowTop + size + 5.0f * scale), IM_COL32(8, 10, 16, 120), 9.0f * scale);
         for (const Chip& c : chips) {
-            draw->AddText(body, size, ImVec2(x + 1.0f, rowTop + 1.0f), IM_COL32(0, 0, 0, 140), c.text.c_str());
-            draw->AddText(body, size, ImVec2(x, rowTop), c.colour, c.text.c_str());
+            const float chipSize = size * (1.0f + 0.3f * c.pop);   // a chip that has just changed grows, then settles
+            const float lift = (chipSize - size) * 0.5f;
+            draw->AddText(body, chipSize, ImVec2(x + 1.0f, rowTop + 1.0f - lift), IM_COL32(0, 0, 0, 140), c.text.c_str());
+            draw->AddText(body, chipSize, ImVec2(x, rowTop - lift), c.colour, c.text.c_str());
             x += body->CalcTextSizeA(size, FLT_MAX, 0.0f, c.text.c_str()).x + gap;
         }
     }

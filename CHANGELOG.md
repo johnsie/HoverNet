@@ -4,6 +4,11 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## Unreleased
+
+### Added
+- **Live HUD numbers**: the speed eases between values instead of jumping, and the position chip grows and flashes gold when you gain a place and red when you lose one. Checked by a screenshot of the HUD (the speed reads normally); the place-change flash was not seen, because a one-car race has no place changes to trigger it.
+
 ## 2.3.38 - 2026-11-09
 
 ### Added
