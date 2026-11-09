@@ -5,9 +5,11 @@
 #ifndef ONLINE_LOBBY_H
 #define ONLINE_LOBBY_H
 
+#include <chrono>
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -59,6 +61,9 @@ public:
     // A look only: see docs/craft-designer.md. Set before Connect.
     void SetCraftDesign(const std::vector<std::uint8_t>& design) { mDesign = design; }
     void OnCraftDesign(std::function<void(int, const std::vector<std::uint8_t>&)> callback) { mOnDesign = std::move(callback); }
+    const std::map<int, std::vector<std::uint8_t>>& CraftDesigns() const { return mCraftDesigns; }
+    void TestNeverEchoDesign() { mTestNoDesignCap = true; }   // test seam: do not advertise or send a design, as against a server that never echoes one
+    void SetDesignWaitMs(int ms) { mDesignWaitMs = ms; }   // how long a custom look may delay the start of the race while the server's echo is awaited (default 1500)
     void StartRace();
     const std::string& Notice() const { return mNotice; }                    // why the last host/join/watch was refused (cleared by the next request)
     bool Spectating() const { return mSpectating; }
@@ -121,7 +126,12 @@ private:
     Protocol3::Roster mRoster;
     bool mIsHost = false;
     std::vector<std::uint8_t> mDesign;
+    std::map<int, std::vector<std::uint8_t>> mCraftDesigns;             // retained across the lobby-to-race handoff so track loading cannot lose anyone's look
     bool mDesignSent = false;
+    bool mReadyWaitStarted = false;
+    std::chrono::steady_clock::time_point mReadyWaitSince;
+    int mDesignWaitMs = 1500;
+    bool mTestNoDesignCap = false;
     std::function<void(int, const std::vector<std::uint8_t>&)> mOnDesign;
     std::string mHost, mName;
     int mPort = 0;

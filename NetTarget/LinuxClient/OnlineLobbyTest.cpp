@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "OnlineLobby.h"
+#include "../Authority/CraftDesign.h"
 
 namespace
 {
@@ -34,6 +35,16 @@ int main(int argc, char** argv)
     const std::vector<std::uint8_t> noKey;
 
     OnlineLobby host, friendLobby, stranger, solo, watcher;
+    Authority::CraftDesign hostLook;
+    hostLook.body = {{220, 30, 45}};
+    hostLook.bodyStrength = 255;
+    const std::vector<std::uint8_t> hostLookBytes = Authority::EncodeCraftDesign(hostLook);
+    Authority::CraftDesign friendLook;
+    friendLook.accent = {{20, 180, 230}};
+    friendLook.accentStrength = 255;
+    const std::vector<std::uint8_t> friendLookBytes = Authority::EncodeCraftDesign(friendLook);
+    host.SetCraftDesign(hostLookBytes);
+    friendLobby.SetCraftDesign(friendLookBytes);
     Check(host.Connect("127.0.0.1", port, "Hosty", noKey), "connect");
     Check(WaitFor(host, OnlineLobby::State::eBrowsing, 3000), "the lobby lists races after connecting");
     Check(host.Races().empty(), "no races yet");
@@ -68,12 +79,32 @@ int main(int argc, char** argv)
     Check(WaitFor(host, OnlineLobby::State::eReady, 8000), "the host's race starts when the host presses Start Race");
     Check(host.Ack().track == "ClassicH" && host.Ack().players == 2 && host.Ack().laps == 1, "the host is told the race settings");
     Check(host.Ack().player != friendLobby.Ack().player, "each player has their own slot");
+    Check(host.CraftDesigns().size() == 2 && friendLobby.CraftDesigns().size() == 2,
+          "each player retains every relayed craft design for the race handoff");
+    const auto retainedHost = host.CraftDesigns().find(host.Ack().player);
+    const auto retainedFriend = host.CraftDesigns().find(friendLobby.Ack().player);
+    Check(retainedHost != host.CraftDesigns().end() && retainedHost->second == hostLookBytes &&
+              retainedFriend != host.CraftDesigns().end() && retainedFriend->second == friendLookBytes,
+          "the retained craft designs stay matched to their player slots");
 
     // A time trial: one player starts at once.
     Check(solo.Connect("127.0.0.1", port, "Solo", noKey) && WaitFor(solo, OnlineLobby::State::eBrowsing, 3000), "the solo player connects");
     solo.Host("ClassicH", 1, 1, false, "");
     Check(WaitFor(solo, OnlineLobby::State::eReady, 8000), "a one-player race starts at once");
     Check(solo.Ack().players == 1, "a time trial has one player");
+
+    // A custom look whose echo never comes (a server that does not relay designs): the race still starts, after the bounded wait and not before it.
+    OnlineLobby silent;
+    silent.TestNeverEchoDesign();
+    silent.SetCraftDesign(hostLookBytes);
+    silent.SetDesignWaitMs(400);
+    Check(silent.Connect("127.0.0.1", port, "Silent", noKey) && WaitFor(silent, OnlineLobby::State::eBrowsing, 3000), "the player whose look is never echoed connects");
+    const auto silentStart = std::chrono::steady_clock::now();
+    silent.Host("ClassicH", 1, 1, false, "");
+    const bool silentReady = WaitFor(silent, OnlineLobby::State::eReady, 8000);
+    const long long silentMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - silentStart).count();
+    Check(silentReady, "a look that is never echoed does not keep the player in the lobby");
+    Check(silentMs >= 350, "the race waits for the echo first (the bounded wait, not an instant start)");
 
     // Watch the running public race (the solo one is public).
     Check(watcher.Connect("127.0.0.1", port, "Watcher", noKey) && WaitFor(watcher, OnlineLobby::State::eBrowsing, 3000), "the watcher connects");

@@ -106,17 +106,12 @@ await sleep(1500); await shot('5-pause');
 await click(597, 121);
 check(await waitFor(async () => (await inRace()) === 1, 10000), 'Resume Race returns to the race');
 await sleep(1500); await shot('6-resumed');
-// The results screen (shown without driving a whole race: the screen and its buttons are what is under test): its controls are
-// hidden, KEEP DRIVING returns to the race.
+// The offline results screen (shown without driving a whole race) has one way out: MAIN MENU.
 await evalJs("Module.ccall('hovernet_test_show_results','void',[],[])");
 check(await waitFor(async () => (await inRace()) === 0, 10000), 'the results screen opens (race controls hidden)');
 await sleep(1500); await shot('6b-results');
 await click(416, 195);
-check(await waitFor(async () => (await inRace()) === 1, 10000), 'KEEP DRIVING on the results screen returns to the race');
-await sleep(1000);
-await key('Escape', 27); await sleep(2500);
-await click(597, 265); // New Local Race (RESTART RACE sits above it since 2.3.11)
-await sleep(2500); await shot('7-new-local-race');
-check((await inRace()) === 0, 'the setup screen opened from the pause menu has no race controls');
+await sleep(2500); await shot('7-main-menu');
+check((await inRace()) === 0, 'MAIN MENU on offline results keeps race controls hidden');
 check(exceptions.length === 0, `no uncaught page exceptions${exceptions.length ? ': ' + exceptions[0] : ''}`);
 await finish();

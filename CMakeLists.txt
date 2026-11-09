@@ -429,6 +429,7 @@ else()
         NetTarget/LinuxClient/OnlineLobbyTest.cpp
         NetTarget/LinuxClient/OnlineLobby.cpp
         NetTarget/LinuxClient/Sha256.cpp
+        NetTarget/Authority/CraftDesign.cpp
         NetTarget/Authority/ReplayFormat.cpp
         NetTarget/LinuxClient/AuthConnection.cpp
         NetTarget/Authority/Protocol3.cpp
@@ -1158,6 +1159,9 @@ if(BUILD_TESTING AND NOT WIN32)
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetRestartRace
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-restart-race.sh $<TARGET_FILE:HoverNetGame2Player>
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        add_test(NAME HoverNetGarageDecals
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-garage-decals.sh $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
         add_test(NAME HoverNetLeaderboards
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-leaderboards.sh $<TARGET_FILE:HoverNetAuthServer> $<TARGET_FILE:HoverNetReplay> $<TARGET_FILE:HoverNetGame2Player>

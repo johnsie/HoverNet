@@ -35,6 +35,7 @@ int main()
         Check(std::string(HoverNetCraft::DecalName(d)).size() > 0 && std::string(HoverNetCraft::DecalEarnedBy(d)).size() > 0, "a decal has a name and says how it is earned");
     }
     Check(static_cast<int>(pictures.size()) == HoverNetCraft::kDecalCount, "the decals are all different");
+    Check(HoverNetCraft::DecalOpen(0, 0) && HoverNetCraft::DecalOpen(8, 0) && !HoverNetCraft::DecalOpen(1, 0) && HoverNetCraft::DecalOpen(1, 1u << 1), "three decals are open from the start, the rest follow their achievement");
     Check(std::string(HoverNetCraft::LevelTitle(1)) == "Rookie" && std::string(HoverNetCraft::LevelTitle(20)) == "Legend", "titles run from Rookie to Legend");
     Check(HoverNetCraft::UnlockedAtLevel(3).find("Chevrons") != std::string::npos && HoverNetCraft::UnlockedAtLevel(3).find("Metallic") != std::string::npos, "level 3 opens chevrons and metallic colours");
     Check(HoverNetCraft::UnlockedAtLevel(1).empty(), "level 1 announces nothing: it is the start");

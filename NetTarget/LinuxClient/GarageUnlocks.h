@@ -46,6 +46,9 @@ inline const char* DecalEarnedBy(int decal)   // shown on a locked decal
     static const char* const how[kDecalCount] = {"Finish a race", "Finish on the podium", "Win a race", "Finish 10 races", "Finish 50 races", "Set a personal best", "Race online", "Save a craft", "Finish the tutorial"};
     return decal >= 0 && decal < kDecalCount ? how[decal] : "";
 }
+// Three decals (Star, Flag, Arrow) are open from the start so the stamp tool works for everyone at once; the other six are earned (the achievement bit with the decal's number).
+inline bool DecalStarter(int decal) { return decal == 0 || decal == 3 || decal == 8; }
+inline bool DecalOpen(int decal, unsigned achievements) { return DecalStarter(decal) || (achievements >> decal & 1u) != 0; }
 inline bool DecalCovers(int decal, int x, int y)
 {
     static const char* const bitmaps[kDecalCount][kDecalSize] = {

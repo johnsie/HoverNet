@@ -55,9 +55,9 @@ bool OnlineLobby::Connect(const std::string& host, int port, const std::string& 
     if (!mConn.Connect(host, port, error, serverKey.empty() ? nullptr : serverKey.data())) { Fail(error.empty() ? "Could not connect to the server." : error); return false; }
     Hello hello;
     hello.name = name.substr(0, 32);
-    hello.capabilities = kCapRaceId | kCapLobbyChat | kCapHostStart | kCapRoster | kCapCraftDesign;   // race number, lobby chat/users, host-controlled start, and final racer names
+    hello.capabilities = kCapRaceId | kCapLobbyChat | kCapHostStart | kCapRoster | (mTestNoDesignCap ? 0u : kCapCraftDesign);   // race number, lobby chat/users, host-controlled start, and final racer names
     if (gHasDevice) { hello.capabilities |= kCapDeviceId; hello.hasDevice = true; hello.deviceHigh = gDeviceHigh; hello.deviceLow = gDeviceLow; }
-    mRaces.clear(); mBacklog.clear(); mUsers.clear(); mUsersTotal = 0; mChat.clear(); mRoster = Roster(); mIsHost = false;
+    mRaces.clear(); mBacklog.clear(); mUsers.clear(); mUsersTotal = 0; mChat.clear(); mRoster = Roster(); mIsHost = false; mCraftDesigns.clear(); mReadyWaitStarted = false;
     mGotAck = mGotStart = mSpectating = false;
     mDesignSent = false;
     mQueuedWatchId = 0;
@@ -166,10 +166,15 @@ void OnlineLobby::Pump()
         }
         else if (f.type == kHelloAck) {
             mGotAck = Decode(f.payload, mAck);
-            if (mGotAck && !mDesign.empty() && !mDesignSent && !mSpectating) { mDesignSent = true; mConn.Send(kSetCraftDesign, mDesign); }   // the race is joined: tell it how this craft looks
+            if (mGotAck && !mDesign.empty() && !mDesignSent && !mSpectating && !mTestNoDesignCap) { mDesignSent = true; mConn.Send(kSetCraftDesign, mDesign); }   // the race is joined: tell it how this craft looks
         }
         else if (f.type == kCraftDesign) {
-            if (mOnDesign && f.payload.size() > 1) mOnDesign(f.payload[0], std::vector<std::uint8_t>(f.payload.begin() + 1, f.payload.end()));
+            if (f.payload.size() > 1) {
+                const int slot = f.payload[0];
+                std::vector<std::uint8_t> design(f.payload.begin() + 1, f.payload.end());
+                mCraftDesigns[slot] = design;
+                if (mOnDesign) mOnDesign(slot, design);
+            }
         }
         else if (f.type == kStart) { mGotStart = true; }
         else if (mGotAck) mBacklog.push_back(f);   // ticks that arrive while the race is being set up
@@ -181,7 +186,16 @@ void OnlineLobby::Pump()
         if (!found) { mQueuedWatchId = 0; mNotice = "The race you were waiting to watch is gone."; }
         else if (started) { const std::uint32_t id = mQueuedWatchId; mQueuedWatchId = 0; Spectate(id, mQueuedWatchCode); return; }
     }
-    if (mGotAck && (mGotStart || mSpectating) && mState == State::eWaiting) { mState = State::eReady; mMessage = "Starting"; return; }
+    // A racer with a custom look waits briefly for the server to echo it before the race loads, so it is on screen from the first frame. The wait is bounded:
+    // a server that never echoes (an older build, a refused design, a lost frame) must not keep the player in the lobby. A look that arrives later is still
+    // applied, because the renderer reads the table on every draw and the race loop applies relayed designs as they come.
+    if (mGotAck && (mGotStart || mSpectating) && mState == State::eWaiting) {
+        const auto now = std::chrono::steady_clock::now();
+        if (!mReadyWaitStarted) { mReadyWaitStarted = true; mReadyWaitSince = now; }
+        const bool designReady = mSpectating || mDesign.empty() || mCraftDesigns.count(mAck.player) != 0 ||
+                                 now - mReadyWaitSince >= std::chrono::milliseconds(mDesignWaitMs);
+        if (designReady) { mState = State::eReady; mMessage = "Starting"; return; }
+    }
     if (!open) Fail(mState == State::eWaiting ? "The connection to the server was lost before the race started." : "The connection to the server was lost.");
 }
 

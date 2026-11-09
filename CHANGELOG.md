@@ -6,7 +6,19 @@ and how to roll one back.
 
 ## Unreleased
 
+### Changed
+- **Main menu**: RACE ONLINE is first and the big red button, with a line under it ("Race real players, climb the leaderboards, and show off your craft."); the offline mode is now PRACTICE OFFLINE, a quieter button below it.
+- **Results screen** has only what fits: after an online race RETURN TO LOBBY and MAIN MENU, after an offline race only MAIN MENU (Esc / B goes to the main menu). Keep Driving, Restart, New Local Race, Online Multiplayer and Quit were removed from it (Restart race is still in the pause menu). The results XP now counts up.
+- **Garage**: leaving with changes that were never saved (Back, Esc, or closing the program) asks "Save and leave / Leave without saving / Keep editing" in a dialog drawn by the game (so it also works in a browser). Clicking a decal puts it on the paint straight away (and the canvas stamps more); decals show their names, three (Star, Flag, Arrow) are open from the start, and a line names the next one to earn.
+
+### Fixed
+- **Online: your own and other players' crafts now show.** A race could start before the server's copy of each design arrived, or the designs were lost when the track loaded and the craft renderers were rebuilt. The lobby now keeps every relayed design, waits up to 1.5 s for your own to be echoed before the race starts (then starts anyway, so a server that never echoes cannot trap you in the lobby), and applies the full set after the track has loaded. Test `HoverNetOnlineLobby` checks the lobby keeps both players' designs matched to their seats. Checked end to end with a real two-client race on the local race server: each client's own craft (red and blue, with a yellow trim) is drawn. I could not get a second real client into the same race on the authoritative server here, so another player's craft on screen was not seen; please check it with a friend.
+- **GitHub Actions: the Windows build failed** (`MenuInput.h` used a C++17 inline variable; the Windows client builds as C++14). Fixed; confirmed only by the next Windows job.
+
 ### Added
+- **Tests for the Garage decals and the results screen**: `HoverNetGarageDecals` makes a real pointer click on each decal button (SDL mouse events through the interface, the button found where it is drawn): the three decals open from the start paint the craft, a locked one does nothing, and it works once unlocked. `HoverNetRestartRace` now also checks that an offline race's results screen offers only MAIN MENU. `HoverNetOnlineLobby` checks that a look the server never echoes does not keep the player in the lobby.
+- **Test tools that are kind to the machine**: `scripts/ctest-gentle.sh` runs the suite two tests at a time at low priority, and the browser smoke tests no longer leave Chrome profiles and pictures in /tmp (set `HN_KEEP_PICTURES=1` to keep them).
+- **The last lap announces itself**: when the final lap starts the banner reads FINAL LAP (with the lap time just driven) and the lap chime is a major third higher than on other laps. Presentation only; built, not listened to or seen on screen by a person.
 - **The music steps back for a heavy hit** (to under half for about a second, then returns), and the music volume now glides to a new setting over about a tenth of a second instead of stepping, so the pause menu's ducking no longer clicks. Checked that the audio output still plays normally in a recorded run; the dip itself is not visible in the levels (the motor is louder than the music's change) and has not been listened to by a person.
 
 ## 2.3.40 - 2026-11-09
@@ -14,7 +26,6 @@ and how to roll one back.
 ### Added
 - **Sounds for sliders and tabs**: a soft tick as a slider moves (at most every 45 ms) and a click when another Settings tab is chosen. Not listened to by a person.
 
-### Fixed
 - **Garage patterns now replace the paint** instead of drawing over what was there (clicking several piled them up); Undo brings the old paint back. Decals still go on top.
 - **The button hover tick no longer repeats** while the pointer rests on a button, including when keyboard or controller focus is on a different button (the likely cause: the two alternated every frame). Checked with a scripted run (focus on one button, pointer held on another, 200 frames): 2 ticks played.
 - **Web: the music no longer goes crazy when the page is not in the foreground.** The browser throttles a hidden page's timers and the audio is mixed on the page's own thread, so it starved and stuttered; audio now pauses while the page is hidden and carries on from the same place when it is shown again. The web build compiles with the change; I could not test a real hidden tab here, so please check it in your browser. A window that is visible but not focused is not paused.

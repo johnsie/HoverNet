@@ -2658,7 +2658,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                                  MR_3DViewPort& viewport, const MR_Sprite& font,
                                  MR_SimulationTime pFinishTime, MR_SimulationTime pBestLap,
                                  int pRank, int pPlayerCount, int pFrameLimit = -1,
-                                 const PersonalBests::Outcome* pBests = nullptr, bool pCanRestart = false);
+                                 const PersonalBests::Outcome* pBests = nullptr, bool pWasOnline = false);
 
 #if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
 // The official HoverNet server players are sent to without typing anything. The key is the server's identity for an encrypted connection (64 hex
@@ -4318,7 +4318,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                                  MR_3DViewPort& viewport, const MR_Sprite& font,
                                  MR_SimulationTime pFinishTime, MR_SimulationTime pBestLap,
                                  int pRank, int pPlayerCount, int pFrameLimit,
-                                 const PersonalBests::Outcome* pBests, bool pCanRestart)
+                                 const PersonalBests::Outcome* pBests, bool pWasOnline)
 {
     if (std::getenv("HOVERNET_TEST_FINISH") != nullptr) { std::printf("FINISHTEST results screen opened\n"); std::fflush(stdout); }
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
@@ -4347,7 +4347,6 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         if (framesShown == 2 && std::getenv("HOVERNET_TEST_RESULTS_CHOICE") != nullptr) {   // test hook (scripts/test-main-menu.sh, test-restart-race.sh)
             const std::string pick = std::getenv("HOVERNET_TEST_RESULTS_CHOICE");
             if (pick == "main") { choice = PostRaceChoice::eMainMenu; running = false; break; }
-            if (pick == "restart" && pCanRestart) { choice = PostRaceChoice::eRestartRace; running = false; break; }
         }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -4359,10 +4358,12 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                 }
             }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+                choice = PostRaceChoice::eMainMenu;
                 running = false;
             }
             else if (event.type == SDL_CONTROLLERBUTTONDOWN &&
                      event.cbutton.button == SDL_CONTROLLER_BUTTON_B) {
+                choice = PostRaceChoice::eMainMenu;
                 running = false;
             }
         }
@@ -4397,7 +4398,9 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
 
         const float cardWidth = std::min(680.0f, workSize.x - 48.0f);
-        const float cardHeight = std::min((pBests != nullptr && pBests->Any() ? 690.0f : 620.0f) + (gRewardView.valid ? 150.0f + (gRewardView.reward.unlocked.empty() ? 0.0f : 26.0f * (1.0f + static_cast<float>(gRewardView.reward.unlocked.size() / 3))) : 0.0f), workSize.y - 24.0f);
+        const float cardHeight = std::min((pBests != nullptr && pBests->Any() ? 440.0f : 360.0f) + (pWasOnline ? 54.0f : 0.0f) +
+                                          (gRewardView.valid ? 150.0f + (gRewardView.reward.unlocked.empty() ? 0.0f : 26.0f * (1.0f + static_cast<float>(gRewardView.reward.unlocked.size() / 3))) : 0.0f),
+                                          workSize.y - 24.0f);
         ImGui::SetCursorPos(ImVec2((workSize.x - cardWidth) * 0.5f,
                                    (workSize.y - cardHeight) * 0.5f));
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.065f, 0.065f, 0.085f, 0.97f));
@@ -4482,7 +4485,11 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             ImGui::Separator();
             ImGui::Spacing();
             char line[160];
-            std::snprintf(line, sizeof line, "+%d XP", reward.xp);
+            {   // the XP counts up over the first second, easing out, so the reward lands instead of just appearing
+                const float t = std::min(1.0f, static_cast<float>(framesShown) / 50.0f);
+                const float eased = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+                std::snprintf(line, sizeof line, "+%d XP", static_cast<int>(reward.xp * eased + 0.5f));
+            }
             if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
             ImGui::TextColored(ImVec4(0.55f, 0.95f, 0.65f, 1.0f), "%s", line);
             if (gHoverNetDisplayFont != nullptr) ImGui::PopFont();
@@ -4522,14 +4529,16 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             focusFirstButton = false;
         }
         struct PostRaceAction { const char* label; PostRaceChoice choice; };
-        std::vector<PostRaceAction> actions = {{"KEEP DRIVING", PostRaceChoice::eContinue}};
-        if (pCanRestart) actions.push_back({"RESTART RACE", PostRaceChoice::eRestartRace});   // the same track, laps and weapons again
-        actions.insert(actions.end(), {{"NEW LOCAL RACE", PostRaceChoice::eNewLocalRace},
-                                       {"ONLINE MULTIPLAYER", PostRaceChoice::eOnlineLobby},
-                                       {"MAIN MENU", PostRaceChoice::eMainMenu}});
-#ifndef __EMSCRIPTEN__
-        actions.push_back({"QUIT HOVERNET", PostRaceChoice::eQuit});
-#endif
+        std::vector<PostRaceAction> actions;
+        if (pWasOnline) actions.push_back({"RETURN TO LOBBY", PostRaceChoice::eOnlineLobby});
+        actions.push_back({"MAIN MENU", PostRaceChoice::eMainMenu});
+        static bool buttonsReported = false;
+        if (!buttonsReported && framesShown >= 2 && std::getenv("HOVERNET_TEST_FINISH") != nullptr) {   // test hook (scripts/test-restart-race.sh): which buttons the results screen offers
+            buttonsReported = true;
+            std::string labels;
+            for (const PostRaceAction& action : actions) labels += (labels.empty() ? "" : ", ") + std::string(action.label);
+            std::printf("FINISHTEST results buttons: %s\n", labels.c_str()); std::fflush(stdout);
+        }
         for (std::size_t index = 0; index < actions.size(); ++index) {
             const float rowRoom = (ImGui::GetContentRegionAvail().y - 34.0f) / static_cast<float>(actions.size()) - ImGui::GetStyle().ItemSpacing.y;
             if ((index == 0 ? HoverNetButton(actions[index].label, ImVec2(-FLT_MIN, std::max(34.0f, std::min(54.0f, rowRoom + 8.0f)))) : HoverNetQuietButton(actions[index].label, ImVec2(-FLT_MIN, std::max(30.0f, std::min(44.0f, rowRoom)))))) {
@@ -4538,7 +4547,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             }
             ImGui::Spacing();
         }
-        HoverNetHint("Esc / B: keep driving");
+        HoverNetHint("Esc / B: main menu");
         ImGui::EndChild();
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor();
@@ -6418,6 +6427,7 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
     int slot = store.Active();
     if (slot < 0) slot = 0;
     if (!store.Load(slot, design)) design = CraftDesign();
+    CraftDesign lastSavedDesign = design;
 #ifdef HOVERNET_WEB
     int accountCraftRevision = hovernet_js_account_craft_revision();
 #endif
@@ -6473,12 +6483,75 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         }
     };
     auto pushUndo = [&]() { undo.push_back(design.paint); if (undo.size() > 30) undo.erase(undo.begin()); };
+    auto stampDecal = [&](int centreX, int centreY) {
+        pushUndo();
+        for (int dy = 0; dy < HoverNetCraft::kDecalSize; ++dy)
+            for (int dx = 0; dx < HoverNetCraft::kDecalSize; ++dx) {
+                if (!HoverNetCraft::DecalCovers(decal, dx, dy)) continue;
+                const int px = centreX + dx - HoverNetCraft::kDecalSize / 2;
+                const int py = centreY + dy - HoverNetCraft::kDecalSize / 2;
+                for (int pass = 0; pass < (mirror ? 2 : 1); ++pass) {
+                    const int qx = pass == 0 ? px : Authority::kPaintSize - 1 - px;
+                    if (qx >= 0 && py >= 0 && qx < Authority::kPaintSize && py < Authority::kPaintSize)
+                        design.paint[static_cast<size_t>(py) * Authority::kPaintSize + qx] = static_cast<std::uint8_t>(colour);
+                }
+            }
+    };
+
+    auto saveCurrent = [&]() {
+        const CraftDesign clean = Authority::SanitiseCraftDesign(design);
+        if (!store.Save(slot, clean) || !store.SetActive(slot)) {
+            status = "Could not save the craft on this device.";
+            return false;
+        }
+        design = clean;
+        lastSavedDesign = clean;
+        HoverNetProfile::Profile profile;
+        profile.Load(ProfilePath());
+        if (profile.Unlock(HoverNetProfile::eGarageDesigner).xp > 0) profile.Save(ProfilePath());
+        garageProfile.Load(ProfilePath());
+        if (std::getenv("HOVERNET_GARAGE_ALL") == nullptr) {
+            garageAchievements = garageProfile.achievements;
+            garageLevel = std::max(garageLevel, garageProfile.Level());
+        }
+        status = "Saved in slot " + std::to_string(slot + 1) + ". Other players see it in online races.";
+        return true;
+    };
+
+    // Leaving with changes that were never saved asks first, in the game's own dialog (a system message box does not exist in a browser).
+    int pendingLeave = 0;   // 0: no question; 1: asked while going back; 2: asked while closing the program
+    auto leaveGarage = [&](bool quitting) {
+        if (Authority::SanitiseCraftDesign(design) == lastSavedDesign) {
+            if (quitting) g_QuitConfirmed = true;
+            return true;
+        }
+        pendingLeave = quitting ? 2 : 1;
+        return false;
+    };
 
     bool running = true;
     int framesShown = 0;
     bool strokeActive = false;
+    int testClickX = -1, testClickY = -1, testClickFrame = 0;   // test hook HOVERNET_TEST_GARAGE_CLICK_DECAL=n: where decal n's button is, and when its real click starts
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
+        if (std::getenv("HOVERNET_TEST_GARAGE_CLICK_DECAL") != nullptr) {   // a real pointer click (SDL events, through ImGui) on the decal's button; then the paint is counted
+            SDL_Event click; SDL_zero(click);
+            if (testClickX >= 0 && framesShown >= testClickFrame && framesShown <= testClickFrame + 2) {
+                if (framesShown == testClickFrame) { click.type = SDL_MOUSEMOTION; click.motion.x = testClickX; click.motion.y = testClickY; }
+                else { click.type = framesShown == testClickFrame + 1 ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP; click.button.button = SDL_BUTTON_LEFT; click.button.x = testClickX; click.button.y = testClickY; click.button.state = framesShown == testClickFrame + 1 ? SDL_PRESSED : SDL_RELEASED; click.button.clicks = 1; }
+                SDL_PushEvent(&click);
+            }
+            if (framesShown == pFrameLimit) {
+                int painted = 0;
+                for (std::uint8_t cell : design.paint) if (cell != 0) ++painted;
+                std::printf("GARAGETEST decal button at %d,%d; paint cells after the click: %d; status: %s\n", testClickX, testClickY, painted, status.c_str());
+                std::fflush(stdout);
+            }
+        }
+        if (std::getenv("HOVERNET_TEST_GARAGE_ESC") != nullptr && framesShown == 5) {   // test hook: press Escape once, as a player leaving the Garage would
+            SDL_Event esc; SDL_zero(esc); esc.type = SDL_KEYDOWN; esc.key.keysym.sym = SDLK_ESCAPE; esc.key.keysym.scancode = SDL_SCANCODE_ESCAPE; esc.key.state = SDL_PRESSED; SDL_PushEvent(&esc);
+        }
         if (const char* hoverTest = std::getenv("HOVERNET_TEST_HOVER")) {   // test hook: keyboard focus on one button and the pointer held over another; reports how many ticks played
             SDL_Event motion; SDL_zero(motion);
             if (framesShown == 5) { motion.type = SDL_KEYDOWN; motion.key.keysym.sym = SDLK_DOWN; motion.key.keysym.scancode = SDL_SCANCODE_DOWN; motion.key.state = SDL_PRESSED; SDL_PushEvent(&motion); }
@@ -6489,8 +6562,8 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             MenuProcessEvent(event);
-            if (event.type == SDL_QUIT) { g_QuitConfirmed = true; running = false; }
-            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE && !ImGui::GetIO().WantTextInput) running = false;
+            if (event.type == SDL_QUIT) { if (leaveGarage(true)) running = false; }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE && !ImGui::GetIO().WantTextInput) { if (pendingLeave != 0) pendingLeave = 0; else if (leaveGarage(false)) running = false; }
         }
         const Uint32 now = SDL_GetTicks();
         if (spin) yaw = std::fmod(yaw + 30.0f * static_cast<float>(now - lastTick) / 1000.0f, 360.0f);
@@ -6641,20 +6714,10 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
                 const int x = std::max(0, std::min(Authority::kPaintSize - 1, static_cast<int>((m.x - origin.x) / cell)));
                 const int y = std::max(0, std::min(Authority::kPaintSize - 1, static_cast<int>((m.y - origin.y) / cell)));
                 const bool strokeStart = !strokeActive;
-                if (!strokeActive) { pushUndo(); strokeActive = true; }
+                if (!strokeActive) { if (tool != 4) pushUndo(); strokeActive = true; }
                 const std::uint8_t value = tool == 1 ? 0 : static_cast<std::uint8_t>(colour);
                 if (tool == 4) {
-                    if (strokeStart) {   // one stamp for each press, centred on the cell
-                        for (int dy = 0; dy < HoverNetCraft::kDecalSize; ++dy)
-                            for (int dx = 0; dx < HoverNetCraft::kDecalSize; ++dx) {
-                                if (!HoverNetCraft::DecalCovers(decal, dx, dy)) continue;
-                                const int px = x + dx - HoverNetCraft::kDecalSize / 2, py = y + dy - HoverNetCraft::kDecalSize / 2;
-                                for (int pass = 0; pass < (mirror ? 2 : 1); ++pass) {
-                                    const int qx = pass == 0 ? px : Authority::kPaintSize - 1 - px;
-                                    if (qx >= 0 && py >= 0 && qx < Authority::kPaintSize && py < Authority::kPaintSize) design.paint[static_cast<size_t>(py) * Authority::kPaintSize + qx] = static_cast<std::uint8_t>(colour);
-                                }
-                            }
-                    }
+                    if (strokeStart) stampDecal(x, y);   // one stamp for each press, centred on the cell
                 }
                 else if (tool == 3) { const std::uint8_t picked = design.paint[static_cast<size_t>(y) * Authority::kPaintSize + x]; if (picked != 0) colour = picked; tool = 0; }
                 else if (tool == 2) { floodFill(x, y, value); if (mirror) floodFill(Authority::kPaintSize - 1 - x, y, value); }
@@ -6722,17 +6785,36 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
             const float buttonWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * (perRow - 1)) / perRow;
             for (int d = 0; d < HoverNetCraft::kDecalCount; ++d) {
                 if (d % perRow != 0) ImGui::SameLine();
-                const bool locked = (garageAchievements >> d & 1u) == 0;
+                const bool locked = !HoverNetCraft::DecalOpen(d, garageAchievements);
                 const bool on = tool == 4 && decal == d;
                 char label[64];
-                std::snprintf(label, sizeof label, "%s##decal%d", locked ? "Locked" : HoverNetCraft::DecalName(d), d);
+                std::snprintf(label, sizeof label, "%s##decal%d", HoverNetCraft::DecalName(d), d);
                 if (locked) ImGui::BeginDisabled();
                 if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.12f, 0.16f, 1.0f));
                 const bool pressed = ImGui::Button(label, ImVec2(buttonWidth, 0));
                 if (on) ImGui::PopStyleColor();
+                if (const char* clickHook = std::getenv("HOVERNET_TEST_GARAGE_CLICK_DECAL")) {
+                    if (d == std::atoi(clickHook) && testClickX < 0 && framesShown >= 6 && framesShown < 12) ImGui::SetScrollHereY(0.5f);   // the panel scrolls: bring the button on screen first
+                    if (d == std::atoi(clickHook) && testClickX < 0 && framesShown >= 12) {
+                        const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+                        testClickX = static_cast<int>((lo.x + hi.x) * 0.5f); testClickY = static_cast<int>((lo.y + hi.y) * 0.5f); testClickFrame = framesShown + 2;
+                    }
+                }
                 if (locked) { ImGui::EndDisabled(); if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s decal: %s", HoverNetCraft::DecalName(d), HoverNetCraft::DecalEarnedBy(d)); }
-                if (pressed && !locked) { tool = 4; decal = d; }
+                if (pressed && !locked) {
+                    tool = 4;
+                    decal = d;
+                    stampDecal(Authority::kPaintSize / 2, Authority::kPaintSize / 2);
+                    status = std::string(HoverNetCraft::DecalName(d)) + " decal added. Click the canvas to place another.";
+                }
             }
+            for (int d = 0; d < HoverNetCraft::kDecalCount; ++d)
+                if (!HoverNetCraft::DecalOpen(d, garageAchievements)) {
+                    ImGui::PushTextWrapPos(0.0f);
+                    HoverNetHint((std::string("Next decal: ") + HoverNetCraft::DecalName(d) + " - " + HoverNetCraft::DecalEarnedBy(d)).c_str());
+                    ImGui::PopTextWrapPos();
+                    break;
+                }
         }
         for (int i = 1; i < Authority::kPaintColours; ++i) {
             if (i > 1 && (i - 1) % 8 != 0) ImGui::SameLine();
@@ -6763,23 +6845,20 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
                 std::snprintf(label, sizeof label, "%d  %s%s##slot%d", i + 1, have ? (saved.name.empty() ? "(unnamed)" : saved.name.c_str()) : "(empty)", active == i ? "   - used in races" : "", i);
                 const bool on = slot == i;
                 if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.12f, 0.16f, 1.0f));
-                if (ImGui::Button(label, ImVec2(-FLT_MIN, 0))) { slot = i; if (have) { design = saved; undo.clear(); status = "Loaded the craft in slot " + std::to_string(i + 1) + "."; } }
+                if (ImGui::Button(label, ImVec2(-FLT_MIN, 0))) {
+                    slot = i;
+                    design = have ? saved : CraftDesign();
+                    lastSavedDesign = design;
+                    undo.clear();
+                    status = have ? "Loaded the craft in slot " + std::to_string(i + 1) + "." : "Empty slot " + std::to_string(i + 1) + ".";
+                }
                 if (on) ImGui::PopStyleColor();
             }
             if (HoverNetButton("Save to this slot and use it in races", ImVec2(-FLT_MIN, 40))) {
-                const CraftDesign clean = Authority::SanitiseCraftDesign(design);
-                if (store.Save(slot, clean) && store.SetActive(slot)) {
-                    HoverNetProfile::Profile profile;
-                    profile.Load(ProfilePath());
-                    if (profile.Unlock(HoverNetProfile::eGarageDesigner).xp > 0) profile.Save(ProfilePath());
-                    garageProfile.Load(ProfilePath());
-                    if (std::getenv("HOVERNET_GARAGE_ALL") == nullptr) { garageAchievements = garageProfile.achievements; garageLevel = std::max(garageLevel, garageProfile.Level()); }
-                }
-                if (store.Save(slot, clean) && store.SetActive(slot)) status = "Saved in slot " + std::to_string(slot + 1) + ". Other players see it in online races.";
-                else status = "Could not save the craft on this device.";
+                saveCurrent();
             }
             if (HoverNetQuietButton("Race with the standard paint (stock craft)", ImVec2(-FLT_MIN, 32))) { store.SetActive(-1); status = "Your races use the stock craft."; }
-            if (HoverNetQuietButton("Delete this slot", ImVec2(-FLT_MIN, 32))) { store.Delete(slot); design = CraftDesign(); undo.clear(); status = "Deleted."; }
+            if (HoverNetQuietButton("Delete this slot", ImVec2(-FLT_MIN, 32))) { store.Delete(slot); design = CraftDesign(); lastSavedDesign = design; undo.clear(); status = "Deleted."; }
 #ifdef HOVERNET_WEB
             HoverNetSectionHeading("OUTIVA ACCOUNT");
             if (HoverNetButton("Save local slots to account", ImVec2(-FLT_MIN, 36))) hovernet_js_account_craft_save();
@@ -6813,7 +6892,26 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         }
         ImGui::EndChild();
         ImGui::Spacing();
-        if (HoverNetQuietButton("Back", ImVec2(-FLT_MIN, 40))) running = false;
+        if (HoverNetQuietButton("Back", ImVec2(-FLT_MIN, 40)) && leaveGarage(false)) running = false;
+        if (pendingLeave != 0 && !ImGui::IsPopupOpen("Unsaved craft")) ImGui::OpenPopup("Unsaved craft");
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.30f, 0.09f, 0.13f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.45f, 0.11f, 0.16f, 1.0f));
+        const bool leaveDialogOpen = ImGui::BeginPopupModal("Unsaved craft", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
+        ImGui::PopStyleColor(2);
+        if (leaveDialogOpen) {
+            if (pendingLeave == 0) ImGui::CloseCurrentPopup();
+            ImGui::PushTextWrapPos(380.0f);
+            ImGui::TextUnformatted("You changed this craft since you last saved it. Save it before you leave the Garage?");
+            ImGui::PopTextWrapPos();
+            ImGui::Spacing();
+            const bool closing = pendingLeave == 2;
+            if (HoverNetButton("Save and leave", ImVec2(380, 42)) && saveCurrent()) { if (closing) g_QuitConfirmed = true; running = false; pendingLeave = 0; ImGui::CloseCurrentPopup(); }
+            ImGui::SetItemDefaultFocus();
+            if (HoverNetQuietButton("Leave without saving", ImVec2(380, 34))) { if (closing) g_QuitConfirmed = true; running = false; pendingLeave = 0; ImGui::CloseCurrentPopup(); }
+            if (HoverNetQuietButton("Keep editing", ImVec2(380, 34))) { pendingLeave = 0; ImGui::CloseCurrentPopup(); }
+            ImGui::EndPopup();
+        }
         ImGui::End();
 
         // Redraw the preview when the design, the hull or the angle changed (the design at most every 80 ms: each change builds new textures).
@@ -8713,10 +8811,11 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         const bool sideBySidePrimary = phoneShort;
         const int primaryRows = sideBySidePrimary ? 1 : 2;
         const bool showHeading = roomyPanel;
+        const bool showOnlinePitch = showHeading && !sideBySidePrimary;
         const bool showHint = roomyPanel && panelHeight >= 540.0f;
         const bool showTutorialHint = false;
         const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
-        const float reserved = (showHeading ? lineHeight + gap * 3.0f + 4.0f : 0.0f) + (showHint ? lineHeight * 2.0f + gap : 0.0f) + (showTutorialHint ? lineHeight * 2.0f : 0.0f) + gap * (primaryRows + 3);
+        const float reserved = (showHeading ? lineHeight + gap * 3.0f + 4.0f : 0.0f) + (showOnlinePitch ? lineHeight * 2.0f + gap : 0.0f) + (showHint ? lineHeight * 2.0f + gap : 0.0f) + (showTutorialHint ? lineHeight * 2.0f : 0.0f) + gap * (primaryRows + 3);
         // Heights in "units": a main button is 1.45 units, a grid button 1 unit (two rows of them).
         const float room = std::max(0.0f, ImGui::GetContentRegionAvail().y - reserved);
         const float unit = room / (primaryRows * 1.45f + 2.0f);
@@ -8725,13 +8824,18 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
         if (sideBySidePrimary) {
             const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-            if (HoverNetButton("PLAY OFFLINE", ImVec2(half, primaryHeight))) { choice = MenuChoice::eLocalPlay; running = false; }
-            ImGui::SameLine();
             if (HoverNetButton("RACE ONLINE", ImVec2(half, primaryHeight))) { choice = MenuChoice::eOnlineLobby; running = false; }
+            ImGui::SameLine();
+            if (HoverNetQuietButton("PRACTICE OFFLINE", ImVec2(half, primaryHeight))) { choice = MenuChoice::eLocalPlay; running = false; }
         }
         else {
-            if (HoverNetButton("PLAY OFFLINE", ImVec2(-FLT_MIN, primaryHeight))) { choice = MenuChoice::eLocalPlay; running = false; }
             if (HoverNetButton("RACE ONLINE", ImVec2(-FLT_MIN, primaryHeight))) { choice = MenuChoice::eOnlineLobby; running = false; }
+            if (showOnlinePitch) {
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextColored(kHoverNetCoral, "Race real players, climb the leaderboards, and show off your craft.");
+                ImGui::PopTextWrapPos();
+            }
+            if (HoverNetQuietButton("PRACTICE OFFLINE", ImVec2(-FLT_MIN, primaryHeight))) { choice = MenuChoice::eLocalPlay; running = false; }
         }
         ImGui::PopStyleVar();
         {
@@ -9241,7 +9345,7 @@ int RunClient(int argc, char** argv)
     } factoryCleanup;
 #ifdef HOVERNET_GAME2_PLAYER
     MR_SoundServer::Init(nullptr);
-    gMenuSliderChanged = &SliderTick;
+    MenuSliderChangedHook() = &SliderTick;
     MR_SoundServer::SetMasterVolume(LoadMute() ? 0.0 : LoadVolume());
     struct SoundServerCleanup
     {
@@ -9893,6 +9997,14 @@ int RunClient(int argc, char** argv)
             std::fprintf(stderr, "%s\n", startError.c_str());
             return AuthScreenResult::eBack;
         }
+        // Track loading rebuilds the renderers. Apply the complete retained set only after every race craft exists,
+        // then set our own saved look explicitly in case its echoed relay follows the start message.
+        ClearRaceCraftDesigns();
+        for (const auto& relayed : lobby.CraftDesigns()) ApplyRelayedCraftDesign(relayed.first, relayed.second);
+        if (!auth.spectator) {
+            Authority::CraftDesign mine;
+            if (HoverNetCraft::CraftStore(ConfigDirPath()).LoadActive(mine)) SetRaceCraftDesign(auth.ack.player, &mine);
+        }
         return AuthScreenResult::eRace;
     };
 #endif
@@ -10221,7 +10333,8 @@ int RunClient(int argc, char** argv)
                 gRewardView.valid = true;
             }
             RunPostRaceScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
-                              83456, 27341, 1, 4, frameLimit, bestsMode != nullptr ? &sample : nullptr);
+                              83456, 27341, 1, 4, frameLimit, bestsMode != nullptr ? &sample : nullptr,
+                              std::getenv("HOVERNET_TEST_RESULTS_ONLINE") != nullptr);
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--tutorial")) {
@@ -11121,12 +11234,13 @@ int RunClient(int argc, char** argv)
                     const int lap = mainCharacter->GetLap();
                     static MR_SimulationTime lapStartedAt = 0, bestSoFar = 0;
                     if (lastLap >= 0 && lap > lastLap && lap < mainCharacter->GetTotalLap()) {
-                        PlaySfx(Sfx::eLap);
+                        const bool finalLap = lap == mainCharacter->GetTotalLap() - 1 && mainCharacter->GetTotalLap() > 1;   // the last lap starts: a higher chime and its own banner
+                        PlaySfx(Sfx::eLap, 0, finalLap ? 1.26 : 1.0);
                         const MR_SimulationTime lapTime = mainCharacter->GetTotalTime() - lapStartedAt;
                         char timeText[32];
                         FormatRaceTime(lapTime, timeText, sizeof(timeText));
                         const bool best = lastLap >= 1 && bestSoFar > 0 && lapTime < bestSoFar;   // the first lap has nothing to beat
-                        gLapBannerText = "LAP " + std::to_string(lastLap + 1) + " DONE";
+                        gLapBannerText = finalLap ? std::string("FINAL LAP") : "LAP " + std::to_string(lastLap + 1) + " DONE";
                         gLapBannerSub = std::string(best ? "BEST LAP  " : "Lap time  ") + timeText;
                         gLapBannerBest = best;
                         gLapBannerAt = SDL_GetTicks();
@@ -11512,9 +11626,9 @@ int RunClient(int argc, char** argv)
                     finishTotalTime, finishBestLap,
                     session.GetRank(mainCharacter), session.GetNbPlayers(),
                     frameLimit < 0 ? -1 : 2, &finishBests,
-                    lastLocal.valid && !raceWasOnline && !replay.active
+                    raceWasOnline
 #if defined(HOVERNET_AUTH)
-                        && !auth.active
+                        || (auth.active && !auth.spectator)
 #endif
                     );
                 if (resultChoice == PostRaceChoice::eQuit) {
