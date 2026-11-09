@@ -13,6 +13,8 @@ and how to roll one back.
 - **The Windows client failed to link** (`VideoServices.dll`: unresolved `GpuFinisher` methods). The legacy Visual Studio projects were missing sources the CMake build has (`GpuFinisher.cpp` in VideoServices; `ColourGrade.cpp` and `TextureEnhance.cpp` in ObjFacTools; `CraftLook.cpp` and `CraftDesign.cpp` in ObjFac1), two `MR_2DViewPort` methods were not exported, and `std::min` and `std::max` clashed with the Windows macros in `GpuFinisher.cpp` and `CraftLook.cpp`. Reproduced and fixed on the Windows runner: `VideoServices`, `ObjFacTools`, `ObjFac1` and `Game2` (Win32, Release) now build and link. The full GitHub Actions run has not been seen.
 
 ### Added
+- **The loading screen shows the course's style, difficulty and suggested laps under the track's name, with the track's map faint behind the title.** Seen in one screenshot (the first track loaded at start-up); the map is loaded for that one frame and released. Not checked: a community track whose map is downloaded, the browser and Windows builds.
+### Added
 - **Buttons ease between their colours on the older (ImGui) screens**: a button's fill fades to its hover colour over about a tenth of a second when the pointer or focus arrives, and back when it leaves, instead of snapping. Off with Reduced motion. Built, and the menu, camera-rule, garage, online-screen click and restart tests pass; I have not watched the fade itself.
 
 ### Changed

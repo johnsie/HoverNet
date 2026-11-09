@@ -7014,10 +7014,34 @@ void ShowLoadingScreen(SDL2GraphicsBackend& graphics, const std::string& trackNa
     ImFont* body = ImGui::GetIO().Fonts->Fonts[0];
     const float scale = std::max(0.8f, std::min(1.6f, display.y / 768.0f));
     const std::string name = trackName.empty() ? "THE TRACK" : trackName;
+    // The track's map, faint and large behind the title (loaded for this one frame and released), and the course's style and difficulty under the name.
+    TrackPreview mapPreview;
+    {
+        const int trackIndex = Tracks().Find(trackName);
+        if (trackIndex >= 0) {
+            TrackPreview map = LoadTrackPreview(renderer, name.c_str());
+            if (map.mTexture != nullptr && map.mWidth > 0 && map.mHeight > 0) {
+                const float aspect = static_cast<float>(map.mWidth) / static_cast<float>(map.mHeight);
+                float h = display.y * 0.62f, w = h * aspect;
+                if (w > display.x * 0.7f) { w = display.x * 0.7f; h = w / aspect; }
+                draw->AddImage(reinterpret_cast<ImTextureID>(map.mTexture), ImVec2((display.x - w) * 0.5f, display.y * 0.5f - h * 0.5f), ImVec2((display.x + w) * 0.5f, display.y * 0.5f + h * 0.5f), ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 30));
+            }
+            mapPreview = map;   // destroyed once this frame has been presented
+        }
+    }
     const float titleSize = 54.0f * scale;
     const ImVec2 titleBox = big->CalcTextSizeA(titleSize, FLT_MAX, 0.0f, name.c_str());
     draw->AddText(big, 20.0f * scale, ImVec2((display.x - big->CalcTextSizeA(20.0f * scale, FLT_MAX, 0.0f, "LOADING").x) * 0.5f, display.y * 0.36f), IM_COL32(250, 125, 132, 255), "LOADING");
     draw->AddText(big, titleSize, ImVec2((display.x - titleBox.x) * 0.5f, display.y * 0.36f + 30.0f * scale), IM_COL32(255, 255, 255, 255), name.c_str());
+    {
+        const int trackIndex = Tracks().Find(trackName);
+        if (trackIndex >= 0) {
+            const TrackBriefing guide = BriefingFor(trackIndex);
+            const std::string line = guide.mCharacter + "   -   " + guide.mDifficulty + (guide.mFreePlay ? std::string() : "   -   suggested " + std::to_string(guide.mSuggestedLaps) + " laps");
+            const ImVec2 lineBox = body->CalcTextSizeA(18.0f * scale, FLT_MAX, 0.0f, line.c_str());
+            draw->AddText(body, 18.0f * scale, ImVec2((display.x - lineBox.x) * 0.5f, display.y * 0.36f + 30.0f * scale + titleSize + 8.0f * scale), IM_COL32(250, 125, 132, 255), line.c_str());
+        }
+    }
     // a spinner of dots
     const Uint32 ticks = SDL_GetTicks();
     for (int i = 0; i < 8; ++i) {
@@ -7037,6 +7061,7 @@ void ShowLoadingScreen(SDL2GraphicsBackend& graphics, const std::string& trackNa
     ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
     CaptureFrameIfRequested(renderer, 1, 1, "HOVERNET_CAPTURE_LOADING");   // test hook
     SDL_RenderPresent(renderer);
+    if (mapPreview.mTexture != nullptr) SDL_DestroyTexture(mapPreview.mTexture);
     SDL_RenderSetLogicalSize(renderer, logicalW, logicalH);
     if (ownsImGuiContext) {
         ImGui_ImplSDLRenderer2_Shutdown();
