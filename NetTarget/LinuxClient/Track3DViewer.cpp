@@ -1338,6 +1338,19 @@ void ScreenFadeFrame(const void* pKey)
     const int alpha = static_cast<int>(255.0f * 0.92f * t * t);
     ImGui::GetForegroundDrawList()->AddRectFilled(ImVec2(0, 0), ImGui::GetIO().DisplaySize, IM_COL32(10, 11, 16, alpha));
 }
+// The main menu's entrance and glow: whether motion is wanted (not with Reduced motion, and not for the screenshot hooks, so the regression captures stay what they were) and the
+// ease-out curve used for the parts sliding in.
+bool MenuMotionAllowed()
+{
+    static int envAllowed = -1;
+    if (envAllowed < 0) envAllowed = std::getenv("HOVERNET_NO_FADE") == nullptr && std::getenv("HOVERNET_CAPTURE_FRAME") == nullptr && std::getenv("HOVERNET_CAPTURE_MENU") == nullptr && std::getenv("HOVERNET_CAPTURE_HUB") == nullptr ? 1 : 0;
+    return envAllowed == 1;
+}
+float EaseOutCubic(float t)
+{
+    t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+    return 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+}
 #define HN_SCREEN_FADE() do { static const char hnFadeKey = 0; ScreenFadeFrame(&hnFadeKey); } while (0)
 
 // Test hook for headless UI regression runs: when HOVERNET_CAPTURE_FRAME names a
@@ -2601,6 +2614,11 @@ bool HoverNetButton(const char* label, const ImVec2& size = ImVec2(0, 0))
     }
     const bool pressed = ImGui::Button(label, size);
     if (!reducedCached) ImGui::PopStyleColor(2);
+    if (!reducedCached && ImGui::IsItemFocused() && !ImGui::IsItemHovered() && ImGui::GetIO().NavVisible) {   // keyboard or controller focus: a soft pulsing ring
+        const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+        const float pulse = 0.55f + 0.45f * std::sin(static_cast<float>(SDL_GetTicks()) / 1000.0f * 4.0f);
+        ImGui::GetForegroundDrawList()->AddRect(ImVec2(lo.x - 2.0f, lo.y - 2.0f), ImVec2(hi.x + 2.0f, hi.y + 2.0f), IM_COL32(255, 120, 135, static_cast<int>(150.0f * pulse)), 7.0f, 0, 2.0f);
+    }
     {
         const float target = ImGui::IsItemHovered() ? 1.0f : 0.0f;   // the pointer only: a button that merely has keyboard focus keeps its usual look
         const float step = std::min(1.0f, ImGui::GetIO().DeltaTime / 0.10f);
@@ -9548,6 +9566,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     bool running = !pickAuthServerForTest && !pickReplaysForTest;
     int framesShown = 0;
     const bool reducedMotion = LoadReducedMotion();
+    const Uint32 menuOpenedAt = SDL_GetTicks();   // the entrance animation counts from here
     // --frames bounds gameplay, not time spent idling at a menu with no human
     // input. One rendered frame verifies this screen in automation, then the
     // documented Local Play default continues into the actual bounded race.
@@ -9639,6 +9658,12 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         const ImVec2 panelPos = phonePortrait ? ImVec2(16.0f, workSize.y - panelHeight - 16.0f)
                               : phoneShort    ? ImVec2(workSize.x - panelWidth - 12.0f, 12.0f)
                                               : ImVec2(workSize.x - panelWidth - (workSize.x < 820.0f ? 20.0f : 42.0f), 42.0f);
+        // Entrance: the craft eases in from the left, the title block settles down from above and the panel slides in from the right and fades up, one after another.
+        const bool menuMotion = MenuMotionAllowed() && !reducedMotion;
+        const float menuAge = static_cast<float>(SDL_GetTicks() - menuOpenedAt) / 1000.0f;
+        const float tCraft = menuMotion ? EaseOutCubic(menuAge / 0.9f) : 1.0f;
+        const float tBrand = menuMotion ? EaseOutCubic((menuAge - 0.08f) / 0.6f) : 1.0f;
+        const float tPanel = menuMotion ? EaseOutCubic((menuAge - 0.15f) / 0.65f) : 1.0f;
         const float craftX = workPos.x + workSize.x * 0.30f;
         const float craftY = workPos.y + workSize.y * 0.68f;
         const float craftScale = std::min(workSize.x / 1200.0f, workSize.y / 760.0f);
@@ -9662,7 +9687,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             const float height = width / cropAspect;
             const float x = workPos.x + (phonePortrait ? 4.0f : std::max(8.0f, (availableWidth - width) * 0.5f + 8.0f));
             const float y = phonePortrait ? workPos.y + std::max(40.0f, (panelPos.y - height) * 0.5f) : workPos.y + std::max(40.0f, (workSize.y - height) * 0.5f + workSize.y * 0.06f);
-            background->AddImage(reinterpret_cast<ImTextureID>(menuCraftTexture), ImVec2(x, y), ImVec2(x + width, y + height), ImVec2(u0, v0), ImVec2(u1, v1));
+            { const float slide = -80.0f * (1.0f - tCraft); background->AddImage(reinterpret_cast<ImTextureID>(menuCraftTexture), ImVec2(x + slide, y), ImVec2(x + slide + width, y + height), ImVec2(u0, v0), ImVec2(u1, v1), IM_COL32(255, 255, 255, static_cast<int>(255.0f * tCraft))); }
         }
         else if (menuBannerTexture != nullptr) {
             // The banner picture fills the space left of the panel (above the panel on a portrait phone).
@@ -9723,7 +9748,8 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                                         43*craftScale, IM_COL32(35, 35, 42, 255));
         }
 
-        ImGui::SetCursorPos(phone ? ImVec2(20.0f, 16.0f) : ImVec2(48.0f, 48.0f));
+        ImGui::SetCursorPos(phone ? ImVec2(20.0f, 16.0f - 24.0f * (1.0f - tBrand)) : ImVec2(48.0f, 48.0f - 24.0f * (1.0f - tBrand)));
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, tBrand);
         ImGui::BeginGroup();
         ImGui::PushStyleColor(ImGuiCol_Text, kHoverNetWhite);
         if (gHoverNetDisplayFont != nullptr) ImGui::PushFont(gHoverNetDisplayFont);
@@ -9751,8 +9777,10 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             }
         }
         ImGui::EndGroup();
+        ImGui::PopStyleVar();   // the title block's fade
 
-        ImGui::SetCursorPos(panelPos);
+        ImGui::SetCursorPos(ImVec2(panelPos.x + 70.0f * (1.0f - tPanel), panelPos.y));
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, tPanel);
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.075f, 0.075f, 0.095f, 0.94f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, phone ? ImVec2(14.0f, 12.0f) : ImVec2(22.0f, 20.0f));
@@ -9787,11 +9815,27 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         if (sideBySidePrimary) {
             const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
             if (HoverNetButton("RACE ONLINE", ImVec2(half, primaryHeight))) { choice = MenuChoice::eOnlineLobby; running = false; }
+            if (menuMotion) {   // a soft pulsing glow around the main button, once the panel is in
+                const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+                const float pulse = 0.5f + 0.5f * std::sin(static_cast<float>(SDL_GetTicks()) / 1000.0f * 2.4f);
+                for (int ring = 1; ring <= 4; ++ring) {
+                    const float grow = static_cast<float>(ring) * 3.0f;
+                    ImGui::GetForegroundDrawList()->AddRect(ImVec2(lo.x - grow, lo.y - grow), ImVec2(hi.x + grow, hi.y + grow), IM_COL32(250, 80, 100, static_cast<int>((34.0f - 7.0f * static_cast<float>(ring)) * pulse * tPanel)), 8.0f + grow, 0, 2.0f);
+                }
+            }
             ImGui::SameLine();
             if (HoverNetQuietButton("PRACTICE OFFLINE", ImVec2(half, primaryHeight))) { choice = MenuChoice::eLocalPlay; running = false; }
         }
         else {
             if (HoverNetButton("RACE ONLINE", ImVec2(-FLT_MIN, primaryHeight))) { choice = MenuChoice::eOnlineLobby; running = false; }
+            if (menuMotion) {   // a soft pulsing glow around the main button, once the panel is in
+                const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+                const float pulse = 0.5f + 0.5f * std::sin(static_cast<float>(SDL_GetTicks()) / 1000.0f * 2.4f);
+                for (int ring = 1; ring <= 4; ++ring) {
+                    const float grow = static_cast<float>(ring) * 3.0f;
+                    ImGui::GetForegroundDrawList()->AddRect(ImVec2(lo.x - grow, lo.y - grow), ImVec2(hi.x + grow, hi.y + grow), IM_COL32(250, 80, 100, static_cast<int>((34.0f - 7.0f * static_cast<float>(ring)) * pulse * tPanel)), 8.0f + grow, 0, 2.0f);
+                }
+            }
             if (showOnlinePitch) {
                 ImGui::PushTextWrapPos(0.0f);
                 ImGui::TextColored(kHoverNetCoral, "Race real players, climb the leaderboards, and show off your craft.");
@@ -9819,6 +9863,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         ImGui::EndChild();
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor();
+        ImGui::PopStyleVar();   // the panel's fade
 
         if (!phonePortrait) {
             ImGui::SetCursorPos(ImVec2(22.0f, workSize.y - 30.0f));
