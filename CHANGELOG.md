@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.42 - 2026-11-09
+
 ### Fixed
 - **Online: the number of laps you choose is remembered.** Creating a race in the online lobby kept your laps, weapons and track in memory only, so the next session went back to 1 lap. They are now saved, and the dialog opens with them. Checked by `HoverNetOnlineScreenClicks`: a new player starts at 1, hosting with 4 laps makes the next session start at 4. (The local race setup already remembered them.)
 
