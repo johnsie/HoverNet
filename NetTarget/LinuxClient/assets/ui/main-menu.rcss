@@ -42,6 +42,7 @@ h1 { font-family: Oxanium; font-size: 46dp; font-weight: bold; margin: 0; }
 	top: 50%;
 	margin-top: -200dp;
 	width: 420dp;
+	max-width: 42%;
 	padding: 24dp 26dp;
 	background-color: #13131ae8;
 	border-radius: 12dp;

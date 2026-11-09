@@ -1288,6 +1288,7 @@ void SaveLocalRacePrefs(const HostPrefs& prefs)
 // second (it never blocks input and never touches the race picture). Each screen loop calls this once per frame with its own key (HN_SCREEN_FADE). Off for the
 // screenshot hooks and with HOVERNET_NO_FADE, so the regression captures stay what they were.
 bool LoadReducedMotion();   // defined with the other settings below
+float LoadUiScale();         // likewise
 
 #ifdef HOVERNET_HAVE_RMLUI
 // Which interface draws the main menu and the other converted screens: the older ImGui screens by default (they look better than the RmlUi ones so far), the RmlUi ones when
@@ -1297,6 +1298,7 @@ bool UseRmlUi(int)
 {
     static bool hooked = false;
     if (!hooked) { hooked = true; HoverNetRml::SetFrameHook(&HoverNetFrameDelayForRml); }   // the RmlUi screens count and pace their frames like the others (the web page waits for the count)
+    HoverNetRml::SetUiScale(LoadUiScale());   // the player's UI Scale setting (75% to 150%) sizes the new screens too
     const char* force = std::getenv("HOVERNET_RML_MENU");
     return force != nullptr && std::string(force) != "0";
 }

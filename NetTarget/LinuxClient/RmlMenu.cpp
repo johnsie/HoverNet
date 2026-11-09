@@ -72,6 +72,8 @@ void EndFrame(int pFrameLimit)
 
 // The screens are drawn twice as large into an off-screen picture and shrunk onto the window with smooth filtering: that smooths the edges of rounded corners and of text,
 // which SDL's renderer does not do by itself (Dear ImGui builds smooth edges into its own shapes, so without this the new screens look rougher). HOVERNET_RML_SS=1 turns it off.
+float gUiScale = 1.0f;   // see SetUiScale
+
 struct Supersample
 {
     SDL_Renderer* renderer = nullptr;
@@ -89,7 +91,7 @@ struct Supersample
     {
         width = pWidth; height = pHeight;
         pContext->SetDimensions(Rml::Vector2i(pWidth * factor, pHeight * factor));
-        pContext->SetDensityIndependentPixelRatio(static_cast<float>(factor));
+        pContext->SetDensityIndependentPixelRatio(static_cast<float>(factor) * gUiScale);
         if (texture != nullptr) { SDL_DestroyTexture(texture); texture = nullptr; }
         if (factor > 1) {
             texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, pWidth * factor, pHeight * factor);
@@ -305,7 +307,7 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
                     // Placed and sized as the older menu does: as wide as the room left of the panel allows, but no wider than 60% of the window's height, centred in that room and
                     // a little below the middle (window units, then scaled to the large picture).
                     const float f = static_cast<float>(ss.factor), windowW = static_cast<float>(width), windowH = static_cast<float>(height);
-                    const float panelW = std::min(430.0f, windowW * (windowW < 820.0f ? 0.5f : 0.42f));
+                    const float panelW = std::min(430.0f * gUiScale, windowW * (windowW < 820.0f ? 0.5f : 0.42f));
                     const float room = std::max(220.0f, windowW - panelW - 66.0f);
                     const float aspect = static_cast<float>(crop.w) / static_cast<float>(crop.h);
                     const float cw = std::min(room, windowH * 0.6f * aspect), ch = cw / aspect;
@@ -1119,4 +1121,5 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
     return out;
 }
 void SetFrameHook(void (*pHook)()) { gFrameHook = pHook; }
+void SetUiScale(float pScale) { gUiScale = std::max(0.5f, std::min(2.0f, pScale)); }
 }  // namespace HoverNetRml

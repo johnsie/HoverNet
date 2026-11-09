@@ -17,6 +17,9 @@ enum class Sound { eHover, eClick, eBack };
 // Called once at the end of every frame of every screen here (the game's own frame counter and pacing; without it a screen paces itself with a short delay).
 void SetFrameHook(void (*hook)());
 
+// The player's UI Scale setting (1.0 = 100%): every screen here is laid out that much larger or smaller.
+void SetUiScale(float scale);
+
 struct MainMenuInfo
 {
     std::string assetDir;        // NetTarget/LinuxClient/assets, with the ui/ folder and the fonts and pictures in it
