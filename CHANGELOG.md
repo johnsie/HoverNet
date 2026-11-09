@@ -4,6 +4,17 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.31 - 2026-11-09
+
+### Added
+- **The Garage: design your own craft.** Shape (length, width, height, nose), body and trim colours and a 32x32 painted livery, with a live preview, eight saved designs and the one used in races. A look only: the hull you pick still decides speed, weight and handling, and designs never enter the race, replays or golden files. Other players see your design in online races (relayed by the race server, never client to client; capability bit 32, messages 36 and 37). Signed-in Outiva accounts can keep the designs on the account (`/account/craft`). New tests: `HoverNetCraftDesign`, `HoverNetCraftLook`, `HoverNetCraftDesignNet`, and the craft checks in `scripts/test-web-account.py`. Details and what was not checked: `docs/craft-designer.md`.
+
+### Changed
+- Soft craft shadows, light from the craft and haze, engine/trail/spark effects, and richer colour and vignette are now off by default (still in Settings > Graphics; a saved file from before is reset once).
+
+### Fixed
+- The web client stopped loading with "window is not defined" in the page's worker threads (`web-pre.js` touched `window` at the top level, which Emscripten also runs in pthread workers).
+
 ## 2.3.30 - 2026-11-09
 
 ### Fixed
