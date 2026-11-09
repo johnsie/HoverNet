@@ -50,6 +50,18 @@ int MR_Sprite::GetItemHeight()const
    return mItemHeight;
 }
 
+void MR_Sprite::Remap( const MR_UInt8 pTable[256] )
+{
+   if( mData != NULL )
+   {
+      const long lTotal = (long)mNbItem*mItemHeight*mWidth;
+      for( long lIndex = 0; lIndex < lTotal; lIndex++ )
+      {
+         mData[ lIndex ] = pTable[ mData[ lIndex ] ];
+      }
+   }
+}
+
 int MR_Sprite::GetItemWidth()const
 {
    return mWidth;

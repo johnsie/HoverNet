@@ -260,7 +260,8 @@ jobs:
             "--controls-reference --frames 2",
             "--pause-menu --frames 2",
             "--results-screen --frames 2",
-            "--onboarding --frames 2"
+            "--settings-hub --frames 2",
+            "--tutorial --autoplay --frames 120"
           )
           foreach ($scenario in $scenarios) {
             $arguments = $scenario.Split(' ')
@@ -389,7 +390,8 @@ jobs:
                 "--controls-reference --frames 2",
                 "--pause-menu --frames 2",
                 "--results-screen --frames 2",
-                "--onboarding --frames 2"
+                "--settings-hub --frames 2",
+            "--tutorial --autoplay --frames 120"
               )
               foreach ($scenario in $installedScenarios) {
                 $installedClient = Start-Process -FilePath "$installDir\HoverNet.exe" `

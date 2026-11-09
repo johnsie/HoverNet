@@ -42,7 +42,7 @@ bool RenderCraftPreview(MR_ResourceLib& pLib, const Authority::CraftDesign* pDes
     std::vector<MR_UInt32> colour(static_cast<std::size_t>(pWidth) * pHeight, 0);
     viewport.SetColourBuffer(colour.data(), pPalette256);
     viewport.SetTextureFiltering(TRUE);
-    viewport.SetupCameraPosition(MR_3DCoordinate(-extent * 15 / 10, 0, (lo.mZ + hi.mZ) / 2 - extent / 25), 0, 0);
+    viewport.SetupCameraPosition(MR_3DCoordinate(-extent * 14 / 10, 0, (lo.mZ + hi.mZ) / 2 - extent / 25), 0, 0);
     viewport.Clear(255);
     viewport.ClearZ();
     MR_PositionMatrix matrix;

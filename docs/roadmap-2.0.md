@@ -431,7 +431,7 @@ walkthrough covering race selection, driving and weapons, the race HUD, and
 configuration/accessibility. It explains live preview plus Save/Cancel semantics
 so a new player can safely adjust the game without external documentation. It is
 skipped for automated bounded runs, records completion only after Finish, and
-remains reachable through How to Play on the main menu. Completion is versioned,
+remains reachable through How to Play on the main menu. (Superseded on 2026-11-09: the walkthrough was removed and replaced by the playable tutorial under Settings, see docs/linux-client.md.) Completion is versioned,
 so players who finished the earlier three-step walkthrough see this expanded
 version once; finishing records the new version. The first and final pages have
 separate bounded smoke coverage.

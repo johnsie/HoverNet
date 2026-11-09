@@ -271,6 +271,7 @@ bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height)
     SDL_RenderClear(m_renderer);
     SDL_Rect r = {0, 0, width, height};
     SDL_RenderCopy(m_renderer, m_texture, nullptr, &r);
+    if (m_overlay) m_overlay(m_renderer);
     SDL_RenderPresent(m_renderer);
     return true;
 }

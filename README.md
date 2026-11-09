@@ -56,7 +56,7 @@ you race other players **online**.
 | **Linux** (Ubuntu, Debian) | `hovernet-game_<version>_amd64.deb` | `sudo apt install ./hovernet-game_*.deb`, then run `hovernet` |
 | **Windows (32-bit)** or an older PC | `HoverNet-<version>-win32-setup.exe` | the classic version, kept for compatibility |
 
-**2. Press START.** The first time, a short tutorial shows you the controls.
+**2. Press START.** New here? Open Settings and run the Tutorial: a short practice race that teaches the controls.
 
 **3. Pick a mode.**
 

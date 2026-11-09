@@ -4,6 +4,19 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## Unreleased
+
+### Changed
+- **A simpler main menu with no scrollbars.** Play Offline, Race Online, Leaderboards, Garage, and a Settings button. Everything else (game settings, controls, watch a replay, tutorial) is in a new Settings hub. The buttons are sized from the room the panel has, so the menu fits any window from 640x480 up without scrolling.
+- **The HUD's words are drawn in the menu typefaces** (Oxanium and Inter) on soft panels instead of the pink bitmap font: the race clock and lap at the top, speed, fuel and weapon chips under them, the lap time at the bottom, callouts and chat. The bars, meters, weapon indicator and map are unchanged. `HOVERNET_CLASSIC_HUD_TEXT=1` brings back the bitmap font (the render golden frames use it, so they are unchanged). The tutorial's lesson card is drawn the same way.
+- **The Garage** has labelled sliders (right-click resets, Ctrl+click types a value), ready-made colour swatches with a full picker, tooltips, and a preview that stays in view. A test checks that every control visibly changes the preview craft on every hull.
+
+### Added
+- **A real tutorial**: Settings > Tutorial is a practice race with a coach. Eight lessons (accelerate, steer, brake, jump, fire, read the HUD, finish a lap); each waits until you have done it, names your own keys or controller buttons, and shows a progress bar over the race. New test `HoverNetTutorial`.
+
+### Removed
+- The four-page **How to Play** walkthrough and its first-run screen (and `tutorial-race.bmp`).
+
 ## 2.3.31 - 2026-11-09
 
 ### Added

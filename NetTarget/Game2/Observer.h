@@ -25,6 +25,8 @@
 #ifndef OBSERVER_H
 #define OBSERVER_H
 
+#include <string>
+#include <vector>
 #include "../VideoServices/3DViewport.h"
 #include "../VideoServices/ModernGraphics.h"
 #include <vector>
@@ -33,6 +35,24 @@
 #include "../ObjFacTools/SpriteHandle.h"
 
 
+
+// What the HUD says this frame (see MR_Observer::GetHudText). Strings are plain ASCII.
+struct HudText
+{
+   bool        valid = false;
+   char        mainLine[96] = {0};    // "Race 0:05.39  Lap 1/1", "Start in 03.00 sec. for 3 laps", "Finish in ...", "Free play ..."
+   char        lapLine[96] = {0};     // "Current lap ...  Best ...", "Lap time ...", "Best lap ..." (may be empty)
+   char        position[32] = {0};    // "Pos 1/1"
+   char        fuel[40] = {0};        // "Fuel 97%" (with a warning when low)
+   char        weapon[48] = {0};      // "Missile ready", "Missile charging 40%", "Mines 2", "Power-ups 1"
+   char        network[56] = {0};     // "Local", "Online 40 ms", "Replay", ...
+   char        ghost[16] = {0};       // the gap to the ghost, or empty
+   char        callout[64] = {0};     // "IMPACT - CONTROL DISRUPTED", "FUEL REPLENISHED  (80%)", or empty
+   int         speedPercent = 0;
+   int         fuelPercent = 0;
+   std::vector<std::string> chat;     // newest first: the messages and chat lines shown at the bottom left
+   std::string typing;                // the chat line being typed, or empty
+};
 
 class MR_Observer
 {
@@ -103,6 +123,8 @@ class MR_Observer
       BOOL            mWasOutOfControl;
       MR_SimulationTime mFeedbackUntil;
       char            mFeedbackText[64];
+      BOOL            mExternalHudText;     // the client draws the HUD's words itself (from GetHudText), so they are not drawn here in the bitmap font
+      HudText         mHudText;
 
       MR_2DViewPort m2DDebugView;
       MR_3DViewPort mWireFrameView;
@@ -169,6 +191,9 @@ class MR_Observer
       void SetModernEffects( BOOL pEnable, BOOL pShadows, BOOL pReducedMotion, const MR_UInt8* pShadowLut );
       // True colour with filtered textures (needs SetModernEffects): pPalette768 is the palette the picture is shown through (256 RGB triples, copied).
       void SetModernTextures( BOOL pEnable, const MR_UInt8* pPalette768 );
+      // The HUD's words (race clock, lap, status, callouts, chat) as text, for a client that draws them in a typeface. The bars, meters and map are still drawn here.
+      void SetExternalHudText( BOOL pExternal ) { mExternalHudText = pExternal; }
+      const HudText& GetHudText() const { return mHudText; }
       void SetModernLighting( BOOL pEnable ) { mModernLighting = pEnable; }   // light pools, headlight and haze (needs SetModernEffects)
       const HoverNetGfx::FrameHints& GetFrameHints() const { return mHints; }
       void SetChaseScale( int pPercent ) { mChaseScale = pPercent < 40 ? 40 : (pPercent > 300 ? 300 : pPercent); }

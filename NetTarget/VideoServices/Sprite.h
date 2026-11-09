@@ -66,6 +66,9 @@ class MR_DllDeclare MR_Sprite
       void StrBlt( int pX, int pY, const char* pStr, MR_2DViewPort* pDest, eAlignment pHAlign = eLeft, eAlignment pVAlign = eTop, int pScaling = 1 )const;
 
 
+      const MR_UInt8* GetData() const { return mData; }   // the pixels (palette indices), item after item, for tools
+      int  GetWidth() const { return mWidth; }
+      void Remap( const MR_UInt8 pTable[256] );          // every pixel becomes pTable[pixel] (the HUD font's colours)
       int  GetNbItem()const;
       int  GetItemHeight()const;
       int  GetItemWidth()const;

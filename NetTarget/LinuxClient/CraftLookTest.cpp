@@ -6,6 +6,7 @@
 #include "../ObjFacTools/ResActor.h"
 #include "../ObjFacTools/ResBitmap.h"
 #include "../ObjFacTools/ResourceLib.h"
+#include "../ObjFacTools/ResSprite.h"
 #include "../Util/WorldCoordinates.h"
 #include "../VideoServices/3DViewport.h"
 #include "../VideoServices/ColorPalette.h"
@@ -64,6 +65,14 @@ int main()
     MR_ResourceLib lib("NetTarget/ObjFac1.dat");
     MR_ResBitmap::SetColourPalette(palette.data(), 1.0f, false);
 
+    if (std::getenv("HOVERNET_FONT_DUMP")) {
+        const MR_ResSprite* font = lib.GetSprite(1);
+        std::printf("font: items %d item height %d width %d data %p\n", font->GetNbItem(), font->GetItemHeight(), font->GetWidth(), (const void*)font->GetData());
+        long hist[256] = {0};
+        const long total = (long)font->GetNbItem() * font->GetItemHeight() * font->GetWidth();
+        for (long i = 0; i < total; ++i) hist[font->GetData()[i]]++;
+        for (int i = 0; i < 256; ++i) if (hist[i]) std::printf("index %3d  %6ld px  rgb %3d %3d %3d\n", i, hist[i], palette[i*3], palette[i*3+1], palette[i*3+2]);
+    }
     const int ids[5] = {MR_ELECTRO_CAR, MR_HITECH_CAR, MR_BITURBO_CAR, 19, MR_MANTA_CRAFT};
     for (int c = 0; c < 5; ++c) {
         const MR_ResActor* actor = lib.GetActor(ids[c]);
@@ -136,6 +145,48 @@ int main()
                 if (FILE* f = std::fopen(path, "wb")) { std::fprintf(f, "P6\n480 360\n255\n"); for (std::uint32_t p : img) { std::fputc(p & 255, f); std::fputc((p >> 8) & 255, f); std::fputc((p >> 16) & 255, f); } std::fclose(f); }
             }
         }
+    }
+
+    // Every control of the Garage must show on the preview craft: each single change, on every hull, changes a visible number of pixels (a control that
+    // did nothing you could see would be a bug). The picture is the one the Garage draws (480x360), at the two angles the turntable passes through.
+    {
+        struct Change { const char* name; void (*apply)(Authority::CraftDesign&); int minPixels; };
+        const Change changes[] = {
+            {"length +25%", [](Authority::CraftDesign& x) { x.length = 25; }, 400},
+            {"length -25%", [](Authority::CraftDesign& x) { x.length = -25; }, 400},
+            {"width +25%", [](Authority::CraftDesign& x) { x.width = 25; }, 400},
+            {"width -25%", [](Authority::CraftDesign& x) { x.width = -25; }, 400},
+            {"height +25%", [](Authority::CraftDesign& x) { x.height = 25; }, 400},
+            {"height -25%", [](Authority::CraftDesign& x) { x.height = -25; }, 400},
+            {"nose wide +30%", [](Authority::CraftDesign& x) { x.taper = 30; }, 150},
+            {"nose narrow -30%", [](Authority::CraftDesign& x) { x.taper = -30; }, 150},
+            {"body colour blue, full", [](Authority::CraftDesign& x) { x.body = {{20, 60, 230}}; x.bodyStrength = 255; }, 1500},
+            {"body colour red, half", [](Authority::CraftDesign& x) { x.body = {{230, 30, 30}}; x.bodyStrength = 128; }, 1000},
+            {"trim colour green, full", [](Authority::CraftDesign& x) { x.accent = {{20, 220, 60}}; x.accentStrength = 255; }, 60},
+            {"paint: a 4-cell stripe", [](Authority::CraftDesign& x) { for (int i = 0; i < Authority::kPaintSize; ++i) for (int j = 12; j < 16; ++j) x.paint[static_cast<size_t>(i) * Authority::kPaintSize + j] = 5; }, 400},
+            {"paint: a coarse checkerboard", [](Authority::CraftDesign& x) { for (int i = 0; i < Authority::kPaintSize; ++i) for (int j = 0; j < Authority::kPaintSize; ++j) if (((i / 4) + (j / 4)) % 2 == 0) x.paint[static_cast<size_t>(i) * Authority::kPaintSize + j] = 3; }, 800},
+            {"paint: the whole canvas", [](Authority::CraftDesign& x) { x.paint.fill(8); }, 1500},
+        };
+        int worst = 1 << 30; const char* worstName = ""; int worstCraft = 0; bool allVisible = true;
+        for (int c = 0; c < 5; ++c) {
+            for (const Change& change : changes) {
+                Authority::CraftDesign x;
+                change.apply(x);
+                int best = 0;
+                for (int yaw : {25, 205}) {
+                    std::vector<std::uint32_t> a, b;
+                    HoverNetCraft::RenderCraftPreview(lib, nullptr, c, yaw, gWords.data(), 480, 360, a);
+                    HoverNetCraft::RenderCraftPreview(lib, &x, c, yaw, gWords.data(), 480, 360, b);
+                    int diff = 0;
+                    for (size_t i = 0; i < a.size(); ++i) if (a[i] != b[i]) ++diff;
+                    best = std::max(best, diff);
+                }
+                if (best < worst) { worst = best; worstName = change.name; worstCraft = c; }
+                if (best < change.minPixels) { allVisible = false; std::printf("FAIL: craft %d: '%s' changes only %d pixels of the preview (needs %d)\n", c, change.name, best, change.minPixels); ++gFail; }
+            }
+        }
+        std::printf("least visible change: craft %d, %s: %d pixels\n", worstCraft, worstName, worst);
+        Check(allVisible, "every Garage control visibly changes the preview craft, on every hull");
     }
 
     // Colour functions.

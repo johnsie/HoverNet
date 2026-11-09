@@ -40,13 +40,11 @@ stick to steer, right trigger to accelerate, left trigger to brake or reverse,
 A to jump, X to fire, Y to select a weapon, and Start to open the pause menu.
 Menus support the D-pad, A to confirm, and B to go back where applicable.
 
-A four-step **How to Play** walkthrough appears on the first interactive run
-and remains available from the main menu. It covers choosing a race, driving and
-weapons, reading the race HUD, and configuring display, audio, and accessibility.
-Completing it stores
-`onboarding_complete` alongside the other per-user settings. The stored value is
-a walkthrough version: when onboarding gains materially new guidance, existing
-players see the revised walkthrough once and finishing it records the new version.
+The main menu has four choices: **Play Offline**, **Race Online**, **Leaderboards** and **Garage**, and a **Settings** button. Settings opens a hub with
+Game settings, Controls, Watch a replay and **Tutorial**. The tutorial is a one-lap practice race on the first track with a coach: eight lessons
+(accelerate, steer, brake, jump, fire, read the HUD, finish a lap), each finished by what you actually do, shown in the HUD font over the race. Finishing it
+stores `tutorial_complete` beside the other per-user settings; until then the main menu points new players to it. `HoverNetGame2Player --play --tutorial`
+starts it directly. The lesson logic is `NetTarget/LinuxClient/Tutorial.cpp` (test `HoverNetTutorial`).
 
 The keyboard and controller bindings are available in-game through **Controls**
 on the main menu and the Escape menu, including while browsing the online lobby.

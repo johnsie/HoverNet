@@ -67,6 +67,13 @@ std::uint64_t Fnv1a(const std::uint8_t* data, std::size_t size)
 int main(int argc, char** argv)
 {
     if (argc < 3) { std::fprintf(stderr, "usage: %s <track> <grid640|drive640|wide1280|cockpit640>\n", argv[0]); return 2; }
+    // The committed frames were drawn with the original (pink) HUD font. The game now draws white HUD text (ResourceLib); the golden frames test the rasteriser and
+    // the camera, not the font, so they keep the original font and stay as they were (docs/render-golden.md).
+#ifdef _WIN32
+    _putenv_s("HOVERNET_CLASSIC_HUD_TEXT", "1");
+#else
+    setenv("HOVERNET_CLASSIC_HUD_TEXT", "1", 0);
+#endif
     const std::string trackName = argv[1], scene = argv[2];
     int width = 640, height = 480;
     std::uint32_t ticks = 600;

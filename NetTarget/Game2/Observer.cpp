@@ -73,10 +73,20 @@ CString gFirstLapTimeStr = "Lap time %d:%02d.%02d";
 CString gFinalLapStr     = "Race %d:%02d.%02d  FINAL LAP";
 
 
+// Draws HUD text in the bitmap font, unless the client draws the words itself (SetExternalHudText).
+static void HudStr( bool pDraw, const MR_Sprite* pFont, int pX, int pY, const char* pStr, MR_2DViewPort* pDest, MR_Sprite::eAlignment pH, MR_Sprite::eAlignment pV, int pScaling )
+{
+   if( pDraw )
+   {
+      pFont->StrBlt( pX, pY, pStr, pDest, pH, pV, pScaling );
+   }
+}
+
 MR_Observer::MR_Observer()
 {
    mLastCameraPosValid = FALSE;
    mLastCameraTime = 0;
+   mExternalHudText = FALSE;
    mEyeOffset = 0;
    mReuseCamera = FALSE;
    mScroll = 0;
@@ -2120,6 +2130,10 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
    }
 
    // Display race timers at top and bottom of screen
+   mHudText.valid = false;
+   mHudText.chat.clear();
+   mHudText.typing.clear();
+   mHudText.callout[0] = 0;
    if( mBaseFont != NULL )
    {
       char lMainLineBuffer[80];
@@ -2199,10 +2213,14 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
                   pTime/60000, (pTime%60000)/1000, (pTime%1000)/10 );
       }
 
+      snprintf( mHudText.mainLine, sizeof(mHudText.mainLine), "%s", lMainLineBuffer );
+      snprintf( mHudText.lapLine, sizeof(mHudText.lapLine), "%s", lLapLineBuffer );
+      mHudText.valid = true;
+
       // Render timer text at top and bottom center of screen.
       const MR_Sprite* lHudFont = mBaseFont->GetSprite();
-      lHudFont->StrBlt( lXRes/2, lYRes/16, Ascii2Simple( lMainLineBuffer ), &m3DView, MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
-      lHudFont->StrBlt( lXRes/2, lYRes-1, Ascii2Simple( lLapLineBuffer ), &m3DView, MR_Sprite::eCenter, MR_Sprite::eBottom, 0 );
+      HudStr( !mExternalHudText, lHudFont, lXRes/2, lYRes/16, Ascii2Simple( lMainLineBuffer ), &m3DView, MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
+      HudStr( !mExternalHudText, lHudFont, lXRes/2, lYRes-1, Ascii2Simple( lLapLineBuffer ), &m3DView, MR_Sprite::eCenter, MR_Sprite::eBottom, 0 );
 
       // The original HUD rendered speed/fuel as unlabeled bars and weapons as
       // icon frames.  Keep those compact visuals, but add a readable status line
@@ -2273,6 +2291,14 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       else
          snprintf( lNetworkStatus, sizeof(lNetworkStatus), "Local" );
 
+      mHudText.speedPercent = lSpeedPercent;
+      mHudText.fuelPercent = lFuelPercent;
+      snprintf( mHudText.position, sizeof(mHudText.position), "%s", lPositionStatus );
+      snprintf( mHudText.fuel, sizeof(mHudText.fuel), "%s", lFuelStatus );
+      snprintf( mHudText.weapon, sizeof(mHudText.weapon), "%s", lWeaponStatus );
+      snprintf( mHudText.network, sizeof(mHudText.network), "%s", lNetworkStatus );
+      snprintf( mHudText.ghost, sizeof(mHudText.ghost), "%s", mGhostGapText );
+
       int lStatusY = lYRes/16 + lHudFont->GetItemHeight() + 4;
       if( mLargeHudText )
       {
@@ -2282,9 +2308,9 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
          char lDriveStatus[96];
          snprintf( lDriveStatus, sizeof(lDriveStatus), "%s   Speed %d%%   %s",
                    lPositionStatus, lSpeedPercent, lFuelStatus );
-         lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lDriveStatus ), &m3DView,
+         HudStr( !mExternalHudText, lHudFont, lXRes/2, lStatusY, Ascii2Simple( lDriveStatus ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
-         lHudFont->StrBlt( lXRes/2, lStatusY + lHudFont->GetItemHeight() + 3,
+         HudStr( !mExternalHudText, lHudFont, lXRes/2, lStatusY + lHudFont->GetItemHeight() + 3,
                            Ascii2Simple( lWeaponStatus ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
          char lNetworkLine[96];
@@ -2292,7 +2318,7 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
             snprintf( lNetworkLine, sizeof(lNetworkLine), "%s   Ghost %s", lNetworkStatus, mGhostGapText );
          else
             snprintf( lNetworkLine, sizeof(lNetworkLine), "%s", lNetworkStatus );
-         lHudFont->StrBlt( lXRes/2, lStatusY + 2*(lHudFont->GetItemHeight() + 3),
+         HudStr( !mExternalHudText, lHudFont, lXRes/2, lStatusY + 2*(lHudFont->GetItemHeight() + 3),
                            Ascii2Simple( lNetworkLine ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
       }
@@ -2306,7 +2332,7 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
             const size_t lUsed = strlen( lStatusLine );
             snprintf( lStatusLine + lUsed, sizeof(lStatusLine) - lUsed, "   Ghost %s", mGhostGapText );
          }
-         lHudFont->StrBlt( lXRes/2, lStatusY, Ascii2Simple( lStatusLine ), &m3DView,
+         HudStr( !mExternalHudText, lHudFont, lXRes/2, lStatusY, Ascii2Simple( lStatusLine ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 0 );
       }
 
@@ -2357,7 +2383,8 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       }
       if( pTime >= 0 && pTime < mFeedbackUntil && mFeedbackText[0] != 0 )
       {
-         lHudFont->StrBlt( lXRes/2, lYRes/4, Ascii2Simple( mFeedbackText ), &m3DView,
+         snprintf( mHudText.callout, sizeof(mHudText.callout), "%s", mFeedbackText );
+         HudStr( !mExternalHudText, lHudFont, lXRes/2, lYRes/4, Ascii2Simple( mFeedbackText ), &m3DView,
                            MR_Sprite::eCenter, MR_Sprite::eTop, 1 );
       }
 
@@ -2394,7 +2421,8 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       pSession->GetCurrentMessage( lChatLineBuffer );
       if( lChatLineBuffer[0] != 0 )
       {
-         lChatFont->StrBlt( lChatXMargin, lChatYMargin, lChatLineBuffer, &m3DView,
+         mHudText.typing = lChatLineBuffer;
+         HudStr( !mExternalHudText, lChatFont, lChatXMargin, lChatYMargin, lChatLineBuffer, &m3DView,
                             MR_Sprite::eLeft, MR_Sprite::eTop, lChatFontScaling );
       }
       lChatYMargin -= lChatLineSpacing;
@@ -2406,16 +2434,17 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
       while( pSession->GetMessageStack( lChatStackLevel++, lChatLineBuffer, kChatMessageLifeSeconds ) &&
              lChatLineCount < kChatMaxLines && lChatYMargin > lYRes/4 )
       {
+         mHudText.chat.push_back( lChatLineBuffer );
          const int lChatStrLen = static_cast<int>( strlen( lChatLineBuffer ) );
          if( lChatStrLen > lChatPrintLen )
          {
-            lChatFont->StrBlt( lChatXMargin, lChatYMargin, lChatLineBuffer+lChatPrintLen, &m3DView,
+            HudStr( !mExternalHudText, lChatFont, lChatXMargin, lChatYMargin, lChatLineBuffer+lChatPrintLen, &m3DView,
                                MR_Sprite::eLeft, MR_Sprite::eTop, lChatFontScaling );
             lChatYMargin -= lChatLineSpacing;
             lChatLineBuffer[ lChatPrintLen ] = 0;
             ++lChatLineCount;
          }
-         lChatFont->StrBlt( lChatXMargin, lChatYMargin, lChatLineBuffer, &m3DView,
+         HudStr( !mExternalHudText, lChatFont, lChatXMargin, lChatYMargin, lChatLineBuffer, &m3DView,
                             MR_Sprite::eLeft, MR_Sprite::eTop, lChatFontScaling );
          lChatYMargin -= lChatLineSpacing;
          ++lChatLineCount;

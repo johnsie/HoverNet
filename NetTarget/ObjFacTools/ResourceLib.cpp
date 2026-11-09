@@ -70,6 +70,21 @@ MR_ResourceLib::MR_ResourceLib( const char* pResFile )
             LoadSounds( lArchive );
             t2 = GetTickCount();
 
+            // The HUD font was drawn in pinks and magentas. It now uses the palette's own white-to-grey ramp, so the HUD text is clean white with a soft dark
+            // edge (the picture passes add their own outline). HOVERNET_CLASSIC_HUD_TEXT=1 keeps the original pink font.
+            if( getenv( "HOVERNET_CLASSIC_HUD_TEXT" ) == NULL )
+            {
+               MR_ResSprite* lFont = (MR_ResSprite*)GetSprite( 1 );
+               if( lFont != NULL && lFont->GetNbItem() == 96 )
+               {
+                  MR_UInt8 lTable[ 256 ];
+                  for( int lIndex = 0; lIndex < 256; lIndex++ ) lTable[ lIndex ] = (MR_UInt8)lIndex;
+                  lTable[ 38 ] = 14; lTable[ 35 ] = 23; lTable[ 36 ] = 25; lTable[ 37 ] = 26;
+                  lTable[ 49 ] = 12; lTable[ 48 ] = 13; lTable[ 47 ] = 14; lTable[ 46 ] = 17; lTable[ 45 ] = 18; lTable[ 44 ] = 22; lTable[ 43 ] = 23;
+                  lFont->Remap( lTable );
+               }
+            }
+
             // The AI-enhanced images for some of the textures, from the pack that sits beside this file (ObjFac1.textures); optional.
             if( getenv( "HOVERNET_NO_AI_TEXTURES" ) == NULL )
             {

@@ -21,6 +21,13 @@ int MR_Sprite::GetNbItem() const { return mNbItem; }
 int MR_Sprite::GetItemHeight() const { return mItemHeight; }
 int MR_Sprite::GetItemWidth() const { return mWidth; }
 
+void MR_Sprite::Remap(const MR_UInt8 table[256])
+{
+    if (mData == nullptr) return;
+    const long total = static_cast<long>(mNbItem) * mItemHeight * mWidth;
+    for (long i = 0; i < total; ++i) mData[i] = table[mData[i]];
+}
+
 void MR_Sprite::Blt(int x, int y, MR_2DViewPort* destination, eAlignment horizontalAlignment,
                     eAlignment verticalAlignment, int item, int scaling) const
 {

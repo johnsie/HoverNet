@@ -591,6 +591,8 @@ add_executable(HoverNetViewportSmoke
 target_link_libraries(HoverNetViewportSmoke PRIVATE HoverNetVideoCore HoverNetResourceCore)
 add_executable(HoverNetTextureExport NetTarget/LinuxClient/TextureExport.cpp)
 target_link_libraries(HoverNetTextureExport PRIVATE HoverNetVideoCore HoverNetResourceCore)
+add_executable(HoverNetTutorialTest NetTarget/LinuxClient/TutorialTest.cpp NetTarget/LinuxClient/Tutorial.cpp)
+target_link_libraries(HoverNetTutorialTest PRIVATE HoverNetSim)
 add_executable(HoverNetCraftDesignTest NetTarget/LinuxClient/CraftDesignTest.cpp)
 target_link_libraries(HoverNetCraftDesignTest PRIVATE HoverNetSim)
 add_executable(HoverNetCraftLookTest NetTarget/LinuxClient/CraftLookTest.cpp NetTarget/LinuxClient/CraftPreview.cpp)
@@ -606,6 +608,7 @@ if(NOT EMSCRIPTEN)
     target_link_libraries(HoverNetViewportThreadsTest PRIVATE Threads::Threads)
     add_test(NAME HoverNetViewportThreads COMMAND HoverNetViewportThreadsTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetViewportColour COMMAND HoverNetViewportColourTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME HoverNetTutorial COMMAND HoverNetTutorialTest)
     add_test(NAME HoverNetCraftDesign COMMAND HoverNetCraftDesignTest)
     add_test(NAME HoverNetCraftLook COMMAND HoverNetCraftLookTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetTexturePack COMMAND HoverNetTexturePackTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
@@ -773,6 +776,7 @@ endif()
 
 add_executable(HoverNetTrack3DViewer
     NetTarget/LinuxClient/Track3DViewer.cpp
+    NetTarget/LinuxClient/Tutorial.cpp
     NetTarget/LinuxClient/CraftStore.cpp
     NetTarget/LinuxClient/CraftPreview.cpp
     NetTarget/GraphicsSDL2/SDL2Graphics.cpp
@@ -786,6 +790,7 @@ target_link_libraries(HoverNetTrack3DViewer PRIVATE HoverNetClientSession HoverN
 
 add_executable(HoverNetGame2Player
     NetTarget/LinuxClient/Track3DViewer.cpp
+    NetTarget/LinuxClient/Tutorial.cpp
     NetTarget/LinuxClient/CraftStore.cpp
     NetTarget/LinuxClient/CraftPreview.cpp
     NetTarget/LinuxClient/TrackCatalog.cpp
@@ -1259,10 +1264,10 @@ if(BUILD_TESTING AND NOT WIN32)
     set_tests_properties(HoverNetQuitConfirmationSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetPostRaceSmoke COMMAND HoverNetGame2Player --results-screen --frames 2)
     set_tests_properties(HoverNetPostRaceSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-    add_test(NAME HoverNetOnboardingSmoke COMMAND HoverNetGame2Player --onboarding --frames 2)
-    set_tests_properties(HoverNetOnboardingSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-    add_test(NAME HoverNetOnboardingConfigSmoke COMMAND HoverNetGame2Player --onboarding-config --frames 2)
-    set_tests_properties(HoverNetOnboardingConfigSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    add_test(NAME HoverNetSettingsHubSmoke COMMAND HoverNetGame2Player --settings-hub --frames 2)
+    set_tests_properties(HoverNetSettingsHubSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    add_test(NAME HoverNetTutorialRace COMMAND HoverNetGame2Player --play --tutorial --autoplay --frames 120)
+    set_tests_properties(HoverNetTutorialRace PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetGame2PlayerDebug COMMAND HoverNetGame2Player --debug --frames 1)
     set_tests_properties(HoverNetGame2PlayerDebug PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetTrack3DViewerPowerup COMMAND HoverNetTrack3DViewer --powerup --frames 1)
@@ -1285,6 +1290,6 @@ if(BUILD_TESTING AND NOT WIN32)
         # the suite, and this check still runs on the non-sanitizer build.
         set_tests_properties(HoverNetMemoryBaselineSmoke PROPERTIES DISABLED TRUE)
     endif()
-    set_tests_properties(HoverNetLinuxBootstrap HoverNetTrackViewer HoverNetTrack3DViewer HoverNetGame2Player HoverNetGame2PlayerAutoplay HoverNetGame2PlayerSwitchback HoverNetGame2PlayerAudio HoverNetGame2PlayerCombat HoverNetGame2PlayerWeaponCycle HoverNetGame2PlayerJump HoverNetGame2PlayerFire HoverNetGame2PlayerControls HoverNetSettingsScreenSmoke HoverNetControlsReferenceSmoke HoverNetPauseMenuSmoke HoverNetQuitConfirmationSmoke HoverNetPostRaceSmoke HoverNetOnboardingSmoke HoverNetOnboardingConfigSmoke HoverNetGame2PlayerDebug HoverNetTrack3DViewerPowerup HoverNetMemoryBaselineSmoke
+    set_tests_properties(HoverNetLinuxBootstrap HoverNetTrackViewer HoverNetTrack3DViewer HoverNetGame2Player HoverNetGame2PlayerAutoplay HoverNetGame2PlayerSwitchback HoverNetGame2PlayerAudio HoverNetGame2PlayerCombat HoverNetGame2PlayerWeaponCycle HoverNetGame2PlayerJump HoverNetGame2PlayerFire HoverNetGame2PlayerControls HoverNetSettingsScreenSmoke HoverNetControlsReferenceSmoke HoverNetPauseMenuSmoke HoverNetQuitConfirmationSmoke HoverNetPostRaceSmoke HoverNetGame2PlayerDebug HoverNetTrack3DViewerPowerup HoverNetMemoryBaselineSmoke
         PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 endif()

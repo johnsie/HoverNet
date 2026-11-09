@@ -13,7 +13,6 @@ $required = @(
     "NetTarget\ObjFac1.dat",
     "NetTarget\LinuxClient\assets\menu-hovercraft.bmp",
     "NetTarget\LinuxClient\assets\menu-banner.bmp",
-    "NetTarget\LinuxClient\assets\tutorial-race.bmp",
     "NetTarget\LinuxClient\assets\Inter-Variable.ttf",
     "NetTarget\LinuxClient\assets\Oxanium-Variable.ttf",
     "NetTarget\CommunityTracks.tsv"

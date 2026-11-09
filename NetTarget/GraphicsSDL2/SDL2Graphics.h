@@ -7,7 +7,8 @@
 
 // Optional SDL2 support - if SDL2 is not available, this backend is disabled
 #ifdef _HAVE_SDL2
-    #include <SDL.h>
+    #include <functional>
+#include <SDL.h>
 #else
     // Forward declarations for when SDL2 is not available
     typedef void* SDL_Window;
@@ -68,10 +69,14 @@ public:
 
     // Raw SDL handles, for overlay UI (e.g. Dear ImGui) drawn via the same
     // renderer this backend already owns. Null until Initialize() succeeds.
+    // Something drawn over each finished frame just before it is shown (the tutorial's lesson card): called with the renderer after the picture has been copied
+    // to it. It must leave the renderer's logical size as it found it. Pass an empty function to remove it.
+    void SetOverlay(std::function<void(SDL_Renderer*)> overlay) { m_overlay = std::move(overlay); }
     SDL_Window* GetWindow() const { return m_window; }
     SDL_Renderer* GetRenderer() const { return m_renderer; }
 
 private:
+    std::function<void(SDL_Renderer*)> m_overlay;
     // SDL2 objects
     SDL_Window* m_window;
     SDL_Renderer* m_renderer;
