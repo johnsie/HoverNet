@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
 // See repository history for authorship and detailed changes.
 // Observer.h// MR_Observer object interface
 //
@@ -123,6 +123,7 @@ class MR_Observer
       BOOL            mWasOutOfControl;
       MR_SimulationTime mFeedbackUntil;
       char            mFeedbackText[64];
+      MR_SceneSink*   mSceneSink;
       BOOL            mExternalHudText;     // the client draws the HUD's words itself (from GetHudText), so they are not drawn here in the bitmap font
       HudText         mHudText;
 
@@ -194,6 +195,9 @@ class MR_Observer
       // The HUD's words (race clock, lap, status, callouts, chat) as text, for a client that draws them in a typeface. The bars, meters and map are still drawn here.
       void SetExternalHudText( BOOL pExternal ) { mExternalHudText = pExternal; }
       const HudText& GetHudText() const { return mHudText; }
+      // The graphics card draws the scene (GpuFinisher.h): walls, floors and craft are handed to the sink as triangles instead of being rasterised here, and the frame's hints
+      // say so. Pass NULL to draw on the processor again. The camera is the same either way.
+      void SetSceneSink( MR_SceneSink* pSink ) { mSceneSink = pSink; m3DView.SetSceneSink( pSink ); }
       void SetModernLighting( BOOL pEnable ) { mModernLighting = pEnable; }   // light pools, headlight and haze (needs SetModernEffects)
       const HoverNetGfx::FrameHints& GetFrameHints() const { return mHints; }
       void SetChaseScale( int pPercent ) { mChaseScale = pPercent < 40 ? 40 : (pPercent > 300 ? 300 : pPercent); }

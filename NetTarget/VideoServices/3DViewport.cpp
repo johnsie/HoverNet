@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
 // See repository history for authorship and detailed changes.
 // 3DViewport.cpp
 //
@@ -32,6 +32,7 @@
 // Methods implementation
 MR_3DViewPort::MR_3DViewPort()
 {
+   mSink = NULL;
    mOrientation = 0;
    mPosition    = MR_3DCoordinate( 0,0,0 );
    mVAngle      = 1;
@@ -399,6 +400,15 @@ const MR_UInt16* MR_3DViewPort::GetDepthLine( int pY ) const
 
 void MR_3DViewPort::ShadeEllipse( int pCenterX, int pCenterY, int pRadiusX, int pRadiusY, int pDepthMm, int pMarginMm, const MR_UInt8* pDarkLut )
 {
+   if( mSink != NULL )
+   {
+      if( pRadiusX >= 1 && pRadiusY >= 1 )
+      {
+         mSink->Shadow( pCenterX, pCenterY, pRadiusX, pRadiusY, pDepthMm, pMarginMm );
+      }
+      return;
+   }
+
    if( pDarkLut == NULL || pRadiusX < 1 || pRadiusY < 1 || mVideoBuffer == NULL || mLineLen <= 0 )
    {
       return;

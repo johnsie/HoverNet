@@ -99,6 +99,7 @@ MR_Observer::MR_Observer()
    mLastCameraPosValid = FALSE;
    mLastCameraTime = 0;
    mExternalHudText = FALSE;
+   mSceneSink = NULL;
    mEyeOffset = 0;
    mReuseCamera = FALSE;
    mScroll = 0;
@@ -752,6 +753,14 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
          mHints.trailY[ mHints.trailCount ] = lY;
          mHints.trailCount++;
       }
+   }
+
+   // The card draws the scene from the same projection, whether or not the lighting is on.
+   if( mSceneSink != NULL && !mModernLighting )
+   {
+      m3DView.GetProjection( mProjKx, mProjKz, mHints.projCenterX, mHints.projCenterY, mSceneX0, mSceneY0 );
+      mHints.projKx = (float)mProjKx;
+      mHints.projKz = (float)mProjKz;
    }
 
    // Light: engine pools under the craft, a headlight ahead of the viewing craft, and a short orange flash when it hits something.
@@ -2487,6 +2496,17 @@ void MR_Observer::RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSes
          {
             mHints.depth       = mDepthCopy.data();
             mHints.tags        = m3DView.GetTagLine( 0 ) != NULL && mTagCopy.size() == mDepthCopy.size() ? mTagCopy.data() : NULL;
+            mHints.depthX0     = mSceneX0;
+            mHints.depthY0     = mSceneY0;
+            mHints.depthWidth  = lSceneW;
+            mHints.depthHeight = lSceneH;
+         }
+         if( mSceneSink != NULL )
+         {
+            // The scene was drawn by the graphics card, which has its own depth and tags: the window it covers is all the hints carry.
+            mHints.gpuScene    = true;
+            mHints.depth       = NULL;
+            mHints.tags        = NULL;
             mHints.depthX0     = mSceneX0;
             mHints.depthY0     = mSceneY0;
             mHints.depthWidth  = lSceneW;

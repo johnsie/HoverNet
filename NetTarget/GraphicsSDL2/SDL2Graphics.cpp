@@ -302,6 +302,8 @@ bool SDL2GraphicsBackend::Present(const uint8_t* buffer, int width, int height)
                 std::fflush(stdout);
             }
         }
+        if (m_gpu) m_gpu->SetPalette(m_paletteRGB);
+        if (const char* sceneChoice = std::getenv("HOVERNET_GPU_SCENE")) m_gpuSceneAllowed = std::strcmp(sceneChoice, "0") != 0;
         HoverNetGfx::Options frameOptions = m_modernOptions;
         frameOptions.gpuFinish = m_gpuAllowed && m_presenter.FinisherActive();
         m_presenter.Process(rgb_buffer, width, height, frameOptions, m_frameHints);

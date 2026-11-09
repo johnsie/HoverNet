@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <cstdlib>
 #include <vector>
 
 namespace HoverNetGfx
@@ -17,7 +18,8 @@ enum : GLenum {
     kMinFilter = 0x2801, kMagFilter = 0x2800, kNearest = 0x2600, kLinear = 0x2601, kWrapS = 0x2802, kWrapT = 0x2803, kClampToEdge = 0x812F,
     kFramebuffer = 0x8D40, kColorAttachment0 = 0x8CE0, kFramebufferComplete = 0x8CD5, kFragmentShader = 0x8B30, kVertexShader = 0x8B31,
     kCompileStatus = 0x8B81, kLinkStatus = 0x8B82, kInfoLogLength = 0x8B84, kTriangles = 4, kUnpackAlignment = 0x0CF5, kPackAlignment = 0x0D05,
-    kTexture0 = 0x84C0, kR16UI = 0x8234, kR8UI = 0x8232, kRedInteger = 0x8D94, kUnsignedShort = 0x1403, kRenderer = 0x1F01, kBlend = 0x0BE2, kDepthTest = 0x0B71, kCullFace = 0x0B44, kScissorTest = 0x0C11
+    kTexture0 = 0x84C0, kArrayBuffer = 0x8892, kStreamDraw = 0x88E0, kFloat = 0x1406, kRenderbuffer = 0x8D41, kDepth24 = 0x81A6, kDepthAttachment = 0x8D00,
+    kColorAttachment1 = 0x8CE1, kColorAttachment2 = 0x8CE2, kColor = 0x1800, kDepth = 0x1801, kLess = 0x0201, kLequal = 0x0203, kRepeat = 0x2901, kLinearMipmapLinear = 0x2703, kR16UI = 0x8234, kR8UI = 0x8232, kRedInteger = 0x8D94, kUnsignedShort = 0x1403, kRenderer = 0x1F01, kBlend = 0x0BE2, kDepthTest = 0x0B71, kCullFace = 0x0B44, kScissorTest = 0x0C11
 };
 
 struct Gl
@@ -50,6 +52,24 @@ struct Gl
     void (*Uniform4f)(GLint, GLfloat, GLfloat, GLfloat, GLfloat) = nullptr;
     void (*Uniform4i)(GLint, GLint, GLint, GLint, GLint) = nullptr;
     void (*Uniform4fv)(GLint, GLsizei, const GLfloat*) = nullptr;
+    void (*GenBuffers)(GLsizei, GLuint*) = nullptr;
+    void (*BindBuffer)(GLenum, GLuint) = nullptr;
+    void (*BufferData)(GLenum, std::ptrdiff_t, const void*, GLenum) = nullptr;
+    void (*EnableVertexAttribArray)(GLuint) = nullptr;
+    void (*VertexAttribPointer)(GLuint, GLint, GLenum, GLboolean, GLsizei, const void*) = nullptr;
+    void (*GenRenderbuffers)(GLsizei, GLuint*) = nullptr;
+    void (*BindRenderbuffer)(GLenum, GLuint) = nullptr;
+    void (*RenderbufferStorage)(GLenum, GLenum, GLsizei, GLsizei) = nullptr;
+    void (*FramebufferRenderbuffer)(GLenum, GLenum, GLenum, GLuint) = nullptr;
+    void (*DrawBuffers)(GLsizei, const GLenum*) = nullptr;
+    void (*ClearBufferuiv)(GLenum, GLint, const GLuint*) = nullptr;
+    void (*ClearBufferfv)(GLenum, GLint, const GLfloat*) = nullptr;
+    void (*Enable)(GLenum) = nullptr;
+    void (*DepthFunc)(GLenum) = nullptr;
+    void (*DepthMask)(GLboolean) = nullptr;
+    void (*Scissor)(GLint, GLint, GLsizei, GLsizei) = nullptr;
+    void (*GenerateMipmap)(GLenum) = nullptr;
+    void (*Uniform2fv)(GLint, GLsizei, const GLfloat*) = nullptr;
     void (*Uniform1iv)(GLint, GLsizei, const GLint*) = nullptr;
     void (*GenFramebuffers)(GLsizei, GLuint*) = nullptr;
     void (*BindFramebuffer)(GLenum, GLuint) = nullptr;
@@ -88,21 +108,21 @@ in vec2 vUv; out vec4 o;
 const int MAXL = 12;
 uniform sampler2D uSrc; uniform sampler2D uMask;
 uniform highp usampler2D uDepth; uniform highp usampler2D uTags;
-uniform ivec2 uSize; uniform ivec4 uWin; uniform vec4 uProj; uniform vec3 uSky; uniform int uHasMask, uHasTags, uFlags, uBlock;
+uniform ivec2 uSize; uniform ivec4 uWin; uniform ivec2 uDOff; uniform ivec2 uTexSize; uniform vec4 uProj; uniform vec3 uSky; uniform int uHasMask, uHasTags, uFlags, uBlock;
 uniform int uLightCount; uniform vec4 uLA[MAXL]; uniform vec4 uLB[MAXL]; uniform vec4 uLC[MAXL]; uniform int uLK[MAXL];
 uniform vec4 uCraft;   // craft x, y, radius, ground row
 
 const int TAG_FLOOR = 1, TAG_CEILING = 2, TAG_CRAFT = 5;
 bool hud(ivec2 p) { return uHasMask != 0 && texelFetch(uMask, clamp(p, ivec2(0), uSize - 1), 0).r > 0.001; }
 float depthRaw(ivec2 p) {
-    ivec2 q = p - uWin.xy;
-    if (q.x < 0 || q.y < 0 || q.x >= uWin.z || q.y >= uWin.w) return 65535.0;
+    ivec2 q = p - uDOff;
+    if (q.x < 0 || q.y < 0 || q.x >= uTexSize.x || q.y >= uTexSize.y) return 65535.0;
     return float(texelFetch(uDepth, q, 0).r);
 }
 int tagAt(ivec2 p) {
     if (uHasTags == 0) return 0;
-    ivec2 q = p - uWin.xy;
-    if (q.x < 0 || q.y < 0 || q.x >= uWin.z || q.y >= uWin.w) return 0;
+    ivec2 q = p - uDOff;
+    if (q.x < 0 || q.y < 0 || q.x >= uTexSize.x || q.y >= uTexSize.y) return 0;
     return int(texelFetch(uTags, q, 0).r);
 }
 vec3 camPos(ivec2 p, float z) { float X = z * 4.0; return vec3(X, (uProj.z - float(p.x)) * X * uProj.x, (uProj.w - float(p.y)) * X * uProj.y); }
@@ -321,6 +341,55 @@ void main() {
 }
 )";
 
+
+// The scene's triangles: camera space in, the same perspective as the software rasteriser's (a pixel is where x = cx - y / (depth * kx), y = cy - z / (depth * kz)),
+// out to three targets: the colour, the depth in 4 mm units (what every depth-based pass reads) and the surface tag.
+const char* kGeoVertex = R"(
+layout(location = 0) in vec3 aPos; layout(location = 1) in vec2 aUv; layout(location = 2) in float aTag;
+out vec2 vUv; out float vX; flat out float vTag;
+uniform vec2 uFrame; uniform vec4 uProj;
+void main() {
+    float X = max(aPos.x, 1.0);
+    float cx = (2.0 * uProj.z / uFrame.x - 1.0) * X - 2.0 * aPos.y / (uProj.x * uFrame.x);
+    float cy = (2.0 * uProj.w / uFrame.y - 1.0) * X - 2.0 * aPos.z / (uProj.y * uFrame.y);
+    gl_Position = vec4(cx, cy, 0.0, X);
+    vUv = aUv; vX = aPos.x; vTag = aTag;
+}
+)";
+
+const char* kGeoFragment = R"(
+in vec2 vUv; in float vX; flat in float vTag;
+uniform sampler2D uTex; uniform int uUseTex; uniform vec3 uFlat;
+layout(location = 0) out vec4 oColour; layout(location = 1) out highp uint oDepth; layout(location = 2) out highp uint oTag;
+void main() {
+    oColour = vec4(uUseTex != 0 ? texture(uTex, vUv).rgb : uFlat, 1.0);
+    oDepth = uint(clamp(vX / 4.0, 0.0, 65534.0));
+    oTag = uint(vTag + 0.5);
+    gl_FragDepth = clamp(vX / 262140.0, 0.0, 1.0);
+}
+)";
+
+// The scene over the processor's picture (the sky and the HUD): the HUD stays, the card's scene replaces everything it drew, and the craft's shadow darkens the floor.
+const char* kCompose = R"(
+in vec2 vUv; out vec4 o;
+uniform sampler2D uBase; uniform sampler2D uSceneColour; uniform sampler2D uMask; uniform highp usampler2D uSceneDepth;
+uniform ivec2 uSize; uniform int uHasMask, uShadowCount; uniform vec4 uShadowA[16]; uniform vec2 uShadowB[16];
+void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    vec3 base = texelFetch(uBase, p, 0).rgb;
+    if (uHasMask != 0 && texelFetch(uMask, p, 0).r > 0.001) { o = vec4(base, 1.0); return; }
+    uint z = texelFetch(uSceneDepth, p, 0).r;
+    if (z == 65535u) { o = vec4(base, 1.0); return; }
+    vec3 c = texelFetch(uSceneColour, p, 0).rgb;
+    for (int i = 0; i < 16; ++i) {
+        if (i >= uShadowCount) break;
+        vec2 d = (vec2(p) - uShadowA[i].xy) / uShadowA[i].zw;
+        if (dot(d, d) < 1.0 && float(z) * 4.0 >= uShadowB[i].x - uShadowB[i].y) c *= 0.87;
+    }
+    o = vec4(c, 1.0);
+}
+)";
+
 // The main pass: de-banding with dither, edge smoothing and sharpening, in one read of the picture. HUD pixels pass through untouched.
 const char* kMain = R"(
 in vec2 vUv; out vec4 o;
@@ -421,6 +490,12 @@ struct GpuFinisher::Impl
     bool es = false;
     Gl gl;
     GLuint vao = 0;
+    GLuint progGeo = 0, progCompose = 0;
+    GLuint texSColour = 0, texSDepth = 0, texSTag = 0, rboDepth = 0, fboGeo = 0, texBase = 0, fboBase = 0, vbo = 0;
+    int geoW = 0, geoH = 0;
+    struct Tex { GLuint id = 0; unsigned serial = 0; };
+    std::map<const MR_Bitmap*, Tex> textures;
+    bool sceneDrawn = false;
     GLuint progScene = 0, progMain = 0, progDown = 0, progBlur = 0, progFinal = 0;
     GLuint texDepth = 0, texTags = 0, texScene = 0, fboScene = 0;
     int depthW = 0, depthH = 0, tagsW = 0, tagsH = 0;
@@ -451,10 +526,10 @@ struct GpuFinisher::Impl
         return shader;
     }
 
-    GLuint Program(const char* fragment, std::string& error)
+    GLuint Program(const char* fragment, std::string& error, const char* vertex = nullptr)
     {
         const std::string header = es ? "#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n" : "#version 330 core\n";
-        const GLuint vs = Compile(kVertexShader, header + kVertex, error);
+        const GLuint vs = Compile(kVertexShader, header + (vertex != nullptr ? vertex : kVertex), error);
         const GLuint fs = vs != 0 ? Compile(kFragmentShader, header + fragment, error) : 0;
         if (vs == 0 || fs == 0) return 0;
         const GLuint program = gl.CreateProgram();
@@ -518,6 +593,83 @@ struct GpuFinisher::Impl
         return gl.CheckFramebufferStatus(kFramebuffer) == kFramebufferComplete || true;
     }
 
+    // The scene's render targets: colour, depth (4 mm units, 65535 = nothing) and surface tag, with a depth buffer for the hidden-surface test.
+    void EnsureGeo(int w, int h)
+    {
+        if (geoW == w && geoH == h && fboGeo != 0) return;
+        geoW = w; geoH = h;
+        auto target = [&](GLuint& tex, GLint internal, GLenum format, GLenum type) {
+            if (tex == 0) gl.GenTextures(1, &tex);
+            gl.BindTexture(kTexture2D, tex);
+            gl.TexImage2D(kTexture2D, 0, internal, w, h, 0, format, type, nullptr);
+            gl.TexParameteri(kTexture2D, kMinFilter, kNearest); gl.TexParameteri(kTexture2D, kMagFilter, kNearest);
+            gl.TexParameteri(kTexture2D, kWrapS, kClampToEdge); gl.TexParameteri(kTexture2D, kWrapT, kClampToEdge);
+        };
+        target(texSColour, kRGBA8, kRGBA, kUnsignedByte);
+        target(texSDepth, kR16UI, kRedInteger, kUnsignedShort);
+        target(texSTag, kR8UI, kRedInteger, kUnsignedByte);
+        if (rboDepth == 0) gl.GenRenderbuffers(1, &rboDepth);
+        gl.BindRenderbuffer(kRenderbuffer, rboDepth);
+        gl.RenderbufferStorage(kRenderbuffer, kDepth24, w, h);
+        if (fboGeo == 0) gl.GenFramebuffers(1, &fboGeo);
+        gl.BindFramebuffer(kFramebuffer, fboGeo);
+        gl.FramebufferTexture2D(kFramebuffer, kColorAttachment0, kTexture2D, texSColour, 0);
+        gl.FramebufferTexture2D(kFramebuffer, kColorAttachment1, kTexture2D, texSDepth, 0);
+        gl.FramebufferTexture2D(kFramebuffer, kColorAttachment2, kTexture2D, texSTag, 0);
+        gl.FramebufferRenderbuffer(kFramebuffer, kDepthAttachment, kRenderbuffer, rboDepth);
+        const GLenum buffers[3] = {kColorAttachment0, kColorAttachment1, kColorAttachment2};
+        gl.DrawBuffers(3, buffers);
+        MakeTarget(texBase, fboBase, w, h, kRGBA8);
+        if (vbo == 0) gl.GenBuffers(1, &vbo);
+    }
+
+    // A bitmap's texels on the card, in true colour (or through the palette when it has no true-colour copy); uploaded again when its colours were rebuilt.
+    GLuint TextureFor(const MR_Bitmap* bitmap, const std::uint8_t* palette)
+    {
+        Tex& t = textures[bitmap];
+        const unsigned serial = bitmap->GetColourSerial();
+        const int shift = bitmap->GetColourScaleShift();
+        const MR_UInt32* const* cols = bitmap->GetColourColumnBufferTable(0);
+        const unsigned stamp = serial * 4u + (cols != nullptr ? 1u : 0u) + static_cast<unsigned>(shift) * 8u;
+        if (t.id != 0 && t.serial == stamp) return t.id;
+        int top = 0;
+        for (int i = 1; i < bitmap->GetNbSubBitmap(); ++i) if (bitmap->GetXRes(i) * bitmap->GetYRes(i) > bitmap->GetXRes(top) * bitmap->GetYRes(top)) top = i;
+        cols = bitmap->GetColourColumnBufferTable(top);
+        const int xres = bitmap->GetXRes(top), yres = bitmap->GetYRes(top);
+        if (xres <= 0 || yres <= 0) return 0;
+        const int w = cols != nullptr ? xres << shift : xres, h = cols != nullptr ? yres << shift : yres;
+        std::vector<unsigned char> px(static_cast<std::size_t>(w) * h * 4);
+        if (cols != nullptr) {
+            for (int x = 0; x < w; ++x) {
+                const MR_UInt32* column = cols[x];
+                for (int y = 0; y < h; ++y) {
+                    const MR_UInt32 c = column[y];
+                    unsigned char* o = &px[(static_cast<std::size_t>(y) * w + x) * 4];
+                    o[0] = static_cast<unsigned char>(c >> 16); o[1] = static_cast<unsigned char>(c >> 8); o[2] = static_cast<unsigned char>(c); o[3] = 255;
+                }
+            }
+        }
+        else {
+            MR_UInt8** idx = bitmap->GetColumnBufferTable(top);
+            if (idx == nullptr) return 0;
+            for (int x = 0; x < w; ++x)
+                for (int y = 0; y < h; ++y) {
+                    const MR_UInt8 i = idx[x][y];
+                    unsigned char* o = &px[(static_cast<std::size_t>(y) * w + x) * 4];
+                    o[0] = palette[i * 3]; o[1] = palette[i * 3 + 1]; o[2] = palette[i * 3 + 2]; o[3] = 255;
+                }
+        }
+        if (t.id == 0) gl.GenTextures(1, &t.id);
+        gl.BindTexture(kTexture2D, t.id);
+        gl.PixelStorei(kUnpackAlignment, 1);
+        gl.TexImage2D(kTexture2D, 0, kRGBA8, w, h, 0, kRGBA, kUnsignedByte, px.data());
+        gl.GenerateMipmap(kTexture2D);
+        gl.TexParameteri(kTexture2D, kMinFilter, kLinearMipmapLinear); gl.TexParameteri(kTexture2D, kMagFilter, kLinear);
+        gl.TexParameteri(kTexture2D, kWrapS, kRepeat); gl.TexParameteri(kTexture2D, kWrapT, kRepeat);
+        t.serial = stamp;
+        return t.id;
+    }
+
     void Draw(GLuint program, GLuint fbo, int w, int h) { gl.UseProgram(program); gl.BindFramebuffer(kFramebuffer, fbo); gl.Viewport(0, 0, w, h); gl.DrawArrays(kTriangles, 0, 3); }
     void Bind(int unit, GLuint texture) { gl.ActiveTexture(kTexture0 + static_cast<GLenum>(unit)); gl.BindTexture(kTexture2D, texture); }
     void Set1i(GLuint program, const char* name, int v) { gl.Uniform1i(gl.GetUniformLocation(program, name), v); }
@@ -525,6 +677,26 @@ struct GpuFinisher::Impl
     void Set2f(GLuint program, const char* name, float a, float b) { gl.Uniform2f(gl.GetUniformLocation(program, name), a, b); }
     void Set2i(GLuint program, const char* name, int a, int b) { gl.Uniform2i(gl.GetUniformLocation(program, name), a, b); }
 };
+
+void GpuSceneSink::Triangles(const MR_SceneVertex* v, int count, const MR_Bitmap* bitmap, MR_UInt8 flat, MR_UInt8 tag)
+{
+    if (count < 3 || v == nullptr) return;
+    // batches by texture (a flat colour is its own batch); the tag is a per-vertex value
+    const std::uint64_t key = bitmap != nullptr ? reinterpret_cast<std::uintptr_t>(bitmap) : (1ull << 63) | flat;
+    auto it = mIndex.find(key);
+    if (it == mIndex.end()) { mBatches.push_back(Batch{bitmap, flat, {}}); it = mIndex.emplace(key, mBatches.size() - 1).first; }
+    std::vector<float>& d = mBatches[it->second].data;
+    d.reserve(d.size() + static_cast<std::size_t>(count) * 6);
+    for (int i = 0; i < count; ++i) { d.push_back(v[i].x); d.push_back(v[i].y); d.push_back(v[i].z); d.push_back(v[i].u); d.push_back(v[i].v); d.push_back(static_cast<float>(tag)); }
+    mTriangles += static_cast<std::size_t>(count) / 3;
+}
+
+void GpuSceneSink::Shadow(int cx, int cy, int rx, int ry, int depthMm, int marginMm)
+{
+    if (mShadows.size() < 16) mShadows.push_back(ShadowEllipse{cx, cy, rx, ry, depthMm, marginMm});
+}
+
+void GpuFinisher::SetPalette(const std::uint8_t* palette768) { if (palette768 != nullptr) std::memcpy(mPalette, palette768, sizeof mPalette); }
 
 bool GpuFinisher::OutputIsShared() const { return mImpl->lastShared; }
 
@@ -603,14 +775,21 @@ bool GpuFinisher::Init()
               Load(g.BindFramebuffer, "glBindFramebuffer") && Load(g.FramebufferTexture2D, "glFramebufferTexture2D") && Load(g.CheckFramebufferStatus, "glCheckFramebufferStatus") &&
               Load(g.Viewport, "glViewport") && Load(g.DrawArrays, "glDrawArrays") && Load(g.GenVertexArrays, "glGenVertexArrays") && Load(g.BindVertexArray, "glBindVertexArray") &&
               Load(g.ActiveTexture, "glActiveTexture") && Load(g.ReadPixels, "glReadPixels") && Load(g.Disable, "glDisable") && Load(g.GetString, "glGetString") && Load(g.Finish, "glFinish") && Load(g.GetIntegerv, "glGetIntegerv") &&
-              Load(g.Uniform3f, "glUniform3f") && Load(g.Uniform4f, "glUniform4f") && Load(g.Uniform4i, "glUniform4i") && Load(g.Uniform4fv, "glUniform4fv") && Load(g.Uniform1iv, "glUniform1iv");
+              Load(g.Uniform3f, "glUniform3f") && Load(g.Uniform4f, "glUniform4f") && Load(g.Uniform4i, "glUniform4i") && Load(g.Uniform4fv, "glUniform4fv") && Load(g.Uniform1iv, "glUniform1iv") &&
+              Load(g.GenBuffers, "glGenBuffers") && Load(g.BindBuffer, "glBindBuffer") && Load(g.BufferData, "glBufferData") && Load(g.EnableVertexAttribArray, "glEnableVertexAttribArray") &&
+              Load(g.VertexAttribPointer, "glVertexAttribPointer") && Load(g.GenRenderbuffers, "glGenRenderbuffers") && Load(g.BindRenderbuffer, "glBindRenderbuffer") &&
+              Load(g.RenderbufferStorage, "glRenderbufferStorage") && Load(g.FramebufferRenderbuffer, "glFramebufferRenderbuffer") && Load(g.DrawBuffers, "glDrawBuffers") &&
+              Load(g.ClearBufferuiv, "glClearBufferuiv") && Load(g.ClearBufferfv, "glClearBufferfv") && Load(g.Enable, "glEnable") && Load(g.DepthFunc, "glDepthFunc") &&
+              Load(g.DepthMask, "glDepthMask") && Load(g.Scissor, "glScissor") && Load(g.GenerateMipmap, "glGenerateMipmap") && Load(g.Uniform2fv, "glUniform2fv");
     if (!ok) { mError = "OpenGL functions are missing"; }
     else {
         g.GenVertexArrays(1, &m.vao);
         g.BindVertexArray(m.vao);
         std::string error;
         m.progScene = m.Program(kScene, error);
-        if (m.progScene != 0) m.progMain = m.Program(kMain, error);
+        if (m.progScene != 0) m.progGeo = m.Program(kGeoFragment, error, kGeoVertex);
+        if (m.progGeo != 0) m.progCompose = m.Program(kCompose, error);
+        if (m.progCompose != 0) m.progMain = m.Program(kMain, error);
         if (m.progMain != 0) m.progDown = m.Program(kDown, error);
         if (m.progDown != 0) m.progBlur = m.Program(kBlur, error);
         if (m.progBlur != 0) m.progFinal = m.Program(kFinal, error);
@@ -648,6 +827,62 @@ bool GpuFinisher::Process(std::uint8_t* rgb, int width, int height, const Option
     const bool deband = options.quality >= 1 && options.deband, smooth = options.quality >= 2 && options.smoothing, sharpen = options.quality >= 2 && options.sharpen;
     const bool bloom = options.quality >= 2 && options.bloom, exposure = options.quality >= 1 && options.exposure, vignette = options.grade, outline = hints.valid && options.hudOutline;
 
+    // -1: the scene itself, when the viewport handed over triangles instead of drawing: walls, floors and craft on the card, with the depth and tags this writes.
+    GLuint baseTexture = m.texSrc;
+    m.sceneDrawn = false;
+    if (hints.gpuScene && !mScene.Empty() && m.progGeo != 0 && hints.projKx > 0.0f && hints.projKz > 0.0f) {
+        m.EnsureGeo(width, height);
+        g.BindFramebuffer(kFramebuffer, m.fboGeo);
+        g.Viewport(0, 0, width, height);
+        const GLfloat clearColour[4] = {0, 0, 0, 0}, depthOne = 1.0f;
+        const GLuint far16[4] = {65535, 0, 0, 0}, zero[4] = {0, 0, 0, 0};
+        g.ClearBufferfv(kColor, 0, clearColour);
+        g.ClearBufferuiv(kColor, 1, far16);
+        g.ClearBufferuiv(kColor, 2, zero);
+        g.ClearBufferfv(kDepth, 0, &depthOne);
+        g.Enable(kDepthTest); g.DepthFunc(kLequal); g.DepthMask(1);
+        g.Enable(kScissorTest);
+        g.Scissor(std::max(0, hints.depthX0), std::max(0, hints.depthY0), hints.depthWidth > 0 ? hints.depthWidth : width, hints.depthHeight > 0 ? hints.depthHeight : height);
+        g.UseProgram(m.progGeo);
+        g.Uniform2f(g.GetUniformLocation(m.progGeo, "uFrame"), static_cast<float>(width), static_cast<float>(height));
+        g.Uniform4f(g.GetUniformLocation(m.progGeo, "uProj"), hints.projKx, hints.projKz, static_cast<float>(hints.projCenterX), static_cast<float>(hints.projCenterY));
+        m.Set1i(m.progGeo, "uTex", 0);
+        g.BindVertexArray(m.vao);
+        g.BindBuffer(kArrayBuffer, m.vbo);
+        g.EnableVertexAttribArray(0); g.EnableVertexAttribArray(1); g.EnableVertexAttribArray(2);
+        const GLsizei stride = 6 * sizeof(float);
+        g.VertexAttribPointer(0, 3, kFloat, 0, stride, nullptr);
+        g.VertexAttribPointer(1, 2, kFloat, 0, stride, reinterpret_cast<const void*>(3 * sizeof(float)));
+        g.VertexAttribPointer(2, 1, kFloat, 0, stride, reinterpret_cast<const void*>(5 * sizeof(float)));
+        for (const GpuSceneSink::Batch& batch : mScene.Batches()) {
+            if (batch.data.empty()) continue;
+            GLuint texture = batch.bitmap != nullptr ? m.TextureFor(batch.bitmap, mPalette) : 0;
+            const bool textured = texture != 0;
+            if (textured) { g.ActiveTexture(kTexture0); g.BindTexture(kTexture2D, texture); }
+            m.Set1i(m.progGeo, "uUseTex", textured ? 1 : 0);
+            g.Uniform3f(g.GetUniformLocation(m.progGeo, "uFlat"), mPalette[batch.flat * 3] / 255.0f, mPalette[batch.flat * 3 + 1] / 255.0f, mPalette[batch.flat * 3 + 2] / 255.0f);
+            g.BufferData(kArrayBuffer, static_cast<std::ptrdiff_t>(batch.data.size() * sizeof(float)), batch.data.data(), kStreamDraw);
+            g.DrawArrays(kTriangles, 0, static_cast<GLsizei>(batch.data.size() / 6));
+        }
+        g.Disable(kDepthTest); g.Disable(kScissorTest);
+        g.BindBuffer(kArrayBuffer, 0);
+        // over the processor's picture: the scene replaces what it drew; the HUD stays; the craft's shadow darkens the floor
+        float sa[16 * 4] = {0}, sb[16 * 2] = {0};
+        const std::vector<GpuSceneSink::ShadowEllipse>& shadows = mScene.Shadows();
+        const int shadowCount = static_cast<int>(std::min<std::size_t>(shadows.size(), 16));
+        for (int i = 0; i < shadowCount; ++i) { sa[i * 4] = static_cast<float>(shadows[i].cx); sa[i * 4 + 1] = static_cast<float>(shadows[i].cy); sa[i * 4 + 2] = static_cast<float>(shadows[i].rx); sa[i * 4 + 3] = static_cast<float>(shadows[i].ry); sb[i * 2] = static_cast<float>(shadows[i].depthMm); sb[i * 2 + 1] = static_cast<float>(shadows[i].marginMm); }
+        m.Bind(0, m.texSrc); m.Bind(1, m.texSColour); m.Bind(2, m.texMask); m.Bind(3, m.texSDepth);
+        g.UseProgram(m.progCompose);
+        m.Set1i(m.progCompose, "uBase", 0); m.Set1i(m.progCompose, "uSceneColour", 1); m.Set1i(m.progCompose, "uMask", 2); m.Set1i(m.progCompose, "uSceneDepth", 3);
+        m.Set1i(m.progCompose, "uHasMask", hasMask ? 1 : 0); m.Set1i(m.progCompose, "uShadowCount", shadowCount); m.Set2i(m.progCompose, "uSize", width, height);
+        g.Uniform4fv(g.GetUniformLocation(m.progCompose, "uShadowA"), 16, sa);
+        g.Uniform2fv(g.GetUniformLocation(m.progCompose, "uShadowB"), 16, sb);
+        m.Draw(m.progCompose, m.fboBase, width, height);
+        baseTexture = m.texBase;
+        m.sceneDrawn = true;
+    }
+    mScene.Clear();
+
     // 0: the scene pass (needs the depth): edge smoothing, haze and ambient light, contact shading, lights, craft, reflection, halos
     const bool lighting = options.lighting;
     int flags = 0;
@@ -660,16 +895,20 @@ bool GpuFinisher::Process(std::uint8_t* rgb, int width, int height, const Option
     if (options.quality >= 1 && options.edgeAA) flags |= 64;
     if (options.quality >= 1 && options.occlusion) flags |= 128;
     if (options.quality >= 2 && options.linearLight) flags |= 256;
-    GLuint pictureTexture = m.texSrc;
-    const bool scene = hints.valid && hints.depth != nullptr && hints.depthWidth > 0 && hints.depthHeight > 0 && flags != 0 && hints.projKx > 0.0f && hints.projKz > 0.0f;
+    GLuint pictureTexture = baseTexture;
+    const bool scene = hints.valid && (m.sceneDrawn || (hints.depth != nullptr && hints.depthWidth > 0 && hints.depthHeight > 0)) && flags != 0 && hints.projKx > 0.0f && hints.projKz > 0.0f;
     if (scene) {
+        const int wx0 = m.sceneDrawn && hints.depthWidth <= 0 ? 0 : std::max(0, hints.depthX0), wy0 = m.sceneDrawn && hints.depthHeight <= 0 ? 0 : std::max(0, hints.depthY0);
+        const int wW = hints.depthWidth > 0 ? hints.depthWidth : width, wH = hints.depthHeight > 0 ? hints.depthHeight : height;
         // the sky's colour, from sky pixels of the upper half of the view, smoothed from frame to frame (as the processor does)
         {
-            const int x0 = std::max(0, hints.depthX0), y0 = std::max(0, hints.depthY0), x1 = std::min(width, hints.depthX0 + hints.depthWidth), y1 = std::min(height, hints.depthY0 + hints.depthHeight);
+            const int x0 = wx0, y0 = wy0, x1 = std::min(width, wx0 + wW), y1 = std::min(height, wy0 + wH);
             int sr = 0, sg = 0, sb = 0, count = 0;
             for (int y = y0; y < y0 + (y1 - y0) / 2; y += 6)
                 for (int x = x0; x < x1; x += 9) {
-                    if (hints.depth[static_cast<std::size_t>(y - hints.depthY0) * hints.depthWidth + (x - hints.depthX0)] != 0xFFFF || (hudMask != nullptr && hudMask[static_cast<std::size_t>(y) * width + x])) continue;
+                    // on the processor's picture, sky pixels are the ones the depth says nothing was drawn at; with the scene on the card the processor's picture is only sky and HUD
+                    if (!m.sceneDrawn && hints.depth[static_cast<std::size_t>(y - hints.depthY0) * hints.depthWidth + (x - hints.depthX0)] != 0xFFFF) continue;
+                    if (hudMask != nullptr && hudMask[static_cast<std::size_t>(y) * width + x]) continue;
                     const std::uint8_t* px = rgb + (static_cast<std::size_t>(y) * width + x) * 3;
                     sr += px[0]; sg += px[1]; sb += px[2]; ++count;
                 }
@@ -679,36 +918,42 @@ bool GpuFinisher::Process(std::uint8_t* rgb, int width, int height, const Option
                 else { m.skyR += (r - m.skyR) * 0.25f; m.skyG += (gg - m.skyG) * 0.25f; m.skyB += (b - m.skyB) * 0.25f; }
             }
         }
-        // the depth and the surface tags as integer textures
-        g.PixelStorei(kUnpackAlignment, 1);
-        if (m.texDepth == 0) g.GenTextures(1, &m.texDepth);
-        g.BindTexture(kTexture2D, m.texDepth);
-        if (m.depthW != hints.depthWidth || m.depthH != hints.depthHeight) {
-            g.TexImage2D(kTexture2D, 0, kR16UI, hints.depthWidth, hints.depthHeight, 0, kRedInteger, kUnsignedShort, hints.depth);
-            g.TexParameteri(kTexture2D, kMinFilter, kNearest); g.TexParameteri(kTexture2D, kMagFilter, kNearest);
-            g.TexParameteri(kTexture2D, kWrapS, kClampToEdge); g.TexParameteri(kTexture2D, kWrapT, kClampToEdge);
-            m.depthW = hints.depthWidth; m.depthH = hints.depthHeight;
-        }
-        else g.TexSubImage2D(kTexture2D, 0, 0, 0, hints.depthWidth, hints.depthHeight, kRedInteger, kUnsignedShort, hints.depth);
-        const bool hasTags = hints.tags != nullptr;
-        if (hasTags) {
-            if (m.texTags == 0) g.GenTextures(1, &m.texTags);
-            g.BindTexture(kTexture2D, m.texTags);
-            if (m.tagsW != hints.depthWidth || m.tagsH != hints.depthHeight) {
-                g.TexImage2D(kTexture2D, 0, kR8UI, hints.depthWidth, hints.depthHeight, 0, kRedInteger, kUnsignedByte, hints.tags);
+        const bool hasTags = m.sceneDrawn || hints.tags != nullptr;
+        if (!m.sceneDrawn) {
+            // the depth and the surface tags as integer textures
+            g.PixelStorei(kUnpackAlignment, 1);
+            if (m.texDepth == 0) g.GenTextures(1, &m.texDepth);
+            g.BindTexture(kTexture2D, m.texDepth);
+            if (m.depthW != hints.depthWidth || m.depthH != hints.depthHeight) {
+                g.TexImage2D(kTexture2D, 0, kR16UI, hints.depthWidth, hints.depthHeight, 0, kRedInteger, kUnsignedShort, hints.depth);
                 g.TexParameteri(kTexture2D, kMinFilter, kNearest); g.TexParameteri(kTexture2D, kMagFilter, kNearest);
                 g.TexParameteri(kTexture2D, kWrapS, kClampToEdge); g.TexParameteri(kTexture2D, kWrapT, kClampToEdge);
-                m.tagsW = hints.depthWidth; m.tagsH = hints.depthHeight;
+                m.depthW = hints.depthWidth; m.depthH = hints.depthHeight;
             }
-            else g.TexSubImage2D(kTexture2D, 0, 0, 0, hints.depthWidth, hints.depthHeight, kRedInteger, kUnsignedByte, hints.tags);
+            else g.TexSubImage2D(kTexture2D, 0, 0, 0, hints.depthWidth, hints.depthHeight, kRedInteger, kUnsignedShort, hints.depth);
+            if (hints.tags != nullptr) {
+                if (m.texTags == 0) g.GenTextures(1, &m.texTags);
+                g.BindTexture(kTexture2D, m.texTags);
+                if (m.tagsW != hints.depthWidth || m.tagsH != hints.depthHeight) {
+                    g.TexImage2D(kTexture2D, 0, kR8UI, hints.depthWidth, hints.depthHeight, 0, kRedInteger, kUnsignedByte, hints.tags);
+                    g.TexParameteri(kTexture2D, kMinFilter, kNearest); g.TexParameteri(kTexture2D, kMagFilter, kNearest);
+                    g.TexParameteri(kTexture2D, kWrapS, kClampToEdge); g.TexParameteri(kTexture2D, kWrapT, kClampToEdge);
+                    m.tagsW = hints.depthWidth; m.tagsH = hints.depthHeight;
+                }
+                else g.TexSubImage2D(kTexture2D, 0, 0, 0, hints.depthWidth, hints.depthHeight, kRedInteger, kUnsignedByte, hints.tags);
+            }
         }
-        m.Bind(0, m.texSrc); m.Bind(1, m.texMask); m.Bind(2, m.texDepth); m.Bind(3, hasTags ? m.texTags : m.texDepth);
+        const GLuint depthTexture = m.sceneDrawn ? m.texSDepth : m.texDepth;
+        const GLuint tagTexture = m.sceneDrawn ? m.texSTag : (hints.tags != nullptr ? m.texTags : m.texDepth);
+        m.Bind(0, baseTexture); m.Bind(1, m.texMask); m.Bind(2, depthTexture); m.Bind(3, tagTexture);
         g.UseProgram(m.progScene);
         m.Set1i(m.progScene, "uSrc", 0); m.Set1i(m.progScene, "uMask", 1); m.Set1i(m.progScene, "uDepth", 2); m.Set1i(m.progScene, "uTags", 3);
         m.Set1i(m.progScene, "uHasMask", hasMask ? 1 : 0); m.Set1i(m.progScene, "uHasTags", hasTags ? 1 : 0); m.Set1i(m.progScene, "uFlags", flags);
         m.Set1i(m.progScene, "uBlock", HoverNetGfx::Presenter::BlockShift(width) == 3 ? 8 : 4);
         m.Set2i(m.progScene, "uSize", width, height);
-        g.Uniform4i(g.GetUniformLocation(m.progScene, "uWin"), hints.depthX0, hints.depthY0, hints.depthWidth, hints.depthHeight);
+        g.Uniform4i(g.GetUniformLocation(m.progScene, "uWin"), wx0, wy0, wW, wH);
+        m.Set2i(m.progScene, "uDOff", m.sceneDrawn ? 0 : wx0, m.sceneDrawn ? 0 : wy0);
+        m.Set2i(m.progScene, "uTexSize", m.sceneDrawn ? width : wW, m.sceneDrawn ? height : wH);
         g.Uniform4f(g.GetUniformLocation(m.progScene, "uProj"), hints.projKx, hints.projKz, static_cast<float>(hints.projCenterX), static_cast<float>(hints.projCenterY));
         g.Uniform3f(g.GetUniformLocation(m.progScene, "uSky"), m.skyKnown ? m.skyR : 150.0f, m.skyKnown ? m.skyG : 180.0f, m.skyKnown ? m.skyB : 220.0f);
         g.Uniform4f(g.GetUniformLocation(m.progScene, "uCraft"), static_cast<float>(hints.craftX), static_cast<float>(hints.craftY), static_cast<float>(hints.craftRadius), static_cast<float>(hints.craftGroundY));

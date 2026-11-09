@@ -264,6 +264,7 @@ add_library(HoverNetVideoCore STATIC
     NetTarget/LinuxClient/HeadlessVideoBuffer.cpp
     NetTarget/VideoServices/2DViewPort.cpp
     NetTarget/VideoServices/3DViewport.cpp
+    NetTarget/VideoServices/3DViewportScene.cpp
     NetTarget/VideoServices/3DViewportRendering.cpp
     NetTarget/VideoServices/Bitmap.cpp
     NetTarget/VideoServices/ColorPalette.cpp
@@ -599,6 +600,8 @@ target_link_libraries(HoverNetMusicTest PRIVATE HoverNetResourceCore)
 add_executable(HoverNetProfileTest NetTarget/LinuxClient/ProfileTest.cpp NetTarget/LinuxClient/Profile.cpp)
 add_executable(HoverNetGpuFinishTest NetTarget/LinuxClient/GpuFinishTest.cpp NetTarget/VideoServices/GpuFinisher.cpp NetTarget/VideoServices/ModernGraphics.cpp NetTarget/VideoServices/ColourGrade.cpp)
 target_link_libraries(HoverNetGpuFinishTest PRIVATE SDL2::SDL2)
+add_executable(HoverNetGpuSceneTest NetTarget/LinuxClient/GpuSceneTest.cpp NetTarget/VideoServices/GpuFinisher.cpp NetTarget/VideoServices/ModernGraphics.cpp NetTarget/VideoServices/ColourGrade.cpp)
+target_link_libraries(HoverNetGpuSceneTest PRIVATE HoverNetVideoCore HoverNetResourceCore SDL2::SDL2)
 add_executable(HoverNetCraftDesignTest NetTarget/LinuxClient/CraftDesignTest.cpp)
 target_link_libraries(HoverNetCraftDesignTest PRIVATE HoverNetSim)
 add_executable(HoverNetCraftLookTest NetTarget/LinuxClient/CraftLookTest.cpp NetTarget/LinuxClient/CraftPreview.cpp)
@@ -618,6 +621,8 @@ if(NOT EMSCRIPTEN)
     add_test(NAME HoverNetProfile COMMAND HoverNetProfileTest)
     add_test(NAME HoverNetGpuFinish COMMAND HoverNetGpuFinishTest)
     set_tests_properties(HoverNetGpuFinish PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME HoverNetGpuScene COMMAND HoverNetGpuSceneTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    set_tests_properties(HoverNetGpuScene PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME HoverNetTutorial COMMAND HoverNetTutorialTest)
     add_test(NAME HoverNetCraftDesign COMMAND HoverNetCraftDesignTest)
     add_test(NAME HoverNetCraftLook COMMAND HoverNetCraftLookTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

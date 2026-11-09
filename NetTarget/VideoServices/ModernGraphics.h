@@ -75,6 +75,7 @@ struct Options
 // What the observer knows about the frame it just drew, in framebuffer pixels.
 struct FrameHints
 {
+    bool gpuScene = false;        // the scene was handed to the graphics card as triangles (MR_SceneSink): there is no depth or tag buffer on the processor; the card has them
     bool valid = false;           // false when no race view was drawn (menus, loading): only the picture passes are applied
     bool cockpit = false;         // the camera is in the cockpit, so the craft itself is not on screen
     bool craftVisible = false;

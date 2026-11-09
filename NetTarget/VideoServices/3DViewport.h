@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
 // See repository history for authorship and detailed changes.
 // 3DViewport.h
 //
@@ -54,6 +54,20 @@ class MR_PositionMatrix
 
 
 
+// The scene as triangles for a renderer that is not this one (the graphics card: GpuFinisher.h). With a sink set on a viewport, the Render* services below
+// do not draw: they hand the surface over as triangles in camera space (x forward, y to the left, z up, in mm) with texture coordinates (u along the
+// bitmap's columns, v down its rows, 1.0 = the bitmap once; the texture repeats), the bitmap, the flat palette colour for a patch with no bitmap, and the
+// surface tag. The camera is not touched: positions are what the software rasteriser's own transforms give.
+struct MR_SceneVertex { float x, y, z, u, v; };
+
+class MR_SceneSink
+{
+   public:
+      virtual ~MR_SceneSink() {}
+      virtual void Triangles( const MR_SceneVertex* pVertices, int pCount, const MR_Bitmap* pBitmap, MR_UInt8 pFlatIndex, MR_UInt8 pTag ) = 0;
+      virtual void Shadow( int pCenterX, int pCenterY, int pRadiusX, int pRadiusY, int pDepthMm, int pMarginMm ) = 0;   // frame coordinates, as ShadeEllipse
+};
+
 class MR_3DViewPort: public MR_2DViewPort
 {   
    protected:
@@ -76,6 +90,7 @@ class MR_3DViewPort: public MR_2DViewPort
       MR_Int32        mPlanHW;                // Horizontal Half
       MR_Int32        mPlanVW;                // Vertical Half 
 
+      MR_SceneSink*   mSink;                  // optional: when set the Render* services emit triangles to it instead of drawing
       MR_UInt8*       mTagBase;               // optional: a buffer laid out exactly like the video buffer, that gets a surface tag per pixel drawn
       MR_UInt8        mSurfaceTag;            // the tag the next surfaces drawn are marked with
       MR_UInt32*       mRgbBase;              // optional true-colour output: one 0x00RRGGBB word per pixel, at the same pixel offsets as the video buffer
@@ -108,6 +123,11 @@ class MR_3DViewPort: public MR_2DViewPort
       void ApplyRotationMatrix( const MR_2DCoordinate& pSrc, MR_2DCoordinate& pDest )const;
       void ApplyPositionMatrix( const MR_PositionMatrix& pMatrix, const MR_3DCoordinate& pSrc, MR_3DCoordinate& pDest )const;
 
+      // The services for the sink (3DViewportScene.cpp)
+      void EmitWall( const MR_3DCoordinate& pUpperLeft, const MR_3DCoordinate& pLowerRight, MR_Int32 pLen, const MR_Bitmap* pBitmap );
+      void EmitHorizontal( int pNbVertex, const MR_2DCoordinate* pVertexList, MR_Int32 pLevel, BOOL pTop, const MR_Bitmap* pBitmap );
+      void EmitPatch( const MR_Patch& pPatch, const MR_PositionMatrix& pMatrix, const MR_Bitmap* pBitmap, MR_UInt8 pFlatIndex );
+
       MR_DllDeclare void OnMetricsChange( int pMetrics );
 
    public:
@@ -115,6 +135,8 @@ class MR_3DViewPort: public MR_2DViewPort
       MR_DllDeclare MR_3DViewPort();
       MR_DllDeclare ~MR_3DViewPort();
 
+      MR_DllDeclare void SetSceneSink( MR_SceneSink* pSink ) { mSink = pSink; }
+      MR_DllDeclare MR_SceneSink* GetSceneSink() const { return mSink; }
       MR_DllDeclare void Setup( MR_VideoBuffer* pBuffer, int pX0, int pY0, int pSizeX, int pSizeY, MR_Angle pApperture, int pMetrics = eNone );
 
       MR_DllDeclare void SetupCameraPosition( const MR_3DCoordinate& pPosition,

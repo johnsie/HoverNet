@@ -8,6 +8,7 @@ and how to roll one back.
 
 ### Added
 - **The picture passes run on the graphics card** (first stage of the GPU renderer): de-banding with dither, edge smoothing, sharpening, bloom, the highlight roll-off, the dark edge beside the HUD and the vignette are shaders now (OpenGL 3.3 or ES 3.0 through SDL, its own hidden context), with the HUD's pixels untouched. Each pass matches the processor's within 0.6 levels (test `HoverNetGpuFinish`, skipped where no OpenGL context can be made); 7 ms against 12 ms at 640x480 on an Intel Iris Xe. Without a card, in the browser or with `HOVERNET_GPU=0` (or Settings > Graphics > "Use my graphics card") the processor passes run as before.
+- **The card shows the picture and draws the scene.** The depth-based passes (haze and ambient light, contact shading, lights, craft rim, reflections, halos, edge smoothing) are shaders too; the window's renderer is OpenGL when there is a card and the finished picture is written straight into the texture it shows (no read-back); and the walls, floors and craft are drawn by the card instead of the software rasteriser, from the same camera (tests `HoverNetGpuScene`, `HoverNetGpuFinish`). `HOVERNET_GPU_SCENE=0` keeps the software rasteriser, `HOVERNET_GPU=0` or the Graphics setting turns the card off, `HOVERNET_RENDERER=software` keeps the old window renderer. Particles and weapon effects, the browser and the Windows build are not on the card yet (the Windows path was not run).
 
 ## 2.3.35 - 2026-11-09
 

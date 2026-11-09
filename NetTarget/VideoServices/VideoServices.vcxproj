@@ -71,6 +71,7 @@
   <ItemGroup>
     <ClCompile Include="2DViewPort.cpp" />
     <ClCompile Include="3DViewport.cpp" />
+    <ClCompile Include="3DViewportScene.cpp" />
     <ClCompile Include="3DViewportRendering.cpp" />
     <ClCompile Include="Bitmap.cpp" />
     <ClCompile Include="ColorPalette.cpp" />

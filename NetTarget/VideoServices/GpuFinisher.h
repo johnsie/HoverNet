@@ -11,6 +11,10 @@
 #define HOVERNET_GPU_FINISHER_H
 
 #include "ModernGraphics.h"
+#include "3DViewport.h"
+
+#include <map>
+#include <vector>
 
 #include <cstdint>
 #include <string>
@@ -20,6 +24,26 @@ struct SDL_Texture;
 
 namespace HoverNetGfx
 {
+// What the viewport hands over in place of drawing (3DViewport.h: MR_SceneSink): the frame's triangles, grouped by texture, and the craft's shadow ellipses.
+class GpuSceneSink : public MR_SceneSink
+{
+public:
+    struct Batch { const MR_Bitmap* bitmap; MR_UInt8 flat; std::vector<float> data; };   // data: x, y, z, u, v, tag per vertex
+    struct ShadowEllipse { int cx, cy, rx, ry, depthMm, marginMm; };
+    void Triangles(const MR_SceneVertex* vertices, int count, const MR_Bitmap* bitmap, MR_UInt8 flatIndex, MR_UInt8 tag) override;
+    void Shadow(int cx, int cy, int rx, int ry, int depthMm, int marginMm) override;
+    void Clear() { mBatches.clear(); mShadows.clear(); mIndex.clear(); mTriangles = 0; }
+    bool Empty() const { return mTriangles == 0; }
+    std::size_t Triangles() const { return mTriangles; }
+    const std::vector<Batch>& Batches() const { return mBatches; }
+    const std::vector<ShadowEllipse>& Shadows() const { return mShadows; }
+private:
+    std::vector<Batch> mBatches;
+    std::vector<ShadowEllipse> mShadows;
+    std::map<std::uint64_t, std::size_t> mIndex;
+    std::size_t mTriangles = 0;
+};
+
 class GpuFinisher
 {
 public:
@@ -42,12 +66,21 @@ public:
 
     double LastMilliseconds() const { return mLastMs; }
 
+    // The scene as triangles: set this as the viewport's sink (MR_3DViewPort::SetSceneSink) and the card draws the walls, floors and craft instead of the software
+    // rasteriser; the depth and tags the other passes need stay on the card. The 8-bit palette (768 bytes) is for textures that have no true-colour copy.
+    GpuSceneSink& Scene() { return mScene; }
+    void SetPalette(const std::uint8_t* palette768);
+    bool SceneWorks() const { return mReady && !mSceneBroken; }
+
 private:
     struct Impl;
     Impl* mImpl;
     bool mReady = false;
     std::string mError, mRenderer;
     double mLastMs = 0.0;
+    GpuSceneSink mScene;
+    bool mSceneBroken = false;
+    std::uint8_t mPalette[768] = {0};
 };
 }
 

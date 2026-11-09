@@ -9105,6 +9105,7 @@ int RunClient(int argc, char** argv)
                 }
             }
             observer->SetModernEffects(options.enabled ? TRUE : FALSE, options.shadows ? TRUE : FALSE, options.reducedMotion ? TRUE : FALSE, graphics.GetShadowLut());
+            observer->SetSceneSink(options.enabled ? graphics.SceneSink() : nullptr);   // the card draws the walls, floors and craft when it can
         }
 #endif
     };

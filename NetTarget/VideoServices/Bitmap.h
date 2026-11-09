@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
 // See repository history for authorship and detailed changes.
 // Bitmap.h
 //
@@ -74,6 +74,8 @@ class MR_DllDeclare MR_Bitmap
       virtual int               GetColourScaleShift()const { return 1; }
       virtual const MR_UInt32*  GetColourColumnBuffer( int /*pSubBitmap*/, int /*pColumn*/ )const { return 0; }
       virtual const MR_UInt32* const* GetColourColumnBufferTable( int /*pSubBitmap*/ )const { return 0; }
+      // Changes whenever the true-colour copy is rebuilt (a new palette, a new grade): a cache of this bitmap's texels on the graphics card (GpuFinisher.h) uploads it again.
+      virtual unsigned          GetColourSerial()const { return 0; }
 };
 
 

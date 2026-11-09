@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
 // See repository history for authorship and detailed changes.
 // 3DViewportRendering.cpp
 //
@@ -193,6 +193,12 @@ void MR_3DViewPort::RenderWallSurface( const MR_3DCoordinate& pUpperLeft, const 
 
 void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLeft, const MR_3DCoordinate& pLowerRight, MR_Int32 pLen, const MR_Bitmap* pBitmap, const MR_Bitmap* pBitmap2, int pSerialLen, int pSerialStart )
 {
+   if( mSink != NULL )
+   {
+      EmitWall( pUpperLeft, pLowerRight, pLen, pBitmap );
+      return;
+   }
+
    PrepareOutputs( mVideoBuffer->GetBuffer(), mTagBase, mSurfaceTag, mRgbBase, mPalette, mFilter != FALSE );
        
 
@@ -735,6 +741,12 @@ void BltColumn()
 
 void MR_3DViewPort::RenderHorizontalSurface( int pNbVertex, const MR_2DCoordinate* pVertexList, MR_Int32 pLevel, BOOL pTop, const MR_Bitmap* pBitmap )
 {
+   if( mSink != NULL )
+   {
+      EmitHorizontal( pNbVertex, pVertexList, pLevel, pTop, pBitmap );
+      return;
+   }
+
    PrepareOutputs( mVideoBuffer->GetBuffer(), mTagBase, mSurfaceTag, mRgbBase, mPalette, mFilter != FALSE );
    
 
@@ -1629,6 +1641,12 @@ static thread_local int             gsScreenVisibility[ MAX_PATCH_RES*MAX_PATCH_
 
 void MR_3DViewPort::RenderPatch( const MR_Patch& pPatch, const MR_PositionMatrix& pMatrix , const MR_Bitmap* pBitmap )
 {
+   if( mSink != NULL )
+   {
+      EmitPatch( pPatch, pMatrix, pBitmap, 0 );
+      return;
+   }
+
    PrepareOutputs( mVideoBuffer->GetBuffer(), mTagBase, mSurfaceTag, mRgbBase, mPalette, mFilter != FALSE );
 
 

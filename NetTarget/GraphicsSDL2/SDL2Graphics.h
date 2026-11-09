@@ -62,6 +62,8 @@ public:
     int GetEffectiveQuality() const { return m_presenter.EffectiveQuality(); }
     // True while the picture passes run on the graphics card; the card's name, and how long the last frame took there (ms).
     bool GpuActive() const { return m_gpuAllowed && m_presenter.FinisherActive(); }
+    // Where the viewport hands the scene when the card draws it (null while it cannot: no card, switched off, or it failed). Set it on the observer every frame.
+    MR_SceneSink* SceneSink() { return GpuActive() && m_gpu && m_gpu->SceneWorks() && m_gpuSceneAllowed ? &m_gpu->Scene() : nullptr; }
     void SetGpuAllowed(bool allowed) { m_gpuAllowed = allowed; }   // the player's choice (Settings > Graphics); the CPU passes run when it is off
     const char* GpuName() const { return m_gpu ? m_gpu->Renderer().c_str() : ""; }
     double GpuMilliseconds() const { return m_gpu ? m_gpu->LastMilliseconds() : 0.0; }
@@ -105,6 +107,7 @@ private:
     std::unique_ptr<HoverNetGfx::GpuFinisher> m_gpu;   // the finishing passes on the graphics card, when this machine has one (HOVERNET_GPU=0 turns it off)
     bool m_gpuTried = false;
     bool m_gpuAllowed = true;
+    bool m_gpuSceneAllowed = true;   // HOVERNET_GPU_SCENE=0 keeps the software rasteriser and puts only the picture passes on the card
     HoverNetGfx::Options m_modernOptions;
     HoverNetGfx::FrameHints m_frameHints;
     

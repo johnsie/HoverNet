@@ -571,6 +571,12 @@ void MR_ResBitmap::SetEnhancedImage( int pWidth, int pHeight, std::vector<MR_UIn
    mColourVersion = -1;
 }
 
+unsigned MR_ResBitmap::GetColourSerial()const
+{
+   EnsureColour();
+   return (unsigned)mColourVersion.load() + 1u;
+}
+
 int MR_ResBitmap::GetColourScaleShift()const
 {
    EnsureColour();

@@ -123,6 +123,7 @@ class MR_ResBitmap: public MR_Bitmap
       MR_DllDeclare int               GetColourScaleShift()const;
       MR_DllDeclare const MR_UInt32*  GetColourColumnBuffer( int pSubBitmap, int pColumn )const;
       MR_DllDeclare const MR_UInt32* const* GetColourColumnBufferTable( int pSubBitmap )const;
+      MR_DllDeclare virtual unsigned        GetColourSerial()const;
 
       // True-colour textures for every bitmap in this program: pPalette768 is what the palette indices mean (256 RGB triples, copied; NULL switches
       // true-colour textures off). Safe to call from any thread; textures are rebuilt lazily, one at a time, when next used.
