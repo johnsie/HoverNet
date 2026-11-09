@@ -1665,7 +1665,7 @@ void SaveVolume(double volume)
 // ---- Music -------------------------------------------------------------------------------------------------------------------------------------------
 // Two tracks from OpenGameArt (NetTarget/Music, credits and licences in NetTarget/Music/CREDITS.md): "Hard Left" in the menus and results, "Asphalt" in races.
 // Ogg Vorbis files streamed by the sound server; the music volume is its own setting (<config>/music_volume, 0 to 1).
-enum class MusicTrack { eNone, eMenu, eRace };
+enum class MusicTrack { eNone, eMenu, eRace, eFinalLap };
 
 double LoadMusicVolume()
 {
@@ -1696,19 +1696,53 @@ RewardView gRewardView;
 
 std::string ProfilePath() { return ConfigDirPath() + "/profile"; }
 
+// The tracks that can play in a race, taken in turn: one is never played twice in a row (the last one is remembered between runs), and a package that lacks some of
+// the files simply rotates through the rest. The final lap has its own, faster track.
+struct MusicFile { const char* file; const char* credit; };
+const MusicFile kRaceMusic[] = {
+    {"Asphalt.ogg", "Asphalt - Sygil"},
+    {"FeverStadium.ogg", "Fever Stadium - MintoDog"},
+    {"HyperUltraRacing.ogg", "Hyper Ultra-Racing - cynicmusic"},
+};
+const MusicFile kFinalLapMusic = {"FeverStadiumClimax.ogg", "Fever Stadium (final lap) - MintoDog"};
+const MusicFile kMenuMusic = {"HardLeft.ogg", "Hard Left - Dan Knoflicek"};
+
+bool MusicFileExists(const char* file)
+{
+    return static_cast<bool>(std::ifstream(SourcePath((std::string("NetTarget/Music/") + file).c_str()), std::ios::binary));
+}
+
+// Picks the next race track: not the one played last (a race, or the last run), and chosen at random among the others.
+const MusicFile& ChooseRaceMusic()
+{
+    const int count = static_cast<int>(sizeof(kRaceMusic) / sizeof(kRaceMusic[0]));
+    const std::string lastPath = ConfigDirPath() + "/last_race_music";
+    static int last = -2;   // -2: not read yet
+    if (last == -2) { last = -1; std::ifstream in(lastPath); int saved = -1; if (in >> saved && saved >= 0 && saved < count) last = saved; }
+    std::vector<int> candidates;
+    for (int i = 0; i < count; ++i) if (i != last && MusicFileExists(kRaceMusic[i].file)) candidates.push_back(i);
+    if (candidates.empty()) for (int i = 0; i < count; ++i) if (MusicFileExists(kRaceMusic[i].file)) candidates.push_back(i);
+    if (candidates.empty()) return kRaceMusic[0];
+    last = candidates[static_cast<std::size_t>((SDL_GetTicks() / 7 + static_cast<Uint32>(std::rand())) % candidates.size())];
+    std::ofstream out(lastPath);
+    out << last << '\n';
+    return kRaceMusic[last];
+}
+
 void PlayMusic(MusicTrack track)
 {
     if (track == gMusicState.current) return;
     if (std::getenv("HOVERNET_NO_MUSIC") != nullptr) { gMusicState.current = track; return; }
     gMusicState.current = track;
     if (track == MusicTrack::eNone) { MR_SoundServer::MusicStop(1.0); return; }
-    const char* file = track == MusicTrack::eMenu ? "HardLeft.ogg" : "Asphalt.ogg";
-    std::ifstream in(SourcePath((std::string("NetTarget/Music/") + file).c_str()), std::ios::binary);
+    const MusicFile& chosen = track == MusicTrack::eMenu ? kMenuMusic : track == MusicTrack::eFinalLap ? kFinalLapMusic : ChooseRaceMusic();
+    std::ifstream in(SourcePath((std::string("NetTarget/Music/") + chosen.file).c_str()), std::ios::binary);
     if (!in) return;   // a package without the music is simply quiet
     const std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    MR_SoundServer::MusicPlay(reinterpret_cast<const unsigned char*>(bytes.data()), static_cast<unsigned long>(bytes.size()), LoadMusicVolume() * (gMusicState.ducked ? 0.35 : 1.0), 1.6);
-    gMusicState.toast = track == MusicTrack::eMenu ? "Hard Left - Dan Knoflicek" : "Asphalt - Sygil";
+    MR_SoundServer::MusicPlay(reinterpret_cast<const unsigned char*>(bytes.data()), static_cast<unsigned long>(bytes.size()), LoadMusicVolume() * (gMusicState.ducked ? 0.35 : 1.0), track == MusicTrack::eFinalLap ? 0.8 : 1.6);
+    gMusicState.toast = chosen.credit;
     gMusicState.toastAt = SDL_GetTicks();
+    if (std::getenv("HOVERNET_TEST_MUSIC") != nullptr) { std::printf("MUSICTEST %s\n", chosen.file); std::fflush(stdout); }
 }
 
 // The music steps back while a menu is over the race (pause), and comes back after.
@@ -11870,6 +11904,7 @@ int RunClient(int argc, char** argv)
                     if (lastLap >= 0 && lap > lastLap && lap < mainCharacter->GetTotalLap()) {
                         const bool finalLap = lap == mainCharacter->GetTotalLap() - 1 && mainCharacter->GetTotalLap() > 1;   // the last lap starts: a higher chime and its own banner
                         PlaySfx(Sfx::eLap, 0, finalLap ? 1.26 : 1.0);
+                        if (finalLap) PlayMusic(MusicTrack::eFinalLap);   // the faster final-lap track takes over
                         const MR_SimulationTime lapTime = mainCharacter->GetTotalTime() - lapStartedAt;
                         char timeText[32];
                         FormatRaceTime(lapTime, timeText, sizeof(timeText));
