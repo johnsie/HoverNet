@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.41 - 2026-11-09
+
 ### Changed
 - **Main menu**: RACE ONLINE is first and the big red button, with a line under it ("Race real players, climb the leaderboards, and show off your craft."); the offline mode is now PRACTICE OFFLINE, a quieter button below it.
 - **Results screen** has only what fits: after an online race RETURN TO LOBBY and MAIN MENU, after an offline race only MAIN MENU (Esc / B goes to the main menu). Keep Driving, Restart, New Local Race, Online Multiplayer and Quit were removed from it (Restart race is still in the pause menu). The results XP now counts up.
