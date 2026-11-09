@@ -6448,6 +6448,8 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
     std::vector<std::array<std::uint8_t, Authority::kPaintSize * Authority::kPaintSize>> undo;
     int tool = 0, colour = 3;
     int decal = 0;   // the stamp chosen (tool 4)
+    auto decalBase = design.paint, decalResult = design.paint;   // the paint before the last decal BUTTON stamped, and the paint it made: a different decal button replaces that decal (only while nothing was drawn since)
+    bool decalPlaced = false;
     // What this player has earned: patterns, colour sets and shape range by level, decals by achievement (HOVERNET_GARAGE_LEVEL=n, HOVERNET_GARAGE_ALL=1: test hooks).
     HoverNetProfile::Profile garageProfile;
     garageProfile.Load(ProfilePath());
@@ -6532,20 +6534,24 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
     bool running = true;
     int framesShown = 0;
     bool strokeActive = false;
-    int testClickX = -1, testClickY = -1, testClickFrame = 0;   // test hook HOVERNET_TEST_GARAGE_CLICK_DECAL=n: where decal n's button is, and when its real click starts
+    // Test hook HOVERNET_TEST_GARAGE_CLICK_DECAL=a,b,...: real pointer clicks (SDL mouse events, through the interface) on those decals' buttons one after another, then the paint is counted.
+    std::vector<int> testDecals;
+    if (const char* list = std::getenv("HOVERNET_TEST_GARAGE_CLICK_DECAL")) for (const char* c = list; *c != 0;) { testDecals.push_back(std::atoi(c)); while (*c != 0 && *c != ',') ++c; if (*c == ',') ++c; }
+    int testClickX = -1, testClickY = -1;
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
-        if (std::getenv("HOVERNET_TEST_GARAGE_CLICK_DECAL") != nullptr) {   // a real pointer click (SDL events, through ImGui) on the decal's button; then the paint is counted
-            SDL_Event click; SDL_zero(click);
-            if (testClickX >= 0 && framesShown >= testClickFrame && framesShown <= testClickFrame + 2) {
-                if (framesShown == testClickFrame) { click.type = SDL_MOUSEMOTION; click.motion.x = testClickX; click.motion.y = testClickY; }
-                else { click.type = framesShown == testClickFrame + 1 ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP; click.button.button = SDL_BUTTON_LEFT; click.button.x = testClickX; click.button.y = testClickY; click.button.state = framesShown == testClickFrame + 1 ? SDL_PRESSED : SDL_RELEASED; click.button.clicks = 1; }
+        if (!testDecals.empty()) {
+            const int phase = (framesShown - 6) / 8, step = (framesShown - 6) % 8;   // per decal: scroll its button into view (steps 0-3), find it (4), move, press, release (5-7)
+            if (framesShown >= 6 && phase < static_cast<int>(testDecals.size()) && step >= 5) {
+                SDL_Event click; SDL_zero(click);
+                if (step == 5) { click.type = SDL_MOUSEMOTION; click.motion.x = testClickX; click.motion.y = testClickY; }
+                else { click.type = step == 6 ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP; click.button.button = SDL_BUTTON_LEFT; click.button.x = testClickX; click.button.y = testClickY; click.button.state = step == 6 ? SDL_PRESSED : SDL_RELEASED; click.button.clicks = 1; }
                 SDL_PushEvent(&click);
             }
             if (framesShown == pFrameLimit) {
                 int painted = 0;
                 for (std::uint8_t cell : design.paint) if (cell != 0) ++painted;
-                std::printf("GARAGETEST decal button at %d,%d; paint cells after the click: %d; status: %s\n", testClickX, testClickY, painted, status.c_str());
+                std::printf("GARAGETEST paint cells after the clicks: %d; status: %s\n", painted, status.c_str());
                 std::fflush(stdout);
             }
         }
@@ -6793,18 +6799,28 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
                 if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.12f, 0.16f, 1.0f));
                 const bool pressed = ImGui::Button(label, ImVec2(buttonWidth, 0));
                 if (on) ImGui::PopStyleColor();
-                if (const char* clickHook = std::getenv("HOVERNET_TEST_GARAGE_CLICK_DECAL")) {
-                    if (d == std::atoi(clickHook) && testClickX < 0 && framesShown >= 6 && framesShown < 12) ImGui::SetScrollHereY(0.5f);   // the panel scrolls: bring the button on screen first
-                    if (d == std::atoi(clickHook) && testClickX < 0 && framesShown >= 12) {
-                        const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
-                        testClickX = static_cast<int>((lo.x + hi.x) * 0.5f); testClickY = static_cast<int>((lo.y + hi.y) * 0.5f); testClickFrame = framesShown + 2;
+                if (!testDecals.empty() && framesShown >= 6) {
+                    const int phase = (framesShown - 6) / 8, step = (framesShown - 6) % 8;
+                    if (phase < static_cast<int>(testDecals.size()) && d == testDecals[static_cast<size_t>(phase)]) {
+                        if (step < 4) ImGui::SetScrollHereY(0.5f);   // the panel scrolls: bring the button on screen first
+                        else if (step == 4) {
+                            const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+                            testClickX = static_cast<int>((lo.x + hi.x) * 0.5f); testClickY = static_cast<int>((lo.y + hi.y) * 0.5f);
+                        }
                     }
                 }
                 if (locked) { ImGui::EndDisabled(); if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s decal: %s", HoverNetCraft::DecalName(d), HoverNetCraft::DecalEarnedBy(d)); }
                 if (pressed && !locked) {
                     tool = 4;
                     decal = d;
+                    if (decalPlaced && design.paint == decalResult) {   // nothing has been drawn since the last decal button: swap it for this one instead of piling them up
+                        design.paint = decalBase;
+                        if (!undo.empty()) undo.pop_back();   // that stamp's undo step goes with it, so one Undo still takes back the decal now shown
+                    }
+                    decalBase = design.paint;
                     stampDecal(Authority::kPaintSize / 2, Authority::kPaintSize / 2);
+                    decalResult = design.paint;
+                    decalPlaced = true;
                     status = std::string(HoverNetCraft::DecalName(d)) + " decal added. Click the canvas to place another.";
                 }
             }
