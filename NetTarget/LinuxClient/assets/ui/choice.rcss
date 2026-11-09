@@ -53,3 +53,8 @@ button:active { transform: scale(0.97); }
 
 .detail { font-family: Inter; font-size: 14dp; font-weight: normal; color: #cfd1de; }
 button.primary .detail { color: #ffe3e6; }
+
+scrollbarvertical { width: 12dp; }
+scrollbarvertical slidertrack { width: 12dp; background-color: #1b1e2a; }
+scrollbarvertical sliderbar { width: 12dp; min-height: 36dp; background-color: #3f4560; }
+scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0dp; height: 0dp; display: none; }

@@ -6796,6 +6796,7 @@ HubChoice RunSettingsHub(SDL2GraphicsBackend& graphics, int pFrameLimit)
         info.title = "SETTINGS";
         info.eyebrow = "HOVERNET";
         info.panelTitle = "SETTINGS";
+        info.backdrop = 1;
         info.reducedMotion = LoadReducedMotion();
         info.sound = [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); };
         const HubChoice choices[] = {HubChoice::eGame, HubChoice::eControls, HubChoice::eReplays, HubChoice::eTutorial, HubChoice::eBack};

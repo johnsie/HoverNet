@@ -4,7 +4,6 @@
 	<link type="text/rcss" href="main-menu.rcss"/>
 </head>
 <body>
-	<div class="streak s1"></div><div class="streak s2"></div><div class="streak s3"></div>
 	<div id="hero"><img src="../menu-hovercraft-source.png"/></div>
 	<div id="brand">
 		<h1>HOVERNET</h1>

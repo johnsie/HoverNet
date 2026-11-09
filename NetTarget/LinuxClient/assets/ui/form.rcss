@@ -44,11 +44,11 @@ input.range sliderarrowdec, input.range sliderarrowinc { width: 0dp; height: 0dp
 .toggle .box { display: inline-block; width: 22dp; height: 22dp; vertical-align: middle; background-color: #0b0c11; border-width: 2dp; border-color: #4a4f66; margin-right: 12dp; }
 .toggle.on .box { background-color: #dc3546; border-color: #fa737a; }
 .toggle .tlabel { vertical-align: middle; }
-.select { display: block; box-sizing: border-box; height: 42dp; padding: 3dp; background-color: #0b0c11; border-width: 1dp; border-color: #303342; border-radius: 6dp; tab-index: auto; }
+.select { display: flex; flex-direction: row; align-items: center; box-sizing: border-box; height: 42dp; padding: 3dp; background-color: #0b0c11; border-width: 1dp; border-color: #303342; border-radius: 6dp; tab-index: auto; }
 .select:focus { border-color: #fa737a; }
-.select .sval { display: inline-block; width: 380dp; text-align: center; padding-top: 8dp; }
+.select .sval { display: block; flex: 1 1 0; text-align: center; }
 .arrow {
-	display: inline-block; box-sizing: border-box; width: 44dp; height: 34dp; text-align: center; padding-top: 5dp; margin: 0;
+	display: block; flex: 0 0 auto; box-sizing: border-box; width: 44dp; height: 34dp; text-align: center; padding-top: 5dp; margin: 0;
 	font-family: Oxanium; font-weight: bold; color: #ffffff; background-color: #2b2e3e; cursor: pointer; border-radius: 4dp;
 	transition: background-color 0.12s cubic-out;
 }
@@ -100,3 +100,11 @@ button.act.quiet:hover, button.act.quiet:focus { background-color: #3a3e54; }
 #busybar { height: 10dp; background-color: #303342; }
 #busyfill { height: 10dp; width: 0%; background-color: #fa737a; }
 #busybutton { margin-top: 18dp; }
+
+/* scrollbars (without these a tall tab collapses the controls into a narrow column) */
+scrollbarvertical { width: 12dp; }
+scrollbarvertical slidertrack { width: 12dp; background-color: #1b1e2a; }
+scrollbarvertical sliderbar { width: 12dp; min-height: 36dp; background-color: #3f4560; }
+scrollbarvertical sliderbar:hover { background-color: #5a6285; }
+scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0dp; height: 0dp; display: none; }
+#rule { width: 520dp; height: 3dp; margin: 8dp auto 0 auto; decorator: gradient( horizontal #e02a43 #e02a4300 ); }

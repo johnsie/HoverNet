@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
+#include <cmath>
 #include <functional>
 #include <map>
 #include <memory>
@@ -69,6 +70,100 @@ void EndFrame(int pFrameLimit)
     else SDL_Delay(pFrameLimit >= 0 ? 16 : 4);
 }
 
+// The screens are drawn twice as large into an off-screen picture and shrunk onto the window with smooth filtering: that smooths the edges of rounded corners and of text,
+// which SDL's renderer does not do by itself (Dear ImGui builds smooth edges into its own shapes, so without this the new screens look rougher). HOVERNET_RML_SS=1 turns it off.
+struct Supersample
+{
+    SDL_Renderer* renderer = nullptr;
+    SDL_Texture* texture = nullptr;
+    int factor = 2, width = 0, height = 0;
+    explicit Supersample(SDL_Renderer* pRenderer) : renderer(pRenderer)
+    {
+        if (const char* f = std::getenv("HOVERNET_RML_SS")) factor = std::max(1, std::min(4, std::atoi(f)));
+    }
+    ~Supersample() { if (texture != nullptr) SDL_DestroyTexture(texture); }
+    Supersample(const Supersample&) = delete;
+    Supersample& operator=(const Supersample&) = delete;
+    // Sizes the context and the picture for a window of pWidth x pHeight.
+    void Resize(Rml::Context* pContext, int pWidth, int pHeight)
+    {
+        width = pWidth; height = pHeight;
+        pContext->SetDimensions(Rml::Vector2i(pWidth * factor, pHeight * factor));
+        pContext->SetDensityIndependentPixelRatio(static_cast<float>(factor));
+        if (texture != nullptr) { SDL_DestroyTexture(texture); texture = nullptr; }
+        if (factor > 1) {
+            texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, pWidth * factor, pHeight * factor);
+            if (texture != nullptr) SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
+            else { factor = 1; pContext->SetDimensions(Rml::Vector2i(pWidth, pHeight)); pContext->SetDensityIndependentPixelRatio(1.0f); }
+        }
+    }
+    int W() const { return width * factor; }
+    int H() const { return height * factor; }
+    void Begin() { if (texture != nullptr) SDL_SetRenderTarget(renderer, texture); }
+    void End()
+    {
+        if (texture == nullptr) return;
+        if (const char* dump = std::getenv("HOVERNET_RML_SS_DUMP")) {   // test hook: what was drawn into the large picture
+            if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, W(), H(), 32, SDL_PIXELFORMAT_ARGB8888)) {
+                SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888, surface->pixels, surface->pitch);
+                SDL_SaveBMP(surface, dump);
+                SDL_FreeSurface(surface);
+            }
+        }
+        SDL_SetRenderTarget(renderer, nullptr);
+        SDL_RenderSetClipRect(renderer, nullptr);   // nothing the interface left behind may crop or move the picture
+        SDL_RenderSetViewport(renderer, nullptr);
+        const SDL_Rect whole = {0, 0, width, height};
+        SDL_RenderCopy(renderer, texture, nullptr, &whole);
+    }
+    // Mouse positions come in window pixels and the context works in picture pixels.
+    void Forward(Rml::Context* pContext, SDL_Event event) const
+    {
+        if (event.type == SDL_MOUSEMOTION) { event.motion.x *= factor; event.motion.y *= factor; event.motion.xrel *= factor; event.motion.yrel *= factor; }
+        else if (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) { event.button.x *= factor; event.button.y *= factor; }
+        RmlSDL::InputEventHandler(pContext, event);
+    }
+};
+
+// A thick line as two triangles (SDL draws 1-pixel lines only): the older menu's grid and speed streaks are 1 to 2 pixels thick, so in the large picture they are factor times that.
+void ThickLine(SDL_Renderer* pRenderer, float pX0, float pY0, float pX1, float pY1, float pThickness, SDL_Color pColour)
+{
+    float dx = pX1 - pX0, dy = pY1 - pY0;
+    const float length = std::sqrt(dx * dx + dy * dy);
+    if (length < 0.001f) return;
+    const float nx = -dy / length * pThickness * 0.5f, ny = dx / length * pThickness * 0.5f;
+    const SDL_Vertex v[4] = {{{pX0 + nx, pY0 + ny}, pColour, {0, 0}}, {{pX0 - nx, pY0 - ny}, pColour, {0, 0}}, {{pX1 + nx, pY1 + ny}, pColour, {0, 0}}, {{pX1 - nx, pY1 - ny}, pColour, {0, 0}}};
+    const int order[6] = {0, 1, 2, 1, 3, 2};
+    SDL_RenderGeometry(pRenderer, nullptr, v, 4, order, 6);
+}
+
+// The main menu's background, as the older menu draws it: a four-corner gradient, a darker floor under a horizon, a perspective grid running to a vanishing point and 18 short
+// diagonal speed streaks that drift sideways (still when the player has chosen reduced motion). pFactor: the large picture's scale; pTick: milliseconds / 8, or 0 when still.
+void DrawMenuBackdrop(SDL_Renderer* pRenderer, int pWidth, int pHeight, int pFactor, unsigned pTick)
+{
+    SDL_SetRenderDrawBlendMode(pRenderer, SDL_BLENDMODE_BLEND);
+    const float f = static_cast<float>(pFactor), w = static_cast<float>(pWidth), h = static_cast<float>(pHeight);
+    const float windowW = w / f, windowH = h / f;
+    SDL_SetRenderDrawColor(pRenderer, 13, 13, 19, 255);
+    SDL_RenderClear(pRenderer);
+    const SDL_Color tl = {13, 13, 19, 255}, tr = {25, 10, 18, 255}, bl = {7, 7, 11, 255}, br = {12, 6, 10, 255};
+    const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, tl, {0, 0}}, {{w, 0.0f}, tr, {0, 0}}, {{0.0f, h}, bl, {0, 0}}, {{w, h}, br, {0, 0}}};
+    const int order[6] = {0, 1, 2, 1, 3, 2};
+    SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
+    const float horizon = h * 0.54f, vx = w * 0.35f;
+    SDL_SetRenderDrawColor(pRenderer, 9, 9, 14, 235);
+    const SDL_FRect floorRect = {0.0f, horizon, w, h - horizon};
+    SDL_RenderFillRectF(pRenderer, &floorRect);
+    for (int line = -8; line <= 12; ++line) ThickLine(pRenderer, vx, horizon, w * (static_cast<float>(line) / 10.0f), h, 1.5f * f, SDL_Color{202, 32, 57, 72});
+    for (float row : {0.04f, 0.10f, 0.19f, 0.31f, 0.47f, 0.67f, 0.88f}) { const float y = horizon + (h - horizon) * row; ThickLine(pRenderer, 0.0f, y, w, y, 1.0f * f, SDL_Color{240, 53, 75, 52}); }
+    for (int streak = 0; streak < 18; ++streak) {
+        const float x = static_cast<float>((static_cast<unsigned>(streak * 193) + pTick) % static_cast<unsigned>(std::max(1.0f, windowW))) * f;
+        const float y = (125.0f + static_cast<float>((streak * 47) % static_cast<int>(std::max(1.0f, windowH * 0.38f)))) * f;
+        const float length = (35.0f + static_cast<float>((streak * 17) % 90)) * f;
+        ThickLine(pRenderer, x, y, x + length, y - 8.0f * f, 2.0f * f, SDL_Color{255, 91, 108, 70});
+    }
+}
+
 const char* const kButtons[] = {"online", "offline", "leaderboards", "garage", "tutorial", "settings"};   // in the order the arrow keys walk them
 constexpr int kButtonCount = 6;
 
@@ -100,6 +195,8 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
     int width = 0, height = 0;
     SDL_GetRendererOutputSize(pRenderer, &width, &height);
     Rml::Context* context = Rml::CreateContext("hovernet-main-menu", Rml::Vector2i(width, height));
+    Supersample ss(pRenderer);
+    if (context != nullptr) ss.Resize(context, width, height);
     Rml::LoadFontFace(pInfo.assetDir + "/Inter-Variable.ttf", true);       // the body face (also the fallback for any name)
     Rml::LoadFontFace(pInfo.assetDir + "/Oxanium-Variable.ttf", false);    // the display face
     Rml::ElementDocument* document = context != nullptr ? context->LoadDocument(pInfo.assetDir + "/ui/main-menu.rml") : nullptr;
@@ -140,9 +237,9 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
                 Rml::Element* target = document->GetElementById(step.substr(6));
                 if (target != nullptr) {
                     const Rml::Vector2f at = target->GetAbsoluteOffset(Rml::Box::BORDER) + target->GetBox().GetSize(Rml::Box::BORDER) * 0.5f;
-                    scripted.type = SDL_MOUSEMOTION; scripted.motion.x = static_cast<int>(at.x); scripted.motion.y = static_cast<int>(at.y); SDL_PushEvent(&scripted);
-                    SDL_zero(scripted); scripted.type = SDL_MOUSEBUTTONDOWN; scripted.button.button = SDL_BUTTON_LEFT; scripted.button.state = SDL_PRESSED; scripted.button.clicks = 1; scripted.button.x = static_cast<int>(at.x); scripted.button.y = static_cast<int>(at.y); SDL_PushEvent(&scripted);
-                    SDL_zero(scripted); scripted.type = SDL_MOUSEBUTTONUP; scripted.button.button = SDL_BUTTON_LEFT; scripted.button.state = SDL_RELEASED; scripted.button.clicks = 1; scripted.button.x = static_cast<int>(at.x); scripted.button.y = static_cast<int>(at.y); SDL_PushEvent(&scripted);
+                    scripted.type = SDL_MOUSEMOTION; scripted.motion.x = static_cast<int>(at.x / static_cast<float>(ss.factor)); scripted.motion.y = static_cast<int>(at.y / static_cast<float>(ss.factor)); SDL_PushEvent(&scripted);
+                    SDL_zero(scripted); scripted.type = SDL_MOUSEBUTTONDOWN; scripted.button.button = SDL_BUTTON_LEFT; scripted.button.state = SDL_PRESSED; scripted.button.clicks = 1; scripted.button.x = static_cast<int>(at.x / static_cast<float>(ss.factor)); scripted.button.y = static_cast<int>(at.y / static_cast<float>(ss.factor)); SDL_PushEvent(&scripted);
+                    SDL_zero(scripted); scripted.type = SDL_MOUSEBUTTONUP; scripted.button.button = SDL_BUTTON_LEFT; scripted.button.state = SDL_RELEASED; scripted.button.clicks = 1; scripted.button.x = static_cast<int>(at.x / static_cast<float>(ss.factor)); scripted.button.y = static_cast<int>(at.y / static_cast<float>(ss.factor)); SDL_PushEvent(&scripted);
                 }
             }
             else {
@@ -168,21 +265,16 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
                 if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) { MoveFocus(document, -1, pInfo.sound); continue; }
                 if (b == SDL_CONTROLLER_BUTTON_A) { if (Rml::Element* f = document->GetFocusLeafNode()) f->Click(); continue; }
             }
-            RmlSDL::InputEventHandler(context, event);
+            ss.Forward(context, event);
         }
         int w = 0, h = 0;
         SDL_GetRendererOutputSize(pRenderer, &w, &h);
-        if (w != width || h != height) { width = w; height = h; context->SetDimensions(Rml::Vector2i(width, height)); }
+        if (w != width || h != height) { width = w; height = h; ss.Resize(context, width, height); }
         context->Update();
         // Under the interface: the background (a gradient the renderer draws itself, so the craft can sit between it and the markup) and the player's craft.
+        ss.Begin();
         {
-            SDL_SetRenderDrawColor(pRenderer, 18, 20, 28, 255);
-            SDL_RenderClear(pRenderer);
-            const SDL_Color top = {18, 20, 28, 255}, bottom = {38, 16, 26, 255};
-            const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, top, {0, 0}}, {{static_cast<float>(width), 0.0f}, top, {0, 0}},
-                                        {{0.0f, static_cast<float>(height)}, bottom, {0, 0}}, {{static_cast<float>(width), static_cast<float>(height)}, bottom, {0, 0}}};
-            const int order[6] = {0, 1, 2, 1, 3, 2};
-            SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
+            DrawMenuBackdrop(pRenderer, ss.W(), ss.H(), ss.factor, pInfo.reducedMotion ? 0u : SDL_GetTicks() / 8u);
             if (pInfo.craftFrame) {
                 const Uint32 now = SDL_GetTicks();
                 const int yaw = pInfo.reducedMotion ? 28 : static_cast<int>(now / 1000.0 * 22.0) % 360 / 2 * 2;
@@ -191,19 +283,25 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
                 Rml::Element* hero = document->GetElementById("hero");
                 if (craft != nullptr && hero != nullptr && crop.w > 0 && crop.h > 0) {
                     if (!craftShown) { craftShown = true; craftStart = now; if (Rml::Element* img = hero->GetFirstChild()) img->SetProperty("display", "none"); }
-                    const Rml::Vector2f origin = hero->GetAbsoluteOffset(Rml::Box::BORDER), size = hero->GetBox().GetSize(Rml::Box::BORDER);
+                    // Placed and sized as the older menu does: as wide as the room left of the panel allows, but no wider than 60% of the window's height, centred in that room and
+                    // a little below the middle (window units, then scaled to the large picture).
+                    const float f = static_cast<float>(ss.factor), windowW = static_cast<float>(width), windowH = static_cast<float>(height);
+                    const float panelW = std::min(430.0f, windowW * (windowW < 820.0f ? 0.5f : 0.42f));
+                    const float room = std::max(220.0f, windowW - panelW - 66.0f);
                     const float aspect = static_cast<float>(crop.w) / static_cast<float>(crop.h);
-                    float w = size.x, h = w / aspect;
-                    if (h > size.y) { h = size.y; w = h * aspect; }
+                    const float cw = std::min(room, windowH * 0.6f * aspect), ch = cw / aspect;
+                    const Rml::Vector2f origin(std::max(8.0f, (room - cw) * 0.5f + 8.0f) * f, std::max(40.0f, (windowH - ch) * 0.5f + windowH * 0.06f) * f), size(cw * f, ch * f);
+                    float w = size.x, h = size.y;
                     const float t = pInfo.reducedMotion ? 1.0f : std::min(1.0f, static_cast<float>(now - craftStart) / 900.0f);
                     const float ease = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);   // the same curve as the markup's cubic-out
-                    SDL_FRect to = {origin.x + (size.x - w) * 0.5f - 70.0f * (1.0f - ease), origin.y + (size.y - h) * 0.5f, w, h};
+                    SDL_FRect to = {origin.x - 70.0f * static_cast<float>(ss.factor) * (1.0f - ease), origin.y, w, h};
                     SDL_SetTextureAlphaMod(craft, static_cast<Uint8>(255.0f * ease));
                     SDL_RenderCopyF(pRenderer, craft, &crop, &to);
                 }
             }
         }
         context->Render();
+        ss.End();
         if (const char* shot = std::getenv("HOVERNET_CAPTURE_MENU")) {   // the same capture hook as the ImGui menu: the last frame of a bounded run
             if (pFrameLimit >= 0 && frames == pFrameLimit) {
                 if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888)) {
@@ -266,6 +364,8 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
     int width = 0, height = 0;
     SDL_GetRendererOutputSize(pRenderer, &width, &height);
     Rml::Context* context = Rml::CreateContext("hovernet-results", Rml::Vector2i(width, height));
+    Supersample ss(pRenderer);
+    if (context != nullptr) ss.Resize(context, width, height);
     Rml::LoadFontFace(pInfo.assetDir + "/Inter-Variable.ttf", true);
     Rml::LoadFontFace(pInfo.assetDir + "/Oxanium-Variable.ttf", false);
     Rml::ElementDocument* document = context != nullptr ? context->LoadDocument(pInfo.assetDir + "/ui/results.rml") : nullptr;
@@ -365,20 +465,22 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
                 }
                 if (b == SDL_CONTROLLER_BUTTON_A) { if (Rml::Element* f = document->GetFocusLeafNode()) f->Click(); continue; }
             }
-            RmlSDL::InputEventHandler(context, event);
+            ss.Forward(context, event);
         }
         int w = 0, h = 0;
         SDL_GetRendererOutputSize(pRenderer, &w, &h);
-        if (w != width || h != height) { width = w; height = h; context->SetDimensions(Rml::Vector2i(width, height)); }
+        if (w != width || h != height) { width = w; height = h; ss.Resize(context, width, height); }
         context->Update();
+        ss.Begin();
         SDL_SetRenderDrawColor(pRenderer, 18, 12, 20, 255);
         SDL_RenderClear(pRenderer);
         const SDL_Color top = {18, 12, 20, 255}, bottom = {69, 13, 28, 255};   // the same dark red wash as the ImGui results screen
-        const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, top, {0, 0}}, {{static_cast<float>(width), 0.0f}, top, {0, 0}},
-                                    {{0.0f, static_cast<float>(height)}, bottom, {0, 0}}, {{static_cast<float>(width), static_cast<float>(height)}, bottom, {0, 0}}};
+        const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, top, {0, 0}}, {{static_cast<float>(ss.W()), 0.0f}, top, {0, 0}},
+                                    {{0.0f, static_cast<float>(ss.H())}, bottom, {0, 0}}, {{static_cast<float>(ss.W()), static_cast<float>(ss.H())}, bottom, {0, 0}}};
         const int order[6] = {0, 1, 2, 1, 3, 2};
         SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
         context->Render();
+        ss.End();
         if (const char* shot = std::getenv("HOVERNET_CAPTURE_RML")) {
             if (pFrameLimit >= 0 && frames == pFrameLimit) {
                 if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888)) {
@@ -398,22 +500,39 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
 
 namespace
 {
-// The synthwave backdrop of the pause menu: a dark gradient, lines running to a vanishing point and a few horizontal rows.
-void DrawGridBackdrop(SDL_Renderer* pRenderer, int pWidth, int pHeight)
+// The two backdrops of the older screens. Style 0 (the pause menu): a dark gradient with lines running to a vanishing point on the left and a few horizontal rows. Style 1 (Settings and the
+// other screens): a four-corner gradient with a centred perspective grid whose horizon sits low. Drawn into the large picture, so a line is pFactor pixels thick for one window pixel.
+void DrawGridBackdrop(SDL_Renderer* pRenderer, int pWidth, int pHeight, int pStyle = 0, int pFactor = 1)
 {
+    SDL_SetRenderDrawBlendMode(pRenderer, SDL_BLENDMODE_BLEND);
+    const float w = static_cast<float>(pWidth), h = static_cast<float>(pHeight);
+    const int order[6] = {0, 1, 2, 1, 3, 2};
+    auto line = [&](float x0, float y0, float x1, float y1, bool steep) {
+        for (int k = 0; k < std::max(1, pFactor); ++k) SDL_RenderDrawLineF(pRenderer, x0 + (steep ? static_cast<float>(k) : 0.0f), y0 + (steep ? 0.0f : static_cast<float>(k)), x1 + (steep ? static_cast<float>(k) : 0.0f), y1 + (steep ? 0.0f : static_cast<float>(k)));
+    };
+    if (pStyle == 1) {
+        SDL_SetRenderDrawColor(pRenderer, 9, 12, 22, 255);
+        SDL_RenderClear(pRenderer);
+        const SDL_Color tl = {9, 12, 22, 255}, tr = {31, 10, 22, 255}, bl = {5, 8, 15, 255}, br = {13, 7, 15, 255};
+        const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, tl, {0, 0}}, {{w, 0.0f}, tr, {0, 0}}, {{0.0f, h}, bl, {0, 0}}, {{w, h}, br, {0, 0}}};
+        SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
+        const float horizon = h * 0.72f;
+        SDL_SetRenderDrawColor(pRenderer, 224, 42, 67, 34);
+        for (int l = -8; l <= 8; ++l) line(w * 0.5f, horizon, w * (0.5f + static_cast<float>(l) * 0.14f), h, true);
+        SDL_SetRenderDrawColor(pRenderer, 224, 42, 67, 28);
+        for (int row = 1; row <= 4; ++row) line(0.0f, horizon + (h - horizon) * static_cast<float>(row * row) / 16.0f, w, horizon + (h - horizon) * static_cast<float>(row * row) / 16.0f, false);
+        return;
+    }
     SDL_SetRenderDrawColor(pRenderer, 13, 13, 19, 255);
     SDL_RenderClear(pRenderer);
     const SDL_Color top = {13, 13, 19, 255}, bottom = {30, 9, 16, 255};
-    const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, top, {0, 0}}, {{static_cast<float>(pWidth), 0.0f}, top, {0, 0}},
-                                {{0.0f, static_cast<float>(pHeight)}, bottom, {0, 0}}, {{static_cast<float>(pWidth), static_cast<float>(pHeight)}, bottom, {0, 0}}};
-    const int order[6] = {0, 1, 2, 1, 3, 2};
+    const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, top, {0, 0}}, {{w, 0.0f}, top, {0, 0}}, {{0.0f, h}, bottom, {0, 0}}, {{w, h}, bottom, {0, 0}}};
     SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
-    SDL_SetRenderDrawBlendMode(pRenderer, SDL_BLENDMODE_BLEND);
-    const float horizon = pHeight * 0.60f, vx = pWidth * 0.28f;
+    const float horizon = h * 0.60f, vx = w * 0.28f;
     SDL_SetRenderDrawColor(pRenderer, 227, 43, 66, 55);
-    for (int line = -5; line <= 10; ++line) SDL_RenderDrawLineF(pRenderer, vx, horizon, pWidth * (static_cast<float>(line) / 7.0f), static_cast<float>(pHeight));
+    for (int l = -5; l <= 10; ++l) line(vx, horizon, w * (static_cast<float>(l) / 7.0f), h, true);
     SDL_SetRenderDrawColor(pRenderer, 240, 53, 75, 48);
-    for (float row : {0.10f, 0.24f, 0.43f, 0.68f, 0.94f}) { const float y = horizon + (pHeight - horizon) * row; SDL_RenderDrawLineF(pRenderer, 0.0f, y, static_cast<float>(pWidth), y); }
+    for (float row : {0.10f, 0.24f, 0.43f, 0.68f, 0.94f}) { const float y = horizon + (h - horizon) * row; line(0.0f, y, w, y, false); }
 }
 
 class OptionListener : public Rml::EventListener
@@ -446,6 +565,8 @@ int RunChoiceMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const ChoiceInfo
     int width = 0, height = 0;
     SDL_GetRendererOutputSize(pRenderer, &width, &height);
     Rml::Context* context = Rml::CreateContext("hovernet-choice", Rml::Vector2i(width, height));
+    Supersample ss(pRenderer);
+    if (context != nullptr) ss.Resize(context, width, height);
     Rml::LoadFontFace(pInfo.assetDir + "/Inter-Variable.ttf", true);
     Rml::LoadFontFace(pInfo.assetDir + "/Oxanium-Variable.ttf", false);
     Rml::ElementDocument* document = context != nullptr ? context->LoadDocument(pInfo.assetDir + "/ui/choice.rml") : nullptr;
@@ -508,15 +629,17 @@ int RunChoiceMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const ChoiceInfo
                 if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) { move(-1); continue; }
                 if (b == SDL_CONTROLLER_BUTTON_A) { if (Rml::Element* f = document->GetFocusLeafNode()) f->Click(); continue; }
             }
-            RmlSDL::InputEventHandler(context, event);
+            ss.Forward(context, event);
         }
         if (decided) break;
         int w = 0, h = 0;
         SDL_GetRendererOutputSize(pRenderer, &w, &h);
-        if (w != width || h != height) { width = w; height = h; context->SetDimensions(Rml::Vector2i(width, height)); }
+        if (w != width || h != height) { width = w; height = h; ss.Resize(context, width, height); }
         context->Update();
-        DrawGridBackdrop(pRenderer, width, height);
+        ss.Begin();
+        DrawGridBackdrop(pRenderer, ss.W(), ss.H(), pInfo.backdrop, ss.factor);
         context->Render();
+        ss.End();
         if (const char* shot = std::getenv("HOVERNET_CAPTURE_RML")) {
             if ((pFrameLimit >= 0 && frames == pFrameLimit) || (pFrameLimit < 0 && frames == 62)) {
                 if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888)) {
@@ -610,6 +733,7 @@ struct FormScreen::Impl
     Rml::Context* context = nullptr;
     Rml::ElementDocument* document = nullptr;
     FormListener listener;
+    std::unique_ptr<Supersample> ss;
     bool ok = false, initialised = false;
     int width = 0, height = 0, restoreW = 0, restoreH = 0;
     std::vector<std::string> script;     // test hook HOVERNET_TEST_RML: "tab:2", "click:name", "text:name=Tester", "enter", "down" ...
@@ -632,6 +756,8 @@ FormScreen::FormScreen(SDL_Window* pWindow, SDL_Renderer* pRenderer, const std::
     m.initialised = true;
     SDL_GetRendererOutputSize(pRenderer, &m.width, &m.height);
     m.context = Rml::CreateContext("hovernet-form", Rml::Vector2i(m.width, m.height));
+    m.ss.reset(new Supersample(pRenderer));
+    if (m.context != nullptr) m.ss->Resize(m.context, m.width, m.height);
     Rml::LoadFontFace(pAssetDir + "/Inter-Variable.ttf", true);
     Rml::LoadFontFace(pAssetDir + "/Oxanium-Variable.ttf", false);
     m.document = m.context != nullptr ? m.context->LoadDocument(pAssetDir + "/ui/form.rml") : nullptr;
@@ -647,6 +773,7 @@ FormScreen::~FormScreen()
 {
     Impl& m = *mImpl;
     if (m.document != nullptr) m.document->Close();
+    m.ss.reset();
     if (m.initialised) Rml::Shutdown();
     SDL_RenderSetLogicalSize(m.renderer, m.restoreW, m.restoreH);
     delete mImpl;
@@ -813,14 +940,16 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
             if (b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT && arrowOnSelect(true)) continue;
             if (b == SDL_CONTROLLER_BUTTON_A) { if (Rml::Element* f = m.document->GetFocusLeafNode()) f->Click(); continue; }
         }
-        RmlSDL::InputEventHandler(m.context, event);
+        m.ss->Forward(m.context, event);
     }
     int w = 0, h = 0;
     SDL_GetRendererOutputSize(m.renderer, &w, &h);
-    if (w != m.width || h != m.height) { m.width = w; m.height = h; m.context->SetDimensions(Rml::Vector2i(w, h)); }
+    if (w != m.width || h != m.height) { m.width = w; m.height = h; m.ss->Resize(m.context, w, h); }
     m.context->Update();
-    DrawGridBackdrop(m.renderer, m.width, m.height);
+    m.ss->Begin();
+    DrawGridBackdrop(m.renderer, m.ss->W(), m.ss->H(), 1, m.ss->factor);
     m.context->Render();
+    m.ss->End();
     if (const char* shot = std::getenv("HOVERNET_CAPTURE_RML")) {
         if ((pFrameLimit >= 0 && pFrame == pFrameLimit) || (pFrameLimit < 0 && pFrame == 62)) {
             if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, m.width, m.height, 32, SDL_PIXELFORMAT_ARGB8888)) {

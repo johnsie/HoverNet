@@ -76,6 +76,7 @@ struct ChoiceInfo
     std::string title, eyebrow, subtitle;   // the block at the top left
     std::string panelTitle;                 // above the buttons
     std::vector<ChoiceOption> options;
+    int backdrop = 0;                       // 0: the pause menu's backdrop, 1: the one Settings and most other screens have
     bool reducedMotion = false;
     std::function<void(Sound)> sound;
 };

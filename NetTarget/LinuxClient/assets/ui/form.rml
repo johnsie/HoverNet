@@ -4,7 +4,7 @@
 	<link type="text/rcss" href="form.rcss"/>
 </head>
 <body>
-	<div id="header"><p id="eyebrow">HOVERNET</p><h1 id="title">SETTINGS</h1></div>
+	<div id="header"><p id="eyebrow">HOVERNET</p><h1 id="title">SETTINGS</h1><div id="rule"></div></div>
 	<div id="card">
 		<div id="tabs"></div>
 		<div id="fields"></div>
