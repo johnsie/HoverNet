@@ -4,7 +4,7 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## Unreleased
+## 2.3.39 - 2026-11-09
 
 ### Added
 - **Garage unlocks, cosmetic only** (nothing changes how a craft drives; the five hulls stay open to everyone). Patterns open by level (3 at the start, all 14 by level 9); four extra colour sets (Metallic, Neon, Pastel, Earth) open at levels 3, 5, 7 and 9; the shape sliders reach +/-10% at the start and widen to +/-25% by level 9; nine decals, stamped on the paint with a click, are each earned by an achievement (first finish, podium, win, 10 races, 50 races, personal best, online race, saving a craft, the tutorial). Locked items stay visible, greyed out, and say how to open them. Level titles (Rookie to Legend) show beside the level on the main menu and the results screen, and a level-up lists what it opened. Nothing is enforced on a server and nothing new is stored in a design. Test `HoverNetGarageUnlocks`; checked by screenshots of the Garage at level 1 and with everything open; the decal stamp was checked with a test hook that uses the same stamp code, not with a real click, and the level-up line on the results screen was not seen on screen. Not done: engine glow and matte/gloss finishes (they need a new design format, server relay, account-service support and renderer work), titles sent to other players.
