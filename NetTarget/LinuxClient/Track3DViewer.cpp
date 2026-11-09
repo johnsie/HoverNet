@@ -3950,6 +3950,25 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
     (void)buffer;
     (void)viewport;
     (void)font;
+#ifdef HOVERNET_HAVE_RMLUI
+    if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this dialog (docs/rmlui.md); if it cannot load, the ImGui one below is shown
+        HoverNetRml::ChoiceInfo info;
+        info.assetDir = SourcePath("NetTarget/LinuxClient/assets");
+        info.title = "QUIT HOVERNET?";
+        info.eyebrow = "ARE YOU SURE?";
+        info.subtitle = "Your settings and progress are kept.";
+        info.panelTitle = "LEAVING SO SOON";
+        info.reducedMotion = LoadReducedMotion();
+        info.sound = [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); };
+        { HoverNetRml::ChoiceOption keep; keep.label = "KEEP PLAYING"; keep.primary = true; info.options.push_back(keep); }
+        { HoverNetRml::ChoiceOption quit; quit.label = "QUIT"; info.options.push_back(quit); }
+        const int picked = HoverNetRml::RunChoiceMenu(graphics.GetWindow(), graphics.GetRenderer(), info, std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit, kWidth, kHeight);
+        if (picked == 1) return true;
+        if (picked == 0 || picked == HoverNetRml::kChoiceBack) return false;
+        if (picked == HoverNetRml::kChoiceNone && pFrameLimit >= 0) return false;
+        // otherwise (could not load): the ImGui dialog below
+    }
+#endif
     const bool ownsImGuiContext = ImGui::GetCurrentContext() == nullptr;
     if (ownsImGuiContext) {
         ImGui::CreateContext();
@@ -6480,6 +6499,29 @@ HubChoice RunSettingsHub(SDL2GraphicsBackend& graphics, int pFrameLimit)
         ImGui_ImplSDLRenderer2_Init(graphics.GetRenderer());
     }
     const bool tutorialDone = HoverNetTutorial::HasCompleted(ConfigDirPath());
+#ifdef HOVERNET_HAVE_RMLUI
+    if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this screen (docs/rmlui.md); if it cannot load, the ImGui screen below is shown
+        HoverNetRml::ChoiceInfo info;
+        info.assetDir = SourcePath("NetTarget/LinuxClient/assets");
+        info.title = "SETTINGS";
+        info.eyebrow = "HOVERNET";
+        info.panelTitle = "SETTINGS";
+        info.reducedMotion = LoadReducedMotion();
+        info.sound = [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); };
+        const HubChoice choices[] = {HubChoice::eGame, HubChoice::eControls, HubChoice::eReplays, HubChoice::eTutorial, HubChoice::eBack};
+        const char* labels[] = {"Game settings", "Controls", "Watch a replay", "Tutorial", "Back"};
+        const char* details[] = {"Your name, server, sound, display, text size and graphics.", "Keyboard and controller buttons.", "Races saved on this device.",
+                                 tutorialDone ? "A hands-on practice race: run it again any time." : "A hands-on practice race. New here? Start with this.", ""};
+        for (int i = 0; i < 5; ++i) { HoverNetRml::ChoiceOption option; option.label = labels[i]; option.detail = details[i]; option.primary = i == 0; info.options.push_back(option); }
+        const int picked = HoverNetRml::RunChoiceMenu(graphics.GetWindow(), graphics.GetRenderer(), info, std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit, kWidth, kHeight);
+        auto shutdownImGui = [&]() { if (ownsImGuiContext) { ImGui_ImplSDLRenderer2_Shutdown(); ImGui_ImplSDL2_Shutdown(); ImGui::DestroyContext(); } };
+        if (picked >= 0 && picked < 5) { shutdownImGui(); return choices[picked]; }
+        if (picked == HoverNetRml::kChoiceBack) { shutdownImGui(); return HubChoice::eBack; }
+        if (picked == HoverNetRml::kChoiceClose) { g_QuitConfirmed = true; shutdownImGui(); return HubChoice::eBack; }
+        if (picked == HoverNetRml::kChoiceNone && pFrameLimit >= 0) { shutdownImGui(); return HubChoice::eBack; }
+        // otherwise (could not load): the ImGui screen below
+    }
+#endif
     HubChoice result = HubChoice::eBack;
     bool running = true, focusFirst = true;
     int framesShown = 0;

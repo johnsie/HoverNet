@@ -26,5 +26,8 @@ if [ "$got" = "menu" ]; then echo "ok   the results screen opens after a race an
 # The pause menu in a real race (Escape at frame 60 of an autoplay race, then Down and Enter): the second button is chosen.
 pick=$(HOVERNET_TEST_PAUSE_AT_FRAME=60 HOVERNET_TEST_RML="down,enter" timeout -s KILL 60 "$client" --play --track "The River" --autoplay --frames 100000 2>&1 | grep -a "^RMLTEST choice" | head -1 | sed 's/^RMLTEST choice //')
 if [ "$pick" = "1" ]; then echo "ok   the pause menu opens in a race and the second button (Down, Enter) is chosen: 1"; else echo "FAIL: pause menu: wanted choice 1, got '${pick:-nothing}'"; fail=1; fi
-[ $fail -eq 0 ] && echo "RmlUi main menu and results screen: keyboard and mouse reach every door"
+# The Settings hub is the same kind of screen: Up from the main menu's first button reaches Settings; in the hub Up wraps to Back (the fifth button).
+hub=$(HOVERNET_TEST_RML="up,enter" timeout -s KILL 40 "$client" --play --frames 100000 2>&1 | grep -a "^RMLTEST choice" | head -1 | sed 's/^RMLTEST choice //')
+if [ "$hub" = "4" ]; then echo "ok   Settings opens the hub, and its Back button is the fifth: 4"; else echo "FAIL: settings hub: wanted choice 4, got '${hub:-nothing}'"; fail=1; fi
+[ $fail -eq 0 ] && echo "RmlUi main menu, results screen, pause menu and Settings hub: keyboard and mouse reach every door"
 exit $fail

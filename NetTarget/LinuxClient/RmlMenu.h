@@ -64,6 +64,7 @@ struct ChoiceOption
     std::string label;
     bool primary = false;           // the one red button
     std::string headingBefore;      // a small heading above this button (empty: none)
+    std::string detail;             // a smaller line under the label (empty: none)
 };
 
 struct ChoiceInfo

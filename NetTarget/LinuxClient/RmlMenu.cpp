@@ -431,7 +431,7 @@ int RunChoiceMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const ChoiceInfo
     for (size_t i = 0; i < pInfo.options.size(); ++i) {
         const ChoiceOption& option = pInfo.options[i];
         if (!option.headingBefore.empty()) html += "<p class=\"group\">" + Escaped(option.headingBefore) + "</p>";
-        html += "<button id=\"opt" + std::to_string(i) + "\"" + (option.primary ? " class=\"primary\"" : "") + ">" + Escaped(option.label) + "</button>";
+        html += "<button id=\"opt" + std::to_string(i) + "\"" + (option.primary ? " class=\"primary\"" : "") + ">" + Escaped(option.label) + (option.detail.empty() ? "" : "<br/><span class=\"detail\">" + Escaped(option.detail) + "</span>") + "</button>";
     }
     if (Rml::Element* list = document->GetElementById("options")) list->SetInnerRML(html);
     int result = kChoiceNone;

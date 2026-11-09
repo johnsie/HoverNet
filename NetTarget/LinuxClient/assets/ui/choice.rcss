@@ -50,3 +50,6 @@ button.primary { padding: 18dp 10dp; font-size: 22dp; background-color: #dc3546;
 button:hover, button:focus { background-color: #3a3e54; transform: scale(1.025); }
 button.primary:hover, button.primary:focus { background-color: #f04a5b; }
 button:active { transform: scale(0.97); }
+
+.detail { font-family: Inter; font-size: 14dp; font-weight: normal; color: #cfd1de; }
+button.primary .detail { color: #ffe3e6; }
