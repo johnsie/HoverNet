@@ -1,0 +1,94 @@
+body {
+	font-family: Inter;
+	font-size: 17dp;
+	color: #f4f5f8;
+	width: 100%;
+	height: 100%;
+	decorator: gradient( vertical #12141c #26101a );
+}
+p, h1, div { display: block; }
+
+/* the craft, big on the left, drifting in */
+#hero {
+	position: absolute;
+	left: 3%;
+	bottom: 2%;
+	width: 52%;
+	height: 92%;
+	animation: 0.9s cubic-out hero-in;
+}
+#hero img { width: 100%; height: 100%; }
+@keyframes hero-in {
+	from { opacity: 0; transform: translateX(-70dp) scale(0.96); }
+	to   { opacity: 1; transform: translateX(0dp) scale(1); }
+}
+
+#brand { position: absolute; left: 48dp; top: 40dp; animation: 0.7s cubic-out fade-down; }
+h1 { font-family: Oxanium; font-size: 46dp; font-weight: bold; margin: 0; }
+.coral { color: #fa737a; font-size: 16dp; margin: 2dp 0; }
+.dim { color: #8b8fa3; font-size: 15dp; margin: 2dp 0; }
+@keyframes fade-down {
+	from { opacity: 0; transform: translateY(-24dp); }
+	to   { opacity: 1; transform: translateY(0dp); }
+}
+
+#level { margin-top: 14dp; width: 220dp; }
+.bar { height: 6dp; margin-top: 4dp; background-color: #303342; border-radius: 3dp; }
+#barfill { height: 6dp; width: 0%; background-color: #fa737a; border-radius: 3dp; transition: width 0.8s cubic-out; }
+
+/* the panel, sliding in from the right */
+#panel {
+	position: absolute;
+	right: 4%;
+	top: 50%;
+	margin-top: -250dp;
+	width: 420dp;
+	padding: 24dp 26dp;
+	background-color: #13131ae8;
+	border-radius: 12dp;
+	animation: 0.65s cubic-out panel-in;
+}
+@keyframes panel-in {
+	from { opacity: 0; transform: translateX(90dp); }
+	to   { opacity: 1; transform: translateX(0dp); }
+}
+hr { height: 1dp; margin: 12dp 0 16dp 0; background-color: #303342; }
+
+button {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	padding: 14dp 10dp;
+	margin-bottom: 10dp;
+	text-align: center;
+	font-family: Inter;
+	font-size: 18dp;
+	font-weight: bold;
+	color: #ffffff;
+	background-color: #dc3546;
+	tab-index: auto;
+	cursor: pointer;
+	transition: background-color transform 0.14s cubic-out;
+}
+button.primary { padding: 22dp 10dp; font-size: 24dp; }
+button.quiet { background-color: #2b2e3e; }
+button:hover { background-color: #f04a5b; transform: scale(1.025); }
+button.quiet:hover { background-color: #3a3e54; }
+button:focus { background-color: #ff5a6c; transform: scale(1.025); }
+button.quiet:focus { background-color: #4a4f6c; }
+button:active { transform: scale(0.97); }
+#online { animation: 1.6s sine-in-out infinite online-pulse; }
+@keyframes online-pulse {
+	from { background-color: #dc3546; }
+	50%  { background-color: #ee4457; }
+	to   { background-color: #dc3546; }
+}
+#online:hover { animation: none; }
+
+.pitch { color: #fa737a; font-size: 14dp; margin: -2dp 0 12dp 0; text-align: center; }
+.grid { margin-top: 6dp; }
+.grid button { display: inline-block; width: 48%; margin-right: 2%; font-size: 17dp; padding: 12dp 6dp; }
+.grid button#garage, .grid button#settings { margin-right: 0; margin-left: 0; }
+.hint { margin-top: 8dp; text-align: center; }
+
+#footer { position: absolute; left: 22dp; bottom: 14dp; color: #6c7086; font-size: 13dp; }

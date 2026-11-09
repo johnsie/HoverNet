@@ -139,6 +139,35 @@ target_include_directories(HoverNetImGui PUBLIC
 target_link_libraries(HoverNetImGui PUBLIC SDL2::SDL2)
 set_target_properties(HoverNetImGui PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# RmlUi (HTML/CSS-style user interface with real layout, transitions and animation), vendored with FreeType for its fonts (THIRD_PARTY_NOTICES.md).
+# Off by default while the new main menu is a prototype: -DHOVERNET_RMLUI=ON builds it, HOVERNET_RML_MENU=1 shows it at run time (docs/rmlui.md).
+option(HOVERNET_RMLUI "Build the RmlUi user interface prototype" OFF)
+if(HOVERNET_RMLUI)
+    set(FT_DISABLE_ZLIB ON CACHE BOOL "" FORCE)
+    set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
+    set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
+    set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
+    set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
+    set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5)   # FreeType declares an old minimum CMake version that new CMake refuses
+    set(_hn_shared ${BUILD_SHARED_LIBS})
+    set(BUILD_SHARED_LIBS OFF)
+    add_subdirectory(NetTarget/ThirdParty/freetype ${CMAKE_BINARY_DIR}/freetype EXCLUDE_FROM_ALL)
+    set(BUILD_SHARED_LIBS ${_hn_shared})
+    set_target_properties(freetype PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    file(GLOB_RECURSE HOVERNET_RMLUI_SOURCES CONFIGURE_DEPENDS NetTarget/ThirdParty/rmlui/Source/Core/*.cpp)
+    add_library(HoverNetRmlUi STATIC ${HOVERNET_RMLUI_SOURCES}
+        NetTarget/ThirdParty/rmlui/Backends/RmlUi_Platform_SDL.cpp
+        NetTarget/ThirdParty/rmlui/Backends/RmlUi_Renderer_SDL.cpp)
+    target_include_directories(HoverNetRmlUi PUBLIC NetTarget/ThirdParty/rmlui/Include NetTarget/ThirdParty/rmlui/Backends)
+    target_include_directories(HoverNetRmlUi PRIVATE NetTarget/ThirdParty/rmlui/Source/Core)
+    target_compile_definitions(HoverNetRmlUi PUBLIC RMLUI_STATIC_LIB)
+    # RmlUi 5.1's robin_hood.h relies on <cstdint> arriving indirectly, which newer compilers no longer do: include it first rather than edit the vendored file.
+    target_compile_options(HoverNetRmlUi PUBLIC "$<$<CXX_COMPILER_ID:MSVC>:/FIcstdint>" "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:SHELL:-include cstdint>")
+    target_link_libraries(HoverNetRmlUi PUBLIC freetype SDL2::SDL2)
+    set_target_properties(HoverNetRmlUi PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_STANDARD 14)
+endif()
+
 add_library(HoverNetPortableUtil STATIC
     NetTarget/Util/DllObjectFactory.cpp
     NetTarget/Util/FuzzyLogic.cpp
@@ -895,6 +924,11 @@ else()
 endif()
 target_compile_definitions(HoverNetGame2Player PRIVATE _HAVE_SDL2 HOVERNET_GAME2_PLAYER HOVERNET_SOURCE_DIR="${CMAKE_SOURCE_DIR}" HOVERNET_VERSION="${HOVERNET_VERSION}")
 target_link_libraries(HoverNetGame2Player PRIVATE HoverNetObserver HoverNetClientSession HoverNetResourceCore HoverNetVideoCore HoverNetRaceServerClient HoverNetImGui SDL2::SDL2)
+if(HOVERNET_RMLUI)
+    target_sources(HoverNetGame2Player PRIVATE NetTarget/LinuxClient/RmlMenu.cpp)
+    target_link_libraries(HoverNetGame2Player PRIVATE HoverNetRmlUi)
+    target_compile_definitions(HoverNetGame2Player PRIVATE HOVERNET_HAVE_RMLUI)
+endif()
 # The object library (ObjFac1.so) carries its own copy of the sound server (it links the resource code), so on Linux its sounds, such as the craft's motor, would be
 # registered in a second mixer that nothing plays. The game exports its sound server's symbols so the library uses the game's one.
 if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
@@ -1160,6 +1194,11 @@ if(BUILD_TESTING AND NOT WIN32)
         add_test(NAME HoverNetRestartRace
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-restart-race.sh $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        if(HOVERNET_RMLUI)
+            add_test(NAME HoverNetRmlMenu
+                COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-rml-menu.sh $<TARGET_FILE:HoverNetGame2Player>
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        endif()
         add_test(NAME HoverNetGarageDecals
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-garage-decals.sh $<TARGET_FILE:HoverNetGame2Player>
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

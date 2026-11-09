@@ -44,6 +44,9 @@
 #include "RaceServerClient.h"
 #include "../ThirdParty/imgui/imgui.h"
 #include "../ThirdParty/imgui/imgui_internal.h"
+#ifdef HOVERNET_HAVE_RMLUI
+#include "RmlMenu.h"
+#endif
 #include "../ThirdParty/imgui/backends/imgui_impl_sdl2.h"
 #include "MenuInput.h"
 #include "../ThirdParty/imgui/backends/imgui_impl_sdlrenderer2.h"
@@ -8543,6 +8546,31 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 {
     StartMarketCatalogueRefresh(pFrameLimit >= 0);   // the Track Market's list of tracks, fetched in the background
     ApplyMarketCatalogueUpdate();
+#ifdef HOVERNET_HAVE_RMLUI
+    if (std::getenv("HOVERNET_RML_MENU") != nullptr) {   // the RmlUi prototype of this menu (docs/rmlui.md); anything it cannot do falls back to the menu below
+        HoverNetRml::MainMenuInfo info;
+        info.assetDir = SourcePath("NetTarget/LinuxClient/assets");
+        info.version = HOVERNET_VERSION;
+        HoverNetProfile::Profile profile;
+        profile.Load(ProfilePath());
+        if (profile.xp > 0 || profile.races > 0) { info.level = profile.Level(); info.levelTitle = HoverNetCraft::LevelTitle(profile.Level()); info.levelProgress = profile.LevelProgress(); }
+        info.tutorialDone = HoverNetTutorial::HasCompleted(ConfigDirPath());
+        const HoverNetRml::Choice picked = HoverNetRml::RunMainMenu(graphics.GetWindow(), graphics.GetRenderer(), info, pFrameLimit, kWidth, kHeight);
+        switch (picked) {
+        case HoverNetRml::Choice::eOnline: return MenuChoice::eOnlineLobby;
+        case HoverNetRml::Choice::eOffline: return MenuChoice::eLocalPlay;
+        case HoverNetRml::Choice::eLeaderboards: return MenuChoice::eLeaderboards;
+        case HoverNetRml::Choice::eGarage: return MenuChoice::eGarage;
+        case HoverNetRml::Choice::eTutorial: return MenuChoice::eTutorial;
+        case HoverNetRml::Choice::eSettings: return MenuChoice::eSettings;
+        case HoverNetRml::Choice::eBack: return MenuChoice::eLocalPlay;   // as the ImGui menu: Esc / B leave with the default choice
+        case HoverNetRml::Choice::eQuitRequested:
+            if (ConfirmQuit(graphics, buffer, viewport, font)) { g_QuitConfirmed = true; return MenuChoice::eLocalPlay; }
+            break;   // the player changed their mind: show the menu below instead
+        case HoverNetRml::Choice::eNone: if (pFrameLimit >= 0) return MenuChoice::eLocalPlay; break;
+        }
+    }
+#endif
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
