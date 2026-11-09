@@ -1259,6 +1259,29 @@ void SaveLocalRacePrefs(const HostPrefs& prefs)
 }
 
 
+// Screens fade in from black: the first frames of a screen that is not the one drawn just before it are covered by a dark layer that clears in about a quarter of a
+// second (it never blocks input and never touches the race picture). Each screen loop calls this once per frame with its own key (HN_SCREEN_FADE). Off for the
+// screenshot hooks and with HOVERNET_NO_FADE, so the regression captures stay what they were.
+void ScreenFadeFrame(const void* pKey)
+{
+    static const void* lastKey = nullptr;
+    static Uint32 enteredAt = 0;
+    static int enabled = -1;
+    if (enabled < 0) {
+        enabled = std::getenv("HOVERNET_NO_FADE") == nullptr && std::getenv("HOVERNET_CAPTURE_FRAME") == nullptr && std::getenv("HOVERNET_CAPTURE_LOADING") == nullptr &&
+                  std::getenv("HOVERNET_CAPTURE_HUB") == nullptr && std::getenv("HOVERNET_CAPTURE_MENU") == nullptr && std::getenv("HOVERNET_CAPTURE_SERVERS") == nullptr ? 1 : 0;
+    }
+    const Uint32 now = SDL_GetTicks();
+    if (pKey != lastKey) { lastKey = pKey; enteredAt = now; }
+    if (enabled == 0) return;
+    const float age = static_cast<float>(now - enteredAt);
+    if (age >= 260.0f) return;
+    const float t = 1.0f - age / 260.0f;
+    const int alpha = static_cast<int>(255.0f * 0.92f * t * t);
+    ImGui::GetForegroundDrawList()->AddRectFilled(ImVec2(0, 0), ImGui::GetIO().DisplaySize, IM_COL32(10, 11, 16, alpha));
+}
+#define HN_SCREEN_FADE() do { static const char hnFadeKey = 0; ScreenFadeFrame(&hnFadeKey); } while (0)
+
 // Test hook for headless UI regression runs: when HOVERNET_CAPTURE_FRAME names a
 // file, the last frame of a frame-limited screen is saved there as a BMP. Call it
 // after the draw data is rendered and before SDL_RenderPresent.
@@ -3699,6 +3722,7 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
         }
 
         ImGui::End();
+        HN_SCREEN_FADE();
         ImGui::Render();
 
         SDL_Renderer* renderer = graphics.GetRenderer();
@@ -3842,6 +3866,7 @@ bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DVie
         ImGui::PopStyleColor();
         ImGui::End();
 
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
@@ -4025,6 +4050,7 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
         ImGui::PopStyleColor();
 
         ImGui::End();
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
@@ -4150,6 +4176,7 @@ ReplayEndChoice RunReplayEndScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor();
         ImGui::End();
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
@@ -4399,6 +4426,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         ImGui::PopStyleColor();
         ImGui::End();
 
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
@@ -4655,6 +4683,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         ImGui::End();
 
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_Renderer* renderer = graphics.GetRenderer();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
@@ -5229,6 +5258,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
         ImGui::End();
 
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_Renderer* renderer = graphics.GetRenderer();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
@@ -5549,6 +5579,7 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         }
         ImGui::End();
 
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
@@ -6190,6 +6221,7 @@ HubChoice RunSettingsHub(SDL2GraphicsBackend& graphics, int pFrameLimit)
         ImGui::Spacing();
         if (HoverNetQuietButton("Back", ImVec2(-FLT_MIN, 40))) running = false;
         ImGui::End();
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
@@ -6545,6 +6577,7 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
             shownHash = hash; shownYaw = yawNow; shownCraft = design.craft; lastBuild = now;
         }
 
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
@@ -6907,6 +6940,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
         if (HoverNetQuietButton("Back", ImVec2(-FLT_MIN, 40))) running = false;
         ImGui::End();
 
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
@@ -7274,6 +7308,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             else if (trackState == DownloadUi::State::eFailed) { pendingWatch.id = 0; downloadId = 0; }
         }
         ImGui::End();
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
@@ -8075,6 +8110,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
 
         ImGui::End();
 
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);
@@ -8430,6 +8466,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         }
         ImGui::End();
 
+        HN_SCREEN_FADE();
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 23, 23, 28, 255);
         SDL_RenderClear(renderer);

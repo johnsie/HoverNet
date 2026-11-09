@@ -7,6 +7,7 @@ and how to roll one back.
 ## Unreleased
 
 ### Added
+- **Screens fade in** from black (a quarter of a second) when you move between menu screens. Checked by sampling the screen brightness of the main menu as it opens; the other screens use the same call but were not each looked at. `HOVERNET_NO_FADE=1` turns it off.
 - **A lap banner** when you complete a lap: the lap, its time, and "BEST LAP" in gold when it beats your earlier laps in that race. Checked by a screenshot with a test hook (`HOVERNET_TEST_LAPBANNER`); not yet seen after a real lap, because the autoplay bot gets stuck on a wall before finishing one.
 
 ## 2.3.36 - 2026-11-09
