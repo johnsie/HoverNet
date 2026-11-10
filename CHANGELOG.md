@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **More RmlUi screens (still opt-in): the loading screen and the online lobby.** The loading screen shows the track, its style and difficulty, a faint map, a tip and a ring of dots. The lobby has the name card, the connecting and "can't reach the server" cards, the race list, race details with the map, the actions, the waiting room (roster, Start Race, Leave), the chat and user list, and the Host a race (track search, laps, weapons, private code, map) and Join a private race dialogs; a community track downloads over the screen first. Run with the older lobby's logic, so its server behaviour is the same. Checked: screenshots of the lobby and both dialogs against a local server, the scripted tests for the lobby (menu, fallback, auto-refresh, chat typed and sent with Enter, community track, lobby) with `HOVERNET_RML_MENU=1`, the screens' tests without it, and `HoverNetRmlMenu`. Not checked: a person clicking through hosting, joining and watching with the new screen, the browser and Windows builds. The main menu stays on the older version when `HOVERNET_TEST_MENU` is set (the test hook that opens a screen from the menu).
+- Not done: the Garage (a paint editor), the browser sign-in gate, and the tutorial overlay and race HUD (drawn over the race; the HUD is not to change). See [docs/rmlui.md](docs/rmlui.md).
+
 ## 2.3.45 - 2026-11-10
 
 _Released at the owner's request without waiting for the test suite or the Actions run, like 2.3.44. 2.3.44's tag was not released: its Windows installer job failed on the package check._

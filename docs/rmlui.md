@@ -40,7 +40,13 @@ glyphs unhinted. RmlUi 5.1's `robin_hood.h` needs `<cstdint>` first on current c
 | Game settings | Built (the form engine: tabs, toggles, sliders, choosers, text fields; same live previews, validation and Save/Cancel). |
 | Local race setup | Built (filterable track chooser, track map, briefing, laps and records, download with progress). |
 | Controls | Built (Keyboard and Controller tabs; remapping by pressing the key or button, with swap on conflict). |
-| Not built | Online lobby and its host/join dialogs, Garage, Leaderboards, Replays, the browser sign-in gate, loading screen, tutorial overlay, ImGui-only tools (the track editor stays on ImGui). |
+| Leaderboards | Built (four tabs, WATCH buttons, the community-track download before a replay). |
+| Replays | Built (My races with delete confirmation, Server replays with a track filter, the "follow which craft" question). |
+| Loading screen | Built (one frame: track name, style and difficulty, faint map, tip, ring of dots). |
+| Online lobby | Built (name entry, connecting and "can't reach" cards, race list, details with map, actions, waiting room, chat, users, the Host a race and Join a private race dialogs, track download over the screen). Not used by the two tests that click the ImGui widgets (`HoverNetOnlineScreenClicks`, `HoverNetStartRace`). |
+| Not built | **Garage** (a paint editor: canvas painting with the pointer, tools, 3D preview), the browser **sign-in gate** (web only), the **tutorial overlay and the race HUD** (drawn over the live race every frame; the HUD is not to be changed), ImGui-only tools (the track editor stays on ImGui). |
+
+The form engine also has "free screens" (`FormScreen` with another markup file, `lobby.rml`): the caller fills regions with `SetHtml` and hears clicks, changes and Enter on any element with a `data-id`.
 
 ## How it is drawn
 
