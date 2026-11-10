@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Changed
+- **The craft's shadow on the graphics-card path has a soft edge and a dark core.** It was a flat 13% darkening with a hard edge (a grey ring); the processor path has always drawn five rings that each darken to 87%, so a core about half as bright and a rim at 87%. The card now draws the same range as a smooth gradient: about 11% at the rim, falling to about half as bright inside 36% of the radius. Seen in captures on the card path (llvmpipe); the test (`HoverNetGpuScene`) now expects a wall under the shadow to come out between 30% and 80% of its brightness. Not seen on a real GPU.
+
 ## 2.3.51 - 2026-11-10
 
 _Released at the owner's request without waiting for the test suite. 2.3.49's GitHub run passed in full; 2.3.50's run was still in progress when this was cut. This release fixes every light and glow being drawn mirrored left to right (a missile's glow and smoke on the wrong side of the missile), the missile smoke trail, and the shadow darkening the craft on the graphics-card path; it also records frame rates measured on the development laptop. It corrects the 2.3.50 note below: the 2.3.49 run had been going about 20 minutes, not "several hours"._

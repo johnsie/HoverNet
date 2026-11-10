@@ -139,7 +139,7 @@ int main()
             const std::size_t left = (static_cast<std::size_t>(hints.projCenterY) * W + hints.projCenterX - 40) * 3, right = (static_cast<std::size_t>(hints.projCenterY) * W + hints.projCenterX + 40) * 3;
             Check(a && b && plain[left] > 20 && plain[right] > 20, "the shadow test's two quads are drawn");
             Check(shaded[left] == plain[left] && shaded[left + 1] == plain[left + 1], "a shadow does not darken the craft's own pixels");
-            Check(shaded[right] < plain[right] && shaded[right] > plain[right] * 8 / 10, "but it darkens the wall beside it (about 13%)");
+            Check(shaded[right] < plain[right] * 8 / 10 && shaded[right] > plain[right] * 3 / 10, "but it darkens the wall beside it (towards half as bright in the core, with a soft edge)");
             gpu.SetPalette(palette.data());
         }
         if (view == 0) {

@@ -413,7 +413,13 @@ void main() {
     for (int i = 0; i < 16; ++i) {
         if (i >= uShadowCount || tag == 5u || tag == 4u) break;
         vec2 d = (vec2(p) - uShadowA[i].xy) / uShadowA[i].zw;
-        if (dot(d, d) < 1.0 && float(z) * 4.0 >= uShadowB[i].x - uShadowB[i].y) c *= 0.87;
+        float r2 = dot(d, d);
+        if (r2 < 1.0 && float(z) * 4.0 >= uShadowB[i].x - uShadowB[i].y) {
+            // The processor draws five rings that each darken to 87%, so the core is about half as bright and the rim 87% (a stepped gradient). Here the same range runs smoothly, and the
+            // rim is a light 11% so the shadow still grounds the craft, with a smooth fall to the dark core: n runs from 0.8 at the rim to 5 inside 36% of the radius.
+            float t = clamp((1.0 - sqrt(r2)) / 0.64, 0.0, 1.0);
+            c *= pow(0.87, 0.8 + 4.2 * t * t * (3.0 - 2.0 * t));
+        }
     }
     o = vec4(c, 1.0);
 }
