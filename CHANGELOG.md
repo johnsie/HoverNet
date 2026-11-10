@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+- Linux and Windows: the window's close (X) button now asks "Quit HoverNet? / Keep playing" on every screen. The settings screen, the hub, replays, leaderboards, the servers screen, the online lobby and the garage used to quit straight away; "Keep playing" returns to the game. Checked on Linux only (`HoverNetCloseButtonAsksKeep`/`AsksQuit` ctest, settings screen with the answer given by an environment variable; the dialog itself by the existing quit smoke test). The other screens use the same call but were not each driven; Windows was not run.
+
 ## 2.3.54 - 2026-11-10
 
 _Released at the owner's request without waiting for the test suite._

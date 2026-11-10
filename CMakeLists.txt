@@ -1353,6 +1353,15 @@ if(BUILD_TESTING AND NOT WIN32)
     set_tests_properties(HoverNetPauseMenuSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetQuitConfirmationSmoke COMMAND HoverNetGame2Player --quit-confirmation --frames 2)
     set_tests_properties(HoverNetQuitConfirmationSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    # The window's close (X) button asks "are you sure?" on a screen, and "keep playing" leaves the screen running.
+    add_test(NAME HoverNetCloseButtonAsksKeep COMMAND HoverNetGame2Player --settings-screen --frames 20)
+    set_tests_properties(HoverNetCloseButtonAsksKeep PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        ENVIRONMENT "HOVERNET_TEST_PUSH_QUIT=1;HOVERNET_TEST_QUIT_ANSWER=keep"
+        PASS_REGULAR_EXPRESSION "QUITASKED keep.*quit confirmed: 0")
+    add_test(NAME HoverNetCloseButtonAsksQuit COMMAND HoverNetGame2Player --settings-screen --frames 20)
+    set_tests_properties(HoverNetCloseButtonAsksQuit PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        ENVIRONMENT "HOVERNET_TEST_PUSH_QUIT=1;HOVERNET_TEST_QUIT_ANSWER=quit"
+        PASS_REGULAR_EXPRESSION "QUITASKED quit.*quit confirmed: 1")
     add_test(NAME HoverNetPostRaceSmoke COMMAND HoverNetGame2Player --results-screen --frames 2)
     set_tests_properties(HoverNetPostRaceSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetSettingsHubSmoke COMMAND HoverNetGame2Player --settings-hub --frames 2)

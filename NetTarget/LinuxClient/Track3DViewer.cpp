@@ -2836,6 +2836,7 @@ void HoverNetHint(const char* label)
 // needs to call it from its own SDL_QUIT handling.
 bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                  const MR_Sprite& font, int pFrameLimit = -1);
+bool ConfirmQuit(SDL2GraphicsBackend& graphics, int pFrameLimit = -1);
 
 // PauseChoice/RunPauseMenu and SettingsResult/RunSettingsScreen are fully
 // defined further below (where the pause menu and settings screen already
@@ -4098,12 +4099,19 @@ bool RunLobbyScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3D
 // language as the rest of the Phase 3 menus. It borrows an active context when
 // invoked from another ImGui screen and owns one when invoked directly from a
 // race. Returns true only after an explicit destructive confirmation.
-bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
-                 const MR_Sprite& font, int pFrameLimit)
+bool ConfirmQuit(SDL2GraphicsBackend& graphics, MR_VideoBuffer&, MR_3DViewPort&, const MR_Sprite&, int pFrameLimit)
 {
-    (void)buffer;
-    (void)viewport;
-    (void)font;
+    return ConfirmQuit(graphics, pFrameLimit);
+}
+
+// The dialog itself needs only the window: every screen's close (X) button asks through this one ("Are you sure?" first, never straight out).
+bool ConfirmQuit(SDL2GraphicsBackend& graphics, int pFrameLimit)
+{
+    if (const char* answer = std::getenv("HOVERNET_TEST_QUIT_ANSWER")) {   // tests: answer without a dialog, and say the question was asked
+        std::printf("QUITASKED %s\n", answer);
+        std::fflush(stdout);
+        return std::string(answer) == "quit";
+    }
 #ifdef HOVERNET_HAVE_RMLUI
     if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this dialog (docs/rmlui.md); if it cannot load, the ImGui one below is shown
         HoverNetRml::ChoiceInfo info;
@@ -6326,8 +6334,10 @@ void RunControlsScreen(SDL2GraphicsBackend& graphics, int pFrameLimit)
         while (SDL_PollEvent(&event)) {
             MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
-                g_QuitConfirmed = true;
-                running = false;
+                if (ConfirmQuit(graphics)) {
+                    g_QuitConfirmed = true;
+                    running = false;
+                }
             }
             else if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE &&
@@ -7221,7 +7231,7 @@ HubChoice RunSettingsHub(SDL2GraphicsBackend& graphics, int pFrameLimit)
         auto shutdownImGui = [&]() { if (ownsImGuiContext) { ImGui_ImplSDLRenderer2_Shutdown(); ImGui_ImplSDL2_Shutdown(); ImGui::DestroyContext(); } };
         if (picked >= 0 && picked < 5) { shutdownImGui(); return choices[picked]; }
         if (picked == HoverNetRml::kChoiceBack) { shutdownImGui(); return HubChoice::eBack; }
-        if (picked == HoverNetRml::kChoiceClose) { g_QuitConfirmed = true; shutdownImGui(); return HubChoice::eBack; }
+        if (picked == HoverNetRml::kChoiceClose) { if (ConfirmQuit(graphics)) { g_QuitConfirmed = true; shutdownImGui(); return HubChoice::eBack; } shutdownImGui(); return HubChoice::eBack; }   // X: asks first; "keep playing" goes back one screen
         if (picked == HoverNetRml::kChoiceNone && pFrameLimit >= 0) { shutdownImGui(); return HubChoice::eBack; }
         // otherwise (could not load): the ImGui screen below
     }
@@ -7234,7 +7244,7 @@ HubChoice RunSettingsHub(SDL2GraphicsBackend& graphics, int pFrameLimit)
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             MenuProcessEvent(event);
-            if (event.type == SDL_QUIT) { g_QuitConfirmed = true; running = false; }
+            if (event.type == SDL_QUIT) { if (ConfirmQuit(graphics)) { g_QuitConfirmed = true; running = false; } }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) running = false;
             else if (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_B) running = false;
         }
@@ -7740,7 +7750,7 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             MenuProcessEvent(event);
-            if (event.type == SDL_QUIT) { if (leaveGarage(true)) running = false; }
+            if (event.type == SDL_QUIT) { if (ConfirmQuit(graphics) && leaveGarage(true)) running = false; }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE && !ImGui::GetIO().WantTextInput) { if (pendingLeave != 0) pendingLeave = 0; else if (leaveGarage(false)) running = false; }
         }
         const Uint32 now = SDL_GetTicks();
@@ -8285,7 +8295,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                 int startSlot = 0;
                 std::string startNote;
                 if (outcome == HoverNetRml::FormOutcome::eSave || outcome == HoverNetRml::FormOutcome::eCancel) { if (craftChoice.active) craftChoice.active = false; else running = false; }
-                else if (outcome == HoverNetRml::FormOutcome::eClose) { g_QuitConfirmed = true; running = false; }
+                else if (outcome == HoverNetRml::FormOutcome::eClose) { if (ConfirmQuit(graphics)) { g_QuitConfirmed = true; running = false; } }
 #if defined(HOVERNET_AUTH)
                 if (tab == 1 && !serverTried) { serverTried = true; if (!ConnectLobbyForReplays(server)) message = "The server address is not usable. Check it in the HoverNet servers screen."; }
                 server.Pump();
@@ -8437,7 +8447,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             MenuProcessEvent(event);
-            if (event.type == SDL_QUIT) { g_QuitConfirmed = true; running = false; }
+            if (event.type == SDL_QUIT) { if (ConfirmQuit(graphics)) { g_QuitConfirmed = true; running = false; } }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) running = false;
             else if (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_B) running = false;
         }
@@ -8777,7 +8787,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                 std::vector<HoverNetRml::FormEvent> events;
                 const HoverNetRml::FormOutcome outcome = form->Frame(events, frame, limit);
                 if (outcome == HoverNetRml::FormOutcome::eSave || outcome == HoverNetRml::FormOutcome::eCancel) running = false;
-                else if (outcome == HoverNetRml::FormOutcome::eClose) { g_QuitConfirmed = true; running = false; }
+                else if (outcome == HoverNetRml::FormOutcome::eClose) { if (ConfirmQuit(graphics)) { g_QuitConfirmed = true; running = false; } }
                 if (!serverTried) { serverTried = true; if (!ConnectLobbyForReplays(server)) message = "The server address is not usable. Check it in the HoverNet servers screen."; }
                 server.Pump();
                 if (server.GetState() == OnlineLobby::State::eBrowsing) {
@@ -8958,7 +8968,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             MenuProcessEvent(event);
-            if (event.type == SDL_QUIT) { g_QuitConfirmed = true; running = false; }
+            if (event.type == SDL_QUIT) { if (ConfirmQuit(graphics)) { g_QuitConfirmed = true; running = false; } }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) running = false;
             else if (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_B) running = false;
         }
@@ -9320,7 +9330,7 @@ void RunSignInGate(SDL2GraphicsBackend& graphics)
             rml->SetClass("card", "hide", state != 0);
             std::vector<HoverNetRml::FormEvent> events;
             const HoverNetRml::FormOutcome outcome = rml->Frame(events, 1, -1);
-            if (outcome == HoverNetRml::FormOutcome::eClose) { g_QuitConfirmed = true; running = false; }
+            if (outcome == HoverNetRml::FormOutcome::eClose) { if (ConfirmQuit(graphics)) { g_QuitConfirmed = true; running = false; } }
             for (const HoverNetRml::FormEvent& e : events) {
                 if (e.id == "signin") hovernet_js_open_signin();
                 else if (e.id == "guest") running = false;
@@ -9569,8 +9579,10 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
 #endif
             MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
-                running = false;
-                g_QuitConfirmed = true;
+                if (ConfirmQuit(graphics)) {
+                    running = false;
+                    g_QuitConfirmed = true;
+                }
             }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
                 if (lobby.GetState() == OnlineLobby::State::eWaiting) lobby.Cancel();
@@ -9791,7 +9803,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             HoverNetRml::FormOutcome rOutcome;
             std::vector<HoverNetRml::FormEvent> rEvents;
             rOutcome = rml->Frame(rEvents, framesShown, std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit);
-            if (rOutcome == HoverNetRml::FormOutcome::eClose) { running = false; g_QuitConfirmed = true; }
+            if (rOutcome == HoverNetRml::FormOutcome::eClose) { if (ConfirmQuit(graphics)) { running = false; g_QuitConfirmed = true; } }
             else if (rOutcome == HoverNetRml::FormOutcome::eCancel || rOutcome == HoverNetRml::FormOutcome::eSave) {
                 if (rHostOpen || rPrivOpen) { if (!trackDownload.Active()) closeDialogs(); }
                 else if (rWaiting) lobby.Cancel();
@@ -12427,6 +12439,17 @@ int RunClient(int argc, char** argv)
             if (!joinOnlineRace(true)) {
                 return FatalClientError("Online race acceptance could not host, start, and load a race.");
             }
+        }
+        else if (HasArgument(argc, argv, "--settings-screen") && std::getenv("HOVERNET_TEST_PUSH_QUIT") != nullptr) {
+            // The window's close (X) button on a screen: it must ask first. HOVERNET_TEST_QUIT_ANSWER=keep|quit stands in for the player's answer (see ConfirmQuit).
+            SDL_Event closeEvent = {};
+            closeEvent.type = SDL_QUIT;
+            SDL_PushEvent(&closeEvent);
+            RunSettingsScreen(graphics, buffer, viewport, *menuFontHandle->GetSprite(),
+                              "Player", lobbyHost, lobbyPort, LoadVolume(), LoadMute(), LoadFullscreen(), frameLimit);
+            std::printf("CLOSETEST screen returned, quit confirmed: %d\n", g_QuitConfirmed ? 1 : 0);
+            std::fflush(stdout);
+            g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--lobby-screen")) {
             // Deterministic CI entry point: exercise protocol negotiation and
