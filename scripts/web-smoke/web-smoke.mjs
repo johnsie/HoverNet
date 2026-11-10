@@ -96,7 +96,7 @@ await sleep(1500); await shot('1-briefing');
 await click(95, 331); await sleep(900);
 for (let i = 0; i < 3; i++) { await click(201, 331); await sleep(900); }
 await sleep(1500); await shot('2-main-menu');
-await click(641, 88); await sleep(1500); await shot('3-local-setup');
+await click(732, 101); await sleep(1500); await shot('3-local-setup');   // PRACTICE OFFLINE on the older menu (its panel moved; the old click landed 7 px left of the button)
 await click(129, 339);
 check(await waitFor(async () => (await inRace()) === 1, 30000), 'Start Race begins a race (race controls enabled)');
 await sleep(3000); await shot('4-race');
