@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.50 - 2026-11-10
+
+_Released at the owner's request without waiting for the test suite. 2.3.49's GitHub run had not finished when this was cut (it was still in progress after several hours, which is unusual). This release adds: other craft and missiles heard from where they are with a Doppler pitch, a muzzle flash and a power-up sparkle, and the browser smoke test's click fix. The browser build of the fixed-tick offline play was run through a full race in headless Chrome before this release._
+
 ### Added
 - **A muzzle flash when a missile is launched and a sparkle when a power-up is taken** (part of the optional look, with the explosions: they need Effects and Lighting on, and are off with Reduced motion). A missile that appears near your craft gets a small white-yellow flash and a few sparks for a quarter of a second; a power-up that disappears while your craft is next to it gets a green-white burst that rises and fades over 0.6 s. Both are a new light kind (`kLightBurst`) drawn by the processor and by the graphics card (the glow in the light's own colour). Seen as events in a headless run with an autofiring craft (four launches and one explosion in 1800 frames on ClassicH, `HOVERNET_GFX_DEBUG=1`); unit-tested (a green burst glows green and throws a few sparks, none with Reduced motion). Not seen on screen, and no power-up was taken in that run, so the pickup burst itself has not been triggered.
 
