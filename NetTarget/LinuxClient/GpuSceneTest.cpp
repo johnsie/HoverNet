@@ -98,6 +98,17 @@ int main()
         std::vector<std::uint8_t> rgb(static_cast<std::size_t>(W) * H * 3, 0);
         const bool done = gpu.Process(rgb.data(), W, H, options, hints, nullptr);
         if (view == 0) Check(done, "the card finishes a frame with a scene");
+        if (view == 0) {
+            // glows (the engine glow, sparks, embers) are drawn by the card after the scene, so they show over it
+            gpu.Scene().Clear(); card.SetSceneSink(&gpu.Scene()); card.Clear(255); card.ClearZ(); draw(card);
+            const HoverNetGfx::GlowSprite sprite{W / 2.0f, H / 2.0f, 24.0f, 24.0f, 255, 200, 100, 1.0f};
+            HoverNetGfx::FrameHints withGlow = hints; withGlow.sprites = &sprite; withGlow.spriteCount = 1;
+            std::vector<std::uint8_t> lit(rgb.size(), 0);
+            const bool glowDone = gpu.Process(lit.data(), W, H, options, withGlow, nullptr);
+            const std::size_t centre = (static_cast<std::size_t>(H / 2) * W + W / 2) * 3, far = (static_cast<std::size_t>(H / 2) * W + W / 2 + 40) * 3;
+            Check(glowDone && lit[centre] > rgb[centre] + 120, "a glow sprite is added over the card's scene (centre brighter)");
+            Check(lit[far] == rgb[far] && lit[far + 1] == rgb[far + 1], "and does not touch pixels outside it");
+        }
 
         // --- compare
         long cpuCovered = 0, gpuCovered = 0, both = 0; double diff = 0;

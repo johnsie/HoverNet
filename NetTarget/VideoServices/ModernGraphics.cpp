@@ -201,6 +201,8 @@ void Presenter::Process(std::uint8_t* rgb, int width, int height, const Options&
                std::strcmp(name, "hud-outline") == 0 || std::strcmp(name, "vignette") == 0;
     };
     const bool useFinisher = options.gpuFinish && FinisherActive();
+    mSprites.clear();
+    mDeferGlows = useFinisher && hints.gpuScene;   // the card's scene replaces the processor's, so it draws the glows after it
     auto run = [&](Pass& pass) {
         if (mProfiling) {
             const auto start = std::chrono::steady_clock::now();
@@ -216,7 +218,10 @@ void Presenter::Process(std::uint8_t* rgb, int width, int height, const Options&
     }
     if (useFinisher) {
         const auto start = std::chrono::steady_clock::now();
-        const bool done = mFinisher(rgb, width, height, options, hints, mask);
+        FrameHints handed;
+        const FrameHints* toFinisher = &hints;
+        if (!mSprites.empty()) { handed = hints; handed.sprites = mSprites.data(); handed.spriteCount = static_cast<int>(mSprites.size()); toFinisher = &handed; }
+        const bool done = mFinisher(rgb, width, height, options, *toFinisher, mask);
         if (mProfiling) mPassTimes.push_back({"gpu-finish", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count()});
         if (!done) {   // it could not: this frame gets the CPU passes, and the finisher is not asked again
             mFinisherBroken = true;
@@ -770,6 +775,13 @@ void Presenter::Lighting(std::uint8_t* rgb, int width, int height, const Options
     }
 }
 
+void Presenter::Glow(std::uint8_t* rgb, int width, int height, float cx, float cy, float rx, float ry, int r, int g, int b, float strength)
+{
+    if (!mDeferGlows) { AddGlow(rgb, width, height, cx, cy, rx, ry, r, g, b, strength); return; }
+    if (rx < 1.0f || ry < 1.0f || strength <= 0.0f || mSprites.size() >= 512) return;
+    mSprites.push_back(GlowSprite{cx, cy, rx, ry, static_cast<std::uint8_t>(r), static_cast<std::uint8_t>(g), static_cast<std::uint8_t>(b), strength});
+}
+
 void Presenter::Effects(std::uint8_t* rgb, int width, int height, const Options& options, const FrameHints& hints)
 {
     const float scale = height / 480.0f;
@@ -784,7 +796,7 @@ void Presenter::Effects(std::uint8_t* rgb, int width, int height, const Options&
         // Engine glow under the craft, brighter the faster it goes.
         const float flicker = 1.0f;   // steady: a glow that shimmers makes the craft look as if it is vibrating
         const float r = std::max(6.0f, hints.craftRadius * 1.25f);
-        AddGlow(rgb, width, height, static_cast<float>(hints.craftX), hints.craftY + hints.craftRadius * 0.35f, r, r * 0.6f, 80, 160, 255, (0.22f + 0.5f * speed) * flicker);
+        Glow(rgb, width, height, static_cast<float>(hints.craftX), hints.craftY + hints.craftRadius * 0.35f, r, r * 0.6f, 80, 160, 255, (0.22f + 0.5f * speed) * flicker);
     }
 
     // Impact sparks.
@@ -812,7 +824,7 @@ void Presenter::Effects(std::uint8_t* rgb, int width, int height, const Options&
         p.x += p.vx * dt; p.y += p.vy * dt;
         p.vy += p.gravity * scale * dt;
         const float f = p.life / p.maxLife;
-        AddGlow(rgb, width, height, p.x, p.y, p.size * 2.2f, p.size * 2.2f, p.r, p.g, p.b, f * p.strength);
+        Glow(rgb, width, height, p.x, p.y, p.size * 2.2f, p.size * 2.2f, p.r, p.g, p.b, f * p.strength);
         ++i;
     }
 }

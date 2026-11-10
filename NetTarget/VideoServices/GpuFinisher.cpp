@@ -19,7 +19,7 @@ enum : GLenum {
     kFramebuffer = 0x8D40, kColorAttachment0 = 0x8CE0, kFramebufferComplete = 0x8CD5, kFragmentShader = 0x8B30, kVertexShader = 0x8B31,
     kCompileStatus = 0x8B81, kLinkStatus = 0x8B82, kInfoLogLength = 0x8B84, kTriangles = 4, kUnpackAlignment = 0x0CF5, kPackAlignment = 0x0D05,
     kTexture0 = 0x84C0, kArrayBuffer = 0x8892, kStreamDraw = 0x88E0, kFloat = 0x1406, kRenderbuffer = 0x8D41, kDepth24 = 0x81A6, kDepthAttachment = 0x8D00,
-    kColorAttachment1 = 0x8CE1, kColorAttachment2 = 0x8CE2, kColor = 0x1800, kDepth = 0x1801, kLess = 0x0201, kLequal = 0x0203, kRepeat = 0x2901, kLinearMipmapLinear = 0x2703, kR16UI = 0x8234, kR8UI = 0x8232, kRedInteger = 0x8D94, kUnsignedShort = 0x1403, kRenderer = 0x1F01, kBlend = 0x0BE2, kDepthTest = 0x0B71, kCullFace = 0x0B44, kScissorTest = 0x0C11
+    kColorAttachment1 = 0x8CE1, kColorAttachment2 = 0x8CE2, kColor = 0x1800, kDepth = 0x1801, kLess = 0x0201, kLequal = 0x0203, kRepeat = 0x2901, kLinearMipmapLinear = 0x2703, kR16UI = 0x8234, kR8UI = 0x8232, kRedInteger = 0x8D94, kUnsignedShort = 0x1403, kRenderer = 0x1F01, kBlend = 0x0BE2, kDepthTest = 0x0B71, kCullFace = 0x0B44, kScissorTest = 0x0C11, kOne = 1
 };
 
 struct Gl
@@ -82,6 +82,7 @@ struct Gl
     void (*ActiveTexture)(GLenum) = nullptr;
     void (*ReadPixels)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void*) = nullptr;
     void (*Disable)(GLenum) = nullptr;
+    void (*BlendFunc)(GLenum, GLenum) = nullptr;
     const unsigned char* (*GetString)(GLenum) = nullptr;
     void (*Finish)() = nullptr;
     void (*GetIntegerv)(GLenum, GLint*) = nullptr;
@@ -323,6 +324,7 @@ void main() {
             else if (kind == 7) { col = vec3(120.0, 255.0, 190.0); strength = 0.6; scale = 0.14; }
             else if (kind == 4) { col = vec3(120.0, 185.0, 255.0); strength = 0.38; scale = 0.11; }
             else if (kind == 8) { col = vec3(190.0, 210.0, 255.0); strength = 0.3; scale = 0.11; }
+            else if (kind == 9) { col = min(uLC[li].rgb * 255.0 + vec3(0.0, 50.0, 70.0), vec3(255.0)); strength = min(1.0, uLC[li].a * 1.1); scale = 0.30; }   // an explosion
             else continue;
             vec3 lp = uLA[li].xyz;
             if (lp.x < 500.0) continue;
@@ -334,6 +336,10 @@ void main() {
             vec2 d = vec2(p) - centre;
             float g = glowShape(d, vec2(radius));
             if (kind == 5) g += 0.7 * glowShape(d, vec2(radius * 2.6, radius * 0.25)) + 0.5 * glowShape(d, vec2(radius * 0.25, radius * 2.6));
+            if (kind == 9) {   // a white-hot core and a flare stretched along the floor
+                g += 0.0;
+                c += vec3(255.0, 245.0, 220.0) * glowShape(d, vec2(radius * 0.45)) * strength + col * 0.6 * glowShape(d, vec2(radius * 2.2, radius * 0.3)) * strength;
+            }
             c += col * g * strength;
         }
     }
@@ -354,6 +360,25 @@ void main() {
     float cy = (2.0 * uProj.w / uFrame.y - 1.0) * X - 2.0 * aPos.z / (uProj.y * uFrame.y);
     gl_Position = vec4(cx, cy, 0.0, X);
     vUv = aUv; vX = aPos.x; vTag = aTag;
+}
+)";
+
+// Soft round glows added to the finished scene (the engine glow, sparks, embers and smoke): one quad per sprite, additive.
+const char* kSpriteVertex = R"(
+layout(location = 0) in vec4 aPosUv; layout(location = 1) in vec4 aColour;
+out vec2 vUv; out vec4 vColour;
+uniform vec2 uFrame;
+void main() {
+    gl_Position = vec4(aPosUv.x / uFrame.x * 2.0 - 1.0, aPosUv.y / uFrame.y * 2.0 - 1.0, 0.0, 1.0);
+    vUv = aPosUv.zw; vColour = aColour;
+}
+)";
+const char* kSpriteFragment = R"(
+in vec2 vUv; in vec4 vColour; out vec4 o;
+void main() {
+    float d2 = dot(vUv, vUv);
+    float f = d2 >= 1.0 ? 0.0 : (1.0 - d2) * (1.0 - d2) * vColour.a;
+    o = vec4(vColour.rgb * f, 0.0);
 }
 )";
 
@@ -490,7 +515,7 @@ struct GpuFinisher::Impl
     bool es = false;
     Gl gl;
     GLuint vao = 0;
-    GLuint progGeo = 0, progCompose = 0;
+    GLuint progGeo = 0, progCompose = 0, progSprite = 0;
     GLuint texSColour = 0, texSDepth = 0, texSTag = 0, rboDepth = 0, fboGeo = 0, texBase = 0, fboBase = 0, vbo = 0;
     int geoW = 0, geoH = 0;
     struct Tex { GLuint id = 0; unsigned serial = 0; };
@@ -794,6 +819,7 @@ bool GpuFinisher::Init()
         if (m.progDown != 0) m.progBlur = m.Program(kBlur, error);
         if (m.progBlur != 0) m.progFinal = m.Program(kFinal, error);
         if (m.progFinal == 0) { ok = false; mError = error; }
+        else if (Load(g.BlendFunc, "glBlendFunc")) m.progSprite = m.Program(kSpriteFragment, error, kSpriteVertex);   // optional: without it the glows are simply not drawn on the card's scene
     }
     if (ok) {
         const unsigned char* name = g.GetString(kRenderer);
@@ -974,6 +1000,34 @@ bool GpuFinisher::Process(std::uint8_t* rgb, int width, int height, const Option
         g.Uniform1iv(g.GetUniformLocation(m.progScene, "uLK"), kMaxLights, lk);
         m.Draw(m.progScene, m.fboScene, width, height);
         pictureTexture = m.texScene;
+    }
+
+    // the engine glow, sparks, embers and smoke, added over the scene (the processor cannot paint them: the card's scene replaced its picture)
+    if (m.sceneDrawn && m.progSprite != 0 && hints.sprites != nullptr && hints.spriteCount > 0) {
+        std::vector<float> data;
+        data.reserve(static_cast<std::size_t>(hints.spriteCount) * 48);
+        static const float corners[6][2] = {{-1, -1}, {1, -1}, {1, 1}, {-1, -1}, {1, 1}, {-1, 1}};
+        for (int i = 0; i < hints.spriteCount; ++i) {
+            const GlowSprite& s = hints.sprites[i];
+            for (const auto& corner : corners) {
+                const float vals[8] = {s.x + corner[0] * s.rx, s.y + corner[1] * s.ry, corner[0], corner[1], s.r / 255.0f, s.g / 255.0f, s.b / 255.0f, s.strength};
+                data.insert(data.end(), vals, vals + 8);
+            }
+        }
+        g.BindFramebuffer(kFramebuffer, pictureTexture == m.texScene ? m.fboScene : m.fboBase);
+        g.Viewport(0, 0, width, height);
+        g.Enable(kBlend); g.BlendFunc(kOne, kOne);
+        g.UseProgram(m.progSprite);
+        g.Uniform2f(g.GetUniformLocation(m.progSprite, "uFrame"), static_cast<float>(width), static_cast<float>(height));
+        g.BindVertexArray(m.vao);
+        g.BindBuffer(kArrayBuffer, m.vbo);
+        g.BufferData(kArrayBuffer, static_cast<std::ptrdiff_t>(data.size() * sizeof(float)), data.data(), kStreamDraw);
+        g.EnableVertexAttribArray(0); g.EnableVertexAttribArray(1);
+        g.VertexAttribPointer(0, 4, kFloat, 0, 8 * sizeof(float), nullptr);
+        g.VertexAttribPointer(1, 4, kFloat, 0, 8 * sizeof(float), reinterpret_cast<const void*>(4 * sizeof(float)));
+        g.DrawArrays(kTriangles, 0, static_cast<GLsizei>(data.size() / 8));
+        g.BindBuffer(kArrayBuffer, 0);
+        g.Disable(kBlend);
     }
 
     // 1: de-band, smooth, sharpen

@@ -72,6 +72,10 @@ struct Options
     }
 };
 
+// A soft round glow in framebuffer pixels (strength 0..1, colour 0..255), added to the picture: the engine glow and every particle. The processor paints them itself
+// (AddGlow); when the scene is drawn on the graphics card they are handed to the finisher instead, which draws them after the scene so they are not replaced by it.
+struct GlowSprite { float x, y, rx, ry; std::uint8_t r, g, b; float strength; };
+
 // What the observer knows about the frame it just drew, in framebuffer pixels.
 struct FrameHints
 {
@@ -101,6 +105,8 @@ struct FrameHints
     const std::uint8_t* tags = nullptr;   // optional: a SurfaceTag per pixel, for the same window as the depth (null when the rasteriser was not asked for them)
     float projKx = 0, projKz = 0;
     int projCenterX = 0, projCenterY = 0;
+    const GlowSprite* sprites = nullptr;   // set by the Presenter for the finisher only, valid for that call
+    int spriteCount = 0;
     int lightCount = 0;
     Light lights[kMaxLights];
     int trailCount = 0;           // where the craft was a moment ago, oldest first
@@ -250,6 +256,9 @@ private:
     std::vector<std::uint8_t> mEdge;               // 1 where the filter pass found a strong edge
     int mVignetteWidth = 0, mVignetteHeight = 0;
     std::vector<Particle> mParticles;
+    std::vector<GlowSprite> mSprites;     // glows to hand to the finisher this frame (empty when the processor paints them)
+    bool mDeferGlows = false;
+    void Glow(std::uint8_t* rgb, int width, int height, float cx, float cy, float rx, float ry, int r, int g, int b, float strength);
     std::uint32_t mRandom = 0x2545F491u;
     std::uint32_t mFrame = 0;
     std::vector<std::unique_ptr<Pass>> mPasses;
