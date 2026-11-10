@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.51 - 2026-11-10
+
+_Released at the owner's request without waiting for the test suite. 2.3.49's GitHub run passed in full; 2.3.50's run was still in progress when this was cut. This release fixes every light and glow being drawn mirrored left to right (a missile's glow and smoke on the wrong side of the missile), the missile smoke trail, and the shadow darkening the craft on the graphics-card path; it also records frame rates measured on the development laptop. It corrects the 2.3.50 note below: the 2.3.49 run had been going about 20 minutes, not "several hours"._
+
 ### Fixed
 - **The craft's shadow sat on top of part of the craft (graphics-card path).** The card applies the shadow after the whole scene is drawn, and it darkened every pixel at about the shadow's distance, which includes the craft's own lower hull (and anything else standing on the floor beside it). The processor path never did this because it draws the shadow before the craft. The card's shadow step now skips pixels tagged as a craft or an object. `HoverNetGpuScene` has a new check (a craft-tagged quad and a wall-tagged quad under one shadow: only the wall darkens); it fails without the fix. Seen fixed in a capture of the craft on the card path (llvmpipe); not seen on a real GPU.
 
