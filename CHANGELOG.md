@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.49 - 2026-11-10
+
+_Released at the owner's request without waiting for the test suite. 2.3.47 and 2.3.48 passed GitHub Actions in full; 2.3.49's run had not been seen when this was cut. It carries: every effect on by default with Automatic graphics, fair fixed-tick offline play drawn smoothly between ticks (no 16 ms pause when vsync paces the loop), the Garage and sign-in gate in RmlUi, the window-resize fix, and two memory bugs found under AddressSanitizer._
+
 ### Changed
 - **Offline play is fair at any frame rate and draws smoothly between ticks (the owner's decision, 10 November 2026; it touches the camera's input, see docs/camera.md).**
   - *Fair.* A local race now runs in the same whole 16 ms ticks as the server and the replays (it ran in clock-driven steps, so its speed depended on the frame rate: the same autoplay run went a different distance at 25 and at 70 frames a second). `HoverNetFrameRateTest` shows the same race state after the same number of ticks at 62.5, 60, 30 and 144 Hz, with 1 ms frames, with uneven frames and with one-second stalls. `--variable-step` (or `HOVERNET_VARIABLE_STEP=1`) brings the old stepping back.
