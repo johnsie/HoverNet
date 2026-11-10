@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.56 - 2026-11-10
+
+_Released at the owner's request without waiting for the test suite._
+
 - Linux and Windows: "Race Online" now reaches the same official HoverNet server as the web client (`hovernet.outiva.com:9610`, encrypted, with the server's public key built in). Until now that port was closed to the internet, so those clients fell back silently to the old classic lobby at `outiva.com:9600`, a different lobby with different players. Checked on Linux: with the key the native client connected over the encrypted channel and received the live leaderboards (the same records the web shows); the web client still lists and plays the server's replays. A client built before this change still falls back to the classic lobby. Windows was not run. `scripts/open-server-port.sh` is what changed the server's configuration.
 
 ## 2.3.55 - 2026-11-10
