@@ -73,6 +73,14 @@ void EndFrame(int pFrameLimit)
 // The screens are drawn twice as large into an off-screen picture and shrunk onto the window with smooth filtering: that smooths the edges of rounded corners and of text,
 // which SDL's renderer does not do by itself (Dear ImGui builds smooth edges into its own shapes, so without this the new screens look rougher). HOVERNET_RML_SS=1 turns it off.
 float gUiScale = 1.0f;   // see SetUiScale
+// The screens are designed for a 1024x768 window. In a larger window everything grows with it (up to 1.75 times; never smaller), so the text is not tiny on a 1080p or 4K screen. HOVERNET_RML_FIT=0 turns it off.
+float gFit = 1.0f;
+float FitForWindow(int pWidth, int pHeight)
+{
+    static const bool off = std::getenv("HOVERNET_RML_FIT") != nullptr && std::string(std::getenv("HOVERNET_RML_FIT")) == "0";
+    if (off || pWidth <= 0 || pHeight <= 0) return 1.0f;
+    return std::max(1.0f, std::min(1.75f, std::min(static_cast<float>(pWidth) / 1024.0f, static_cast<float>(pHeight) / 768.0f)));
+}
 
 struct Supersample
 {
@@ -81,9 +89,6 @@ struct Supersample
     int factor = 2, width = 0, height = 0;
     explicit Supersample(SDL_Renderer* pRenderer) : renderer(pRenderer)
     {
-#ifdef HOVERNET_WEB
-        factor = 1;   // the browser: drawing into a picture larger than the canvas put the interface in a quarter of the window (seen in headless Chrome), so it is drawn straight onto the canvas
-#endif
         if (const char* f = std::getenv("HOVERNET_RML_SS")) factor = std::max(1, std::min(4, std::atoi(f)));
     }
     ~Supersample() { if (texture != nullptr) SDL_DestroyTexture(texture); }
@@ -94,12 +99,13 @@ struct Supersample
     {
         width = pWidth; height = pHeight;
         pContext->SetDimensions(Rml::Vector2i(pWidth * factor, pHeight * factor));
-        pContext->SetDensityIndependentPixelRatio(static_cast<float>(factor) * gUiScale);
+        gFit = FitForWindow(pWidth, pHeight);
+        pContext->SetDensityIndependentPixelRatio(static_cast<float>(factor) * gUiScale * gFit);
         if (texture != nullptr) { SDL_DestroyTexture(texture); texture = nullptr; }
         if (factor > 1) {
             texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, pWidth * factor, pHeight * factor);
             if (texture != nullptr) SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
-            else { factor = 1; pContext->SetDimensions(Rml::Vector2i(pWidth, pHeight)); pContext->SetDensityIndependentPixelRatio(1.0f); }
+            else { factor = 1; pContext->SetDimensions(Rml::Vector2i(pWidth, pHeight)); pContext->SetDensityIndependentPixelRatio(gUiScale * gFit); }
         }
     }
     int W() const { return width * factor; }
@@ -124,6 +130,9 @@ struct Supersample
     // Mouse positions come in window pixels and the context works in picture pixels.
     void Forward(Rml::Context* pContext, SDL_Event event) const
     {
+        // RmlUi's SDL helper answers a window size change by setting the context to the window's size in pixels, which undoes the larger picture the screens are drawn at (the whole interface
+        // then fills only a quarter of the window). The size is checked every frame by each screen instead (see Resize), so these events are not passed on.
+        if (event.type == SDL_WINDOWEVENT && (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || event.window.event == SDL_WINDOWEVENT_RESIZED)) return;
         if (event.type == SDL_MOUSEMOTION) { event.motion.x *= factor; event.motion.y *= factor; event.motion.xrel *= factor; event.motion.yrel *= factor; }
         else if (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) { event.button.x *= factor; event.button.y *= factor; }
         RmlSDL::InputEventHandler(pContext, event);
@@ -311,7 +320,7 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
                     // Placed and sized as the older menu does: as wide as the room left of the panel allows, but no wider than 60% of the window's height, centred in that room and
                     // a little below the middle (window units, then scaled to the large picture).
                     const float f = static_cast<float>(ss.factor), windowW = static_cast<float>(width), windowH = static_cast<float>(height);
-                    const float panelW = std::min(430.0f * gUiScale, windowW * (windowW < 820.0f ? 0.5f : 0.42f));
+                    const float panelW = std::min(430.0f * gUiScale * gFit, windowW * (windowW < 820.0f ? 0.5f : 0.42f));
                     const float room = std::max(220.0f, windowW - panelW - 66.0f);
                     const float aspect = static_cast<float>(crop.w) / static_cast<float>(crop.h);
                     const float cw = std::min(room, windowH * 0.6f * aspect), ch = cw / aspect;

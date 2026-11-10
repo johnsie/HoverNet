@@ -6,6 +6,12 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **The RmlUi screens shrank into a quarter of the window whenever the window changed size (desktop and browser).** RmlUi's SDL helper answers a window-size event by setting its layout size to the window's size in pixels, which undid the screens' 2x drawing size; the interface then filled only the top-left quarter. Found in the browser first (the 2.3.48 workaround drew without the 2x smoothing there) and then reproduced on the desktop by opening a window at 1920x1080. The screens now ignore those events and check the size themselves every frame, so a resize or a maximised window lays out correctly, and the browser has the 2x smoothing again. Seen fixed at 1920x1080 on the desktop and in headless Chrome; a real window being dragged larger was not run.
+
+### Changed
+- **The RmlUi screens grow with a large window** (up to 1.75 times, never smaller than their 1024x768 design): on a 1920x1080 window the text and buttons are about 1.4 times larger, where before they stayed small. `HOVERNET_RML_FIT=0` turns it off. Seen on the main menu at 1920x1080; the other screens use the same sizing but were not each looked at in a large window.
+
 ### Added
 - **The Garage is an RmlUi screen too (the default on the desktop and in the browser).** Hull, shape sliders, body and trim colours (swatches and red/green/blue sliders), the paint canvas (painted with the pointer: pencil, eraser, fill, pick, mirror, undo), patterns, colour sets, decals with their unlock hints, the paint palette, slots, saving, the unsaved-changes question and the web account buttons, with the same logic as the older screen. Free screens in the form engine gained pictures in elements (`SetImage`) and a way to ask where an element is; setting an input from the program no longer reports a change. Checked: screenshots with a demo design and scripted clicks (a pattern, a hull, a decal, a colour set, a paint colour all took effect), `HoverNetGarageDecals` (which uses the older screen) and the camera rule. Not checked: painting by dragging the pointer (the pointer is read the same way as the older screen's, but I could not drive it headless), the browser, Windows, a controller. The only screens still on ImGui now are the tutorial overlay, the race HUD and the tools.
 - **The browser's sign-in gate is an RmlUi card too** (SIGN IN WITH OUTIVA, PLAY AS A GUEST). Seen drawing in headless Chrome with the account service mocked; its buttons were not clicked in the browser (the older gate's test still runs through `?menu=imgui`).
