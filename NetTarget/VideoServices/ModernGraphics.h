@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -229,6 +230,7 @@ public:
     static constexpr int kMaxLevel = 5;
     static Options OptionsForLevel(const Options& allowed, int level);   // `allowed` with everything above `level` switched off (nothing is ever switched on)
     int Level() const { return mLevel; }
+    void UseWallClock(bool on) { mWallClock = on; }   // particles age by the real time between pictures (the game does this; the unit tests keep a fixed 1/60 s so their results repeat)
     double PassCostMs() const { return mCostMs; }    // the passes' average cost per frame, and the whole frame's (what the governor weighs)
     double FrameMs() const { return mFrameMs; }
     double StepCostMs() const { return mStepCostMs; }   // what the passes and the whole frame cost at the moment of the last step (the averages are reset after a step)
@@ -283,6 +285,10 @@ private:
     std::vector<std::uint8_t> mEdge;               // 1 where the filter pass found a strong edge
     int mVignetteWidth = 0, mVignetteHeight = 0;
     std::vector<Particle> mParticles;
+    std::vector<std::pair<float, float>> mMissileScreenPrev, mMissileScreenNow;   // where each missile was on the screen last frame and now, so a fast one leaves a continuous trail
+    bool mWallClock = false;                                                       // age the particles by real time (the game) instead of a fixed 1/60 s a frame (the tests)
+    std::chrono::steady_clock::time_point mLastEffectsTime;
+    bool mHaveEffectsTime = false;
     std::vector<GlowSprite> mSprites;     // glows to hand to the finisher this frame (empty when the processor paints them)
     bool mDeferGlows = false;
     void Glow(std::uint8_t* rgb, int width, int height, float cx, float cy, float rx, float ry, int r, int g, int b, float strength);

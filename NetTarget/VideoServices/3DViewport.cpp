@@ -348,7 +348,10 @@ BOOL MR_3DViewPort::ToCameraSpace( const MR_3DCoordinate& pPoint, int& pX, int& 
       return FALSE;
    }
    pX = lPos.mX;
-   pY = -lPos.mY;   // so that +y is to the left, as on the screen
+   // +y is to the LEFT, as the picture does it: a larger lPos.mY puts a point further left on the screen (see ProjectToScreen, which uses -lPos.mY for the pixel column). This line used to
+   // return -lPos.mY, which is to the right, so every light was drawn mirrored left to right about the middle of the picture (a missile's glow, smoke and sparks sat on the wrong side of
+   // the missile, further off the nearer it was to the edge). Fixed 10 November 2026.
+   pY = lPos.mY;
    pZ = lPos.mZ;
    return TRUE;
 }

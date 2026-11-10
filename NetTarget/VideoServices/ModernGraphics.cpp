@@ -874,7 +874,14 @@ void Presenter::Effects(std::uint8_t* rgb, int width, int height, const Options&
         }
     }
     if (!still) Emitters(width, height, options, hints);
-    const float dt = 1.0f / 60.0f;
+    // Real time between pictures when the game asks (a slow machine draws fewer pictures a second: with a fixed 1/60 s a puff lived twice as long in pictures and crept at half speed, so a
+    // missile's trail lagged and bunched up); a fixed step otherwise, so tests repeat.
+    float dt = 1.0f / 60.0f;
+    if (mWallClock) {
+        const auto now = std::chrono::steady_clock::now();
+        if (mHaveEffectsTime) dt = std::min(0.1f, std::max(0.004f, std::chrono::duration<float>(now - mLastEffectsTime).count()));
+        mLastEffectsTime = now; mHaveEffectsTime = true;
+    }
     for (std::size_t i = 0; i < mParticles.size();) {
         Particle& p = mParticles[i];
         p.life -= dt;
@@ -1324,7 +1331,7 @@ void Presenter::HudOutline(PassContext& c)
 void Presenter::Emitters(int width, int height, const Options& options, const FrameHints& hints)
 {
     (void)width;
-    if (options.reducedMotion || !hints.valid) return;
+    if (options.reducedMotion || !hints.valid) { mMissileScreenPrev.clear(); return; }
     const float scale = height / 480.0f;
     auto push = [&](float x, float y, float vx, float vy, float life, float size, int r, int g, int b, float strength, float gravity) {
         if (mParticles.size() >= 320) return;
@@ -1334,6 +1341,7 @@ void Presenter::Emitters(int width, int height, const Options& options, const Fr
         mParticles.push_back(p);
     };
     auto jitter = [&]() { return (static_cast<int>(Random() & 1023) - 512) / 512.0f; };   // -1 .. 1
+    mMissileScreenNow.clear();
     for (int li = 0; li < hints.lightCount && li < kMaxLights; ++li) {
         const Light& light = hints.lights[li];
         if ((light.kind != kLightMissile && light.kind != kLightPowerUp && light.kind != kLightExplosion && light.kind != kLightBurst) || light.x < 500.0f || hints.projKx <= 0.0f || hints.projKz <= 0.0f) continue;
@@ -1366,11 +1374,26 @@ void Presenter::Emitters(int width, int height, const Options& options, const Fr
             continue;
         }
         if (light.kind == kLightMissile) {   // smoke
-            push(px + jitter() * 2.0f, py + jitter() * 2.0f, jitter() * 14.0f, jitter() * 14.0f, 0.6f, 2.6f, 190, 190, 190, 0.28f, -8.0f);
+            // A missile moves a long way across the screen between two pictures, so one puff a picture would be a dotted line that trails behind it. The puffs are laid along the way it came,
+            // from where this missile was last picture (the nearest one within 300 px) to where it is now, one every few pixels.
+            float fromX = px, fromY = py;
+            float best = 300.0f * 300.0f;
+            for (const std::pair<float, float>& before : mMissileScreenPrev) {
+                const float dx = before.first - px, dy = before.second - py, d2 = dx * dx + dy * dy;
+                if (d2 < best) { best = d2; fromX = before.first; fromY = before.second; }
+            }
+            const float length = std::sqrt((px - fromX) * (px - fromX) + (py - fromY) * (py - fromY));
+            const int puffs = std::max(1, std::min(10, static_cast<int>(length / (5.0f * scale)) + 1));
+            for (int k = 1; k <= puffs; ++k) {
+                const float t = static_cast<float>(k) / static_cast<float>(puffs);
+                push(fromX + (px - fromX) * t + jitter() * 2.0f, fromY + (py - fromY) * t + jitter() * 2.0f, jitter() * 14.0f, jitter() * 14.0f, 0.6f, 2.6f, 190, 190, 190, 0.28f, -8.0f);
+            }
+            mMissileScreenNow.emplace_back(px, py);
         }
         else if ((mFrame % 3) == 0) {        // sparkle
             push(px + jitter() * radius * 1.4f, py + jitter() * radius * 1.4f, jitter() * 10.0f, -22.0f, 0.5f, 1.5f, 175, 255, 205, 1.0f, 0.0f);
         }
     }
+    mMissileScreenPrev = mMissileScreenNow;
 }
 }

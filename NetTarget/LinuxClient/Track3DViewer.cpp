@@ -14150,6 +14150,20 @@ int RunClient(int argc, char** argv)
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
         ++framesRendered;
 #ifdef HOVERNET_GAME2_PLAYER
+        if (const char* missileShots = std::getenv("HOVERNET_TEST_SHOT_MISSILE")) {   // test switch: up to 12 pictures (every third frame) while a missile is in flight, to <prefix>N.bmp
+            static int shots = 0;
+            if (observer != nullptr && shots < 12 && observer->IsMissileInFlight() && framesRendered % 3 == 0) {
+                int w = 0, h = 0;
+                SDL_Renderer* shotRenderer = graphics.GetRenderer();
+                if (SDL_GetRendererOutputSize(shotRenderer, &w, &h) == 0) if (SDL_Surface* shot = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888)) {
+                    SDL_RenderReadPixels(shotRenderer, nullptr, SDL_PIXELFORMAT_ARGB8888, shot->pixels, shot->pitch);
+                    SDL_SaveBMP(shot, (std::string(missileShots) + std::to_string(shots++) + ".bmp").c_str());
+                    SDL_FreeSurface(shot);
+                }
+            }
+        }
+#endif
+#ifdef HOVERNET_GAME2_PLAYER
         CaptureFrameIfRequested(graphics.GetRenderer(), framesRendered, frameLimit);
 #endif
 

@@ -763,6 +763,20 @@ int main(int argc, char** argv)
             Presenter r; for (int i = 0; i < 6; ++i) r.Process(f.data(), W, H, o, m);
             Check(r.ParticleCount() >= 6, "a missile trails smoke and a power-up sparkles (with Reduced motion off)");
         }
+        // A missile that crosses the screen between two pictures leaves a continuous trail of smoke along the way, not one puff at the end of it.
+        {
+            Options o = bare(1); o.effects = true;
+            Frame f = Solid(W, H, 60, 60, 60);
+            Presenter single, trail;
+            FrameHints near = sceneHints(wallDepth, &wallTags); near.lightCount = 1; near.lights[0].kind = kLightMissile; near.lights[0].x = 10000; near.lights[0].y = 2000; near.lights[0].radius = 4500; near.lights[0].strength = 0.5f;
+            FrameHints far = near; far.lights[0].y = -2000;   // a long way across the picture in one step
+            single.Process(f.data(), W, H, o, near);
+            const std::size_t before = single.ParticleCount();
+            single.Process(f.data(), W, H, o, far);
+            const std::size_t jumped = single.ParticleCount() - before;
+            Check(jumped >= 4, "a missile that moves far between pictures leaves several puffs along its way");
+            (void)trail;
+        }
         // Edge anti-aliasing: a staircase edge between two surfaces is softened; the texture inside a surface is not touched.
         {
             std::vector<std::uint16_t> depth(static_cast<std::size_t>(W) * H, 2500);

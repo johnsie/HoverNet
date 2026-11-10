@@ -812,6 +812,17 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
          const MR_UInt16 lClass = mLitElements[ lIndex ]->GetTypeId().mClassId;
          if( lClass == 150 )        // a missile: a hot light that travels with it
          {
+            if( getenv( "HOVERNET_GFX_DEBUG" ) != NULL )   // where the picture really puts the missile, and where the presenter will put its glow
+            {
+               int lSX, lSY, lDepth, lPPM, lCX, lCY, lCZ;
+               double lKx, lKz; int lProjCX, lProjCY, lOX, lOY;
+               if( m3DView.ProjectToScreen( lAt, lSX, lSY, lDepth, lPPM ) && m3DView.ToCameraSpace( lAt, lCX, lCY, lCZ ) )
+               {
+                  m3DView.GetProjection( lKx, lKz, lProjCX, lProjCY, lOX, lOY );
+                  printf( "GFXDEBUG missile: picture x=%d y=%d | presenter formula x=%d (cx %d, camera y %d, depth %d)\n", lSX, lSY, (int)( lProjCX - lCY/( lCX*lKx ) ), lProjCX, lCY, lCX );
+                  fflush( stdout );
+               }
+            }
             AddLight( lAt, 4500, 255, 190, 110, 0.5f, HoverNetGfx::kLightMissile );
          }
          else if( lClass == 151 )   // a mine: a red light, pulsing unless Reduced motion is on

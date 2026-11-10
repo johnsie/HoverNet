@@ -116,6 +116,8 @@ class MR_Observer
       std::vector<Blast>   mBlasts;
       MR_SimulationTime    mPrevLitTime;
       double          mProjKx, mProjKz;
+      public: BOOL IsMissileInFlight() const { for( size_t lI = 0; lI < mLitElements.size(); lI++ ) { if( mLitElements[ lI ]->GetTypeId().mClassId == 150 ) return TRUE; } return FALSE; }   // a missile was seen this frame (for the screenshot test switch)
+      private:
       void            AddLight( const MR_3DCoordinate& pWorld, int pRadiusMm, int pR, int pG, int pB, float pStrength, int pKind = 0, const MR_3DCoordinate* pAimAt = NULL, float pConeCos = -1.0f );
       std::vector<MR_UInt8> mHudMask;        // 1 where the HUD drew (or outside the viewport), for the whole frame
       int             mSceneX0, mSceneY0;    // the viewport's corner in the frame

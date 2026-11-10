@@ -113,6 +113,7 @@ bool SDL2GraphicsBackend::Initialize(void* windowHandle, int width, int height)
     }
     
     SDL_RenderSetLogicalSize(m_renderer, width, height);
+    m_presenter.UseWallClock(true);   // particles age by real time in the game
     {   // did the renderer get vsync (the display paces the loop)? The game loops then need no pause of their own.
         SDL_RendererInfo info;
         HoverNetGfx::SetVsyncActive(SDL_GetRendererInfo(m_renderer, &info) == 0 && (info.flags & SDL_RENDERER_PRESENTVSYNC) != 0 && std::getenv("HOVERNET_NO_VSYNC_PACING") == nullptr);

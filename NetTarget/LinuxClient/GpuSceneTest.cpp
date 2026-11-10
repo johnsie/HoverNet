@@ -88,6 +88,22 @@ int main()
         if (view == 0) Check(triangles > 50, "the scene reaches the sink as triangles (and the software buffer stays empty)");
         double kx, kz; int cx, cy, ox, oy;
         card.GetProjection(kx, kz, cx, cy, ox, oy);
+        {   // the camera space the picture passes use (x ahead, y LEFT, z up) agrees with where the viewport puts a point: pixel = centre - y / (x * k). It was mirrored once (lights on the
+            // wrong side of what they belonged to), so check points on both sides of the middle.
+            int checked = 0, badPixels = 0, leftOfCentre = 0, leftSaid = 0;
+            for (int gx = 3000; gx <= 12000; gx += 3000) for (int gy = -6000; gy <= 6000; gy += 2000) for (int gz = 0; gz <= 2000; gz += 1000) {
+                const MR_3DCoordinate world(-150 * view + gx, 60 * view - 200 + gy, gz);
+                int sx, sy, depth, ppm, camX, camY, camZ;
+                if (!card.ProjectToScreen(world, sx, sy, depth, ppm) || !card.ToCameraSpace(world, camX, camY, camZ)) continue;
+                const int px = static_cast<int>(cx - camY / (camX * kx)), py = static_cast<int>(cy - camZ / (camX * kz));
+                ++checked;
+                if (std::abs(px - sx) > 2 || std::abs(py - sy) > 2) ++badPixels;
+                if (sx < cx - 10) { ++leftOfCentre; if (camY > 0) ++leftSaid; }
+            }
+            if (view == 0) Check(checked > 10, "points in front of the camera project");
+            Check(badPixels == 0, "ToCameraSpace and ProjectToScreen agree on where a point is on the screen (both sides of the middle)");
+            Check(leftOfCentre == leftSaid, "a point left of the middle has a positive camera-space y (y is to the left)");
+        }
         HoverNetGfx::FrameHints hints;
         hints.valid = true; hints.gpuScene = true;
         hints.projKx = static_cast<float>(kx); hints.projKz = static_cast<float>(kz); hints.projCenterX = cx; hints.projCenterY = cy;
