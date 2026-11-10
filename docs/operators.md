@@ -183,3 +183,8 @@ not in a race yet; a server without that gauge counts drivers only), excluding s
 ## Not provided yet
 
 Accounts, a server list for players to browse, regional pools, an updater, signed packages.
+
+
+## Web server: compress the game's data file
+
+`packaging/web/hovernet.outiva.com.conf` now has a `mod_deflate` block for `HoverNet.data` (the default type list leaves `application/octet-stream` alone, so the 26.3 MB file was sent as it is; gzipped it is 16.6 MB, measured on the 2.3.52 build). It takes effect when the site file in `/etc/apache2/sites-available/` is updated from the repository's copy and Apache is reloaded (`sudo apache2ctl configtest && sudo systemctl reload apache2`); `mod_deflate` must be enabled (`a2enmod deflate`). Check with `curl -s -I -H 'Accept-Encoding: gzip' https://hovernet.outiva.com/HoverNet.data | grep -i content-encoding`. The bulk of the file is the music (12.7 MB of Ogg, which does not shrink): moving it to a download after the game has started would cut a first visit from about 29 MB to about 7 MB, but needs the deploy tarball and `hovernet-web-deploy` to carry a second file, which has not been done.
