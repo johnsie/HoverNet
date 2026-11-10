@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.44 - 2026-11-10
+
+_Released at the owner's request without waiting for the full local test suite, the Windows runner checks or the GitHub Actions run. What was run for the newest changes is listed in their entries; the rest of the suite was not run for this release._
+
 ### Fixed
 - **On the graphics-card scene path the engine glow, sparks and embers were lost, and an explosion had no halo.** The processor painted them into its own picture, which the card's scene then replaced inside the view. The Presenter now hands them to the card as glow sprites (`FrameHints::sprites`), which draws them additively after the scene (a small extra shader, `GpuFinisher.cpp`); the card's glow pass also knows the new explosion light (white-hot core, glow, flare). The processor path is unchanged. Checked on Mesa llvmpipe: `HoverNetGpuScene` (a sprite brightens its centre and leaves pixels outside it alone), `HoverNetGpuFinish`, `HoverNetModernGraphics*`, the render golden frames and the camera rule pass, and a 400-frame real client run under Xvfb on the card path drew a correct frame. Not checked: a real GPU, Windows, the browser (it keeps the processor path), and an explosion or sparks on the card path by eye.
 
