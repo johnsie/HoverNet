@@ -9237,6 +9237,16 @@ void RunSignInGate(SDL2GraphicsBackend& graphics)
     }
     const Uint32 started = SDL_GetTicks();
     bool running = true, focusFirst = true;
+#ifdef HOVERNET_HAVE_RMLUI
+    // The RmlUi version of this screen (docs/rmlui.md): the same states, drawn with a card; if it cannot load, the ImGui one below runs.
+    std::unique_ptr<HoverNetRml::FormScreen> rml;
+    if (UseRmlUi(-1)) {
+        rml.reset(new HoverNetRml::FormScreen(
+            graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "SIGN IN", LoadReducedMotion(),
+            [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight, "signin.rml"));
+        if (!rml->Ok()) rml.reset();
+    }
+#endif
     while (running) {
         const int state = hovernet_js_account_state();
         if (state == 1) {   // signed in: the Outiva callsign is the name
@@ -9249,6 +9259,19 @@ void RunSignInGate(SDL2GraphicsBackend& graphics)
         }
         if (state == 2 || (state == -1 && SDL_GetTicks() - started > 4000)) break;   // no accounts here, or no answer: carry on as before
         if (state == 0) gAccountsOffered = true;
+#ifdef HOVERNET_HAVE_RMLUI
+        if (rml) {
+            rml->SetClass("card", "hide", state != 0);
+            std::vector<HoverNetRml::FormEvent> events;
+            const HoverNetRml::FormOutcome outcome = rml->Frame(events, 1, -1);
+            if (outcome == HoverNetRml::FormOutcome::eClose) { g_QuitConfirmed = true; running = false; }
+            for (const HoverNetRml::FormEvent& e : events) {
+                if (e.id == "signin") hovernet_js_open_signin();
+                else if (e.id == "guest") running = false;
+            }
+            continue;
+        }
+#endif
         SDL_Event event;
         while (SDL_PollEvent(&event)) { MenuProcessEvent(event); }
         SDL_Renderer* renderer = graphics.GetRenderer();

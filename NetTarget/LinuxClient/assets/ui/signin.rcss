@@ -1,0 +1,12 @@
+body { font-family: Inter; font-size: 16dp; color: #f4f5f8; width: 100%; height: 100%; }
+p, div { display: block; }
+.hide { display: none; }
+#card { position: absolute; left: 50%; top: 32%; width: 520dp; margin-left: -260dp; padding: 26dp 30dp; box-sizing: border-box; background-color: #13131af5; border-radius: 12dp; animation: 0.5s cubic-out card-in; }
+@keyframes card-in { from { opacity: 0; transform: translateY(24dp); } to { opacity: 1; transform: translateY(0dp); } }
+.cardhead { font-family: Oxanium; font-size: 24dp; color: #fa737a; margin: 0 0 10dp 0; }
+.note { color: #8b8fa3; font-size: 14dp; margin: 6dp 0 12dp 0; }
+button.act { display: block; box-sizing: border-box; width: 100%; padding: 12dp; margin: 8dp 0; text-align: center; font-family: Oxanium; font-size: 18dp; font-weight: bold; color: #ffffff; background-color: #dc3546; tab-index: auto; cursor: pointer; transition: background-color transform 0.12s cubic-out; }
+button.act.big { padding: 16dp; font-size: 20dp; }
+button.act.quiet { background-color: #2b2e3e; }
+button.act:hover, button.act:focus { background-color: #f04a5b; transform: scale(1.02); }
+button.act.quiet:hover, button.act.quiet:focus { background-color: #3a3e54; }

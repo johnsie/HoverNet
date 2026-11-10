@@ -1,0 +1,15 @@
+<rml>
+<head>
+	<title>HoverNet</title>
+	<link type="text/rcss" href="signin.rcss"/>
+</head>
+<body>
+	<div id="card" class="hide">
+		<p class="cardhead">WELCOME TO HOVERNET</p>
+		<p class="note">Sign in to race under your Outiva name and keep your Garage crafts on your account.</p>
+		<button class="act big" data-id="signin" tab-index="auto">SIGN IN WITH OUTIVA</button>
+		<button class="act quiet" data-id="guest" tab-index="auto">PLAY AS A GUEST</button>
+		<p class="note">Guests race as "name (nonreg)".</p>
+	</div>
+</body>
+</rml>
