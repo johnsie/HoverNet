@@ -232,8 +232,8 @@
     function mb(n) { return (n / 1048576).toFixed(1); }
     var Module = {
       canvas: document.getElementById('canvas'),
-      // The older (ImGui) menus are the default; ?menu=rml tries the new RmlUi ones (docs/rmlui.md).
-      preRun: [function () { if (/[?&]menu=rml\b/.test(location.search)) ENV.HOVERNET_RML_MENU = '1'; }],
+      // The new RmlUi screens are the default (docs/rmlui.md); ?menu=imgui brings back the older ImGui ones.
+      preRun: [function () { if (/[?&]menu=imgui\b/.test(location.search)) ENV.HOVERNET_RML_MENU = '0'; else if (/[?&]menu=rml\b/.test(location.search)) ENV.HOVERNET_RML_MENU = '1'; }],
       // Game data is fetched under the build's own address, so an old cached copy of it can never be mixed with a new page.
       locateFile: function (path) { return window.HN_BUILD ? path + '?v=' + encodeURIComponent(window.HN_BUILD) : path; },
       print: function(text) { console.log(text); logLine(text); },

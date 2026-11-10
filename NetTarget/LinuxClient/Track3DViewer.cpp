@@ -1291,8 +1291,8 @@ bool LoadReducedMotion();   // defined with the other settings below
 float LoadUiScale();         // likewise
 
 #ifdef HOVERNET_HAVE_RMLUI
-// Which interface draws the main menu and the other converted screens: the RmlUi ones by default on the desktop (since 2.3.46), the older ImGui ones with HOVERNET_RML_MENU=0, in a bounded
-// run and, for now, in the browser unless the page says ?menu=rml. A screen that cannot load falls back to ImGui.
+// Which interface draws the main menu and the other converted screens: the RmlUi ones by default (the desktop since 2.3.46, the browser since 2.3.47), the older ImGui ones with HOVERNET_RML_MENU=0 (on the page: ?menu=imgui) and in a bounded
+// run on the desktop. A screen that cannot load falls back to ImGui.
 void HoverNetFrameDelayForRml() { HoverNetFrameDelay(); }
 bool UseRmlUi(int pFrameLimit)
 {
@@ -1302,7 +1302,8 @@ bool UseRmlUi(int pFrameLimit)
     const char* force = std::getenv("HOVERNET_RML_MENU");
     if (force != nullptr) return std::string(force) != "0";   // HOVERNET_RML_MENU=0 brings back the older ImGui screens; =1 forces the new ones (also in bounded runs and the browser)
 #ifdef HOVERNET_WEB
-    return false;   // the browser keeps the older screens unless the page asks for ?menu=rml (the new ones have not been seen in the browser since the lobby, Leaderboards and Replays were added)
+    (void)pFrameLimit;
+    return true;    // the browser too (since 2.3.47); the page's ?menu=imgui brings back the older screens
 #else
     return pFrameLimit < 0;   // desktop: the new screens by default; a bounded run (--frames N, the tests) keeps the older ones, which the tests drive
 #endif

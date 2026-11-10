@@ -6,6 +6,13 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.47 - 2026-11-10
+
+_Released at the owner's request without waiting for the test suite. 2.3.46's GitHub run had not been looked at when this was cut._
+
+### Changed
+- **The RmlUi screens are the default in the browser too.** `?menu=imgui` on the page (or `HOVERNET_RML_MENU=0`) brings back the older ImGui screens. This is the same switch whose first version looped the site on "Starting HoverNet..." in 2.3.42 (fixed in 2.3.43: every new screen reports its frames to the page). What was not checked: the lobby, Leaderboards, Replays and the loading screen in a browser, a phone or touch, and a WebAssembly build of this change; the browser sign-in gate is still the older kind. If the page loops again, `?menu=imgui` is the way out and the page's 25-second compatibility reload is the cause to look at first.
+
 ## 2.3.46 - 2026-11-10
 
 _Released at the owner's request without waiting for the test suite, as 2.3.44 and 2.3.45 were. Neither of those was released on GitHub (2.3.44: the Windows installer check failed; 2.3.45: the Linux job ran into its 30-minute limit); the fixes for both are in this release and have not been seen to pass on Actions._
