@@ -59,18 +59,21 @@ class Mixer
 public:
     // A looping voice (an engine, the wind): created silent, it fades in to `gain` and glides to new gains and speeds. `key` is any unique pointer for the
     // sound and `copy` its copy number.
-    void Continuous(const void* key, int copy, std::shared_ptr<const Sound> sound, double gain, double speed)
+    // `pan` runs from -1 (all in the left ear) to 1 (all in the right) and glides like the gain; 0 leaves both sides at `gain` (what an engine under the listener sounds like). The far ear is
+    // quieter and the near one is not louder, so a sound that moves to the side does not get louder on the way.
+    void Continuous(const void* key, int copy, std::shared_ptr<const Sound> sound, double gain, double speed, double pan = 0.0)
     {
         CVoice* voice = Find(key, copy);
         if (voice == nullptr) {
             CVoice fresh;
             fresh.key = key; fresh.copy = copy; fresh.sound = std::move(sound);
-            fresh.speed = speed;
+            fresh.speed = speed; fresh.pan = fresh.targetPan = static_cast<float>(Clamp(pan, -1.0, 1.0));
             mC.push_back(fresh);
             voice = &mC.back();
         }
         voice->targetGain = static_cast<float>(gain);
         voice->targetSpeed = static_cast<float>(Clamp(speed, 0.25, 4.0));
+        voice->targetPan = static_cast<float>(Clamp(pan, -1.0, 1.0));
     }
     // The voice stops asking to be heard: it fades out and is removed.
     void ContinuousOff(const void* key, int copy) { if (CVoice* voice = Find(key, copy)) voice->targetGain = 0.0f; }
@@ -106,12 +109,15 @@ public:
             for (std::size_t i = 0; i < frames; ++i) {
                 v.gain += (v.targetGain - v.gain) * kGlide;
                 v.speed += (v.targetSpeed - v.speed) * kGlide;
+                v.pan += (v.targetPan - v.pan) * kGlide;
                 const std::size_t a = static_cast<std::size_t>(v.position) % n;
                 const std::size_t b = (a + 1) % n;   // the loop wraps: the last frame blends into the first
                 const float f = static_cast<float>(v.position - std::floor(v.position));
                 const float g = v.gain * static_cast<float>(master);
-                mBuffer[i * 2] += (src[a * 2] * (1.0f - f) + src[b * 2] * f) * g;
-                mBuffer[i * 2 + 1] += (src[a * 2 + 1] * (1.0f - f) + src[b * 2 + 1] * f) * g;
+                const float side = v.pan * 0.78539816f + 0.78539816f;                       // equal power: centre is 1 and 1, hard right is 0 and 1 (never louder than centre)
+                const float gl = std::min(1.0f, 1.41421356f * std::cos(side)), gr = std::min(1.0f, 1.41421356f * std::sin(side));
+                mBuffer[i * 2] += (src[a * 2] * (1.0f - f) + src[b * 2] * f) * g * gl;
+                mBuffer[i * 2 + 1] += (src[a * 2 + 1] * (1.0f - f) + src[b * 2 + 1] * f) * g * gr;
                 v.position += v.speed;
                 if (v.position >= static_cast<double>(n)) v.position = std::fmod(v.position, static_cast<double>(n));
             }
@@ -150,6 +156,7 @@ private:
         double position = 0.0;
         float gain = 0.0f, targetGain = 0.0f;
         float speed = 1.0f, targetSpeed = 1.0f;
+        float pan = 0.0f, targetPan = 0.0f;
     };
     struct OVoice
     {

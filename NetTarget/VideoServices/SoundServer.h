@@ -73,6 +73,10 @@ namespace MR_SoundServer
 
    MR_DllDeclare void                ApplyContinuousPlay();
 
+   // Doppler: the pitch of the continuous sounds asked for between this call and the next one is multiplied by pFactor (1.0 = none). The observer sets it for each other craft and missile
+   // from how fast it is closing on the listener, and puts it back to 1.0 afterwards. (Implemented by the portable server, HeadlessSoundServer.cpp.)
+   MR_DllDeclare void                SetDopplerFactor( double pFactor );
+
    // Global output level applied on top of every sound's own volume/pan, for a
    // user-facing master volume control (see docs/roadmap-2.0.md's Phase 3
    // "audio and volume settings" item). pVolume is clamped to [0.0, 1.0];

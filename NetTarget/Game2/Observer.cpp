@@ -30,6 +30,8 @@
 #include "../Util/StrRes.h"
 
 #include <math.h>
+#include <chrono>
+#include "../VideoServices/SoundServer.h"
 
 
 #define NB_PLAYER_PAGE 4
@@ -2614,6 +2616,11 @@ void MR_Observer::PlaySounds( const MR_Level* pLevel, MR_MainCharacter* pViewing
          return;
       }
 
+      if( mSoundTracks.size() > 64 )
+      {
+         mSoundTracks.clear();   // a missile that is gone leaves a stale entry behind; this is a rare, cheap reset (the next frames start every track again)
+      }
+
       int lCurrentRoom   = pViewingCharacter->mRoom;
       int lNeighborCount = pLevel->GetRoomVertexCount( lCurrentRoom );
 
@@ -2647,11 +2654,45 @@ void MR_Observer::PlaySounds( const MR_Level* pLevel, MR_MainCharacter* pViewing
                         double lXDist = pViewingCharacter->mPosition.mX-lElement->mPosition.mX;
                         double lYDist = pViewingCharacter->mPosition.mY-lElement->mPosition.mY;
 
-                        int lDB = -(int)sqrt( lXDist*lXDist+lYDist*lYDist )/15;
+                        const double lDistance = sqrt( lXDist*lXDist+lYDist*lYDist );
+                        int lDB = -(int)lDistance/15;
+
+                        // Where it is heard from: the bearing of the source relative to the way the viewing craft faces. x is ahead and y to the left, so a source on the left has a positive
+                        // sine and is panned to the left ear (-100); one straight ahead or behind is in the middle. Close to the craft the pan eases to the middle (it is on top of you).
+                        int lPan = 0;
+                        double lDoppler = 1.0;
+                        if( lDistance > 1.0 )
+                        {
+                           const double lHeading = (double)pViewingCharacter->mOrientation*6.283185307179586/(double)MR_2PI;
+                           const double lToSource = atan2( -lYDist, -lXDist );
+                           const double lAside = sin( lToSource - lHeading );
+                           const double lNear = lDistance < 1500.0 ? lDistance/1500.0 : 1.0;
+                           lPan = (int)( -100.0*lAside*lNear );
+
+                           // Doppler: how fast the distance is closing, sampled at most every 60 ms (frames are shorter than a tick) and eased.
+                           const double lNowMs = (double)std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::steady_clock::now().time_since_epoch() ).count()/1000.0;
+                           SoundTrack& lTrack = mSoundTracks[ lElement ];
+                           if( lTrack.mSampleMs == 0.0 || lNowMs - lTrack.mSampleMs > 400.0 )
+                           {
+                              lTrack.mDistance = lDistance; lTrack.mSampleMs = lNowMs; lTrack.mClosing = 0.0;   // new, or not heard for a while: start from nothing
+                           }
+                           else if( lNowMs - lTrack.mSampleMs >= 60.0 )
+                           {
+                              const double lRate = ( lTrack.mDistance - lDistance )/( lNowMs - lTrack.mSampleMs );
+                              lTrack.mClosing += ( lRate - lTrack.mClosing )*0.5;
+                              lTrack.mDistance = lDistance; lTrack.mSampleMs = lNowMs;
+                           }
+                           // the speed of sound is made up: 250 mm/ms, so a craft closing at 30 m/s is heard 12% high and one pulling away 12% low (never more than 15%)
+                           lDoppler = 250.0/( 250.0 - lTrack.mClosing );
+                           if( lDoppler > 1.15 ) lDoppler = 1.15;
+                           if( lDoppler < 0.87 ) lDoppler = 0.87;
+                        }
 
                         try
                         {
-                           lElement->PlayExternalSounds( lDB, 0 );
+                           MR_SoundServer::SetDopplerFactor( lDoppler );
+                           lElement->PlayExternalSounds( lDB, lPan );
+                           MR_SoundServer::SetDopplerFactor( 1.0 );
                         }
                         catch(...)
                         {

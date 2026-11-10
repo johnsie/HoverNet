@@ -67,6 +67,29 @@ int main()
     Check(std::abs(start[0]) < 200 && std::abs(start[2]) < 400, "a voice starts silent and fades in (no click at the start)");
     Check(MaxStep(start) <= slope, "and the fade-in has no steps either");
 
+    // 2b. panning a looping voice: in the middle both ears get the same, hard to one side the far ear is silent and the near one is no louder than the middle, and a pan that changes glides.
+    {
+        auto levels = [&](double pan, double& left, double& right) {
+            SoftMix::Mixer m;
+            m.Continuous(sound.get(), 0, sound, 1.0, 1.0, pan);
+            std::vector<std::int16_t> o = Render(m, 1.0);
+            left = right = 0.0;
+            for (std::size_t i = 44100; i + 1 < o.size(); i += 2) { left = std::max(left, std::fabs(static_cast<double>(o[i]))); right = std::max(right, std::fabs(static_cast<double>(o[i + 1]))); }
+        };
+        double cl, cr, rl, rr, ll, lr, hl, hr;
+        levels(0.0, cl, cr); levels(1.0, rl, rr); levels(-1.0, ll, lr); levels(0.5, hl, hr);
+        Check(std::fabs(cl - cr) < 40 && cl > 1000, "a voice in the middle sounds the same in both ears");
+        Check(rl < 40 && rr > 0.95 * cr && rr < 1.05 * cr, "panned hard right it is silent on the left and no louder than the middle on the right");
+        Check(lr < 40 && ll > 0.95 * cl && ll < 1.05 * cl, "and hard left the other way round");
+        Check(hr > hl && hl > 0.2 * hr && hl < 0.8 * hr, "halfway right the right ear is louder and the left is only quieter, not gone");
+        SoftMix::Mixer moving;
+        moving.Continuous(sound.get(), 0, sound, 1.0, 1.0, -1.0);
+        Render(moving, 0.5);
+        moving.Continuous(sound.get(), 0, sound, 1.0, 1.0, 1.0);   // the source flies past: left to right at once
+        std::vector<std::int16_t> pass = Render(moving, 0.02);
+        Check(MaxStep(pass) <= slope * 4, "a pan that jumps from one side to the other glides (no click)");
+    }
+
     // 3. a change of volume glides: halving the gain at once is not a jump.
     SoftMix::Mixer glide;
     glide.Continuous(sound.get(), 0, sound, 1.0, 1.0);

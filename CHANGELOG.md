@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **Other craft and missiles are heard from where they are, and with the pitch of how they move.** Before, every sound that was not your own craft's came out of the middle of the stereo picture, and a looping sound (an engine, a missile's motor, the wind) ignored panning altogether. Now the sound of each other craft and missile is panned by its bearing relative to the way your craft faces (a craft on your left is in your left ear; one straight ahead or behind is in the middle; one right on top of you eases to the middle), the far ear is quieter and the near one never louder, and a pan that changes glides (no click as a craft passes). A made-up Doppler shift raises the pitch of something closing on you and lowers it as it pulls away (about 12% at 30 m/s, never more than 15%), measured over at least 60 ms and smoothed. Presentation only: it reads positions and changes no simulation. Checked: new mixer tests (a voice in the middle, hard left, hard right, halfway, and a pan that jumps across), and the audio, sound and race-start tests; the bearing and Doppler arithmetic was reasoned through, not heard (there is no way to listen here). Not heard by a person: how strong the effects feel (the Doppler constants are guesses to tune by ear).
+
 ## 2.3.49 - 2026-11-10
 
 _Released at the owner's request without waiting for the test suite. 2.3.47 and 2.3.48 passed GitHub Actions in full; 2.3.49's run had not been seen when this was cut. It carries: every effect on by default with Automatic graphics, fair fixed-tick offline play drawn smoothly between ticks (no 16 ms pause when vsync paces the loop), the Garage and sign-in gate in RmlUi, the window-resize fix, and two memory bugs found under AddressSanitizer._

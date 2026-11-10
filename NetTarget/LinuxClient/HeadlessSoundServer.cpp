@@ -92,6 +92,7 @@ public:
         BOOL on = FALSE;
         int maxDecibels = -10000;
         double maxSpeed = 0.0;
+        double pan = 0.0;   // -1 left .. 1 right
     };
     std::vector<Request> requests;
 };
@@ -267,16 +268,21 @@ namespace MR_SoundServer
         delete sound;
     }
 
-    void Play(MR_ContinuousSound* sound, int copy, int decibels, double speed, int)
+    double& DopplerFactor() { static double factor = 1.0; return factor; }
+    void SetDopplerFactor(double factor) { DopplerFactor() = std::max(0.5, std::min(2.0, factor)); }
+
+    void Play(MR_ContinuousSound* sound, int copy, int decibels, double speed, int pan)
     {
         if (sound == nullptr) {
             return;
         }
         copy = std::max(0, std::min(copy, sound->copies - 1));
         MR_ContinuousSound::Request& request = sound->requests[static_cast<size_t>(copy)];
+        // The loudest request for a copy sets where it is heard from (the listener's own craft asks at the centre and louder than any other).
+        if (!request.on || decibels >= request.maxDecibels) request.pan = std::min(1.0, std::max(-1.0, pan / 100.0));
         request.on = TRUE;
         request.maxDecibels = std::max(request.maxDecibels, decibels);
-        request.maxSpeed = std::max(request.maxSpeed, speed);
+        request.maxSpeed = std::max(request.maxSpeed, speed * DopplerFactor());
     }
 
     int GetNbCopy(MR_ContinuousSound* sound) { return sound ? sound->copies : 1; }
@@ -292,7 +298,7 @@ namespace MR_SoundServer
         for (MR_ContinuousSound* sound : ContinuousSounds()) {
             for (int copy = 0; copy < sound->copies; ++copy) {
                 MR_ContinuousSound::Request& request = sound->requests[static_cast<size_t>(copy)];
-                if (request.on) gMixer.Continuous(sound, copy, sound->samples, DecibelGain(request.maxDecibels), request.maxSpeed);
+                if (request.on) gMixer.Continuous(sound, copy, sound->samples, DecibelGain(request.maxDecibels), request.maxSpeed, request.pan);
                 else gMixer.ContinuousOff(sound, copy);
                 request = MR_ContinuousSound::Request();
             }

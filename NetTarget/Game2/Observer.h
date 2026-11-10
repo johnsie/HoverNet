@@ -27,6 +27,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include "../VideoServices/3DViewport.h"
 #include "../VideoServices/ModernGraphics.h"
 #include <vector>
@@ -106,6 +107,10 @@ class MR_Observer
       // up), and a flash light and a burst of embers are shown at that spot for most of a second. Nothing here reaches the simulation. Matching is by address and never dereferenced.
       struct LitMemo { const void* mId; MR_3DCoordinate mPos; MR_UInt16 mClass; BOOL mCentral; };
       struct Blast { MR_3DCoordinate mPos; MR_SimulationTime mStart; BOOL mMine; };
+      // Sound from the side and from a moving source: for each other craft and missile the pan (from where it is, relative to the way the viewing craft faces) and the Doppler pitch
+      // (from how fast it closes on the viewing craft, measured over at least 60 ms and smoothed). Presentation only.
+      struct SoundTrack { double mDistance; double mSampleMs; double mClosing; };   // distance (mm) at the last sample, when, and the closing speed (mm/ms, positive = approaching)
+      std::map<const void*, SoundTrack> mSoundTracks;
       std::vector<LitMemo> mPrevLit;
       std::vector<Blast>   mBlasts;
       MR_SimulationTime    mPrevLitTime;
