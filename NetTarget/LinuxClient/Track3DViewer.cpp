@@ -371,8 +371,10 @@ inline void HoverNetFrameDelay()
     }
     if (renderer != nullptr) SDL_RenderSetLogicalSize(renderer, logicalW, logicalH);
 #else
-    SDL_Delay(16);
+    static const bool noDelay = std::getenv("HOVERNET_NO_FRAME_DELAY") != nullptr;   // diagnostic: measure what the machine can do without the pause
+    if (!noDelay) SDL_Delay(16);
 #endif
+    HoverNetGfx::NoteFrameStart();   // the next frame's work is counted from here (see ModernGraphics.h)
 }
 }
 
@@ -2083,7 +2085,11 @@ HoverNetGfx::Options GraphicsOptionsFor(const GraphicsSettings& settings, bool r
         options.sharpen = settings.sharpen; options.exposure = settings.exposure; options.adaptive = settings.adaptive;
         options.brightness = settings.brightness;
         options.reducedMotion = reducedMotion;
-        if (options.automatic) {
+        if (const char* pinned = std::getenv("HOVERNET_AUTO_LEVEL")) {   // diagnostic: run one fixed level of the Automatic ladder (no governor)
+            options = HoverNetGfx::Presenter::OptionsForLevel(options, std::atoi(pinned));
+            options.automatic = false; options.adaptive = false;
+        }
+        else if (options.automatic) {
             options.adaptive = true;   // Automatic is the adaptive governor: it cannot be switched off with it
 #ifdef HOVERNET_WEB
             options.startLevel = 1;    // a browser draws the picture passes on one thread without SIMD: it starts low and rises if there is room
@@ -11621,7 +11627,7 @@ int RunClient(int argc, char** argv)
             static int lastAutomaticLevel = -1;
             if (graphics.GetAutomaticLevel() != lastAutomaticLevel) {   // a few times a minute at most (the governor waits between steps): worth a line for a bug report
                 lastAutomaticLevel = graphics.GetAutomaticLevel();
-                std::printf("Automatic graphics: level %d of %d (frames %.1f ms, picture passes %.1f ms)\n", lastAutomaticLevel, HoverNetGfx::Presenter::kMaxLevel, graphics.GetFrameMs(), graphics.GetPassCostMs());
+                std::printf("Automatic graphics: level %d of %d (at the change: frames %.1f ms, picture passes %.1f ms)\n", lastAutomaticLevel, HoverNetGfx::Presenter::kMaxLevel, graphics.GetStepFrameMs(), graphics.GetStepCostMs());
                 std::fflush(stdout);
             }
         }

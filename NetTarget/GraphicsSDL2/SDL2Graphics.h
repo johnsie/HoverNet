@@ -62,7 +62,9 @@ public:
     int GetEffectiveQuality() const { return m_presenter.EffectiveQuality(); }
     int GetAutomaticLevel() const { return m_presenter.Level(); }
     double GetPassCostMs() const { return m_presenter.PassCostMs(); }
-    double GetFrameMs() const { return m_presenter.FrameMs(); }   // Automatic graphics: how much of the look is running now (0 to Presenter::kMaxLevel)
+    double GetFrameMs() const { return m_presenter.FrameMs(); }
+    double GetStepCostMs() const { return m_presenter.StepCostMs(); }
+    double GetStepFrameMs() const { return m_presenter.StepFrameMs(); }   // Automatic graphics: how much of the look is running now (0 to Presenter::kMaxLevel)
     const HoverNetGfx::Options& GetEffectiveModernOptions() const { return m_presenter.EffectiveOptions(); }   // the options as limited by the automatic level
     // True while the picture passes run on the graphics card; the card's name, and how long the last frame took there (ms).
     bool GpuActive() const { return m_gpuAllowed && m_presenter.FinisherActive(); }

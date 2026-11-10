@@ -175,6 +175,27 @@ Presenter::Presenter()
         [this](PassContext& c) { Vignette(c.rgb, c.width, c.height, 0.0f); });   // steady: it does not react to speed
 }
 
+namespace
+{
+std::chrono::steady_clock::time_point gFrameStart;
+bool gFrameStartKnown = false;
+}
+void NoteFrameStart() { gFrameStart = std::chrono::steady_clock::now(); gFrameStartKnown = true; }
+bool MillisecondsSinceFrameStart(double& milliseconds)
+{
+    if (!gFrameStartKnown) return false;
+    gFrameStartKnown = false;
+    milliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - gFrameStart).count();
+    return true;
+}
+
+void Presenter::NoteWorkMs(double milliseconds)
+{
+    if (milliseconds <= 0.0 || milliseconds > 250.0) return;
+    milliseconds += mCostMs;
+    mFrameMs = mFrameMs <= 0.0 ? milliseconds : mFrameMs * 0.9 + milliseconds * 0.1;
+}
+
 void Presenter::NoteFrameInterval(double milliseconds)
 {
     if (milliseconds <= 0.0 || milliseconds > 250.0) return;
@@ -272,10 +293,11 @@ void Presenter::Process(std::uint8_t* rgb, int width, int height, const Options&
         int& step = automatic ? mLevel : mQualityCap;                 // the thing that is stepped: the level (automatic) or the quality
         const int ceiling = automatic ? kMaxLevel : requested.quality;
         if (mSlowFrames >= 45 && step > 0) {
+            mStepCostMs = mCostMs; mStepFrameMs = mFrameMs;
             --step; mSlowFrames = 0; mCostMs = requested.budgetMs * 0.8;
             if (frameTooSlow) { mRaiseAfter = std::min(mRaiseAfter * 2, 4800); mFrameMs = kFrameBudgetMs * 0.9; }   // wait longer each time before trying again
         }
-        else if (mFastFrames >= mRaiseAfter && step < ceiling) { ++step; mFastFrames = 0; mCostMs = requested.budgetMs * 0.6; }
+        else if (mFastFrames >= mRaiseAfter && step < ceiling) { mStepCostMs = mCostMs; mStepFrameMs = mFrameMs; ++step; mFastFrames = 0; mCostMs = requested.budgetMs * 0.6; }
     }
 }
 

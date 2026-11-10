@@ -119,6 +119,12 @@ struct FrameHints
     int trailY[kMaxTrailPoints] = {};
 };
 
+// Frame pacing. The game's loops pause on purpose each frame (a sleep on the desktop, the browser's next frame) and the display adds its refresh wait, so the time between two pictures says
+// little about what the machine can do. A loop calls NoteFrameStart() when it comes out of its pause; the backend asks MillisecondsSinceFrameStart() just before it shows the picture and the
+// Presenter judges the frame by that work (plus the picture passes) instead. A loop that never calls NoteFrameStart is judged by the time between pictures, as before.
+void NoteFrameStart();
+bool MillisecondsSinceFrameStart(double& milliseconds);   // false when NoteFrameStart was not called since the last answer
+
 // Settings: the four presets the options screen offers, and the options each one stands for.
 // eOff is no processing at all: the plain palette picture. It is not a look players choose (the VR headset uses it, and the rasteriser's own
 // regression tool); the looks are the other three.
@@ -222,6 +228,8 @@ public:
     int Level() const { return mLevel; }
     double PassCostMs() const { return mCostMs; }    // the passes' average cost per frame, and the whole frame's (what the governor weighs)
     double FrameMs() const { return mFrameMs; }
+    double StepCostMs() const { return mStepCostMs; }   // what the passes and the whole frame cost at the moment of the last step (the averages are reset after a step)
+    double StepFrameMs() const { return mStepFrameMs; }
     // What was actually used for the last frame: the player's options as limited by the level. The observer's shadows and lights and the rasteriser's true-colour textures follow this.
     const Options& EffectiveOptions() const { return mEffective; }
 
@@ -230,6 +238,7 @@ public:
     // quality on the quality is also lowered when whole frames take more than about 21 ms (under 47 a second), and raised again only after a long stretch
     // that gets longer every time it had to be lowered. Gaps over a quarter of a second (a menu, a pause) are ignored.
     void NoteFrameInterval(double milliseconds);
+    void NoteWorkMs(double milliseconds);   // the work of one frame, without the loop's pause and the display's wait (see NoteFrameStart); the passes' cost is added here
 
     // The size of the blocks that light, contact shading and normals are worked out in, as a shift: 2 (4x4 pixels) up to 959 pixels wide, 3 (8x8) above.
     static int BlockShift(int width);
@@ -288,6 +297,7 @@ private:
     float mExposure = 1.0f;
     int mQualityCap = 2, mLastRequestedQuality = 2, mSlowFrames = 0, mFastFrames = 0, mRaiseAfter = 240;
     int mLevel = 3;
+    double mStepCostMs = 0.0, mStepFrameMs = 0.0;
     bool mLevelStarted = false;
     Options mEffective;
     double mCostMs = 0.0, mFrameMs = 0.0;
