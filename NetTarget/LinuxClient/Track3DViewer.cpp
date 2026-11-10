@@ -10204,19 +10204,38 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             if (slot < 0) slot = 0;
             if (!store.Load(slot, rmlCraftDesign)) rmlCraftDesign = Authority::CraftDesign();
             rmlCraftDesign = Authority::SanitiseCraftDesign(rmlCraftDesign);
+            if (const char* craftHook = std::getenv("HOVERNET_TEST_MENU_CRAFT")) rmlCraftDesign.craft = std::max(0, std::min(Authority::kCraftCount - 1, std::atoi(craftHook)));   // test hook: show this craft
             rmlCraftTexture = SDL_CreateTexture(graphics.GetRenderer(), SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, kCraftW, kCraftH);
             if (rmlCraftTexture != nullptr) SDL_SetTextureBlendMode(rmlCraftTexture, SDL_BLENDMODE_BLEND);
         }
         if (rmlCraftTexture != nullptr) {
+            // The part of the picture to show: the box that holds the craft at every angle it turns through (found once, by drawing it at twelve angles), with a margin. A fixed box
+            // cut off the top of a craft with a tall fin or engine; this one fits whatever the player designed.
+            SDL_Rect rmlCrop = {kCraftW / 10, kCraftH * 22 / 100, kCraftW * 8 / 10, kCraftH * 64 / 100};
+            bool rmlCropKnown = false;
             info.craftFrame = [&](int yaw, SDL_Rect& crop) -> SDL_Texture* {
                 const Uint32 now = SDL_GetTicks();
+                if (!rmlCropKnown) {
+                    rmlCropKnown = true;
+                    int x0 = kCraftW, y0 = kCraftH, x1 = -1, y1 = -1;
+                    for (int angle = 0; angle < 360; angle += 30) {
+                        if (!HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, angle, rmlPalette.data(), kCraftW, kCraftH, rmlCraftPixels, true)) break;
+                        for (int y = 0; y < kCraftH; ++y) for (int x = 0; x < kCraftW; ++x) if ((rmlCraftPixels[static_cast<std::size_t>(y) * kCraftW + x] >> 24) > 8) { x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y); }
+                    }
+                    rmlCraftYaw = -1000;   // the picture drawn for the next frame is the one for its own angle
+                    if (x1 > x0 && y1 > y0) {
+                        const int margin = 10;
+                        x0 = std::max(0, x0 - margin); y0 = std::max(0, y0 - margin); x1 = std::min(kCraftW - 1, x1 + margin); y1 = std::min(kCraftH - 1, y1 + margin);
+                        rmlCrop = SDL_Rect{x0, y0, x1 - x0 + 1, y1 - y0 + 1};
+                    }
+                }
                 if (yaw != rmlCraftYaw && (now - rmlCraftBuilt >= 40 || !rmlCraftReady)) {
                     rmlCraftReady = HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, yaw,
                                                                       rmlPalette.data(), kCraftW, kCraftH, rmlCraftPixels, true);
                     if (rmlCraftReady) SDL_UpdateTexture(rmlCraftTexture, nullptr, rmlCraftPixels.data(), kCraftW * 4);
                     rmlCraftYaw = yaw; rmlCraftBuilt = now;
                 }
-                crop = SDL_Rect{kCraftW / 10, kCraftH * 22 / 100, kCraftW * 8 / 10, kCraftH * 64 / 100};   // the craft sits in the lower middle of its picture
+                crop = rmlCrop;
                 return rmlCraftReady ? rmlCraftTexture : nullptr;
             };
         }
