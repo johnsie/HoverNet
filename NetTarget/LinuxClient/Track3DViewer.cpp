@@ -342,6 +342,9 @@ inline void HoverNetVrSubmitStereo(const uint8_t* pLeft, const uint8_t* pRight, 
 #endif
 }
 
+struct LoopProfile { bool enabled = std::getenv("HOVERNET_PROFILE_LOOP") != nullptr; int frames = 0; double process = 0, render = 0, present = 0; std::chrono::steady_clock::time_point windowStart = std::chrono::steady_clock::now(); };
+LoopProfile gLoopProfile;
+
 inline void HoverNetFrameDelay()
 {
 #ifdef HOVERNET_WEB
@@ -13540,7 +13543,9 @@ int RunClient(int argc, char** argv)
             }
 #endif
             else {
+                const auto profileProcessStart = std::chrono::steady_clock::now();
                 session.Process();
+                gLoopProfile.process += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - profileProcessStart).count();
 #ifndef HOVERNET_WEB
                 // Test instrumentation (HOVERNET_TEST_JITTER_SP, with --autoplay): the same measurement as HOVERNET_TEST_JITTER gives online
                 // (ticks shown per tick of real time, craft jump per frame), for single player, so the two can be compared.
@@ -14065,6 +14070,7 @@ int RunClient(int argc, char** argv)
                     else {
                         observer->SetChaseScale(kChasePercents[chaseStep]);
                         // Offline play steps in whole ticks: draw the moment between the last two ticks that the wall clock is at (nothing to do for a replay or an online race, which have their own timing).
+                        const auto profileRenderStart = std::chrono::steady_clock::now();
                         MR_SimulationTime drawTime = session.GetSimulationTime();
                         bool interpolated = false;
                         if (!replay.active
@@ -14096,6 +14102,7 @@ int RunClient(int argc, char** argv)
                             }
                         }
                         if (interpolated) session.EndInterpolatedRender();
+                        gLoopProfile.render += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - profileRenderStart).count();
                     }
                 }
                 gReplayLabel.clear();
@@ -14147,8 +14154,17 @@ int RunClient(int argc, char** argv)
         applyGraphics();   // every frame: the shadow table follows the palette, which changes with the track
         graphics.SetFrameHints(observer != nullptr && !debugView ? observer->GetFrameHints() : HoverNetGfx::FrameHints());
 #endif
+        const auto profilePresentStart = std::chrono::steady_clock::now();
         graphics.Present(buffer.GetBuffer(), kWidth, kHeight);
+        gLoopProfile.present += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - profilePresentStart).count();
         ++framesRendered;
+        if (gLoopProfile.enabled && ++gLoopProfile.frames == 300) {   // test switch: where the frame goes (HOVERNET_PROFILE_LOOP=1), every 300 frames
+            const auto nowProfile = std::chrono::steady_clock::now();
+            const double wall = std::chrono::duration<double, std::milli>(nowProfile - gLoopProfile.windowStart).count();
+            std::printf("LOOPPROFILE per frame over 300: whole %.1f ms | simulate %.1f | draw the 3D view %.1f | present (picture passes, upload, show) %.1f | the rest (input, HUD text, pause) %.1f\n", wall / 300, gLoopProfile.process / 300, gLoopProfile.render / 300, gLoopProfile.present / 300, (wall - gLoopProfile.process - gLoopProfile.render - gLoopProfile.present) / 300);
+            std::fflush(stdout);
+            gLoopProfile.frames = 0; gLoopProfile.process = gLoopProfile.render = gLoopProfile.present = 0; gLoopProfile.windowStart = nowProfile;
+        }
 #ifdef HOVERNET_GAME2_PLAYER
         if (const char* missileShots = std::getenv("HOVERNET_TEST_SHOT_MISSILE")) {   // test switch: up to 12 pictures (every third frame) while a missile is in flight, to <prefix>N.bmp
             static int shots = 0;
