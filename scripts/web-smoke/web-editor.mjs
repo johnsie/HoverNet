@@ -62,7 +62,7 @@ try {
   // the editor asks before a page with unsaved work is left (a reload too): the test, like a person, says "leave"
   ws.addEventListener('message', (m) => { const d = JSON.parse(m.data); if (d.method === 'Page.javascriptDialogOpening') send('Page.handleJavaScriptDialog', { accept: true }); });
   await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
-  await send('Page.navigate', { url: base });
+  await send('Page.navigate', { url: base + '?menu=imgui' });   // the editor test clicks the older menu's buttons
   const waitFor = async (fn, ms) => { for (const end = Date.now() + ms; Date.now() < end;) { if (await fn()) return true; await sleep(300); } return false; };
 
   const started = await waitFor(async () => (await evalJs("(window.Module&&Module._hn_rooms)?Module._hn_rooms():-1")) >= 0, 60000);

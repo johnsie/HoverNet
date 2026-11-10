@@ -12,6 +12,7 @@ if [ -z "$node_bin" ] && [ -n "${EMSDK:-}" ]; then node_bin="$(ls "$EMSDK"/node/
 if [ -z "$node_bin" ]; then echo "SKIP: node not found"; exit 77; fi
 "$node_bin" "$here/web-smoke/web-stale-page.mjs" "$web_dir" || exit $?
 "$node_bin" "$here/web-smoke/web-smoke.mjs" "$web_dir" "$out_dir" || exit $?
+HN_WEB_QUERY= "$node_bin" "$here/web-smoke/web-rml-doors.mjs" "$web_dir" || exit $?   # the new screens (the default) draw in the browser
 "$node_bin" "$here/web-smoke/web-account.mjs" "$web_dir" || exit $?   # the optional Outiva sign-in: signed in, saved name, guest, hung service
 "$node_bin" "$here/web-smoke/outiva-status.mjs" || { rc=$?; [ "$rc" = "77" ] || exit "$rc"; }   # the public status for the Outiva console (needs Python)
 if [ -n "${3:-}" ]; then

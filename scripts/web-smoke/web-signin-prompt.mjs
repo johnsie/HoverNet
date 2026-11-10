@@ -51,7 +51,7 @@ async function session(label, fn) {
     const click = async (x, y) => { for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) { await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 }); await sleep(120); } };
     const shot = async (name) => { const r = await send('Page.captureScreenshot', { format: 'png' }); const buf = Buffer.from(r.data, 'base64'); fs.writeFileSync(path.join(out, `${label}-${name}.png`), buf); return buf.length; };
     await send('Runtime.enable'); await send('Page.enable');
-    await send('Page.navigate', { url: base });
+    await send('Page.navigate', { url: base + '?menu=imgui' });   // (the sign-in gate is the older kind of screen either way)
     let running = false;
     for (const end = Date.now() + 90000; Date.now() < end && !running;) { running = (await send('Runtime.evaluate', { expression: "document.body.classList.contains('running')", returnByValue: true })).result?.value === true; if (!running) await sleep(500); }
     check(running, `${label}: the browser build starts`);

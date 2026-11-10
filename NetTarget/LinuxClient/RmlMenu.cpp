@@ -81,6 +81,9 @@ struct Supersample
     int factor = 2, width = 0, height = 0;
     explicit Supersample(SDL_Renderer* pRenderer) : renderer(pRenderer)
     {
+#ifdef HOVERNET_WEB
+        factor = 1;   // the browser: drawing into a picture larger than the canvas put the interface in a quarter of the window (seen in headless Chrome), so it is drawn straight onto the canvas
+#endif
         if (const char* f = std::getenv("HOVERNET_RML_SS")) factor = std::max(1, std::min(4, std::atoi(f)));
     }
     ~Supersample() { if (texture != nullptr) SDL_DestroyTexture(texture); }
@@ -218,6 +221,7 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
     Rml::Context* context = Rml::CreateContext("hovernet-main-menu", Rml::Vector2i(width, height));
     Supersample ss(pRenderer);
     if (context != nullptr) ss.Resize(context, width, height);
+    if (context != nullptr && std::getenv("HOVERNET_RML_DEBUG") != nullptr) std::printf("RMLDEBUG main menu output %dx%d factor %d scale %.2f context %dx%d dpr %.2f\n", width, height, ss.factor, gUiScale, context->GetDimensions().x, context->GetDimensions().y, context->GetDensityIndependentPixelRatio());
     Rml::LoadFontFace(pInfo.assetDir + "/Inter-Variable.ttf", true);       // the body face (also the fallback for any name)
     Rml::LoadFontFace(pInfo.assetDir + "/Oxanium-Variable.ttf", false);    // the display face
     Rml::ElementDocument* document = context != nullptr ? context->LoadDocument(pInfo.assetDir + "/ui/main-menu.rml") : nullptr;
@@ -290,7 +294,7 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
         }
         int w = 0, h = 0;
         SDL_GetRendererOutputSize(pRenderer, &w, &h);
-        if (w != width || h != height) { width = w; height = h; ss.Resize(context, width, height); }
+        if (w != width || h != height) { width = w; height = h; ss.Resize(context, width, height); if (std::getenv("HOVERNET_RML_DEBUG") != nullptr) std::printf("RMLDEBUG main menu resized to %dx%d factor %d context %dx%d dpr %.2f\n", width, height, ss.factor, context->GetDimensions().x, context->GetDimensions().y, context->GetDensityIndependentPixelRatio()); }
         context->Update();
         // Under the interface: the background (a gradient the renderer draws itself, so the craft can sit between it and the markup) and the player's craft.
         ss.Begin();

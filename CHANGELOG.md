@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **The new menus were laid out in a quarter of the window in the browser (2.3.47).** The RmlUi screens draw into a picture twice the window's size and shrink it onto the window; in a WebAssembly build in headless Chrome that put the whole interface (panel, text, craft) in the top-left quarter, cut off. The browser build now draws straight onto the canvas (no 2x smoothing there; the desktop is unchanged). Found by running the default page in headless Chrome for the first time since the lobby, Leaderboards and Replays screens were added; seen fixed in the same browser on the main menu, Leaderboards and the lobby name card. A real GPU browser, a phone and touch were not run.
+- **The main menu cut off the top of a tall craft** (the preview was cropped to a fixed box). It now shows the box that holds the craft at every angle (this was reported with a screenshot of the player's own craft; checked here on the five stock crafts only).
+- The browser tests that click the older menus open the page with `?menu=imgui` (`?menu=classic` is accepted too), and a new browser test, `web-rml-doors.mjs`, opens the default page and the Leaderboards and lobby screens by keyboard (added to `scripts/test-web-client.sh`).
+
 ## 2.3.47 - 2026-11-10
 
 _Released at the owner's request without waiting for the test suite. 2.3.46's GitHub run had not been looked at when this was cut._
