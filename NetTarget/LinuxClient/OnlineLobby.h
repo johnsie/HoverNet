@@ -149,6 +149,8 @@ private:
     std::uint64_t mFetchId = 0;
     long long mLastFetchMs = -100000;   // the server allows one download every half second; a quicker request waits (see FetchReplay)
     bool mFetchSent = false;
+    long long mFetchActivityMs = 0;   // when the request was sent or the last piece arrived: a download that goes quiet is asked for again, then given up on (see Pump)
+    int mFetchTries = 0;
     std::uint16_t mFetchNext = 0, mFetchCount = 0;
     std::vector<std::uint8_t> mReplayBytes;
     std::string mReplayNotice;

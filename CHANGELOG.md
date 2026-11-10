@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+- Replay downloads from a server no longer sit at "DOWNLOADING 0%" for ever when the server goes quiet: after 6 seconds the request is sent once more, and after another 6 a message says the server did not send the replay. **The reported stall itself was not reproduced**: headless Chrome against the live site and against a local server both downloaded and played the same replay at once, so the cause on the reporter's browser is unknown. The new time-outs were not exercised by a test (only the normal download path was re-run).
+
 - Linux and Windows: the window's close (X) button now asks "Quit HoverNet? / Keep playing" on every screen. The settings screen, the hub, replays, leaderboards, the servers screen, the online lobby and the garage used to quit straight away; "Keep playing" returns to the game. Checked on Linux only (`HoverNetCloseButtonAsksKeep`/`AsksQuit` ctest, settings screen with the answer given by an environment variable; the dialog itself by the existing quit smoke test). The other screens use the same call but were not each driven; Windows was not run.
 
 ## 2.3.54 - 2026-11-10

@@ -116,6 +116,7 @@ void OnlineLobby::Pump()
                 continue;
             }
             mFetchCount = ch.count;
+            mFetchActivityMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
             mReplayBytes.insert(mReplayBytes.end(), ch.data.begin(), ch.data.end());
             ++mFetchNext;
             if (mFetchNext == mFetchCount) {
@@ -180,6 +181,14 @@ void OnlineLobby::Pump()
         else if (mGotAck) mBacklog.push_back(f);   // ticks that arrive while the race is being set up
     }
     SendPendingFetch();
+    if (mFetchId != 0 && mFetchSent && mState == State::eBrowsing) {
+        // A download that has gone quiet (nothing for 6 seconds) is asked for once more, then given up on with a message, never left at 0% for ever.
+        const long long now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (now - mFetchActivityMs > 6000) {
+            if (mFetchTries < 2) { ++mFetchTries; mFetchNext = 0; mFetchCount = 0; mReplayBytes.clear(); mFetchSent = false; SendPendingFetch(); }
+            else { mFetchId = 0; mReplayBytes.clear(); mReplayNotice = "The server did not send the replay. Check your connection and try again."; }
+        }
+    }
     if (mQueuedWatchId != 0 && mState == State::eBrowsing) {
         bool found = false, started = false;
         for (const auto& r : mRaces) if (r.id == mQueuedWatchId) { found = true; started = r.started; }
@@ -249,7 +258,7 @@ void OnlineLobby::RefreshRecords(const std::string& track, int laps)
 void OnlineLobby::FetchReplay(std::uint64_t id)
 {
     if (mState != State::eBrowsing || mFetchId != 0) return;
-    mFetchId = id; mFetchNext = 0; mFetchCount = 0; mReplayBytes.clear(); mReplayReady = false; mReplayNotice.clear();
+    mFetchId = id; mFetchNext = 0; mFetchCount = 0; mReplayBytes.clear(); mReplayReady = false; mReplayNotice.clear(); mFetchTries = 1;
     mFetchSent = false;   // sent from Pump() as soon as the server's pace allows
     SendPendingFetch();
 }
@@ -260,6 +269,7 @@ void OnlineLobby::SendPendingFetch()
     const long long now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     if (now - mLastFetchMs < 650) return;
     mLastFetchMs = now;
+    mFetchActivityMs = now;
     mFetchSent = true;
     GetReplay get;
     get.id = mFetchId;
