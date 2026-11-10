@@ -37,7 +37,7 @@ jobs:
     name: Linux game, race server and DEBs
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 90
 
     steps:
       - name: Check out source

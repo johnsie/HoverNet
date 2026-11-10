@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **The Linux job on GitHub Actions was cancelled by its own 30-minute limit (2.3.45).** The log showed tests 1 to 120 of 167 passing and then "The operation was canceled" at 30 minutes 15 seconds: the build plus the serial test run (the RmlUi menu test alone takes about 7 minutes, the whole suite about 25) no longer fit. The limit is 90 minutes now. It has not been seen to finish: tests 121 to 167 have not run on Actions yet, so a failure among them is possible.
+
 ### Added
 - **More RmlUi screens (still opt-in): the loading screen and the online lobby.** The loading screen shows the track, its style and difficulty, a faint map, a tip and a ring of dots. The lobby has the name card, the connecting and "can't reach the server" cards, the race list, race details with the map, the actions, the waiting room (roster, Start Race, Leave), the chat and user list, and the Host a race (track search, laps, weapons, private code, map) and Join a private race dialogs; a community track downloads over the screen first. Run with the older lobby's logic, so its server behaviour is the same. Checked: screenshots of the lobby and both dialogs against a local server, the scripted tests for the lobby (menu, fallback, auto-refresh, chat typed and sent with Enter, community track, lobby) with `HOVERNET_RML_MENU=1`, the screens' tests without it, and `HoverNetRmlMenu`. Not checked: a person clicking through hosting, joining and watching with the new screen, the browser and Windows builds. The main menu stays on the older version when `HOVERNET_TEST_MENU` is set (the test hook that opens a screen from the menu).
 - Not done: the Garage (a paint editor), the browser sign-in gate, and the tutorial overlay and race HUD (drawn over the race; the HUD is not to change). See [docs/rmlui.md](docs/rmlui.md).
