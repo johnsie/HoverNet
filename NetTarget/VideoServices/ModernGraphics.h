@@ -21,7 +21,7 @@ enum { kMaxTrailPoints = 24, kMaxLights = 12 };
 enum SurfaceTag : std::uint8_t { kTagNone = 0, kTagFloor = 1, kTagCeiling = 2, kTagWall = 3, kTagObject = 4, kTagCraft = 5 };
 
 // A point of coloured light in the scene, in camera space (mm: x forward, y left, z up).
-enum LightKind : std::uint8_t { kLightGeneric = 0, kLightEngine, kLightHeadlight, kLightFlash, kLightCraft, kLightMissile, kLightMine, kLightPowerUp, kLightGhost };
+enum LightKind : std::uint8_t { kLightGeneric = 0, kLightEngine, kLightHeadlight, kLightFlash, kLightCraft, kLightMissile, kLightMine, kLightPowerUp, kLightGhost, kLightExplosion };
 
 struct Light
 {

@@ -672,6 +672,26 @@ int main(int argc, char** argv)
             Presenter q; q.Process(g.data(), W, H, o, h2);
             Check(At(g, W, W / 2 + 2, H / 2) == 40, "and the glow is hidden by something in front of it");
         }
+        // Explosions: a bright glow with a hot core, embers and smoke; hidden behind a wall; nothing with Reduced motion.
+        {
+            FrameHints hints = sceneHints(wallDepth, &wallTags);
+            hints.lightCount = 1;
+            Light& l = hints.lights[0];
+            l.kind = kLightExplosion; l.x = 10000; l.y = 0; l.z = 0; l.radius = 9000; l.r = 255; l.g = 175; l.b = 90; l.strength = 1.0f;
+            Options o = bare(1); o.halos = true; o.lighting = true; o.effects = true;
+            Frame f = Solid(W, H, 40, 40, 40);
+            Presenter p; p.Process(f.data(), W, H, o, hints);
+            Check(At(f, W, W / 2, H / 2) > 40 + 120, "an explosion has a bright core");
+            Check(At(f, W, W / 2 + 6, H / 2) > 40 + 40, "and a glow round it");
+            Check(p.ParticleCount() >= 7, "and throws embers");
+            hints.lights[0].strength = 0.3f;
+            Frame g = Solid(W, H, 40, 40, 40);
+            Presenter q; for (int i = 0; i < 4; ++i) q.Process(g.data(), W, H, o, hints);
+            Check(q.ParticleCount() >= 1, "an old explosion lets off smoke, not embers");
+            o.reducedMotion = true;
+            Presenter r; Frame k = Solid(W, H, 40, 40, 40); hints.lights[0].strength = 1.0f; r.Process(k.data(), W, H, o, hints);
+            Check(r.ParticleCount() == 0, "with Reduced motion there are no embers");
+        }
         // Emitters: exhaust and dust behind a fast craft, smoke from a missile, sparkles on a power-up; none with Reduced motion.
         {
             FrameHints hints = Hints(W, H);

@@ -131,6 +131,7 @@ MR_Observer::MR_Observer()
    mModernTextures = FALSE;
    memset( mPalette, 0, sizeof( mPalette ) );
    mImpactFlash = 0.0f;
+   mPrevLitTime = 0;
    mTrailCount = 0;
    mTrailLastTime = 0;
    mPreviousSpeed = 0.0;
@@ -821,6 +822,66 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
             lAt.mZ += 300;
             AddLight( lAt, 3200, 90, 255, 160, 0.35f, HoverNetGfx::kLightPowerUp );
          }
+      }
+      // Explosions: a missile or mine that was in plain view last frame and is not seen now (the list is not full, so it was not just crowded out) has blown up there.
+      if( pTime < mPrevLitTime || pTime - mPrevLitTime > 400 )
+      {
+         mPrevLit.clear();   // a restart or a seek: nothing to compare with
+         mBlasts.clear();
+      }
+      if( mModernMotion && mLitElements.size() < 6 )
+      {
+         for( size_t lOld = 0; lOld < mPrevLit.size(); lOld++ )
+         {
+            const LitMemo& lMemo = mPrevLit[ lOld ];
+            if( !lMemo.mCentral || lMemo.mClass == 152 || mBlasts.size() >= 4 )
+            {
+               continue;
+            }
+            bool lStillThere = false;
+            for( size_t lNow = 0; lNow < mLitElements.size(); lNow++ )
+            {
+               lStillThere = lStillThere || (const void*)mLitElements[ lNow ] == lMemo.mId;
+            }
+            if( !lStillThere )
+            {
+               Blast lBlast;
+               lBlast.mPos = lMemo.mPos;
+               lBlast.mStart = pTime;
+               lBlast.mMine = lMemo.mClass == 151;
+               mBlasts.push_back( lBlast );
+            }
+         }
+      }
+      mPrevLit.clear();
+      mPrevLitTime = pTime;
+      for( size_t lIndex = 0; lIndex < mLitElements.size(); lIndex++ )
+      {
+         LitMemo lMemo;
+         lMemo.mId = mLitElements[ lIndex ];
+         lMemo.mPos = mLitElements[ lIndex ]->mPosition;
+         lMemo.mClass = mLitElements[ lIndex ]->GetTypeId().mClassId;
+         int lCX, lCY, lCZ;
+         lMemo.mCentral = m3DView.ToCameraSpace( lMemo.mPos, lCX, lCY, lCZ ) && lCX > 1500 && lCX < 70000 &&
+                          abs( lCY ) < lCX/2 && abs( lCZ ) < lCX*2/5;
+         mPrevLit.push_back( lMemo );
+      }
+      for( size_t lIndex = 0; lIndex < mBlasts.size(); )
+      {
+         const MR_SimulationTime lAge = pTime - mBlasts[ lIndex ].mStart;
+         if( !mModernMotion || lAge >= 800 )
+         {
+            mBlasts.erase( mBlasts.begin() + lIndex );
+            continue;
+         }
+         const float lLife = 1.0f - (float)lAge/800.0f;
+         MR_3DCoordinate lAt = mBlasts[ lIndex ].mPos;
+         lAt.mZ += 250;
+         // a hard white-orange flash that falls away quickly, and a light that spreads and lingers a little as the fire dies; a mine's is redder and wider
+         const float lHot = lLife*lLife*lLife;
+         const BOOL lMine = mBlasts[ lIndex ].mMine;
+         AddLight( lAt, (int)( (lMine ? 9000 : 6500) + 9000*( 1.0f - lLife ) ), 255, lMine ? 120 : 175, lMine ? 60 : 90, 0.35f + 0.65f*lHot, HoverNetGfx::kLightExplosion );
+         lIndex++;
       }
       if( mGhost != NULL && mGhost != pViewingCharacter )
       {

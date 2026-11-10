@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **Explosions (presentation only).** When a missile or mine that was in plain view disappears, the picture shows a flash at that spot: a bright white-orange core and glow that fall away over about 0.8 s, a light that spreads over the walls and floor, embers thrown out, then warm smoke. It is worked out from what the observer sees (nothing reaches the simulation, the camera or the HUD), and is off with Reduced motion. A power-up picked up does not explode. Checked: unit tests of the glow, embers, smoke and Reduced motion (`HoverNetModernGraphics`), render golden frames, the camera rule and the scene checks pass, and a 600-frame headless race ran. Not seen on screen: no headless run fires a weapon, so the look and the heuristic (a missile that leaves view in the middle of the picture counts as exploded) have not been watched in a real race.
+
 ## 2.3.43 - 2026-11-09
 
 ### Fixed

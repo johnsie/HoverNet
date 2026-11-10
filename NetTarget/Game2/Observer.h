@@ -102,6 +102,13 @@ class MR_Observer
       const MR_Level* mShadowLevel;         // the level being drawn, to find the floor under a craft
       MR_Int32        GroundUnder( const MR_MainCharacter* pCraft ) const;   // the height of the floor a craft's shadow falls on
       float           mImpactFlash;
+      // Explosions, for the picture passes only: a missile or mine that was in plain view last frame and is gone this frame is taken to have blown up there (or been picked
+      // up), and a flash light and a burst of embers are shown at that spot for most of a second. Nothing here reaches the simulation. Matching is by address and never dereferenced.
+      struct LitMemo { const void* mId; MR_3DCoordinate mPos; MR_UInt16 mClass; BOOL mCentral; };
+      struct Blast { MR_3DCoordinate mPos; MR_SimulationTime mStart; BOOL mMine; };
+      std::vector<LitMemo> mPrevLit;
+      std::vector<Blast>   mBlasts;
+      MR_SimulationTime    mPrevLitTime;
       double          mProjKx, mProjKz;
       void            AddLight( const MR_3DCoordinate& pWorld, int pRadiusMm, int pR, int pG, int pB, float pStrength, int pKind = 0, const MR_3DCoordinate* pAimAt = NULL, float pConeCos = -1.0f );
       std::vector<MR_UInt8> mHudMask;        // 1 where the HUD drew (or outside the viewport), for the whole frame
