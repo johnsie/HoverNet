@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.53 - 2026-11-10
+
+_Released at the owner's request without waiting for the test suite._
+
 - Web: the music can be fetched after the game starts instead of being part of the first download (opt-in, `HOVERNET_WEB_DEFERRED_MUSIC`; see `docs/operators.md`). Checked on a local WebAssembly build in headless Chrome only (`scripts/web-smoke/web-music.mjs`): `HoverNet.data` 26.3 MB -> 13.6 MB, the files arrive after the first frame and the menu track starts; with no music file on the server the game runs quietly. Not deployed: the host's `hovernet-web-deploy` must be updated first. Playing the sound itself was not heard (headless).
 - Web server config: `mod_deflate` for `HoverNet.data` (needs the site file updated on the host).
 
