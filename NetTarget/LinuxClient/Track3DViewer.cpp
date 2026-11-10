@@ -2882,7 +2882,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 // characters) once the owner has made the server reachable from the internet with one; empty means a plain connection. The browser always
 // uses its own site (wss://<site>/auth/, TLS at the web server) and ignores these.
 constexpr const char* kOfficialAuthAddress = "hovernet.outiva.com:9610";
-constexpr const char* kOfficialAuthKey = "";
+constexpr const char* kOfficialAuthKey = "635e05b930dbc9f9f51e660f4d6d769b3e50077ea0701bb7562305c19c728609";
 
 struct AuthServerSettings
 {
