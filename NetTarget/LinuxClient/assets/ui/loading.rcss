@@ -1,0 +1,11 @@
+body { font-family: Inter; font-size: 16dp; color: #f4f5f8; width: 100%; height: 100%; }
+p, h1, div { display: block; }
+#wrap { position: absolute; left: 0; right: 0; top: 33%; text-align: center; }
+#eyebrow { font-family: Oxanium; font-size: 20dp; font-weight: bold; color: #fa737a; margin: 0; }
+#name { font-family: Oxanium; font-size: 54dp; font-weight: bold; margin: 2dp 0 0 0; }
+#line { font-size: 18dp; color: #fa737a; margin: 8dp 0 0 0; }
+#spin { position: absolute; left: 50%; top: 58%; width: 0dp; height: 0dp; }
+.dot { position: absolute; width: 9dp; height: 9dp; border-radius: 5dp; background-color: #fa737a; }
+#tipbox { position: absolute; left: 15%; right: 15%; top: 76%; text-align: center; }
+#tiplabel { font-family: Oxanium; font-size: 15dp; color: #fa737a; margin: 0 0 6dp 0; }
+#tip { font-size: 19dp; color: #bec2d0; margin: 0; }

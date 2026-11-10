@@ -88,6 +88,17 @@ struct ChoiceInfo
 constexpr int kChoiceBack = -1, kChoiceClose = -2, kChoiceNone = -3;
 int RunChoiceMenu(SDL_Window* window, SDL_Renderer* renderer, const ChoiceInfo& info, int frameLimit, int restoreW, int restoreH);
 
+// The loading screen: one frame, drawn while the game loads a track (nothing to press). The map is the caller's picture, shown faint and large behind the title.
+struct LoadingInfo
+{
+    std::string assetDir, trackName, briefing, tip;
+    SDL_Texture* map = nullptr; int mapW = 0, mapH = 0;   // the caller owns it
+    int spinnerPhase = 0;                                // 0..7: where the ring of dots is turned to
+    std::function<void()> beforePresent;                 // called with the finished frame on the screen, before it is presented (the capture hook)
+};
+// Returns false when the screen could not load (the caller draws its own). The renderer's logical size is put back to restoreW x restoreH.
+bool ShowLoadingFrame(SDL_Window* window, SDL_Renderer* renderer, const LoadingInfo& info, int restoreW, int restoreH);
+
 // ---- Forms: tabs of labelled controls with Save and Cancel (Settings, and screens like it) -----------------------------------------------------------------
 // The caller keeps its own state and side effects: it describes the fields, and every frame hears what the player changed.
 struct FormField

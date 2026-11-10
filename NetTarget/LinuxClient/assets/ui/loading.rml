@@ -1,0 +1,15 @@
+<rml>
+<head>
+	<title>HoverNet</title>
+	<link type="text/rcss" href="loading.rcss"/>
+</head>
+<body>
+	<div id="wrap">
+		<p id="eyebrow">LOADING</p>
+		<h1 id="name"></h1>
+		<p id="line"></p>
+	</div>
+	<div id="spin"></div>
+	<div id="tipbox"><p id="tiplabel">TIP</p><p id="tip"></p></div>
+</body>
+</rml>

@@ -1133,6 +1133,73 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
     m.listener.outcome = FormOutcome::eNone;
     return out;
 }
+bool ShowLoadingFrame(SDL_Window* pWindow, SDL_Renderer* pRenderer, const LoadingInfo& pInfo, int pRestoreW, int pRestoreH)
+{
+    SystemInterface_SDL system;
+    system.SetWindow(pWindow);
+    std::unique_ptr<RenderInterface_SDL> render(new RenderInterface_SDL(pRenderer));
+    SDL_RenderSetLogicalSize(pRenderer, 0, 0);
+    Rml::SetSystemInterface(&system);
+    Rml::SetRenderInterface(render.get());
+    if (!Rml::Initialise()) { SDL_RenderSetLogicalSize(pRenderer, pRestoreW, pRestoreH); return false; }
+    bool ok = false;
+    {
+        int width = 0, height = 0;
+        SDL_GetRendererOutputSize(pRenderer, &width, &height);
+        Rml::Context* context = Rml::CreateContext("hovernet-loading", Rml::Vector2i(width, height));
+        Supersample ss(pRenderer);
+        if (context != nullptr) ss.Resize(context, width, height);
+        Rml::LoadFontFace(pInfo.assetDir + "/Inter-Variable.ttf", true);
+        Rml::LoadFontFace(pInfo.assetDir + "/Oxanium-Variable.ttf", false);
+        Rml::ElementDocument* document = context != nullptr ? context->LoadDocument(pInfo.assetDir + "/ui/loading.rml") : nullptr;
+        if (document != nullptr) {
+            if (Rml::Element* e = document->GetElementById("name")) e->SetInnerRML(Escaped(pInfo.trackName));
+            if (Rml::Element* e = document->GetElementById("line")) e->SetInnerRML(Escaped(pInfo.briefing));
+            if (Rml::Element* e = document->GetElementById("tip")) e->SetInnerRML(Escaped(pInfo.tip));
+            if (Rml::Element* spin = document->GetElementById("spin")) {   // a ring of eight dots, brightest at the head
+                Rml::String html;
+                for (int i = 0; i < 8; ++i) {
+                    const float angle = static_cast<float>(i - pInfo.spinnerPhase) * 0.785398f;
+                    const float alpha = 0.25f + 0.75f * static_cast<float>(i) / 7.0f;
+                    char style[160];
+                    std::snprintf(style, sizeof style, "left: %.1fdp; top: %.1fdp; opacity: %.2f;", std::cos(angle) * 26.0f - 4.5f, std::sin(angle) * 26.0f - 4.5f, alpha);
+                    html += Rml::String("<div class=\"dot\" style=\"") + style + "\"></div>";
+                }
+                spin->SetInnerRML(html);
+            }
+            document->Show();
+            context->Update();
+            ss.Begin();
+            SDL_SetRenderDrawColor(pRenderer, 10, 11, 18, 255);
+            SDL_RenderClear(pRenderer);
+            const SDL_Color tl = {10, 11, 18, 255}, tr = {26, 10, 18, 255}, bl = {8, 8, 13, 255}, br = {10, 6, 10, 255};
+            const float fw = static_cast<float>(ss.W()), fh = static_cast<float>(ss.H());
+            const SDL_Vertex quad[4] = {{{0.0f, 0.0f}, tl, {0, 0}}, {{fw, 0.0f}, tr, {0, 0}}, {{0.0f, fh}, bl, {0, 0}}, {{fw, fh}, br, {0, 0}}};
+            const int order[6] = {0, 1, 2, 1, 3, 2};
+            SDL_RenderGeometry(pRenderer, nullptr, quad, 4, order, 6);
+            if (pInfo.map != nullptr && pInfo.mapW > 0 && pInfo.mapH > 0) {   // the map, faint and large
+                const float aspect = static_cast<float>(pInfo.mapW) / static_cast<float>(pInfo.mapH);
+                float h = fh * 0.62f, w = h * aspect;
+                if (w > fw * 0.7f) { w = fw * 0.7f; h = w / aspect; }
+                const SDL_FRect to = {(fw - w) * 0.5f, fh * 0.5f - h * 0.5f, w, h};
+                SDL_SetTextureAlphaMod(pInfo.map, 46);
+                SDL_SetTextureBlendMode(pInfo.map, SDL_BLENDMODE_BLEND);
+                SDL_RenderCopyF(pRenderer, pInfo.map, nullptr, &to);
+                SDL_SetTextureAlphaMod(pInfo.map, 255);
+            }
+            context->Render();
+            ss.End();
+            if (pInfo.beforePresent) pInfo.beforePresent();
+            SDL_RenderPresent(pRenderer);
+            document->Close();
+            ok = true;
+        }
+        else std::fprintf(stderr, "RmlUi loading screen: could not load %s/ui/loading.rml\n", pInfo.assetDir.c_str());
+    }
+    Rml::Shutdown();
+    SDL_RenderSetLogicalSize(pRenderer, pRestoreW, pRestoreH);
+    return ok;
+}
 void SetFrameHook(void (*pHook)()) { gFrameHook = pHook; }
 void SetUiScale(float pScale) { gUiScale = std::max(0.5f, std::min(2.0f, pScale)); }
 }  // namespace HoverNetRml

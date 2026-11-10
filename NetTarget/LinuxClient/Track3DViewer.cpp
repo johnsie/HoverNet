@@ -7028,6 +7028,31 @@ void ShowLoadingScreen(SDL2GraphicsBackend& graphics, const std::string& trackNa
     SDL_Renderer* renderer = graphics.GetRenderer();
     int logicalW = 0, logicalH = 0;
     SDL_RenderGetLogicalSize(renderer, &logicalW, &logicalH);
+#ifdef HOVERNET_HAVE_RMLUI
+    if (UseRmlUi(-1)) {   // the RmlUi version of this screen (docs/rmlui.md); if it cannot load, the ImGui one below is drawn
+        HoverNetRml::LoadingInfo info;
+        info.assetDir = SourcePath("NetTarget/LinuxClient/assets");
+        info.trackName = trackName.empty() ? "THE TRACK" : trackName;
+        TrackPreview map;
+        const int trackIndex = Tracks().Find(trackName);
+        if (trackIndex >= 0) {
+            const TrackBriefing guide = BriefingFor(trackIndex);
+            info.briefing = guide.mCharacter + "   -   " + guide.mDifficulty + (guide.mFreePlay ? std::string() : "   -   suggested " + std::to_string(guide.mSuggestedLaps) + " laps");
+            map = LoadTrackPreview(renderer, info.trackName.c_str());
+            info.map = map.mTexture; info.mapW = map.mWidth; info.mapH = map.mHeight;
+        }
+        const Uint32 ticks = SDL_GetTicks();
+        info.tip = tips[(ticks / 1000 + static_cast<Uint32>(info.trackName.size())) % (sizeof(tips) / sizeof(tips[0]))];
+        info.spinnerPhase = static_cast<int>((ticks % 1000) / 125);
+        info.beforePresent = [&]() { CaptureFrameIfRequested(renderer, 1, 1, "HOVERNET_CAPTURE_LOADING"); };
+        const bool shown = HoverNetRml::ShowLoadingFrame(graphics.GetWindow(), renderer, info, logicalW, logicalH);
+        if (map.mTexture != nullptr) SDL_DestroyTexture(map.mTexture);
+        if (shown) {
+            if (ownsImGuiContext) { ImGui_ImplSDLRenderer2_Shutdown(); ImGui_ImplSDL2_Shutdown(); ImGui::DestroyContext(); }
+            return;
+        }
+    }
+#endif
     SDL_RenderSetLogicalSize(renderer, 0, 0);
     ImGui_ImplSDLRenderer2_NewFrame();
     ImGui_ImplSDL2_NewFrame();
