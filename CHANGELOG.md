@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.55 - 2026-11-10
+
+_Released at the owner's request without waiting for the test suite._
+
 - Fixed: the race's words (timer, lap, position, countdown, "Following player", the replay bar's label, chat) were missing after visiting Watch a Replay or Leaderboards. Both screens opened a menu context that the new screens never use and never closed, and the overlay draws nothing while a menu context is open. It lasted for the rest of the session, so a race started afterwards had no text either. Checked in a native run (the context was left open before the fix, closed after; two new ctests) and in the WebAssembly build in headless Chrome (a replay watched from a server, with its timer, lap, "Following player 1" and replay bar showing). Windows was not run.
 
 - Replay downloads from a server no longer sit at "DOWNLOADING 0%" for ever when the server goes quiet: after 6 seconds the request is sent once more, and after another 6 a message says the server did not send the replay. **The reported stall itself was not reproduced**: headless Chrome against the live site and against a local server both downloaded and played the same replay at once, so the cause on the reporter's browser is unknown. The new time-outs were not exercised by a test (only the normal download path was re-run).
