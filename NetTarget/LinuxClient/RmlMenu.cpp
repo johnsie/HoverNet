@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <functional>
 #include <map>
@@ -82,14 +83,29 @@ float FitForWindow(int pWidth, int pHeight)
     return std::max(1.0f, std::min(1.75f, std::min(static_cast<float>(pWidth) / 1024.0f, static_cast<float>(pHeight) / 768.0f)));
 }
 
+// The largest size a screen is drawn at, as a multiple of the window. Every screen starts at 2; one that cannot keep up lowers this to 1 for the rest of the run (see Supersample::Begin),
+// so the next screen does not start slow again. (In a browser the 2x picture took a menu from 59 to 23 frames a second in headless Chrome.)
+#ifdef HOVERNET_WEB
+int gSupersampleCap = 1;   // the browser starts at the window's own size: the 2x picture made a menu stutter there (measured 23 against 59 frames a second in headless Chrome)
+#else
+int gSupersampleCap = 2;
+#endif
+
 struct Supersample
 {
     SDL_Renderer* renderer = nullptr;
     SDL_Texture* texture = nullptr;
     int factor = 2, width = 0, height = 0;
+    Rml::Context* context = nullptr;
+    bool fixed = false;                                   // HOVERNET_RML_SS names a size: no governor
+    std::chrono::steady_clock::time_point lastBegin;
+    bool haveLast = false;
+    int framesSeen = 0, slowFrames = 0;
+    double periodMs = 0.0;
     explicit Supersample(SDL_Renderer* pRenderer) : renderer(pRenderer)
     {
-        if (const char* f = std::getenv("HOVERNET_RML_SS")) factor = std::max(1, std::min(4, std::atoi(f)));
+        factor = gSupersampleCap;
+        if (const char* f = std::getenv("HOVERNET_RML_SS")) { factor = std::max(1, std::min(4, std::atoi(f))); fixed = true; }
     }
     ~Supersample() { if (texture != nullptr) SDL_DestroyTexture(texture); }
     Supersample(const Supersample&) = delete;
@@ -97,6 +113,7 @@ struct Supersample
     // Sizes the context and the picture for a window of pWidth x pHeight.
     void Resize(Rml::Context* pContext, int pWidth, int pHeight)
     {
+        context = pContext;
         width = pWidth; height = pHeight;
         pContext->SetDimensions(Rml::Vector2i(pWidth * factor, pHeight * factor));
         gFit = FitForWindow(pWidth, pHeight);
@@ -110,7 +127,27 @@ struct Supersample
     }
     int W() const { return width * factor; }
     int H() const { return height * factor; }
-    void Begin() { if (texture != nullptr) SDL_SetRenderTarget(renderer, texture); }
+    void Begin()
+    {
+        // The governor: if the screens come out slower than about 38 a second (the time between two frames, which includes the loop's own pause) for a second, draw at the window's own
+        // size from now on. A frame that took over a quarter of a second (a font loading, a stall) says nothing about the speed and is ignored, as are the first frames.
+        const auto now = std::chrono::steady_clock::now();
+        if (haveLast && !fixed && factor > 1) {
+            const double dt = std::chrono::duration<double, std::milli>(now - lastBegin).count();
+            if (dt > 0.0 && dt < 250.0 && ++framesSeen > 25) {
+                periodMs = periodMs == 0.0 ? dt : periodMs * 0.9 + dt * 0.1;
+                slowFrames = periodMs > 26.0 ? slowFrames + 1 : 0;
+                if (slowFrames >= 30 && context != nullptr) {
+                    gSupersampleCap = 1;
+                    factor = 1;
+                    Resize(context, width, height);
+                    if (std::getenv("HOVERNET_RML_DEBUG") != nullptr) std::printf("RMLDEBUG screen too slow (%.1f ms a frame): drawn at the window's own size from now on\n", periodMs);
+                }
+            }
+        }
+        lastBegin = now; haveLast = true;
+        if (texture != nullptr) SDL_SetRenderTarget(renderer, texture);
+    }
     void End()
     {
         if (texture == nullptr) return;

@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **The web client's main menu animation was sluggish.** Since 2.3.49 the browser drew every RmlUi screen at twice the window's size and shrank it down (smoother text, but four times the pixels). In headless Chrome that took the main menu from 59 to 23 frames a second (the older menu: 30); the turning craft was not the cost. The browser now starts at the window's own size (51 frames a second in the same test), and on every platform a screen that comes out slower than about 38 frames a second for a second drops to the window's own size by itself, for the rest of the run, so the next screen does not start slow again (`HOVERNET_RML_SS=n` fixes a size and turns this off; the page accepts `?rmlss=2` to compare). The desktop still starts at 2x. Measured in headless Chrome with software drawing, so the numbers are lower than a real browser's; the reporter's machine was not measured. The browser doors test and `HoverNetRmlMenu` pass. Text in the browser's menus is a little less smooth than at 2x.
+
 ### Changed
 - **The craft's shadow on the graphics-card path has a soft edge and a dark core.** It was a flat 13% darkening with a hard edge (a grey ring); the processor path has always drawn five rings that each darken to 87%, so a core about half as bright and a rim at 87%. The card now draws the same range as a smooth gradient: about 11% at the rim, falling to about half as bright inside 36% of the radius. Seen in captures on the card path (llvmpipe); the test (`HoverNetGpuScene`) now expects a wall under the shadow to come out between 30% and 80% of its brightness. Not seen on a real GPU.
 
