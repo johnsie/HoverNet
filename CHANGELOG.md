@@ -6,6 +6,13 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.46 - 2026-11-10
+
+_Released at the owner's request without waiting for the test suite, as 2.3.44 and 2.3.45 were. Neither of those was released on GitHub (2.3.44: the Windows installer check failed; 2.3.45: the Linux job ran into its 30-minute limit); the fixes for both are in this release and have not been seen to pass on Actions._
+
+### Changed
+- **The RmlUi screens are the default on the desktop** (Linux and Windows): main menu, results, pause, Settings, Local race setup, Controls, Leaderboards, Replays, loading screen and the online lobby. `HOVERNET_RML_MENU=0` brings back the older ImGui screens. The Garage, the tutorial overlay and the race HUD are still the older kind. Bounded runs (`--frames N`, the tests) and the browser keep the older screens unless `HOVERNET_RML_MENU=1` (or `?menu=rml`). Per the owner's decision; the screens were compared with the older ones only in screenshots at 1024x768, not on a large window, a controller, Windows or the browser.
+
 ### Fixed
 - **The Linux job on GitHub Actions was cancelled by its own 30-minute limit (2.3.45).** The log showed tests 1 to 120 of 167 passing and then "The operation was canceled" at 30 minutes 15 seconds: the build plus the serial test run (the RmlUi menu test alone takes about 7 minutes, the whole suite about 25) no longer fit. The limit is 90 minutes now. It has not been seen to finish: tests 121 to 167 have not run on Actions yet, so a failure among them is possible.
 

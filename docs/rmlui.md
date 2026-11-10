@@ -1,4 +1,4 @@
-# RmlUi: the new interface technology (experimental, opt-in)
+# RmlUi: the game's interface (the default on the desktop since 2.3.46)
 
 The game's screens are drawn with Dear ImGui, an immediate-mode toolkit made for tools. It has no layout engine, no transitions and no animation, so polish
 costs workarounds (the screen slide in `ScreenFadeFrame` moves vertices after the fact). The owner is open to better technology, so screens are being rebuilt
@@ -20,8 +20,9 @@ glyphs unhinted. RmlUi 5.1's `robin_hood.h` needs `<cstdint>` first on current c
 ## Using it
 
 * Build: RmlUi is built in by default (`-DHOVERNET_RMLUI=OFF` leaves it out). Linux, the browser build and Windows x64 all compile it.
-* Show it: `HOVERNET_RML_MENU=1 HoverNetGame2Player ...`, or `?menu=rml` on the web page. `HOVERNET_RML_MENU=0` or nothing shows the ImGui screens. If a new screen cannot load
-  its files it falls back to the ImGui one (checked by hiding the `ui` folder). Bounded test runs (`--frames N`) keep the ImGui screens unless `HOVERNET_RML_MENU=1`.
+* Which one is shown: on the desktop the RmlUi screens are the default. `HOVERNET_RML_MENU=0` brings back the older ImGui screens; `HOVERNET_RML_MENU=1` forces the new ones (also in a bounded run and in the browser).
+  A bounded run (`--frames N`, which is what the tests use) keeps the ImGui screens unless `=1`, because most tests drive those widgets. In the browser the older screens are still the default and `?menu=rml`
+  tries the new ones: the browser has not been checked with the lobby, Leaderboards, Replays or loading screen. If a new screen cannot load its files it falls back to the ImGui one (checked by hiding the `ui` folder).
 * Test: ctest `HoverNetRmlMenu` (`scripts/test-rml-menu.sh`) drives the real event path: keys and real mouse clicks on every main-menu door, interface sounds, the results
   screen after a real race, the pause menu in a race, the Settings hub and form, the local race setup and Controls (a remap). Scripted input is `HOVERNET_TEST_RML`:
   `down,enter` is a list of steps for every screen; `a;b;c` gives each screen, in the order they open, its own list. Steps: `up` `down` `enter` `esc`, `click:ID`, `tab:N`,
