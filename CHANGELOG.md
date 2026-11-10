@@ -6,6 +6,16 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.45 - 2026-11-10
+
+_Released at the owner's request without waiting for the test suite or the Actions run, like 2.3.44. 2.3.44's tag was not released: its Windows installer job failed on the package check._
+
+### Fixed
+- **The Windows x64 installer job failed (2.3.44).** The package check expected the licence texts (`licenses\`), the RmlUi markup (`assets\ui`) and the menu source picture in the staging folder, and the workflow never put them there; the installer script also read the licences from a path that is not in that folder. The workflow now stages them and the installer reads them from `licenses\`. Not run here: the validator, Inno Setup or the Actions job.
+
+### Added
+- **Two more RmlUi screens (still opt-in): Leaderboards and Replays.** Leaderboards has the four tabs (records broken, all records per track and craft, recent winners, monthly league) with WATCH buttons and the community-track download; Replays has My races (watch, delete with confirmation), Server replays with a track filter, and the "follow which craft" question. The form engine gained table rows (a title, a smaller line and up to two buttons). Seen in screenshots against a local seeded server; not clicked through to a played replay, and not run on Windows or in the browser.
+
 ## 2.3.44 - 2026-11-10
 
 _Released at the owner's request without waiting for the full local test suite, the Windows runner checks or the GitHub Actions run. What was run for the newest changes is listed in their entries; the rest of the suite was not run for this release._
