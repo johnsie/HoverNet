@@ -138,9 +138,9 @@ build:game:web:
       mkdir -p "$WEB_BUILD_DIR"
       (
         flock -x 8
-        if ! emcmake cmake -S . -B "$WEB_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF; then
+        if ! emcmake cmake -S . -B "$WEB_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DHOVERNET_WEB_DEFERRED_MUSIC="${HOVERNET_WEB_DEFERRED_MUSIC:-OFF}"; then
           rm -rf "$WEB_BUILD_DIR"; mkdir -p "$WEB_BUILD_DIR"
-          emcmake cmake -S . -B "$WEB_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          emcmake cmake -S . -B "$WEB_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DHOVERNET_WEB_DEFERRED_MUSIC="${HOVERNET_WEB_DEFERRED_MUSIC:-OFF}"
         fi
         cmake --build "$WEB_BUILD_DIR" --target HoverNetGame2Player --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
         # Cross-platform determinism: the WebAssembly build must replay the scripted races to the same
@@ -167,8 +167,11 @@ build:game:web:
         cp "$WEB_BUILD_DIR/HoverNet.html" dist/web/index.html
         sed -i "s/__HN_BUILD__/${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}/; s/__HN_ORDER__/$(git log -1 --format=%ct)/" dist/web/index.html   # the page checks the id against the server (packaging/web/shell.html); hovernet-web-deploy refuses a build whose commit time is older than the live one
         cp "$WEB_BUILD_DIR/HoverNet.js" "$WEB_BUILD_DIR/HoverNet.wasm" "$WEB_BUILD_DIR/HoverNet.data" dist/web/
+        # Music after start (docs/operators.md): only when the CI variable HOVERNET_WEB_DEFERRED_MUSIC=ON is set, and only once the
+        # host's hovernet-web-deploy accepts HoverNetMusic.bin (re-run packaging/web/setup-host.sh); a host with the old script rejects the archive.
+        if [ "${HOVERNET_WEB_DEFERRED_MUSIC:-OFF}" = "ON" ]; then python3 scripts/pack-web-music.py dist/web/HoverNetMusic.bin; fi
       ) 8>"${WEB_BUILD_DIR}.lock"
-    - tar -czf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web index.html HoverNet.js HoverNet.wasm HoverNet.data
+    - tar -czf "dist/hovernet-web-${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}.tar.gz" -C dist/web index.html HoverNet.js HoverNet.wasm HoverNet.data $( [ -f dist/web/HoverNetMusic.bin ] && echo HoverNetMusic.bin )
     - 'if [ "$CI_COMMIT_BRANCH" = "$HOVERNET_MAIN_BRANCH" ]; then sudo /usr/local/sbin/hovernet-web-deploy "dist/hovernet-web-${CI_COMMIT_SHORT_SHA}.tar.gz"; fi'
   artifacts:
     name: "hovernet-web-${CI_COMMIT_REF_SLUG}"

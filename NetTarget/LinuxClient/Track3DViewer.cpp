@@ -345,10 +345,17 @@ inline void HoverNetVrSubmitStereo(const uint8_t* pLeft, const uint8_t* pRight, 
 struct LoopProfile { bool enabled = std::getenv("HOVERNET_PROFILE_LOOP") != nullptr; int frames = 0; double process = 0, render = 0, present = 0; std::chrono::steady_clock::time_point windowStart = std::chrono::steady_clock::now(); };
 LoopProfile gLoopProfile;
 
+#ifdef HOVERNET_WEB_DEFERRED_MUSIC
+void HoverNetServiceDeferredMusic();   // Track3DViewer.cpp (PlayMusic): starts the music once the page has downloaded it
+#endif
+
 inline void HoverNetFrameDelay()
 {
 #ifdef HOVERNET_WEB
     ++gHoverNetFrames;
+#ifdef HOVERNET_WEB_DEFERRED_MUSIC
+    HoverNetServiceDeferredMusic();
+#endif
     const bool vr = HoverNetVrActive();
     // Browser mouse/touch events are pushed into SDL while we wait here. Loops restore the
     // renderer's logical size before this call, and SDL rescales every event queued while a
@@ -1726,6 +1733,8 @@ struct MusicState
     bool ducked = false;
     std::string toast;            // "Asphalt - Sygil", shown for a few seconds when a track starts
     Uint32 toastAt = 0;
+    bool missing = false;         // web build: the wanted track's file has not arrived yet
+    Uint32 askedAt = 0;
 };
 MusicState gMusicState;
 
@@ -1772,6 +1781,15 @@ const MusicFile& ChooseRaceMusic()
 
 void PlayMusic(MusicTrack track)
 {
+#ifdef HOVERNET_WEB_DEFERRED_MUSIC
+    if (track == gMusicState.current && gMusicState.missing && track != MusicTrack::eNone) {
+        const Uint32 now = SDL_GetTicks();
+        if (now - gMusicState.askedAt < 1000) return;
+        gMusicState.askedAt = now;
+        gMusicState.missing = false;
+        gMusicState.current = MusicTrack::eNone;   // try the same track again
+    }
+#endif
     if (track == gMusicState.current) return;
     if (std::getenv("HOVERNET_NO_MUSIC") != nullptr) { gMusicState.current = track; return; }
     gMusicState.current = track;
@@ -1779,13 +1797,26 @@ void PlayMusic(MusicTrack track)
     const MusicFile& chosen = track == MusicTrack::eMenu ? kMenuMusic : track == MusicTrack::eFinalLap ? kFinalLapMusic : ChooseRaceMusic();
     gMusicState.gain = chosen.gain;
     std::ifstream in(SourcePath((std::string("NetTarget/Music/") + chosen.file).c_str()), std::ios::binary);
-    if (!in) return;   // a package without the music is simply quiet
+    if (!in) {
+#ifdef HOVERNET_WEB_DEFERRED_MUSIC
+        gMusicState.missing = true;   // the browser downloads the music after the game starts (packaging/web/shell.html): PlayMusic asks again until it is there
+#endif
+        return;   // a package without the music is simply quiet
+    }
     const std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     MR_SoundServer::MusicPlay(reinterpret_cast<const unsigned char*>(bytes.data()), static_cast<unsigned long>(bytes.size()), LoadMusicVolume() * chosen.gain * (gMusicState.ducked ? 0.35 : 1.0), track == MusicTrack::eFinalLap ? 0.8 : 1.6);
     gMusicState.toast = chosen.credit;
     gMusicState.toastAt = SDL_GetTicks();
     if (std::getenv("HOVERNET_TEST_MUSIC") != nullptr) { std::printf("MUSICTEST %s\n", chosen.file); std::fflush(stdout); }
 }
+
+#ifdef HOVERNET_WEB_DEFERRED_MUSIC
+// Every frame: if the wanted track was not there yet, look again about once a second.
+void HoverNetServiceDeferredMusic()
+{
+    if (gMusicState.missing) PlayMusic(gMusicState.current);
+}
+#endif
 
 // The music steps back while a menu is over the race (pause), and comes back after.
 // A heavy hit makes the music step back for a moment so the impact is felt, then it returns (the volume glides, see MixMusic).

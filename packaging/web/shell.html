@@ -233,7 +233,7 @@
     var Module = {
       canvas: document.getElementById('canvas'),
       // The new RmlUi screens are the default (docs/rmlui.md); ?menu=imgui (or the older ?menu=classic) brings back the older ImGui ones.
-      preRun: [function () { if (/[?&]menu=(imgui|classic)\b/.test(location.search)) ENV.HOVERNET_RML_MENU = '0'; else if (/[?&]menu=rml\b/.test(location.search)) ENV.HOVERNET_RML_MENU = '1'; if (/[?&]rmldebug\b/.test(location.search)) ENV.HOVERNET_RML_DEBUG = '1'; var ss = /[?&]rmlss=(\d)/.exec(location.search); if (ss) ENV.HOVERNET_RML_SS = ss[1]; if (/[?&]nocraft\b/.test(location.search)) ENV.HOVERNET_NO_MENU_CRAFT = '1'; }],
+      preRun: [function () { if (/[?&]menu=(imgui|classic)\b/.test(location.search)) ENV.HOVERNET_RML_MENU = '0'; else if (/[?&]menu=rml\b/.test(location.search)) ENV.HOVERNET_RML_MENU = '1'; if (/[?&]rmldebug\b/.test(location.search)) ENV.HOVERNET_RML_DEBUG = '1'; var ss = /[?&]rmlss=(\d)/.exec(location.search); if (ss) ENV.HOVERNET_RML_SS = ss[1]; if (/[?&]nocraft\b/.test(location.search)) ENV.HOVERNET_NO_MENU_CRAFT = '1'; if (/[?&]testmusic\b/.test(location.search)) ENV.HOVERNET_TEST_MUSIC = '1'; }],
       // Game data is fetched under the build's own address, so an old cached copy of it can never be mixed with a new page.
       locateFile: function (path) { return window.HN_BUILD ? path + '?v=' + encodeURIComponent(window.HN_BUILD) : path; },
       print: function(text) { console.log(text); logLine(text); },
@@ -277,6 +277,29 @@
     function framesDrawn() {
       try { return Module.ccall ? Module.ccall('hovernet_frames', 'number', [], []) : 0; } catch (e) { return -1; }
     }
+    // The music is not in HoverNet.data (it is half of it): fetch it now that the game is on screen, drop the files into the game's
+    // file system and the game starts the menu track by itself (it looks again every second). Format: scripts/pack-web-music.py.
+    // A build without the file (404) just stays quiet, as does a failed download.
+    function fetchMusic() {
+      if (/[?&]nomusic\b/.test(location.search)) return;
+      var url = 'HoverNetMusic.bin' + (window.HN_BUILD ? '?v=' + encodeURIComponent(window.HN_BUILD) : '');
+      fetch(url).then(function (r) { return r.ok ? r.arrayBuffer() : null; }).then(function (buffer) {
+        if (!buffer) return;
+        var bytes = new Uint8Array(buffer), at = 0, names = [], sizes = [];
+        function line() { var from = at; while (at < bytes.length && bytes[at] !== 10) at++; var text = new TextDecoder().decode(bytes.subarray(from, at)); at++; return text; }
+        for (var text = line(); text !== '' && at < bytes.length; text = line()) {
+          var parts = text.split(' ');
+          if (parts.length !== 2 || !/^[A-Za-z0-9_.-]+\.ogg$/.test(parts[0])) return;
+          names.push(parts[0]); sizes.push(parseInt(parts[1], 10));
+        }
+        for (var i = 0; i < names.length; i++) {
+          if (!(sizes[i] >= 0) || at + sizes[i] > bytes.length) return;
+          Module.FS.writeFile('/NetTarget/Music/' + names[i] + '.part', bytes.slice(at, at + sizes[i]));
+          Module.FS.rename('/NetTarget/Music/' + names[i] + '.part', '/NetTarget/Music/' + names[i]);   // whole files only
+          at += sizes[i];
+        }
+      }).catch(function () {});
+    }
     function waitForFirstFrame() {
       var started = Date.now();
       (function check() {
@@ -286,6 +309,7 @@
           document.body.classList.add('running');
           Module.canvas.focus();
           if (store.get('hn-gamesize')) applyGameSize();  // restore the chosen game size (desktop)
+          fetchMusic();
           return;
         }
         var waited = Date.now() - started;

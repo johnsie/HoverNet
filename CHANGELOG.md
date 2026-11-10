@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+- Web: the music can be fetched after the game starts instead of being part of the first download (opt-in, `HOVERNET_WEB_DEFERRED_MUSIC`; see `docs/operators.md`). Checked on a local WebAssembly build in headless Chrome only (`scripts/web-smoke/web-music.mjs`): `HoverNet.data` 26.3 MB -> 13.6 MB, the files arrive after the first frame and the menu track starts; with no music file on the server the game runs quietly. Not deployed: the host's `hovernet-web-deploy` must be updated first. Playing the sound itself was not heard (headless).
+- Web server config: `mod_deflate` for `HoverNet.data` (needs the site file updated on the host).
+
 ## 2.3.52 - 2026-11-10
 
 _Released at the owner's request without waiting for the test suite. 2.3.49 and 2.3.50 passed GitHub Actions in full; 2.3.51's run was still in progress when this was cut. This release fixes the sluggish web menu (the 2x picture) and softens the craft's shadow on the graphics-card path._

@@ -14,6 +14,8 @@ import tempfile
 RUNNER_BUILDS = Path("/home/gitlab-runner/builds").resolve()
 WEB_ROOT = Path("/var/www/hovernet.outiva.com")
 REQUIRED = {"index.html", "HoverNet.js", "HoverNet.wasm", "HoverNet.data"}
+# The music is fetched by the page after the game starts (scripts/pack-web-music.py); a build made without it is still valid.
+OPTIONAL = {"HoverNetMusic.bin"}
 ARCHIVE_NAME = re.compile(r"^hovernet-web-([A-Za-z0-9._+-]{1,100})\.tar\.gz$")
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_FILE_BYTES = 256 * 1024 * 1024
@@ -92,7 +94,7 @@ def main():
                 name = item.name.removeprefix("./")
                 path = PurePosixPath(name)
                 if (not item.isfile() or path.is_absolute() or len(path.parts) != 1 or
-                        path.name in ("", ".", "..") or path.name not in REQUIRED or
+                        path.name in ("", ".", "..") or path.name not in REQUIRED | OPTIONAL or
                         path.name in extracted or item.size > MAX_FILE_BYTES):
                     raise SystemExit("archive contains an unexpected or unsafe entry")
                 source = bundle.extractfile(item)
@@ -103,7 +105,7 @@ def main():
                     shutil.copyfileobj(source, target)
                 destination.chmod(0o644)
                 extracted.add(path.name)
-        if extracted != REQUIRED:
+        if not REQUIRED <= extracted:
             raise SystemExit("archive is missing one or more required browser files")
         refuse_older(build_order((staging / "index.html").read_text(encoding="utf-8", errors="replace")), live_build_order())
 

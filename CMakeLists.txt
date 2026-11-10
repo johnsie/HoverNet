@@ -902,6 +902,17 @@ if(EMSCRIPTEN)
     )
     target_compile_definitions(HoverNetGame2Player PRIVATE HOVERNET_WEB_AUTH)
     target_compile_definitions(HoverNetGame2Player PRIVATE HOVERNET_WEB)
+    # The music is 12.7 MB of a 26 MB first download. With HOVERNET_WEB_DEFERRED_MUSIC the preload keeps only its credits and licence;
+    # the page fetches HoverNetMusic.bin (scripts/pack-web-music.py) after the first frame and the game is quiet until it arrives.
+    option(HOVERNET_WEB_DEFERRED_MUSIC "Web build: leave the music out of HoverNet.data (the page downloads it after start)" OFF)
+    if(HOVERNET_WEB_DEFERRED_MUSIC)
+        target_compile_definitions(HoverNetGame2Player PRIVATE HOVERNET_WEB_DEFERRED_MUSIC)
+        set(HOVERNET_WEB_MUSIC_PRELOAD
+            "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/Music/CREDITS.md@/NetTarget/Music/CREDITS.md"
+            "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/Music/GPL-3.0.txt@/NetTarget/Music/GPL-3.0.txt")
+    else()
+        set(HOVERNET_WEB_MUSIC_PRELOAD "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/Music@/NetTarget/Music")
+    endif()
     target_compile_definitions(HoverNetGame2Player PRIVATE
         "HOVERNET_WEB_SOCKET_URL=\"${HOVERNET_WEB_SOCKET_URL}\"")
     set_target_properties(HoverNetGame2Player PROPERTIES OUTPUT_NAME HoverNet)
@@ -913,12 +924,12 @@ if(EMSCRIPTEN)
         -lwebsocket.js
         -lidbfs.js
         "-sEXPORTED_FUNCTIONS=_main,_hovernet_set_touch_mask,_hovernet_in_race,_hovernet_frames,_hovernet_wants_text,_hovernet_text_input,_hovernet_text_key"
-        "-sEXPORTED_RUNTIME_METHODS=ccall"
+        "-sEXPORTED_RUNTIME_METHODS=ccall,FS"
         --shell-file "${CMAKE_SOURCE_DIR}/packaging/web/shell.html"
         --pre-js "${CMAKE_SOURCE_DIR}/packaging/web/web-pre.js"
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/ObjFac1.dat@/NetTarget/ObjFac1.dat"
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/Tracks@/NetTarget/Tracks"
-        "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/Music@/NetTarget/Music"
+        ${HOVERNET_WEB_MUSIC_PRELOAD}
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/CommunityTracks.tsv@/NetTarget/CommunityTracks.tsv"
         "--preload-file=${CMAKE_SOURCE_DIR}/NetTarget/LinuxClient/assets@/NetTarget/LinuxClient/assets"
     )
