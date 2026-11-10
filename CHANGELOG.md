@@ -7,6 +7,13 @@ and how to roll one back.
 ## Unreleased
 
 ### Fixed
+- **Two memory bugs found by running the RmlUi menu under AddressSanitizer** (the nightly "Full test suite under ASan and UBSan" job, which has been red every night since at least 1 November, reported the menu test as "got nothing"):
+  - *Use of a dead variable in the main menu (mine, in 2.3.48).* The craft-crop fix kept two variables inside a block that ended before the menu used them. It worked by luck on a normal build. They now live as long as the menu.
+  - *A heap overflow in RmlUi's `transform` parser* (upstream; it read past the end of a short value such as `scale(1.02)` when comparing keywords). Fixed in the vendored copy with `strncmp`, marked and listed in `THIRD_PARTY_NOTICES.md`.
+  - The vendored RmlUi is also built without UBSan's `vptr` check (its document destructor calls a virtual member on itself, upstream), so the sanitizer build can run it.
+  - With these, the menu and the lobby's first screen run clean under ASan and UBSan here. The rest of the nightly job is still red for older reasons: LeakSanitizer reports many test programs (and a 1,088-byte leak from a system library that appears with the older screens too). I did not run the whole sanitizer suite.
+
+### Fixed
 - **The RmlUi screens shrank into a quarter of the window whenever the window changed size (desktop and browser).** RmlUi's SDL helper answers a window-size event by setting its layout size to the window's size in pixels, which undid the screens' 2x drawing size; the interface then filled only the top-left quarter. Found in the browser first (the 2.3.48 workaround drew without the 2x smoothing there) and then reproduced on the desktop by opening a window at 1920x1080. The screens now ignore those events and check the size themselves every frame, so a resize or a maximised window lays out correctly, and the browser has the 2x smoothing again. Seen fixed at 1920x1080 on the desktop and in headless Chrome; a real window being dragged larger was not run.
 
 ### Changed

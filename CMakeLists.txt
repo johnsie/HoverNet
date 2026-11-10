@@ -161,6 +161,10 @@ if(HOVERNET_RMLUI)
         NetTarget/ThirdParty/rmlui/Backends/RmlUi_Platform_SDL.cpp
         NetTarget/ThirdParty/rmlui/Backends/RmlUi_Renderer_SDL.cpp)
     target_include_directories(HoverNetRmlUi PUBLIC NetTarget/ThirdParty/rmlui/Include NetTarget/ThirdParty/rmlui/Backends)
+    if(HOVERNET_SANITIZE)
+        # RmlUi's ElementDocument destructor calls a virtual member on the half-destroyed document (upstream, harmless in practice); UBSan's vptr check stops the run there. Third-party code: that one check is off for it.
+        target_compile_options(HoverNetRmlUi PRIVATE -fno-sanitize=vptr)
+    endif()
     target_include_directories(HoverNetRmlUi PRIVATE NetTarget/ThirdParty/rmlui/Source/Core)
     target_compile_definitions(HoverNetRmlUi PUBLIC RMLUI_STATIC_LIB)
     # RmlUi 5.1's robin_hood.h relies on <cstdint> arriving indirectly, which newer compilers no longer do: include it first rather than edit the vendored file.

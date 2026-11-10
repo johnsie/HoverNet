@@ -210,7 +210,8 @@ bool PropertyParserTransform::Scan(int& out_bytes_read, const char* str, const c
 	total_bytes_read += bytes_read;
 
 	/* find the keyword */
-	if (!memcmp(str, keyword, strlen(keyword)))
+	// HoverNet, 2026-11-10: strncmp, not memcmp: memcmp read as many bytes as the keyword has even when the text left was shorter (a heap overflow found by AddressSanitizer)
+	if (!strncmp(str, keyword, strlen(keyword)))
 	{
 		bytes_read = (int)strlen(keyword);
 		str += bytes_read;

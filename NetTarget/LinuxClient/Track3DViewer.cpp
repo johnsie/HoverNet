@@ -10482,6 +10482,8 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         std::vector<std::uint32_t> rmlCraftPixels, rmlPalette(256, 0);
         Authority::CraftDesign rmlCraftDesign;
         bool rmlCraftReady = false;
+        SDL_Rect rmlCrop = {kCraftW / 10, kCraftH * 22 / 100, kCraftW * 8 / 10, kCraftH * 64 / 100};   // the part of the craft picture to show (see craftFrame); these two live as long as the menu, which the lambda below outlives its block
+        bool rmlCropKnown = false;
         int rmlCraftYaw = -1000;
         Uint32 rmlCraftBuilt = 0;
         if (gMenuCraftResources != nullptr && graphics.GetRenderPalette() != nullptr && std::getenv("HOVERNET_NO_MENU_CRAFT") == nullptr) {
@@ -10501,8 +10503,6 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         if (rmlCraftTexture != nullptr) {
             // The part of the picture to show: the box that holds the craft at every angle it turns through (found once, by drawing it at twelve angles), with a margin. A fixed box
             // cut off the top of a craft with a tall fin or engine; this one fits whatever the player designed.
-            SDL_Rect rmlCrop = {kCraftW / 10, kCraftH * 22 / 100, kCraftW * 8 / 10, kCraftH * 64 / 100};
-            bool rmlCropKnown = false;
             info.craftFrame = [&](int yaw, SDL_Rect& crop) -> SDL_Texture* {
                 const Uint32 now = SDL_GetTicks();
                 if (!rmlCropKnown) {
