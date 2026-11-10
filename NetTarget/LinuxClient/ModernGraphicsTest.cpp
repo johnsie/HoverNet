@@ -731,6 +731,23 @@ int main(int argc, char** argv)
             Presenter r; Frame k = Solid(W, H, 40, 40, 40); hints.lights[0].strength = 1.0f; r.Process(k.data(), W, H, o, hints);
             Check(r.ParticleCount() == 0, "with Reduced motion there are no embers");
         }
+        // Bursts (a muzzle flash, a power-up taken): a glow in the light's own colour and a few sparks; none with Reduced motion.
+        {
+            FrameHints hints = sceneHints(wallDepth, &wallTags);
+            hints.lightCount = 1;
+            Light& l = hints.lights[0];
+            l.kind = kLightBurst; l.x = 10000; l.y = 0; l.z = 0; l.radius = 4000; l.r = 120; l.g = 255; l.b = 175; l.strength = 0.9f;
+            Options o = bare(0); o.halos = true; o.lighting = true; o.effects = true;
+            Frame f = Solid(W, H, 40, 40, 40);
+            Presenter p; p.Process(f.data(), W, H, o, hints);
+            int greenest = 0;
+            for (int dx = 4; dx <= 18; dx += 2) greenest = std::max(greenest, At(f, W, W / 2 + dx, H / 2, 1) - At(f, W, W / 2 + dx, H / 2, 0));
+            Check(At(f, W, W / 2, H / 2, 1) > 40 + 50 && greenest > 15, "a burst glows in its own colour (green here: the edge of the glow is greener than red)");
+            Check(p.ParticleCount() >= 3, "and throws a few sparks");
+            o.reducedMotion = true;
+            Presenter r; Frame k = Solid(W, H, 40, 40, 40); r.Process(k.data(), W, H, o, hints);
+            Check(r.ParticleCount() == 0, "with Reduced motion there are no sparks");
+        }
         // Emitters: exhaust and dust behind a fast craft, smoke from a missile, sparkles on a power-up; none with Reduced motion.
         {
             FrameHints hints = Hints(W, H);

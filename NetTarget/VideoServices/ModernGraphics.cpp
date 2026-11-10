@@ -1150,6 +1150,7 @@ void Presenter::Halos(PassContext& c)
         case kLightPowerUp: cr = 120; cg = 255; cb = 190; strength = 0.6f;  scale = 0.14f; break;
         case kLightCraft:   cr = 120; cg = 185; cb = 255; strength = 0.38f; scale = 0.11f; break;
         case kLightGhost:   cr = 190; cg = 210; cb = 255; strength = 0.3f;  scale = 0.11f; break;
+        case kLightBurst:   cr = light.r; cg = light.g; cb = light.b; strength = std::min(1.0f, light.strength); scale = 0.20f; break;   // a muzzle flash or a pickup
         case kLightExplosion: cr = light.r; cg = std::min(255, light.g + 50); cb = std::min(255, light.b + 70); strength = std::min(1.0f, light.strength * 1.1f); scale = 0.30f; break;
         default: continue;
         }
@@ -1335,13 +1336,22 @@ void Presenter::Emitters(int width, int height, const Options& options, const Fr
     auto jitter = [&]() { return (static_cast<int>(Random() & 1023) - 512) / 512.0f; };   // -1 .. 1
     for (int li = 0; li < hints.lightCount && li < kMaxLights; ++li) {
         const Light& light = hints.lights[li];
-        if ((light.kind != kLightMissile && light.kind != kLightPowerUp && light.kind != kLightExplosion) || light.x < 500.0f || hints.projKx <= 0.0f || hints.projKz <= 0.0f) continue;
+        if ((light.kind != kLightMissile && light.kind != kLightPowerUp && light.kind != kLightExplosion && light.kind != kLightBurst) || light.x < 500.0f || hints.projKx <= 0.0f || hints.projKz <= 0.0f) continue;
         const float px = hints.projCenterX - light.y / (light.x * hints.projKx), py = hints.projCenterY - light.z / (light.x * hints.projKz);
         if (hints.depth != nullptr) {
             const int ix = static_cast<int>(px), iy = static_cast<int>(py);
             if (ix < hints.depthX0 || iy < hints.depthY0 || ix >= hints.depthX0 + hints.depthWidth || iy >= hints.depthY0 + hints.depthHeight) continue;
         }
         const float radius = std::min(40.0f, std::max(3.0f, light.radius * 0.12f / (light.x * hints.projKx)));
+        if (light.kind == kLightBurst) {   // a few sparks in the light's own colour while it is bright
+            if (light.strength > 0.45f) {
+                for (int k = 0; k < 3; ++k) {
+                    const float angle = 6.2831853f * ((Random() & 1023) / 1023.0f), v = 30.0f + (Random() & 127) * 0.8f;
+                    push(px, py, std::cos(angle) * v, std::sin(angle) * v * 0.8f - 30.0f, 0.25f + (Random() & 255) / 255.0f * 0.3f, 1.2f + (Random() & 127) / 127.0f * 1.2f, light.r, light.g, light.b, 1.0f, 260.0f);
+                }
+            }
+            continue;
+        }
         if (light.kind == kLightExplosion) {   // embers thrown out while the fire is young, then dark smoke rising from it
             if (light.strength > 0.55f) {
                 for (int k = 0; k < 7; ++k) {

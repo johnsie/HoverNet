@@ -134,6 +134,7 @@ MR_Observer::MR_Observer()
    memset( mPalette, 0, sizeof( mPalette ) );
    mImpactFlash = 0.0f;
    mPrevLitTime = 0;
+   mPrevLitHave = FALSE;
    mTrailCount = 0;
    mTrailLastTime = 0;
    mPreviousSpeed = 0.0;
@@ -830,13 +831,16 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
       {
          mPrevLit.clear();   // a restart or a seek: nothing to compare with
          mBlasts.clear();
+         mPrevLitHave = FALSE;
       }
       if( mModernMotion && mLitElements.size() < 6 )
       {
          for( size_t lOld = 0; lOld < mPrevLit.size(); lOld++ )
          {
             const LitMemo& lMemo = mPrevLit[ lOld ];
-            if( !lMemo.mCentral || lMemo.mClass == 152 || mBlasts.size() >= 4 )
+            // a power-up that is gone while the viewing craft is next to it has been taken: a short burst there (anyone's, nearby)
+            const BOOL lTaken = lMemo.mClass == 152 && fabs( (double)( lMemo.mPos.mX - pViewingCharacter->mPosition.mX ) ) < 3500.0 && fabs( (double)( lMemo.mPos.mY - pViewingCharacter->mPosition.mY ) ) < 3500.0;
+            if( ( !lMemo.mCentral && !lTaken ) || ( lMemo.mClass == 152 && !lTaken ) || mBlasts.size() >= 4 )
             {
                continue;
             }
@@ -851,13 +855,39 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
                lBlast.mPos = lMemo.mPos;
                lBlast.mStart = pTime;
                lBlast.mMine = lMemo.mClass == 151;
+               lBlast.mKind = lTaken ? 3 : ( lMemo.mClass == 151 ? 1 : 0 );
                mBlasts.push_back( lBlast );
                if( getenv( "HOVERNET_GFX_DEBUG" ) != NULL ) { printf( "GFXDEBUG explosion at (%d,%d,%d) class %d\n", (int)lBlast.mPos.mX, (int)lBlast.mPos.mY, (int)lBlast.mPos.mZ, (int)lMemo.mClass ); fflush( stdout ); }
             }
          }
       }
+      // A missile that was not there last frame has just been launched (not at a restart: everything is new then): a flash at the muzzle.
+      if( mModernMotion && mPrevLitHave )
+      {
+         for( size_t lNow = 0; lNow < mLitElements.size() && mBlasts.size() < 6; lNow++ )
+         {
+            if( mLitElements[ lNow ]->GetTypeId().mClassId != 150 )
+            {
+               continue;
+            }
+            bool lWasThere = false;
+            for( size_t lOld = 0; lOld < mPrevLit.size(); lOld++ )
+            {
+               lWasThere = lWasThere || mPrevLit[ lOld ].mId == (const void*)mLitElements[ lNow ];
+            }
+            const MR_3DCoordinate lAt = mLitElements[ lNow ]->mPosition;
+            if( !lWasThere && fabs( (double)( lAt.mX - pViewingCharacter->mPosition.mX ) ) < 12000.0 && fabs( (double)( lAt.mY - pViewingCharacter->mPosition.mY ) ) < 12000.0 )
+            {
+               Blast lLaunch;
+               lLaunch.mPos = lAt; lLaunch.mStart = pTime; lLaunch.mMine = FALSE; lLaunch.mKind = 2;
+               mBlasts.push_back( lLaunch );
+               if( getenv( "HOVERNET_GFX_DEBUG" ) != NULL ) { printf( "GFXDEBUG launch at (%d,%d,%d)\n", (int)lAt.mX, (int)lAt.mY, (int)lAt.mZ ); fflush( stdout ); }
+            }
+         }
+      }
       mPrevLit.clear();
       mPrevLitTime = pTime;
+      mPrevLitHave = TRUE;
       for( size_t lIndex = 0; lIndex < mLitElements.size(); lIndex++ )
       {
          LitMemo lMemo;
@@ -872,12 +902,30 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
       for( size_t lIndex = 0; lIndex < mBlasts.size(); )
       {
          const MR_SimulationTime lAge = pTime - mBlasts[ lIndex ].mStart;
-         if( !mModernMotion || lAge >= 800 )
+         const int lKind = mBlasts[ lIndex ].mKind;
+         const int lDuration = lKind == 2 ? 250 : ( lKind == 3 ? 600 : 800 );
+         if( !mModernMotion || lAge >= lDuration )
          {
             mBlasts.erase( mBlasts.begin() + lIndex );
             continue;
          }
-         const float lLife = 1.0f - (float)lAge/800.0f;
+         const float lLife = 1.0f - (float)lAge/(float)lDuration;
+         if( lKind == 2 || lKind == 3 )
+         {
+            MR_3DCoordinate lBurst = mBlasts[ lIndex ].mPos;
+            lBurst.mZ += 250;
+            if( lKind == 2 )   // the muzzle flash: small, white-yellow, gone in a quarter of a second
+            {
+               AddLight( lBurst, (int)( 3500 + 3000*( 1.0f - lLife ) ), 255, 232, 170, 0.9f*lLife*lLife, HoverNetGfx::kLightBurst );
+            }
+            else               // a power-up taken: a green-white sparkle that rises and fades
+            {
+               lBurst.mZ += (MR_Int32)( 700*( 1.0f - lLife ) );
+               AddLight( lBurst, (int)( 4500 + 3500*( 1.0f - lLife ) ), 120, 255, 175, 0.9f*lLife*sqrtf( lLife ), HoverNetGfx::kLightBurst );
+            }
+            lIndex++;
+            continue;
+         }
          MR_3DCoordinate lAt = mBlasts[ lIndex ].mPos;
          lAt.mZ += 250;
          // a hard white-orange flash that falls away quickly, and a light that spreads and lingers a little as the fire dies; a mine's is redder and wider

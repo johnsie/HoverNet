@@ -324,6 +324,7 @@ void main() {
             else if (kind == 7) { col = vec3(120.0, 255.0, 190.0); strength = 0.6; scale = 0.14; }
             else if (kind == 4) { col = vec3(120.0, 185.0, 255.0); strength = 0.38; scale = 0.11; }
             else if (kind == 8) { col = vec3(190.0, 210.0, 255.0); strength = 0.3; scale = 0.11; }
+            else if (kind == 10) { col = uLC[li].rgb * 255.0; strength = min(1.0, uLC[li].a); scale = 0.20; }   // a muzzle flash or a pickup
             else if (kind == 9) { col = min(uLC[li].rgb * 255.0 + vec3(0.0, 50.0, 70.0), vec3(255.0)); strength = min(1.0, uLC[li].a * 1.1); scale = 0.30; }   // an explosion
             else continue;
             vec3 lp = uLA[li].xyz;

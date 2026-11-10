@@ -106,7 +106,8 @@ class MR_Observer
       // Explosions, for the picture passes only: a missile or mine that was in plain view last frame and is gone this frame is taken to have blown up there (or been picked
       // up), and a flash light and a burst of embers are shown at that spot for most of a second. Nothing here reaches the simulation. Matching is by address and never dereferenced.
       struct LitMemo { const void* mId; MR_3DCoordinate mPos; MR_UInt16 mClass; BOOL mCentral; };
-      struct Blast { MR_3DCoordinate mPos; MR_SimulationTime mStart; BOOL mMine; };
+      struct Blast { MR_3DCoordinate mPos; MR_SimulationTime mStart; BOOL mMine; int mKind; };   // mKind: 0 a missile blew up, 1 a mine, 2 a missile was launched, 3 a power-up was taken
+      BOOL                 mPrevLitHave;
       // Sound from the side and from a moving source: for each other craft and missile the pan (from where it is, relative to the way the viewing craft faces) and the Doppler pitch
       // (from how fast it closes on the viewing craft, measured over at least 60 ms and smoothed). Presentation only.
       struct SoundTrack { double mDistance; double mSampleMs; double mClosing; };   // distance (mm) at the last sample, when, and the closing speed (mm/ms, positive = approaching)
