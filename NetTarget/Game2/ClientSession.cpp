@@ -25,6 +25,7 @@
 #include "StdAfx.h"
 
 #include "ClientSession.h"
+#include <chrono>
 #include "../MazeCompiler/TrackCommonStuff.h"
 
 MR_ClientSession::MR_ClientSession()
@@ -32,6 +33,8 @@ MR_ClientSession::MR_ClientSession()
 {
    mFixedStep           = FALSE;
    mLastProcessTime     = 0;
+   mLastProcessUs       = 0;
+   mClockRemainderUs    = 0;
    mMainCharacter1      = NULL;
    mMainCharacter2      = NULL;
    mBackImage           = NULL;
@@ -57,9 +60,15 @@ void MR_ClientSession::Process( int pSpeedFactor )
 {
    if( mFixedStep )
    {
-      const DWORD lNow = GetTickCount();
-      const DWORD lElapsed = (mLastProcessTime == 0) ? 0 : lNow - mLastProcessTime;
-      mLastProcessTime = lNow;
+      // The real time since the last call, to the microsecond; the simulation is handed whole milliseconds and the rest is kept for the next call (and for drawing between ticks).
+      const long long lNowUs = std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::steady_clock::now().time_since_epoch() ).count();
+      long long lElapsedUs = (mLastProcessUs == 0) ? 0 : lNowUs - mLastProcessUs;
+      mLastProcessUs = lNowUs;
+      mLastProcessTime = (DWORD)( lNowUs/1000 );
+      if( lElapsedUs < 0 ) lElapsedUs = 0;
+      const long long lTotalUs = lElapsedUs + mClockRemainderUs;
+      const DWORD lElapsed = (DWORD)( lTotalUs/1000 );
+      mClockRemainderUs = lTotalUs%1000;
       mSession.SimulateElapsed( (MR_SimulationTime)lElapsed );   // a stall longer than 16 ticks (256 ms) is dropped, not replayed
    }
    else

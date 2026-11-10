@@ -372,7 +372,16 @@ inline void HoverNetFrameDelay()
     if (renderer != nullptr) SDL_RenderSetLogicalSize(renderer, logicalW, logicalH);
 #else
     static const bool noDelay = std::getenv("HOVERNET_NO_FRAME_DELAY") != nullptr;   // diagnostic: measure what the machine can do without the pause
-    if (!noDelay) SDL_Delay(16);
+    if (noDelay) {}
+    else if (!HoverNetGfx::VsyncActive()) SDL_Delay(16);   // no vsync to pace the loop (a software renderer, the tests): the old fixed pause
+    else {
+        // The display's refresh paces the loop, so the pause that used to sit on top of it (and made a frame that missed a refresh wait for the next one) is gone. A floor of 5 ms keeps a
+        // driver that does not really block at the refresh from spinning the processor.
+        static Uint32 lastFrame = 0;
+        const Uint32 now = SDL_GetTicks();
+        if (lastFrame != 0 && now - lastFrame < 5) SDL_Delay(5 - (now - lastFrame));
+        lastFrame = SDL_GetTicks();
+    }
 #endif
     HoverNetGfx::NoteFrameStart();   // the next frame's work is counted from here (see ModernGraphics.h)
 }
@@ -11452,8 +11461,10 @@ int RunClient(int argc, char** argv)
         return FatalClientError("Could not create the 3D framebuffer.");
     }
     MR_ClientSession session;
-    // Whole 16 ms simulation ticks whatever the frame rate; off by default (see MR_ClientSession::SetFixedStep).
-    session.SetFixedStep((HasArgument(argc, argv, "--fixed-step") || std::getenv("HOVERNET_FIXED_STEP") != nullptr) ? TRUE : FALSE);
+    // Whole 16 ms simulation ticks whatever the frame rate, the same ticks the server and the replays run, so a race plays the same on every machine and offline is as fair as online; the
+    // picture is drawn between ticks so it stays smooth (see MR_GameSession::BeginInterpolatedRender). On by default since 2.3.49 (the owner's decision, 2026-11-10);
+    // --variable-step (or HOVERNET_VARIABLE_STEP) brings back the older clock-driven stepping.
+    session.SetFixedStep((HasArgument(argc, argv, "--variable-step") || std::getenv("HOVERNET_VARIABLE_STEP") != nullptr) ? FALSE : TRUE);
 #ifdef HOVERNET_GAME2_PLAYER
     ReplayPlayback replay;
     const std::string replayPath = ParseStringArg(argc, argv, "--replay");
@@ -14053,8 +14064,38 @@ int RunClient(int argc, char** argv)
                     }
                     else {
                         observer->SetChaseScale(kChasePercents[chaseStep]);
-                        observer->RenderNormalDisplay(&buffer, &session, mainCharacter, session.GetSimulationTime(),
+                        // Offline play steps in whole ticks: draw the moment between the last two ticks that the wall clock is at (nothing to do for a replay or an online race, which have their own timing).
+                        MR_SimulationTime drawTime = session.GetSimulationTime();
+                        bool interpolated = false;
+                        if (!replay.active
+#if defined(HOVERNET_AUTH)
+                            && !auth.active
+#endif
+                            && std::getenv("HOVERNET_NO_INTERPOLATION") == nullptr) {
+                            interpolated = session.BeginInterpolatedRender(drawTime) != FALSE;
+                        }
+                        observer->RenderNormalDisplay(&buffer, &session, mainCharacter, drawTime,
                                                       session.GetBackImage());
+                        if (std::getenv("HOVERNET_TEST_SMOOTH") != nullptr && mainCharacter != nullptr && session.GetSimulationTime() > 1000) {   // test hook: how evenly the drawn craft moves, frame to frame
+                            // (read before the positions are put back: it is where the picture just drew the craft)
+                            static std::vector<double> sSpeeds;
+                            static double sLastX = 0, sLastY = 0, sLastT = 0;
+                            static bool sHave = false;
+                            const double nowUs = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+                            const double x = mainCharacter->mPosition.mX, y = mainCharacter->mPosition.mY;
+                            if (sHave && nowUs > sLastT) sSpeeds.push_back(std::sqrt((x - sLastX) * (x - sLastX) + (y - sLastY) * (y - sLastY)) / (nowUs - sLastT) * 1000.0);   // mm per ms
+                            sLastX = x; sLastY = y; sLastT = nowUs; sHave = true;
+                            if (sSpeeds.size() == 400) {
+                                double sum = 0; for (double v : sSpeeds) sum += v;
+                                const double mean = sum / sSpeeds.size();
+                                double var = 0; for (double v : sSpeeds) var += (v - mean) * (v - mean);
+                                std::vector<double> sorted = sSpeeds; std::sort(sorted.begin(), sorted.end());
+                                std::printf("SMOOTHTEST interpolated=%d frames=400 mean speed %.2f mm/ms, spread (std/mean) %.3f, p5 %.2f p95 %.2f\n", interpolated ? 1 : 0, mean, std::sqrt(var / sSpeeds.size()) / (mean > 0 ? mean : 1), sorted[20], sorted[379]);
+                                std::fflush(stdout);
+                                sSpeeds.clear();
+                            }
+                        }
+                        if (interpolated) session.EndInterpolatedRender();
                     }
                 }
                 gReplayLabel.clear();

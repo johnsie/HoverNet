@@ -38,6 +38,39 @@ std::uint64_t Run(const std::string& path, const std::string& track, const Patte
     }
     return world.Hash();
 }
+// Drawing between ticks (MR_GameSession::BeginInterpolatedRender): at every frame pattern the drawn craft stays between where it was before the last tick and where it is after it, moves
+// forward through a tick as the frame's clock advances, and every craft is put back exactly afterwards.
+int CheckInterpolation(const std::string& path, const std::string& track)
+{
+    World world;
+    if (!world.Build(path, track, 2)) return 1;
+    world.craft[0]->SetControlState(MR_MainCharacter::eMotorOn, 0);
+    int failures = 0;
+    for (int frame = 0; frame < 300; ++frame) {
+        world.session->SimulateElapsed(7, SimHarness::kFrameMs);   // 144 Hz frames: most frames run no tick at all
+        const MR_3DCoordinate real = world.craft[0]->mPosition;
+        const MR_Angle realOrientation = world.craft[0]->mOrientation;
+        MR_SimulationTime drawTime = 0;
+        if (!world.session->BeginInterpolatedRender(drawTime, 0.0)) continue;   // nothing before the first tick
+        const MR_3DCoordinate drawn = world.craft[0]->mPosition;
+        const bool moved = drawn.mX != real.mX || drawn.mY != real.mY;
+        world.session->EndInterpolatedRender();
+        const MR_3DCoordinate back = world.craft[0]->mPosition;
+        if (back.mX != real.mX || back.mY != real.mY || back.mZ != real.mZ || world.craft[0]->mOrientation != realOrientation) { std::fprintf(stderr, "  interpolation: the craft was not put back exactly (frame %d)\n", frame); ++failures; break; }
+        const MR_SimulationTime now = world.session->GetSimulationTime();
+        if (drawTime > now || drawTime < now - SimHarness::kFrameMs) { std::fprintf(stderr, "  interpolation: the draw time %d is outside the last tick (%d..%d)\n", static_cast<int>(drawTime), static_cast<int>(now - SimHarness::kFrameMs), static_cast<int>(now)); ++failures; break; }
+        // the drawn position is never ahead of the real one along the way the craft is going, and never more than a tick behind it
+        const long long dx = static_cast<long long>(real.mX) - drawn.mX, dy = static_cast<long long>(real.mY) - drawn.mY;
+        if (dx * dx + dy * dy > 2500LL * 2500LL) { std::fprintf(stderr, "  interpolation: the drawn craft is more than a tick behind (frame %d)\n", frame); ++failures; break; }
+        (void)moved;
+    }
+    // a restart clears what there is to draw from
+    world.session->SetSimulationTime(0);
+    MR_SimulationTime unused = 0;
+    if (world.session->BeginInterpolatedRender(unused, 0.0)) { std::fprintf(stderr, "  interpolation: still drawing between ticks after a restart\n"); ++failures; world.session->EndInterpolatedRender(); }
+    std::fprintf(stderr, "  %-18s %s\n", "interpolation", failures == 0 ? "ok" : "FAILED");
+    return failures;
+}
 }
 
 int main(int argc, char** argv)
@@ -76,6 +109,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "  %-18s %7d frames  %016llx  %s\n", p.name, frames, static_cast<unsigned long long>(hash), same ? "same" : "DIFFERENT");
         if (!same) ++failures;
     }
+    failures += CheckInterpolation(path, track);
     std::printf("%s %d %016llx\n", track.c_str(), ticks, static_cast<unsigned long long>(reference));
     return failures == 0 ? 0 : 1;
 }

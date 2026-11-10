@@ -113,6 +113,10 @@ bool SDL2GraphicsBackend::Initialize(void* windowHandle, int width, int height)
     }
     
     SDL_RenderSetLogicalSize(m_renderer, width, height);
+    {   // did the renderer get vsync (the display paces the loop)? The game loops then need no pause of their own.
+        SDL_RendererInfo info;
+        HoverNetGfx::SetVsyncActive(SDL_GetRendererInfo(m_renderer, &info) == 0 && (info.flags & SDL_RENDERER_PRESENTVSYNC) != 0 && std::getenv("HOVERNET_NO_VSYNC_PACING") == nullptr);
+    }
     // Use RGB24 (3 bytes per pixel, no padding) instead of RGB888 to ensure correct pitch handling
     m_texture = SDL_CreateTexture(m_renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, width, height);
     if (!m_texture) { 

@@ -29,6 +29,7 @@
 #include "Level.h"
 #include "ContactEffect.h"
 #include "../Util/RecordFile.h"
+#include <vector>
 
 #if defined(_WIN32) && !defined(HOVERNET_STATIC)
 #ifdef MR_MODEL
@@ -58,6 +59,14 @@ class MR_GameSession
       MR_SimulationTime  mSimulationTime;       // Time simulated since the session start
       MR_SimulationTime  mFixedStepCarry;       // Elapsed time not yet worth a whole tick (SimulateElapsed)
       DWORD              mLastSimulateCallTime; // Time in ms obtainend by timeGetTime
+
+      // Smooth drawing between fixed ticks (presentation only; the simulation never sees it). Before each tick of SimulateElapsed the position and heading of every free element are
+      // kept; a picture is then drawn with each element placed part of the way (carry / tick) from where it was before the last tick to where it is now. See BeginInterpolatedRender.
+      struct RenderPose { MR_FreeElement* mElement; int mRoom; MR_3DCoordinate mPosition; MR_Angle mOrientation; };
+      std::vector<RenderPose> mPreviousPoses;   // before the last tick
+      std::vector<RenderPose> mCurrentPoses;    // what the elements really are, while an interpolated picture is being drawn
+      MR_SimulationTime       mLastTickMs;
+      void CapturePoses( std::vector<RenderPose>& pInto ) const;
 
 
       BOOL LoadLevel( int pLevelIndex ); 
@@ -96,6 +105,11 @@ class MR_GameSession
       // the frame rate. At most pMaxTicks run per call; time beyond that is dropped (a stalled tab or a debugger pause
       // must not replay seconds of race in one frame). Returns the number of ticks run. Uses no clock.
       MR_DllDeclare int  SimulateElapsed( MR_SimulationTime pElapsedMs, MR_SimulationTime pTickMs = 16, int pMaxTicks = 16 );
+      // Drawing between ticks. After SimulateElapsed, call BeginInterpolatedRender before drawing and EndInterpolatedRender after: the free elements are put where they were drawn part of the way
+      // between the last two ticks (an element that is new, changed room or moved implausibly far in one tick stays where it is), and pDrawTime is set to the matching race time (the time
+      // of the previous tick plus the part of the way). End puts every element back exactly. Returns false (and changes nothing) when there is nothing to interpolate.
+      MR_DllDeclare BOOL BeginInterpolatedRender( MR_SimulationTime& pDrawTime, double pExtraMs = 0.0 );   // pExtraMs: time past the whole milliseconds the caller has handed over (the carry is in whole ms)
+      MR_DllDeclare void EndInterpolatedRender();
       MR_DllDeclare void SimulateLateElement( MR_FreeElementHandle pElement, MR_SimulationTime pDuration, int pRoom );
 
       MR_DllDeclare MR_Level*      GetCurrentLevel();

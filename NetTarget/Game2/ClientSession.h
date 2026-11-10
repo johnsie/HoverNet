@@ -54,6 +54,8 @@ class MR_ClientSession
       MR_GameSession    mSession;
       BOOL              mFixedStep;
       DWORD             mLastProcessTime;
+      long long         mLastProcessUs;        // the same moment in microseconds (steady clock): whole milliseconds are coarse next to a 16 ms tick
+      long long         mClockRemainderUs;     // what is left after the whole milliseconds handed to the simulation, below 1000
       MR_MainCharacter* mMainCharacter1;
       MR_MainCharacter* mMainCharacter2;
       std::vector<MR_MainCharacter*> mRemoteCharacters;
@@ -84,7 +86,11 @@ class MR_ClientSession
       // Fixed-step mode runs the simulation in whole 16 ms ticks whatever the frame rate (MR_GameSession::SimulateElapsed),
       // which is what networked prediction and replays need. Off by default: the classic loop is smoother on screen
       // until the renderer interpolates between ticks (docs/adr/0001-simulation-core.md, step 6).
-      void SetFixedStep( BOOL pOn ) { mFixedStep = pOn; mLastProcessTime = 0; }
+      void SetFixedStep( BOOL pOn ) { mFixedStep = pOn; mLastProcessTime = 0; mLastProcessUs = 0; mClockRemainderUs = 0; }
+      BOOL IsFixedStep()const { return mFixedStep; }
+      // Drawing between the fixed ticks Process runs (see MR_GameSession::BeginInterpolatedRender): bracket the picture with these; pDrawTime is the race time to draw at.
+      BOOL BeginInterpolatedRender( MR_SimulationTime& pDrawTime ) { return mFixedStep ? mSession.BeginInterpolatedRender( pDrawTime, (double)mClockRemainderUs/1000.0 ) : FALSE; }
+      void EndInterpolatedRender() { mSession.EndInterpolatedRender(); }
 
       // Replays and the authoritative client drive the simulation tick by tick: StepTicks runs exactly pTicks whole ticks,
       // calling pHook(pData, tick) before each so the caller can set every craft's controls for that tick.

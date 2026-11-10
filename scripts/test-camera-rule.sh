@@ -37,6 +37,13 @@ for pair in "observer->Scroll(:3" "SetChaseScale(:1" "SetCockpitView(:3" "SetEye
   token="${pair%:*}"; want="${pair##*:}"; n="$(grep -c -F -- "$token" "$c")"
   if [ "$n" != "$want" ]; then echo "FAIL $c: '$token' is used $n times, it was $want: a new way of moving the camera needs the owner's request"; fail=1; else echo "ok   $c: '$token' used as before"; fi
 done
+# Offline play draws between its fixed ticks (the owner's decision, 10 November 2026, docs/camera.md "What the camera is given"): the camera is given the interpolated position and race time, and its
+# own arithmetic is unchanged (pinned above). Nothing but the client's one render call may ask for that, and the observer and the graphics code must not.
+n="$(grep -c -F -- "session.BeginInterpolatedRender(" "$c")"
+if [ "$n" != "1" ]; then echo "FAIL $c: session.BeginInterpolatedRender( is called $n times, it was 1"; fail=1; else echo "ok   $c: the interpolated picture is asked for once, around the race render"; fi
+for f in "$obs" NetTarget/Game2/Observer.h NetTarget/VideoServices/ModernGraphics.cpp NetTarget/GraphicsSDL2/SDL2Graphics.cpp; do
+  if grep -q -F -- "InterpolatedRender" "$f"; then echo "FAIL $f mentions the interpolated render: only the client's render call may use it (CLAUDE.md rule 7)"; fail=1; else echo "ok   $f does not use the interpolated render"; fi
+done
 # The observer must not grow a new camera-moving member (a boost, a shake, a zoom, a look-ahead).
 if grep -n -i -E "mApertureBoost|aperturebias|camerashake|shake|lookahead|look_ahead|zoombias|SetFov|SetAperture" "$obs" NetTarget/Game2/Observer.h | grep -v -E "^\S+:[0-9]+:\s*//" | head -3 | grep -q .; then echo "FAIL the observer has something that looks like a camera effect (a boost, shake, zoom or look-ahead)"; fail=1; else echo "ok   the observer has no camera effect"; fi
 if [ "$fail" = 0 ]; then echo "camera rule: the camera is as it is documented in docs/camera.md"; exit 0; fi

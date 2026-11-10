@@ -45,6 +45,7 @@ MR_GameSession::MR_GameSession( BOOL pAllowRendering )
 
    mSimulationTime  = -3000; // 3 sec countdown
    mFixedStepCarry  = 0;
+   mLastTickMs      = 0;
    mLastSimulateCallTime = timeGetTime();
 
 }
@@ -239,6 +240,7 @@ void MR_GameSession::SetSimulationTime( MR_SimulationTime pTime )
    mSimulationTime       = pTime;
    mFixedStepCarry       = 0;
    mLastSimulateCallTime = timeGetTime();
+   mPreviousPoses.clear();   // a restart or a seek: there is no "before the last tick" to draw from
 }
 
 MR_SimulationTime MR_GameSession::GetSimulationTime()const
@@ -275,19 +277,113 @@ int MR_GameSession::SimulateElapsed( MR_SimulationTime pElapsedMs, MR_Simulation
    if( pElapsedMs < 0 ) pElapsedMs = 0;
 
    mFixedStepCarry += pElapsedMs;
+   mLastTickMs = pTickMs;
    int lTicks = 0;
    while( mFixedStepCarry >= pTickMs )
    {
       if( lTicks >= pMaxTicks )
       {
          mFixedStepCarry %= pTickMs;   // drop the rest of a long stall
+         mPreviousPoses.clear();       // (and what came before it is too far back to draw from)
          break;
       }
+      CapturePoses( mPreviousPoses );   // where everything is before this tick (only the last tick of a call stays)
       SimulateStep( pTickMs );
       mFixedStepCarry -= pTickMs;
       ++lTicks;
    }
    return lTicks;
+}
+
+void MR_GameSession::CapturePoses( std::vector<RenderPose>& pInto ) const
+{
+   pInto.clear();
+   if( mCurrentLevel == NULL )
+   {
+      return;
+   }
+   const int lRooms = mCurrentLevel->GetRoomCount();
+   for( int lRoom = 0; lRoom < lRooms; lRoom++ )
+   {
+      MR_FreeElementHandle lHandle = mCurrentLevel->GetFirstFreeElement( lRoom );
+      while( lHandle != NULL )
+      {
+         MR_FreeElement* lElement = MR_Level::GetFreeElement( lHandle );
+         if( lElement != NULL )
+         {
+            RenderPose lPose;
+            lPose.mElement     = lElement;
+            lPose.mRoom        = lRoom;
+            lPose.mPosition    = lElement->mPosition;
+            lPose.mOrientation = lElement->mOrientation;
+            pInto.push_back( lPose );
+         }
+         lHandle = MR_Level::GetNextFreeElement( lHandle );
+      }
+   }
+}
+
+BOOL MR_GameSession::BeginInterpolatedRender( MR_SimulationTime& pDrawTime, double pExtraMs )
+{
+   mCurrentPoses.clear();
+   if( mCurrentLevel == NULL || mLastTickMs <= 0 || mPreviousPoses.empty() )
+   {
+      return FALSE;
+   }
+
+   // How far past the last tick the wall clock is: a fraction of a tick. The picture shows the moment one tick earlier plus that fraction, so it moves smoothly from the state before the
+   // last tick to the state after it (a tick of delay is the price of smoothness).
+   double lAlpha = ( (double)mFixedStepCarry + pExtraMs ) / (double)mLastTickMs;
+   if( lAlpha < 0.0 )
+   {
+      return FALSE;
+   }
+   if( lAlpha > 1.0 )
+   {
+      lAlpha = 1.0;
+   }
+   pDrawTime = mSimulationTime - mLastTickMs + (MR_SimulationTime)( lAlpha*(double)mLastTickMs + 0.5 );
+
+   CapturePoses( mCurrentPoses );
+   const MR_Int32 kMaxJump = 2500;   // mm in one tick: further than any craft or missile goes, so it is a teleport (a restart, a respawn) and is drawn where it is
+   for( size_t lNow = 0; lNow < mCurrentPoses.size(); lNow++ )
+   {
+      const RenderPose& lCurrent = mCurrentPoses[ lNow ];
+      const RenderPose* lBefore = NULL;
+      // the lists are in the same order tick to tick, so the same index usually matches: look there first, then search
+      if( lNow < mPreviousPoses.size() && mPreviousPoses[ lNow ].mElement == lCurrent.mElement ) lBefore = &mPreviousPoses[ lNow ];
+      else for( size_t lOld = 0; lOld < mPreviousPoses.size(); lOld++ ) if( mPreviousPoses[ lOld ].mElement == lCurrent.mElement ) { lBefore = &mPreviousPoses[ lOld ]; break; }
+      if( lBefore == NULL || lBefore->mRoom != lCurrent.mRoom )
+      {
+         continue;
+      }
+      const MR_Int32 lDX = lCurrent.mPosition.mX - lBefore->mPosition.mX;
+      const MR_Int32 lDY = lCurrent.mPosition.mY - lBefore->mPosition.mY;
+      const MR_Int32 lDZ = lCurrent.mPosition.mZ - lBefore->mPosition.mZ;
+      if( lDX > kMaxJump || lDX < -kMaxJump || lDY > kMaxJump || lDY < -kMaxJump || lDZ > kMaxJump || lDZ < -kMaxJump )
+      {
+         continue;
+      }
+      int lTurn = (int)lCurrent.mOrientation - (int)lBefore->mOrientation;
+      lTurn = ( ( lTurn % MR_2PI ) + MR_2PI + MR_PI ) % MR_2PI - MR_PI;   // the short way round, -MR_PI .. MR_PI-1
+      MR_FreeElement* lElement = lCurrent.mElement;
+      lElement->mPosition.mX = lBefore->mPosition.mX + (MR_Int32)( lAlpha*(double)lDX );
+      lElement->mPosition.mY = lBefore->mPosition.mY + (MR_Int32)( lAlpha*(double)lDY );
+      lElement->mPosition.mZ = lBefore->mPosition.mZ + (MR_Int32)( lAlpha*(double)lDZ );
+      lElement->mOrientation = MR_NORMALIZE_ANGLE( (int)lBefore->mOrientation + (int)( lAlpha*(double)lTurn ) );
+   }
+   return TRUE;
+}
+
+void MR_GameSession::EndInterpolatedRender()
+{
+   for( size_t lIndex = 0; lIndex < mCurrentPoses.size(); lIndex++ )
+   {
+      MR_FreeElement* lElement = mCurrentPoses[ lIndex ].mElement;
+      lElement->mPosition    = mCurrentPoses[ lIndex ].mPosition;
+      lElement->mOrientation = mCurrentPoses[ lIndex ].mOrientation;
+   }
+   mCurrentPoses.clear();
 }
 
 void MR_GameSession::SimulateStep( MR_SimulationTime pDurationMs )

@@ -18,6 +18,15 @@ by the 28 render golden frames (`docs/render-golden.md`: they hash the picture t
 | Countdown | before the start the camera swings round and back during the first seconds (`pTime < -3000`) |
 | Split screen, debug views | unchanged |
 
+## What the camera is given (changed 10 November 2026, at the owner's request)
+
+Offline play now runs the simulation in the same whole 16 ms ticks as the server and the replays (so a race plays the same on every machine) and draws each picture between the last two ticks:
+every free element, the viewed craft included, is placed part of the way from where it was before the last tick to where it is after it (`MR_GameSession::BeginInterpolatedRender`, called once
+from the client around `RenderNormalDisplay`), and the race time handed to the observer is the matching moment. **The camera's arithmetic and every number above are unchanged**; what changed is
+its input: the craft position and the race time it is handed are the interpolated ones, so it follows a craft that moves smoothly at any frame rate. Replays and online races are not
+interpolated. `scripts/test-camera-rule.sh` pins that only the client's render call asks for it. `HOVERNET_NO_INTERPOLATION=1` turns it off and `--variable-step` brings back the old
+clock-driven stepping (both for comparison and tests).
+
 ## What this rule forbids
 
 Any change to the above by graphics or other work, including: widening or narrowing the field of view, zooming, shaking, looking ahead of the craft,

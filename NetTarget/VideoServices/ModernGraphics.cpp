@@ -180,6 +180,9 @@ namespace
 std::chrono::steady_clock::time_point gFrameStart;
 bool gFrameStartKnown = false;
 }
+namespace { bool gVsyncActive = false; }
+void SetVsyncActive(bool active) { gVsyncActive = active; }
+bool VsyncActive() { return gVsyncActive; }
 void NoteFrameStart() { gFrameStart = std::chrono::steady_clock::now(); gFrameStartKnown = true; }
 bool MillisecondsSinceFrameStart(double& milliseconds)
 {

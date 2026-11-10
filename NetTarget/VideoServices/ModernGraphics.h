@@ -123,6 +123,9 @@ struct FrameHints
 // little about what the machine can do. A loop calls NoteFrameStart() when it comes out of its pause; the backend asks MillisecondsSinceFrameStart() just before it shows the picture and the
 // Presenter judges the frame by that work (plus the picture passes) instead. A loop that never calls NoteFrameStart is judged by the time between pictures, as before.
 void NoteFrameStart();
+// Whether the display's refresh paces the loop (the renderer got vsync). The loops then need no pause of their own; without it they keep a 16 ms one.
+void SetVsyncActive(bool active);
+bool VsyncActive();
 bool MillisecondsSinceFrameStart(double& milliseconds);   // false when NoteFrameStart was not called since the last answer
 
 // Settings: the four presets the options screen offers, and the options each one stands for.
