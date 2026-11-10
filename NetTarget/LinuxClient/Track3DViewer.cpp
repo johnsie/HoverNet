@@ -8437,6 +8437,8 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
 #if defined(HOVERNET_AUTH)
             if (!started) server.Close();
 #endif
+            // (the context made at the top of this screen is not used by this version; left open it would hide the race's words, see DrawGameOverlay)
+            if (ownsImGuiContext) { ImGui_ImplSDLRenderer2_Shutdown(); ImGui_ImplSDL2_Shutdown(); ImGui::DestroyContext(); }
             return started;
         }
     }
@@ -8958,6 +8960,8 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                 }
             }
             if (!started) server.Close();
+            // (the context made at the top of this screen is not used by this version; left open it would hide the race's words, see DrawGameOverlay)
+            if (ownsImGuiContext) { ImGui_ImplSDLRenderer2_Shutdown(); ImGui_ImplSDL2_Shutdown(); ImGui::DestroyContext(); }
             return started;
         }
     }
@@ -12470,11 +12474,15 @@ int RunClient(int argc, char** argv)
         }
         else if (HasArgument(argc, argv, "--replays-screen")) {   // the screen on its own (screenshots); "Watch" reports instead of playing
             RunReplayBrowser(graphics, frameLimit, [](const std::string&, int, const std::string&, bool& fatal) { fatal = false; return std::string("(screenshot mode: nothing is played)"); });
+            std::printf("MENUCONTEXT after the replays screen: %d\n", ImGui::GetCurrentContext() != nullptr ? 1 : 0);   // 0: the screen cleaned up (a context left open hides the race's words)
+            std::fflush(stdout);
             g_QuitConfirmed = true;
         }
         else if (HasArgument(argc, argv, "--leaderboards-screen")) {   // the screen on its own (screenshots); "Watch" reports instead of playing
 #if defined(HOVERNET_AUTH)
             RunLeaderboards(graphics, frameLimit, [](const std::string&, int, const std::string&, bool& fatal) { fatal = false; return std::string("(screenshot mode: nothing is played)"); });
+            std::printf("MENUCONTEXT after the leaderboards screen: %d\n", ImGui::GetCurrentContext() != nullptr ? 1 : 0);
+            std::fflush(stdout);
 #endif
             g_QuitConfirmed = true;
         }
@@ -12525,6 +12533,7 @@ int RunClient(int argc, char** argv)
             RunLocalRaceSetup(graphics, buffer, viewport, *menuFontHandle->GetSprite(), frameLimit);
             g_QuitConfirmed = true;
         }
+        if (std::getenv("HOVERNET_TEST_MENUCONTEXT") != nullptr) { std::printf("MENUCONTEXT after the screen: %d\n", ImGui::GetCurrentContext() != nullptr ? 1 : 0); std::fflush(stdout); }   // 1: a screen left its ImGui context open, which hides the race's words
         bool pickingMode = !g_QuitConfirmed && !replay.active && !tutorialLoaded;
 #if defined(HOVERNET_AUTH)
         if (auth.active) pickingMode = false;

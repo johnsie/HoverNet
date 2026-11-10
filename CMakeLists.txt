@@ -1353,6 +1353,14 @@ if(BUILD_TESTING AND NOT WIN32)
     set_tests_properties(HoverNetPauseMenuSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME HoverNetQuitConfirmationSmoke COMMAND HoverNetGame2Player --quit-confirmation --frames 2)
     set_tests_properties(HoverNetQuitConfirmationSmoke PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    # A screen that leaves its ImGui context open hides the race's words (HUD, countdown, replay label) for the rest of the session: the new
+    # replays and leaderboards screens did exactly that after "Watch".
+    foreach(screen replays leaderboards)
+        add_test(NAME HoverNetNoMenuContextLeft_${screen} COMMAND HoverNetGame2Player --${screen}-screen --frames 3)
+        set_tests_properties(HoverNetNoMenuContextLeft_${screen} PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "HOVERNET_RML_MENU=1"
+            PASS_REGULAR_EXPRESSION "MENUCONTEXT after the ${screen} screen: 0")
+    endforeach()
     # The window's close (X) button asks "are you sure?" on a screen, and "keep playing" leaves the screen running.
     add_test(NAME HoverNetCloseButtonAsksKeep COMMAND HoverNetGame2Player --settings-screen --frames 20)
     set_tests_properties(HoverNetCloseButtonAsksKeep PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
