@@ -168,3 +168,10 @@ desktop and the browser; SDL2's renderer does not expose shaders, so the context
 - Light is blocked by walls only approximately: three samples along the ray are tested against the depth buffer, per block, so a thin or small blocker can be missed, and the craft's own body is deliberately ignored.
 - The floating-point parts (sparks, glints) are only promised to repeat on the same machine; they are checked by property, not by committed hashes.
 - The browser runs every pass without SIMD, and is several times slower than the desktop.
+
+
+## Automatic graphics (10 November 2026)
+
+`Options::automatic` (the **Automatic** quality, the default) lets the Presenter choose how much of the look runs. `Presenter::OptionsForLevel(allowed, level)` is the ladder (levels 0 to 5, `kMaxLevel`):
+0 grade and effects; 1 + craft shadows; 2 + lights and halos; 3 + de-banding, haze, occlusion, exposure (quality 1); 4 + true-colour textures, reflections, edge smoothing; 5 + smoothing, bloom, sharpening, craft shading, linear light (quality 2).
+It only removes features the player allows. The governor is the older adaptive quality applied to the level: down after 45 slow frames, up after `mRaiseAfter` (240, doubling up to 4,800 after a step up that was too slow) frames with room, nothing during the first 45 frames. The observer's shadows and lights and the rasteriser's true-colour textures follow `Presenter::EffectiveOptions()` (what the last frame used), through `SDL2GraphicsBackend::GetEffectiveModernOptions()`.

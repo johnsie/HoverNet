@@ -60,6 +60,10 @@ public:
     const uint8_t* GetRenderPalette();
     // The quality the picture passes are really running at (lower than the setting while they are too slow for their time budget).
     int GetEffectiveQuality() const { return m_presenter.EffectiveQuality(); }
+    int GetAutomaticLevel() const { return m_presenter.Level(); }
+    double GetPassCostMs() const { return m_presenter.PassCostMs(); }
+    double GetFrameMs() const { return m_presenter.FrameMs(); }   // Automatic graphics: how much of the look is running now (0 to Presenter::kMaxLevel)
+    const HoverNetGfx::Options& GetEffectiveModernOptions() const { return m_presenter.EffectiveOptions(); }   // the options as limited by the automatic level
     // True while the picture passes run on the graphics card; the card's name, and how long the last frame took there (ms).
     bool GpuActive() const { return m_gpuAllowed && m_presenter.FinisherActive(); }
     // Where the viewport hands the scene when the card draws it (null while it cannot: no card, switched off, or it failed). Set it on the observer every frame.

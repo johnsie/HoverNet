@@ -58,6 +58,11 @@ struct Options
     bool gpuFinish = false;       // set by the caller when a finisher is installed: the picture passes (de-banding, smoothing, sharpening, bloom, highlight roll-off, HUD edge, vignette) are done there, not on the CPU
     bool adaptive = true;         // lowers the quality when the passes cost more than budgetMs per frame, and raises it again when there is room
     float budgetMs = 12.0f;
+    // Automatic: the presenter chooses how much of the look to run (a "level" from 0 to Presenter::kMaxLevel, see Presenter::OptionsForLevel) from how fast the machine draws, starting at
+    // startLevel (or at the top when the graphics card does the picture passes) and stepping down when frames are slow and up again when there is room. The other options are then
+    // what the player allows: an option that is off is never switched on. Needs adaptive.
+    bool automatic = false;
+    int startLevel = 3;
     float brightness = 1.0f;      // 0.7 .. 1.4: the player's brightness setting, applied through the palette
     bool reducedMotion = false;   // no sparks, exhaust, dust or smoke, no impact flash, steady glow: the player's "Reduced motion" setting
     int quality = 2;              // 0 low (grade and effects only), 1 medium (adds de-banding and depth haze), 2 high (adds edge smoothing and bloom)
@@ -68,7 +73,7 @@ struct Options
                effects == o.effects && lighting == o.lighting && shadows == o.shadows && reducedMotion == o.reducedMotion && quality == o.quality &&
                atmosphere == o.atmosphere && occlusion == o.occlusion && craftShading == o.craftShading && reflections == o.reflections && halos == o.halos &&
                edgeAA == o.edgeAA && hudOutline == o.hudOutline && sharpen == o.sharpen && exposure == o.exposure && linearLight == o.linearLight &&
-               trueColour == o.trueColour && adaptive == o.adaptive && budgetMs == o.budgetMs && brightness == o.brightness;
+               trueColour == o.trueColour && adaptive == o.adaptive && budgetMs == o.budgetMs && brightness == o.brightness && automatic == o.automatic && startLevel == o.startLevel;
     }
 };
 
@@ -117,7 +122,7 @@ struct FrameHints
 // Settings: the four presets the options screen offers, and the options each one stands for.
 // eOff is no processing at all: the plain palette picture. It is not a look players choose (the VR headset uses it, and the rasteriser's own
 // regression tool); the looks are the other three.
-enum class Preset { eOff, eModern, eModernLite, eModernHigh };
+enum class Preset { eOff, eModern, eModernLite, eModernHigh, eAuto };   // eAuto: everything the machine can run, chosen and followed automatically (Options::automatic)
 Options OptionsForPreset(Preset preset);
 const char* PresetLabel(Preset preset);
 
@@ -210,6 +215,16 @@ public:
     // The quality actually used: what the options ask for, lowered while the passes are too slow for options.budgetMs (see Options::adaptive).
     int EffectiveQuality() const { return mQualityCap; }
 
+    // Automatic quality (Options::automatic). The ladder, each level keeping what the one below has: 0 colour grade and engine/spark effects; 1 craft shadows; 2 light from the craft and glows
+    // round things; 3 de-banding, depth haze and walls that block light; 4 filtered true-colour textures, reflections and edge smoothing; 5 bloom, sharpening and the rest.
+    static constexpr int kMaxLevel = 5;
+    static Options OptionsForLevel(const Options& allowed, int level);   // `allowed` with everything above `level` switched off (nothing is ever switched on)
+    int Level() const { return mLevel; }
+    double PassCostMs() const { return mCostMs; }    // the passes' average cost per frame, and the whole frame's (what the governor weighs)
+    double FrameMs() const { return mFrameMs; }
+    // What was actually used for the last frame: the player's options as limited by the level. The observer's shadows and lights and the rasteriser's true-colour textures follow this.
+    const Options& EffectiveOptions() const { return mEffective; }
+
     // Tells the presenter how long the whole frame took (the time since the previous frame was shown, in ms). A craft that shudders is a craft drawn at an
     // uneven or slow pace, and the passes are only part of the cost of a frame (the rasteriser and the machine's own load are the rest), so with adaptive
     // quality on the quality is also lowered when whole frames take more than about 21 ms (under 47 a second), and raised again only after a long stretch
@@ -272,6 +287,9 @@ private:
     bool mSkyKnown = false;
     float mExposure = 1.0f;
     int mQualityCap = 2, mLastRequestedQuality = 2, mSlowFrames = 0, mFastFrames = 0, mRaiseAfter = 240;
+    int mLevel = 3;
+    bool mLevelStarted = false;
+    Options mEffective;
     double mCostMs = 0.0, mFrameMs = 0.0;
 };
 }

@@ -43,6 +43,19 @@ void AddGlow(std::uint8_t* rgb, int width, int height, float cx, float cy, float
 }
 }
 
+Options Presenter::OptionsForLevel(const Options& allowed, int level)
+{
+    Options o = allowed;
+    level = std::max(0, std::min(kMaxLevel, level));
+    o.quality = std::min(allowed.quality, level >= 5 ? 2 : level >= 3 ? 1 : 0);
+    if (level < 1) o.shadows = false;
+    if (level < 2) { o.lighting = false; o.halos = false; }
+    if (level < 3) { o.atmosphere = false; o.occlusion = false; o.deband = false; o.exposure = false; }
+    if (level < 4) { o.trueColour = false; o.reflections = false; o.edgeAA = false; }
+    if (level < 5) { o.smoothing = false; o.bloom = false; o.sharpen = false; o.craftShading = false; o.linearLight = false; }
+    return o;
+}
+
 Options OptionsForPreset(Preset preset)
 {
     Options o;
@@ -57,6 +70,11 @@ Options OptionsForPreset(Preset preset)
     case Preset::eModernHigh:   // everything, including edge smoothing and bloom: for a fast desktop CPU (see docs/render-golden.md for the cost)
         o.enabled = true;
         o.quality = 2;
+        break;
+    case Preset::eAuto:         // everything allowed, the machine decides how much it runs (see Presenter::OptionsForLevel)
+        o.enabled = true;
+        o.quality = 2;
+        o.automatic = true;
         break;
     case Preset::eModernLite:   // for phones and slow machines: shadows, grade and effects only (under a millisecond at 640x480)
         o.enabled = true;
@@ -73,6 +91,7 @@ const char* PresetLabel(Preset preset)
     case Preset::eOff: return "Off (plain picture)";
     case Preset::eModern: return "Modern";
     case Preset::eModernHigh: return "Modern (high quality, adds glow)";
+    case Preset::eAuto: return "Automatic (the best this computer can run)";
     case Preset::eModernLite: return "Modern (light, for slow devices)";
     }
     return "";
@@ -189,7 +208,15 @@ void Presenter::Process(std::uint8_t* rgb, int width, int height, const Options&
     // time, after a long stretch with room to spare) when they do not.
     if (requested.quality != mLastRequestedQuality) { mLastRequestedQuality = requested.quality; mQualityCap = requested.quality; mSlowFrames = mFastFrames = 0; mRaiseAfter = 240; }
     Options options = requested;
-    if (requested.adaptive) options.quality = std::min(requested.quality, mQualityCap);
+    const bool automatic = requested.automatic && requested.adaptive;
+    if (automatic) {
+        // The first frame: a machine with a graphics card doing the passes starts at the top, any other at the level the caller gave (a phone or a browser starts lower).
+        if (!mLevelStarted) { mLevelStarted = true; mLevel = (requested.gpuFinish && FinisherActive()) ? kMaxLevel : std::max(0, std::min(kMaxLevel, requested.startLevel)); mSlowFrames = mFastFrames = 0; mRaiseAfter = 240; }
+        options = OptionsForLevel(requested, mLevel);
+        mQualityCap = options.quality;
+    }
+    else if (requested.adaptive) options.quality = std::min(requested.quality, mQualityCap);
+    mEffective = options;
     const auto frameStart = std::chrono::steady_clock::now();
 
     const std::uint8_t* mask = hints.hudMask != nullptr && hints.hudMaskWidth == width && hints.hudMaskHeight == height ? hints.hudMask : nullptr;
@@ -230,19 +257,25 @@ void Presenter::Process(std::uint8_t* rgb, int width, int height, const Options&
     }
     if (!(hints.valid && options.effects)) mParticles.clear();
 
-    if (requested.adaptive) {
+    // The first frames only watch: they include shader compilation, texture uploads and the stall of a track that has just loaded (hundreds of milliseconds on a graphics card), which says
+    // nothing about what the machine can sustain.
+    constexpr std::uint32_t kWarmupFrames = 45;
+    if (requested.adaptive && mFrame <= kWarmupFrames) { mCostMs = 0.0; mSlowFrames = mFastFrames = 0; }
+    else if (requested.adaptive) {
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frameStart).count();
-        mCostMs = mFrame <= 1 ? ms : mCostMs * 0.9 + ms * 0.1;
+        mCostMs = mFrame <= kWarmupFrames + 1 ? ms : mCostMs * 0.9 + ms * 0.1;
         const double kFrameBudgetMs = 21.0, kFrameRoomMs = 19.0;   // whole frames: under about 47 a second is too slow; over 52 leaves room
-        const bool frameTooSlow = mFrameMs > kFrameBudgetMs;
+        const bool frameTooSlow = mFrameMs > kFrameBudgetMs;   // (whole frames count even when the passes are cheap: the observer's shadows and lights are not in the passes' cost)
         const bool tooSlow = mCostMs > requested.budgetMs || frameTooSlow;
         const bool roomToSpare = mCostMs < requested.budgetMs * 0.45 && (mFrameMs <= 0.0 || mFrameMs < kFrameRoomMs);
         if (tooSlow) { ++mSlowFrames; mFastFrames = 0; } else if (roomToSpare) { ++mFastFrames; mSlowFrames = 0; } else { mSlowFrames = mFastFrames = 0; }
-        if (mSlowFrames >= 45 && mQualityCap > 0) {
-            --mQualityCap; mSlowFrames = 0; mCostMs = requested.budgetMs * 0.8;
+        int& step = automatic ? mLevel : mQualityCap;                 // the thing that is stepped: the level (automatic) or the quality
+        const int ceiling = automatic ? kMaxLevel : requested.quality;
+        if (mSlowFrames >= 45 && step > 0) {
+            --step; mSlowFrames = 0; mCostMs = requested.budgetMs * 0.8;
             if (frameTooSlow) { mRaiseAfter = std::min(mRaiseAfter * 2, 4800); mFrameMs = kFrameBudgetMs * 0.9; }   // wait longer each time before trying again
         }
-        else if (mFastFrames >= mRaiseAfter && mQualityCap < requested.quality) { ++mQualityCap; mFastFrames = 0; mCostMs = requested.budgetMs * 0.6; }
+        else if (mFastFrames >= mRaiseAfter && step < ceiling) { ++step; mFastFrames = 0; mCostMs = requested.budgetMs * 0.6; }
     }
 }
 

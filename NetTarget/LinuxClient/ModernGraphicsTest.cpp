@@ -98,6 +98,45 @@ int main(int argc, char** argv)
     if (argc >= 2 && std::strcmp(argv[1], "digest") == 0) return Digest();
     const int W = 320, H = 240;
 
+    // 0. Automatic graphics: a ladder of levels that only ever takes features away from what the player allows.
+    {
+        const Options a = OptionsForPreset(Preset::eAuto);
+        Check(a.enabled && a.automatic && a.adaptive && a.quality == 2, "the Automatic preset is on, automatic and adaptive, at top quality");
+        Options none = a; none.shadows = false; none.bloom = false;
+        bool monotone = true, neverMoreThanAllowed = true;
+        Options previous = Presenter::OptionsForLevel(a, 0);
+        int features0 = 0;
+        auto count = [](const Options& o) { return int(o.shadows) + int(o.lighting) + int(o.halos) + int(o.atmosphere) + int(o.occlusion) + int(o.deband) + int(o.exposure) + int(o.trueColour) + int(o.reflections) + int(o.edgeAA) + int(o.smoothing) + int(o.bloom) + int(o.sharpen) + int(o.craftShading) + int(o.linearLight) + o.quality; };
+        features0 = count(previous);
+        for (int level = 1; level <= Presenter::kMaxLevel; ++level) {
+            const Options o = Presenter::OptionsForLevel(a, level);
+            if (count(o) < count(previous)) monotone = false;
+            const Options n = Presenter::OptionsForLevel(none, level);
+            if ((n.shadows && !none.shadows) || (n.bloom && !none.bloom)) neverMoreThanAllowed = false;
+            previous = o;
+        }
+        Check(monotone, "each level has at least what the level below has");
+        Check(neverMoreThanAllowed, "a feature the player switched off is never switched on by a level");
+        Check(Presenter::OptionsForLevel(a, 0).grade && Presenter::OptionsForLevel(a, 0).effects && !Presenter::OptionsForLevel(a, 0).shadows && !Presenter::OptionsForLevel(a, 0).lighting && Presenter::OptionsForLevel(a, 0).quality == 0, "level 0 keeps the grade and the effects and nothing costly");
+        Check(Presenter::OptionsForLevel(a, 1).shadows && !Presenter::OptionsForLevel(a, 1).lighting, "level 1 adds the craft shadows");
+        Check(Presenter::OptionsForLevel(a, 2).lighting && Presenter::OptionsForLevel(a, 2).halos && !Presenter::OptionsForLevel(a, 2).trueColour, "level 2 adds the lights");
+        Check(Presenter::OptionsForLevel(a, 3).quality == 1 && Presenter::OptionsForLevel(a, 3).atmosphere && !Presenter::OptionsForLevel(a, 3).bloom, "level 3 adds haze and de-banding");
+        Check(Presenter::OptionsForLevel(a, 4).trueColour && Presenter::OptionsForLevel(a, 4).edgeAA && !Presenter::OptionsForLevel(a, 4).bloom, "level 4 adds true-colour textures and edge smoothing");
+        Check(Presenter::OptionsForLevel(a, 5).bloom && Presenter::OptionsForLevel(a, 5).smoothing && Presenter::OptionsForLevel(a, 5).quality == 2, "level 5 has everything");
+        Check(count(Presenter::OptionsForLevel(a, 9)) == count(Presenter::OptionsForLevel(a, 5)) && count(Presenter::OptionsForLevel(a, -3)) == features0, "levels outside 0 to 5 are held to the ends");
+        // The governor, on its own: it starts at the level it is given and stays there while frames are fine; the effective options follow the level.
+        Options start = a; start.startLevel = 2; start.adaptive = true;
+        Presenter p;
+        std::vector<std::uint8_t> frame(static_cast<std::size_t>(W) * H * 3, 60);
+        FrameHints h;
+        p.Process(frame.data(), W, H, start, h);
+        Check(p.Level() == 2 && p.EffectiveOptions().lighting && !p.EffectiveOptions().trueColour, "Automatic starts at the level it is given and the effective options follow it");
+        Options manual = a; manual.automatic = false;
+        Presenter q;
+        q.Process(frame.data(), W, H, manual, h);
+        Check(q.EffectiveOptions().shadows == manual.shadows && q.EffectiveOptions().bloom == manual.bloom, "without Automatic the player's options are used as they are");
+    }
+
     // 1. The "off" preset does nothing at all.
     {
         Frame f(static_cast<std::size_t>(W) * H * 3);

@@ -2001,18 +2001,14 @@ void SaveShowGhost(bool enabled)
 // without SIMD and cost several times as much; docs/render-golden.md). A saved "classic" (from before the Classic look was removed) means this too.
 HoverNetGfx::Preset DefaultGraphicsPreset()
 {
-#ifdef HOVERNET_WEB
-    return HoverNetGfx::Preset::eModernLite;
-#else
-    return HoverNetIsTouchDevice() ? HoverNetGfx::Preset::eModernLite : HoverNetGfx::Preset::eModern;
-#endif
+    return HoverNetGfx::Preset::eAuto;   // every machine starts on Automatic: the best look it can run, followed as it plays (the starting point differs, see GraphicsOptionsFor)
 }
 
 struct GraphicsSettings
 {
     HoverNetGfx::Preset preset = DefaultGraphicsPreset();
-    // Off by default (2026-11-09, the owner's choice): soft craft shadows, light from the craft and haze, engine/trail/spark effects, richer colour and vignette.
-    bool shadows = false, deband = true, smoothing = true, bloom = true, grade = false, effects = false, lighting = false, textures = true;
+    // Everything on by default (2026-11-10, the owner's choice; it had been off since 2026-11-09): with Automatic the machine decides how much of it runs, so these are what the player allows.
+    bool shadows = true, deband = true, smoothing = true, bloom = true, grade = true, effects = true, lighting = true, textures = true;
     bool atmosphere = true, occlusion = true, edges = true, craft = true, halos = true, sharpen = true, exposure = true, adaptive = true;
     bool gpu = true;   // the finishing passes on the graphics card, when there is one (see VideoServices/GpuFinisher.h)
     float brightness = 1.0f;   // 0.7 .. 1.4
@@ -2033,7 +2029,7 @@ GraphicsSettings LoadGraphicsSettings()
     while (in >> key >> value) {
         if (key == "defaults") defaultsVersion = std::atoi(value.c_str());
         else if (key == "preset") {
-            settings.preset = value == "modern" ? HoverNetGfx::Preset::eModern : value == "high" ? HoverNetGfx::Preset::eModernHigh : value == "lite" ? HoverNetGfx::Preset::eModernLite : DefaultGraphicsPreset();
+            settings.preset = value == "modern" ? HoverNetGfx::Preset::eModern : value == "high" ? HoverNetGfx::Preset::eModernHigh : value == "lite" ? HoverNetGfx::Preset::eModernLite : value == "auto" ? HoverNetGfx::Preset::eAuto : DefaultGraphicsPreset();
         }
         else if (key == "shadows") settings.shadows = value != "0";
         else if (key == "deband") settings.deband = value != "0";
@@ -2054,8 +2050,9 @@ GraphicsSettings LoadGraphicsSettings()
         else if (key == "gpu") settings.gpu = value != "0";
         else if (key == "brightness") { const float b = static_cast<float>(std::atof(value.c_str())); if (b >= 0.7f && b <= 1.4f) settings.brightness = b; }
     }
-    if (defaultsVersion < 2) {   // a file from before the four extras went off by default: they start off for everyone, and stay as chosen after that
-        settings.shadows = false; settings.lighting = false; settings.effects = false; settings.grade = false;
+    if (defaultsVersion < 3) {   // a file from before the look went back on for everyone (with Automatic to fit it to the machine): the four extras start on and Automatic is chosen, and stay as chosen after that
+        settings.shadows = true; settings.lighting = true; settings.effects = true; settings.grade = true;
+        settings.preset = HoverNetGfx::Preset::eAuto;
     }
     return settings;
 }
@@ -2063,7 +2060,7 @@ GraphicsSettings LoadGraphicsSettings()
 void SaveGraphicsSettings(const GraphicsSettings& settings)
 {
     std::ofstream out(GraphicsSettingsPath());
-    out << "defaults 2\n" << "preset " << (settings.preset == HoverNetGfx::Preset::eModern ? "modern" : settings.preset == HoverNetGfx::Preset::eModernHigh ? "high" : settings.preset == HoverNetGfx::Preset::eModernLite ? "lite" : "modern") << '\n'
+    out << "defaults 3\n" << "preset " << (settings.preset == HoverNetGfx::Preset::eAuto ? "auto" : settings.preset == HoverNetGfx::Preset::eModern ? "modern" : settings.preset == HoverNetGfx::Preset::eModernHigh ? "high" : settings.preset == HoverNetGfx::Preset::eModernLite ? "lite" : "modern") << '\n'
         << "shadows " << settings.shadows << '\n' << "deband " << settings.deband << '\n' << "smooth " << settings.smoothing << '\n' << "bloom " << settings.bloom << '\n'
         << "grade " << settings.grade << '\n' << "effects " << settings.effects << '\n' << "lighting " << settings.lighting << '\n' << "textures " << settings.textures << '\n' << "atmosphere " << settings.atmosphere << '\n' << "occlusion " << settings.occlusion << '\n' << "edges " << settings.edges << '\n'
         << "craft " << settings.craft << '\n' << "halos " << settings.halos << '\n' << "sharpen " << settings.sharpen << '\n' << "exposure " << settings.exposure << '\n' << "adaptive " << settings.adaptive << '\n' << "gpu " << settings.gpu << '\n' << "brightness " << settings.brightness << '\n';
@@ -2086,6 +2083,14 @@ HoverNetGfx::Options GraphicsOptionsFor(const GraphicsSettings& settings, bool r
         options.sharpen = settings.sharpen; options.exposure = settings.exposure; options.adaptive = settings.adaptive;
         options.brightness = settings.brightness;
         options.reducedMotion = reducedMotion;
+        if (options.automatic) {
+            options.adaptive = true;   // Automatic is the adaptive governor: it cannot be switched off with it
+#ifdef HOVERNET_WEB
+            options.startLevel = 1;    // a browser draws the picture passes on one thread without SIMD: it starts low and rises if there is room
+#else
+            options.startLevel = HoverNetIsTouchDevice() ? 1 : 3;
+#endif
+        }
     }
     return options;
 }
@@ -5346,7 +5351,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             int tab = 0;
             bool gfxMore = false;
             float musicPercent = static_cast<float>(LoadMusicVolume() * 100.0);
-            static const HoverNetGfx::Preset presets[] = {HoverNetGfx::Preset::eModern, HoverNetGfx::Preset::eModernHigh, HoverNetGfx::Preset::eModernLite};
+            static const HoverNetGfx::Preset presets[] = {HoverNetGfx::Preset::eAuto, HoverNetGfx::Preset::eModern, HoverNetGfx::Preset::eModernHigh, HoverNetGfx::Preset::eModernLite};
             static const char* const raceViewLabels[] = {"Classic (4:3)", "Widescreen (16:9)", "Match my window"};
             auto heading = [](const char* label) { FormField f; f.type = FormField::Type::eHeading; f.label = label; return f; };
             auto note = [](const char* label) { FormField f; f.type = FormField::Type::eNote; f.label = label; return f; };
@@ -5424,13 +5429,14 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                 else if (which == 3) {
                     std::vector<std::string> presetLabels;
                     int presetIndex = 0;
-                    for (int i = 0; i < 3; ++i) { presetLabels.push_back(HoverNetGfx::PresetLabel(presets[i])); if (presets[i] == graphicsSettings.preset) presetIndex = i; }
+                    for (int i = 0; i < 4; ++i) { presetLabels.push_back(HoverNetGfx::PresetLabel(presets[i])); if (presets[i] == graphicsSettings.preset) presetIndex = i; }
                     f.push_back(heading("Graphics"));
                     f.push_back(select("preset", "Quality", presetLabels, presetIndex));
+                    if (graphicsSettings.preset == HoverNetGfx::Preset::eAuto) f.push_back(note("Automatic keeps the picture as good as this computer can run smoothly: it turns effects up when there is room and down when frames slow. The options below are what it may use; one that is off is never used."));
                     f.push_back(toggle("gpu", "Use my graphics card for the picture passes", graphicsSettings.gpu));
                     f.push_back(toggle("shadows", "Soft craft shadows", graphicsSettings.shadows));
                     if (graphicsSettings.preset != HoverNetGfx::Preset::eModernLite) f.push_back(toggle("deband", "Smooth colour bands", graphicsSettings.deband));
-                    if (graphicsSettings.preset == HoverNetGfx::Preset::eModernHigh) {
+                    if (graphicsSettings.preset == HoverNetGfx::Preset::eModernHigh || graphicsSettings.preset == HoverNetGfx::Preset::eAuto) {
                         f.push_back(toggle("smoothing", "Smooth jagged edges", graphicsSettings.smoothing));
                         f.push_back(toggle("bloom", "Glow around bright lights", graphicsSettings.bloom));
                     }
@@ -5816,7 +5822,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         if (tabOpen) {
         ImGui::TextUnformatted("Graphics");
         {
-            static const HoverNetGfx::Preset presets[] = {HoverNetGfx::Preset::eModern, HoverNetGfx::Preset::eModernHigh, HoverNetGfx::Preset::eModernLite};
+            static const HoverNetGfx::Preset presets[] = {HoverNetGfx::Preset::eAuto, HoverNetGfx::Preset::eModern, HoverNetGfx::Preset::eModernHigh, HoverNetGfx::Preset::eModernLite};
             ImGui::PushItemWidth(-1.0f);
             if (ImGui::BeginCombo("##GraphicsPreset", HoverNetGfx::PresetLabel(graphicsSettings.preset))) {
                 for (const HoverNetGfx::Preset preset : presets) {
@@ -5825,13 +5831,14 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                 ImGui::EndCombo();
             }
             ImGui::PopItemWidth();
+            if (graphicsSettings.preset == HoverNetGfx::Preset::eAuto) HoverNetHint("Keeps the picture as good as this computer can run smoothly: effects go up when there is room and down when frames slow. The options below are what it may use; one that is off is never used.");
             {
                 ImGui::Checkbox("Use my graphics card for the picture passes", &graphicsSettings.gpu);
                 ImGui::Checkbox("Soft craft shadows", &graphicsSettings.shadows);
                 if (graphicsSettings.preset != HoverNetGfx::Preset::eModernLite) {
                     ImGui::Checkbox("Smooth colour bands", &graphicsSettings.deband);
                 }
-                if (graphicsSettings.preset == HoverNetGfx::Preset::eModernHigh) {
+                if (graphicsSettings.preset == HoverNetGfx::Preset::eModernHigh || graphicsSettings.preset == HoverNetGfx::Preset::eAuto) {
                     ImGui::Checkbox("Smooth jagged edges", &graphicsSettings.smoothing);
                     ImGui::Checkbox("Glow around bright lights", &graphicsSettings.bloom);
                 }
@@ -11608,11 +11615,21 @@ int RunClient(int argc, char** argv)
         }
         graphics.SetModernOptions(options);
         graphics.SetGpuAllowed(graphicsSettings.gpu);
+        // With Automatic graphics the presenter decides, frame by frame, how much of the look runs; the observer's shadows and lights and the true-colour textures follow what it used last frame.
+        const HoverNetGfx::Options used = (options.automatic && graphics.GetEffectiveModernOptions().enabled) ? graphics.GetEffectiveModernOptions() : options;
+        if (options.automatic && options.enabled) {
+            static int lastAutomaticLevel = -1;
+            if (graphics.GetAutomaticLevel() != lastAutomaticLevel) {   // a few times a minute at most (the governor waits between steps): worth a line for a bug report
+                lastAutomaticLevel = graphics.GetAutomaticLevel();
+                std::printf("Automatic graphics: level %d of %d (frames %.1f ms, picture passes %.1f ms)\n", lastAutomaticLevel, HoverNetGfx::Presenter::kMaxLevel, graphics.GetFrameMs(), graphics.GetPassCostMs());
+                std::fflush(stdout);
+            }
+        }
 #ifdef HOVERNET_GAME2_PLAYER
         if (observer != nullptr) {
-            observer->SetModernLighting(options.enabled && options.lighting ? TRUE : FALSE);
+            observer->SetModernLighting(options.enabled && used.lighting ? TRUE : FALSE);
             // Filtered true-colour textures cost the rasteriser; when the passes have had to drop to the lowest quality they are switched off too.
-            const bool trueColourNow = options.enabled && options.trueColour && graphics.GetEffectiveQuality() >= 1;
+            const bool trueColourNow = options.enabled && used.trueColour && graphics.GetEffectiveQuality() >= 1;
             {   // The 8-bit palette, so a player's craft design is baked into the craft's 8-bit pixels and shows whether or not true-colour textures are on.
                 static std::uint8_t bakedPalette[768];
                 static bool bakedKnown = false;
@@ -11646,7 +11663,7 @@ int RunClient(int argc, char** argv)
                     texturesOn = false;
                 }
             }
-            observer->SetModernEffects(options.enabled ? TRUE : FALSE, options.shadows ? TRUE : FALSE, options.reducedMotion ? TRUE : FALSE, graphics.GetShadowLut());
+            observer->SetModernEffects(options.enabled ? TRUE : FALSE, used.shadows ? TRUE : FALSE, options.reducedMotion ? TRUE : FALSE, graphics.GetShadowLut());
             observer->SetSceneSink(options.enabled ? graphics.SceneSink() : nullptr);   // the card draws the walls, floors and craft when it can
         }
 #endif
