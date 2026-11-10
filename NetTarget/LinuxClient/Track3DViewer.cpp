@@ -13271,7 +13271,7 @@ int RunClient(int argc, char** argv)
             if (turnLeft) controlState |= MR_MainCharacter::eLeft;
             if (turnRight) controlState |= MR_MainCharacter::eRight;
             if (moveBackward) controlState |= MR_MainCharacter::eBreakDirection;
-            if (fire) controlState |= MR_MainCharacter::eFire;
+            if (fire || (autoPlay && std::getenv("HOVERNET_TEST_AUTOFIRE") != nullptr && (SDL_GetTicks() % 2000) < 250)) controlState |= MR_MainCharacter::eFire;   // test hook: an autoplaying craft fires now and then
             if (jump) controlState |= MR_MainCharacter::eJump;
             if (selectWeapon) controlState |= MR_MainCharacter::eSelectWeapon;
 #ifdef HOVERNET_GAME2_PLAYER

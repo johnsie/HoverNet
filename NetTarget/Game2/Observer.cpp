@@ -850,6 +850,7 @@ void MR_Observer::UpdateModernHints( const MR_MainCharacter* pViewingCharacter, 
                lBlast.mStart = pTime;
                lBlast.mMine = lMemo.mClass == 151;
                mBlasts.push_back( lBlast );
+               if( getenv( "HOVERNET_GFX_DEBUG" ) != NULL ) { printf( "GFXDEBUG explosion at (%d,%d,%d) class %d\n", (int)lBlast.mPos.mX, (int)lBlast.mPos.mY, (int)lBlast.mPos.mZ, (int)lMemo.mClass ); fflush( stdout ); }
             }
          }
       }
