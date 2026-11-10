@@ -1,0 +1,111 @@
+body { font-family: Inter; font-size: 16dp; color: #f4f5f8; width: 100%; height: 100%; }
+p, h1, div { display: block; }
+.hide { display: none; }
+#header { position: absolute; left: 4%; right: 4%; top: 14dp; height: 78dp; text-align: left; }
+#eyebrow { color: #fa737a; font-size: 14dp; margin: 0; }
+h1 { font-family: Oxanium; font-size: 34dp; font-weight: bold; margin: 0; }
+#status { position: absolute; right: 0; top: 24dp; color: #8b8fa3; font-size: 15dp; margin: 0; text-align: right; }
+#rule { position: absolute; left: 0; right: 0; top: 70dp; height: 3dp; decorator: gradient( horizontal #e02a43 #e02a4300 ); }
+
+#grid { position: absolute; left: 4%; right: 4%; top: 104dp; bottom: 16dp; }
+#topbox { position: absolute; left: 0; right: 0; top: 0; height: 58%; }
+#toprow { height: 100%; display: flex; flex-direction: row; }
+#bottombox { position: absolute; left: 0; right: 0; bottom: 0; top: 59%; }
+#bottomrow { height: 100%; display: flex; flex-direction: row; }
+.panel { box-sizing: border-box; background-color: #13131af5; border-radius: 10dp; padding: 12dp 14dp; margin: 0 8dp 0 0; position: relative; }
+#listpanel, #userspanel { flex: 0 0 28%; }
+#detailspanel { flex: 1 1 0; }
+#actionspanel { flex: 0 0 22%; margin-right: 0; }
+#chatpanel { flex: 1 1 0; margin-right: 0; }
+.phead { font-family: Oxanium; font-size: 19dp; color: #fa737a; margin: 0 0 8dp 0; height: 24dp; }
+.scroll { overflow-y: auto; }
+#racelist { position: absolute; left: 14dp; right: 8dp; top: 44dp; bottom: 12dp; }
+#users { position: absolute; left: 14dp; right: 8dp; top: 44dp; bottom: 12dp; }
+#actions { position: absolute; left: 14dp; right: 8dp; top: 12dp; bottom: 12dp; padding-right: 6dp; }
+#detailsbody { position: absolute; left: 14dp; right: 14dp; top: 44dp; bottom: 12dp; }
+#mapbox { position: absolute; left: 0; top: 0; width: 190dp; height: 178dp; }
+#side { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+#info { position: absolute; left: 204dp; right: 0; top: 0; bottom: 0; padding-right: 6dp; }
+#detailsbody.nomap #mapbox { display: none; }
+#detailsbody.nomap #info { left: 0; }
+#chatlines { position: absolute; left: 14dp; right: 8dp; top: 44dp; bottom: 58dp; }
+#chatrow { position: absolute; left: 14dp; right: 14dp; bottom: 12dp; height: 38dp; }
+#chatrow input.text { position: absolute; left: 0; right: 96dp; top: 0; height: 38dp; width: auto; }
+#chatrow button { position: absolute; right: 0; top: 0; width: 88dp; height: 38dp; margin: 0; padding: 8dp 0 0 0; }
+.chatline { color: #d6d9e6; margin: 0 0 3dp 0; font-size: 15dp; }
+
+.note { color: #8b8fa3; font-size: 14dp; margin: 4dp 0 8dp 0; }
+.accent { color: #fa737a; font-size: 14dp; margin: 6dp 0; }
+.irow { margin: 0 0 4dp 0; font-size: 15dp; }
+.ilabel { color: #9d9db0; display: inline-block; width: 84dp; }
+.item { display: block; box-sizing: border-box; width: 100%; padding: 9dp 10dp; text-align: left; color: #e6e8f0; background-color: #171a24; margin-bottom: 3dp; tab-index: auto; cursor: pointer; transition: background-color 0.12s cubic-out; }
+.item:hover, .item:focus { background-color: #2b3046; color: #ffffff; }
+.item.cur { background-color: #dc3546; color: #ffffff; }
+.bullet { color: #d6d9e6; margin: 0 0 3dp 0; font-size: 15dp; }
+
+button.act {
+	display: block; box-sizing: border-box; width: 100%; padding: 10dp; margin: 6dp 0 4dp 0; text-align: center;
+	font-family: Oxanium; font-size: 17dp; font-weight: bold; color: #ffffff; background-color: #dc3546;
+	tab-index: auto; cursor: pointer; transition: background-color transform 0.12s cubic-out;
+}
+button.act.quiet { background-color: #2b2e3e; }
+button.act.big { padding: 14dp 10dp; font-size: 19dp; }
+button.act:hover, button.act:focus { background-color: #f04a5b; transform: scale(1.02); }
+button.act.quiet:hover, button.act.quiet:focus { background-color: #3a3e54; }
+button.act.disabled { background-color: #3a2a30; color: #8b8fa3; cursor: default; transform: none; }
+button.act.disabled:hover { background-color: #3a2a30; transform: none; }
+.gap { height: 10dp; }
+
+input.text {
+	display: block; box-sizing: border-box; width: 100%; padding: 9dp 10dp;
+	color: #ffffff; background-color: #0b0c11; border-width: 1dp; border-color: #303342; border-radius: 6dp;
+	font-size: 16dp; cursor: text;
+}
+input.text:focus { border-color: #fa737a; }
+input.text selection { background-color: #dc3546; color: #ffffff; }
+input.range { display: block; box-sizing: border-box; width: 100%; height: 26dp; margin: 8dp 0 4dp 0; tab-index: auto; }
+input.range slidertrack { height: 8dp; margin-top: 9dp; background-color: #303342; }
+input.range sliderbar { width: 22dp; height: 22dp; margin-top: -7dp; background-color: #dc3546; cursor: pointer; }
+input.range sliderbar:hover, input.range:focus sliderbar { background-color: #f04a5b; }
+input.range sliderarrowdec, input.range sliderarrowinc { width: 0dp; height: 0dp; display: none; }
+.toggle { display: block; box-sizing: border-box; padding: 9dp 6dp; margin: 3dp 0; tab-index: auto; cursor: pointer; transition: background-color 0.12s cubic-out; }
+.toggle:hover, .toggle:focus { background-color: #1f2230; }
+.toggle .box { display: inline-block; width: 22dp; height: 22dp; vertical-align: middle; background-color: #0b0c11; border-width: 2dp; border-color: #4a4f66; margin-right: 12dp; }
+.toggle.on .box { background-color: #dc3546; border-color: #fa737a; }
+.toggle .tlabel { vertical-align: middle; }
+.label { color: #e6e8f0; margin: 8dp 0 4dp 0; }
+.val { color: #fa737a; margin-left: 10dp; }
+
+/* the entry card (name, connecting, can't reach) */
+#entry { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+#entrycard { position: absolute; left: 50%; top: 30%; width: 540dp; margin-left: -270dp; padding: 24dp 28dp; background-color: #13131af5; border-radius: 12dp; animation: 0.5s cubic-out card-in; }
+@keyframes card-in { from { opacity: 0; transform: translateY(24dp); } to { opacity: 1; transform: translateY(0dp); } }
+.cardhead { font-family: Oxanium; font-size: 22dp; color: #fa737a; margin: 0 0 10dp 0; }
+
+/* the dialogs (host a race, join a private race) */
+#dialog { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: #000000b8; }
+#dialogbox { position: absolute; left: 50%; top: 50%; width: 860dp; height: 580dp; margin-left: -430dp; margin-top: -290dp; padding: 18dp 22dp; box-sizing: border-box; background-color: #13131a; border-radius: 12dp; }
+#dialogbox.small { width: 520dp; height: 400dp; margin-left: -260dp; margin-top: -200dp; }
+#dleft { position: absolute; left: 22dp; top: 56dp; bottom: 74dp; width: 440dp; overflow-y: auto; padding-right: 8dp; }
+#dright { position: absolute; right: 22dp; top: 56dp; bottom: 74dp; width: 340dp; }
+#dbuttons { position: absolute; left: 22dp; right: 22dp; bottom: 18dp; height: 44dp; }
+#dbuttons button { display: inline-block; width: 190dp; margin: 0 10dp 0 0; }
+#hlist { height: 120dp; overflow-y: auto; margin: 6dp 0 8dp 0; }
+.trackcur { background-color: #0b0c11; border-width: 1dp; border-color: #4a4f66; padding: 10dp 12dp; margin-bottom: 4dp; }
+
+/* the busy box (a download) */
+#busy { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: #000000b8; display: none; }
+#busy.show { display: block; }
+#busybox { position: absolute; left: 50%; top: 50%; width: 460dp; margin-left: -230dp; margin-top: -90dp; padding: 24dp; background-color: #13131a; border-radius: 12dp; text-align: center; }
+#busytitle { font-family: Oxanium; font-size: 22dp; font-weight: bold; margin: 0 0 6dp 0; }
+#busyline { color: #8b8fa3; margin: 4dp 0 12dp 0; }
+#busybar { height: 10dp; background-color: #303342; }
+#busyfill { height: 10dp; width: 0%; background-color: #fa737a; }
+
+scrollbarvertical { width: 10dp; }
+scrollbarvertical slidertrack { width: 10dp; background-color: #1b1e2a; }
+scrollbarvertical sliderbar { width: 10dp; min-height: 30dp; background-color: #3f4560; }
+scrollbarvertical sliderbar:hover { background-color: #5a6285; }
+scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0dp; height: 0dp; display: none; }
+#dside { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: #0b0c11; border-width: 1dp; border-color: #303342; border-radius: 6dp; }
+#hlapshint { margin-left: 10dp; }

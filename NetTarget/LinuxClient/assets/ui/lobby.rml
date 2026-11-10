@@ -1,0 +1,25 @@
+<rml>
+<head>
+	<title>HoverNet</title>
+	<link type="text/rcss" href="lobby.rcss"/>
+</head>
+<body>
+	<div id="header"><p id="eyebrow">ONLINE MULTIPLAYER</p><h1 id="title">HOVERNET LOBBY</h1><p id="status"></p><div id="rule"></div></div>
+	<div id="entry" class="hide"><div id="entrycard"></div></div>
+	<div id="grid" class="hide">
+		<div id="topbox"><div id="toprow">
+			<div id="listpanel" class="panel"><p class="phead">Game list</p><div id="racelist" class="scroll"></div></div>
+			<div id="detailspanel" class="panel"><p class="phead" id="detailshead">Game details</p>
+				<div id="detailsbody"><div id="mapbox"><div id="side"></div></div><div id="info" class="scroll"></div></div></div>
+			<div id="actionspanel" class="panel"><div id="actions" class="scroll"></div></div>
+		</div></div>
+		<div id="bottombox"><div id="bottomrow">
+			<div id="userspanel" class="panel"><p class="phead" id="usershead">In the lobby</p><div id="users" class="scroll"></div></div>
+			<div id="chatpanel" class="panel"><p class="phead" id="chathead">Lobby chat</p><div id="chatlines" class="scroll"></div>
+				<div id="chatrow"><input type="text" class="text" id="chatinput" data-id="chat" maxlength="200"/><button class="act quiet" id="chatsend" data-id="send" tab-index="auto">Send</button></div></div>
+		</div></div>
+	</div>
+	<div id="dialog" class="hide"></div>
+	<div id="busy"><div id="busybox"><p id="busytitle"></p><p id="busyline"></p><div id="busybar"><div id="busyfill"></div></div></div></div>
+</body>
+</rml>

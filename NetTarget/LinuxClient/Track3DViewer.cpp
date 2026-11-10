@@ -9176,10 +9176,45 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
         std::snprintf(key, sizeof(key), "%s", officialKey.c_str());
     };
 
+#ifdef HOVERNET_HAVE_RMLUI
+    // The RmlUi version of this screen (docs/rmlui.md): the logic of the loop below is shared; only the drawing and the input differ. Not used by the tests that click the ImGui
+    // widgets with real mouse events (HOVERNET_TEST_AUTH_CLICKS, HOVERNET_TEST_AUTH_STARTCLICK); if it cannot load, the ImGui screen runs.
+    std::unique_ptr<HoverNetRml::FormScreen> rml;
+    if (UseRmlUi(pFrameLimit) && clickTest == nullptr && std::getenv("HOVERNET_TEST_AUTH_STARTCLICK") == nullptr) {
+        rml.reset(new HoverNetRml::FormScreen(
+            graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "HOVERNET LOBBY", LoadReducedMotion(),
+            [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight, "lobby.rml"));
+        if (!rml->Ok()) rml.reset();
+    }
+    bool rHostOpen = false, rPrivOpen = false;
+    std::string rHostFilter, rSigEntry, rSigTop, rSigUsers, rSigChat, rSigStatus, rSigHost;
+    bool rFocusedName = false;
+    char rHostLapsText[8] = {0};
+    auto E = [](const std::string& text) { return HoverNetRml::FormScreen::Escape(text); };
+    auto trackLabelOf = [](int index) { const TrackEntry* e = Tracks().Get(index); return e == nullptr ? std::string() : e->mName + (e->mOfficial ? "" : "  -  community") + (e->mInstalled ? "" : "  (download)"); };
+    if (rml) {
+        rml->SetSideImage([&](SDL_Rect& crop) -> SDL_Texture* {
+            int trackIndex = -1;
+            if (rHostOpen) trackIndex = prefs.mTrackIndex;
+            else if (lobby.GetState() == OnlineLobby::State::eWaiting) trackIndex = FindHostableTrack(lobby.Ack().track);
+            else for (const auto& r : lobby.Races()) if (r.id == selectedRaceId) trackIndex = FindHostableTrack(r.track);
+            if (trackIndex < 0 || trackIndex >= static_cast<int>(previews.size())) return nullptr;
+            TrackPreview& preview = previews[static_cast<std::size_t>(trackIndex)];
+            if (!preview.mLoaded) preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(trackIndex).c_str());
+            if (preview.mTexture == nullptr) return nullptr;
+            crop = SDL_Rect{0, 0, preview.mWidth, preview.mHeight};
+            return preview.mTexture;
+        });
+    }
+#endif
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
         SDL_Event event;
+#ifdef HOVERNET_HAVE_RMLUI
+        while (!rml && SDL_PollEvent(&event)) {   // (the RmlUi screen reads its own events)
+#else
         while (SDL_PollEvent(&event)) {
+#endif
             MenuProcessEvent(event);
             if (event.type == SDL_QUIT) {
                 running = false;
@@ -9311,6 +9346,301 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
         }
         if (testStep == 2 && std::getenv("HOVERNET_TEST_AUTH_BROWSE") == nullptr && std::getenv("HOVERNET_TEST_AUTH_SPECTATE") == nullptr && lobby.GetState() == OnlineLobby::State::eBrowsing) { lobby.Host(Tracks().Get(0) != nullptr ? Tracks().Get(0)->mName : "ClassicH", std::getenv("HOVERNET_TEST_AUTH_PLAYERS") != nullptr ? std::max(1, std::min(8, std::atoi(std::getenv("HOVERNET_TEST_AUTH_PLAYERS")))) : 1, 1, false, ""); testStep = 3; }
 
+#ifdef HOVERNET_HAVE_RMLUI
+        if (rml) {
+            using HoverNetRml::FormScreen;
+            const OnlineLobby::State rState = lobby.GetState();
+            const bool rWaiting = rState == OnlineLobby::State::eWaiting;
+            const bool rConnected = rState == OnlineLobby::State::eBrowsing || rWaiting;
+            const auto& rRaces = lobby.Races();
+            auto pickedRace = [&]() -> const Protocol3::RaceInfo* { for (const auto& r : rRaces) if (r.id == selectedRaceId) return &r; return nullptr; };
+            if (!rWaiting) hostedCode.clear();
+            auto closeDialogs = [&]() { if (rHostOpen || rPrivOpen) { rHostOpen = rPrivOpen = false; rml->SetClass("dialog", "hide", true); rml->SetHtml("dialog", ""); rml->SetSideTarget("side"); } };
+            auto trimmed = [](std::string text) { while (!text.empty() && text.back() == ' ') text.pop_back(); while (!text.empty() && text.front() == ' ') text.erase(text.begin()); return text; };
+            auto submitName = [&]() {
+                const std::string typed = trimmed(nameBuffer);
+                if (!typed.empty() && Protocol3::IsValidText(typed, 32)) { name = typed; SaveUsername(name); nameKnown = true; problem.clear(); }
+                else problem = "Type a name (1 to 32 letters, no control characters).";
+            };
+            auto createRace = [&]() {
+                const TrackEntry* hostTrack = Tracks().Get(prefs.mTrackIndex);
+                if (hostTrack == nullptr) return;
+                lobby.Host(hostTrack->mName, players, laps, weapons, hostCode);
+                hostedCode = hostCode;
+                prefs.mLaps = laps; prefs.mWeapons = weapons;
+                SaveLocalRacePrefs(prefs);
+                closeDialogs();
+            };
+            auto fillHostList = [&]() {
+                std::string needle = rHostFilter;
+                for (char& c : needle) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                std::string html;
+                int shown = 0, matches = 0;
+                for (int i = 0; i < Tracks().Count(); ++i) {
+                    std::string label = trackLabelOf(i), lower = label;
+                    for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    if (!needle.empty() && lower.find(needle) == std::string::npos) continue;
+                    ++matches;
+                    if (shown >= 40) continue;
+                    ++shown;
+                    html += "<button class=\"item" + std::string(i == prefs.mTrackIndex ? " cur" : "") + "\" data-id=\"ht\" data-index=\"" + std::to_string(i) + "\">" + E(label) + "</button>";
+                }
+                if (matches > shown) html += "<p class=\"note\">" + std::to_string(matches - shown) + " more: keep typing to narrow the list</p>";
+                if (matches == 0) html += "<p class=\"note\">Nothing matches that</p>";
+                rml->SetHtml("hlist", html);
+            };
+            auto refreshHost = [&]() {   // the parts of the Host dialog that follow the chosen track and the code
+                const TrackEntry* hostTrack = Tracks().Get(prefs.mTrackIndex);
+                const TrackBriefing guide = BriefingFor(prefs.mTrackIndex);
+                std::string brief = "<p class=\"cardhead\">Course briefing</p><p class=\"note\">Style: " + E(guide.mCharacter) + "     Difficulty: " + E(guide.mDifficulty) + "</p><p class=\"note\">" + E(guide.mDescription) + "</p>";
+                const bool needsDownload = hostTrack != nullptr && !hostTrack->mInstalled && hostTrack->mHasDownload;
+                if (hostTrack != nullptr && !hostTrack->mOfficial) {
+                    if (needsDownload) brief += "<p class=\"accent\">Not on this computer yet - it downloads (" + E(FormatMegabytes(hostTrack->mDownloadBytes)) + ") when you create the race.</p>";
+                    brief += "<p class=\"accent\">A server hosts a community track only if its owner has installed it; if this one has not, it says so.</p>";
+                }
+                brief += "<p class=\"note\">Up to 8 players can join. You start the race when you are ready, with whoever is there (alone, it is a time trial).</p>";
+                rml->SetHtml("hbrief", brief);
+                rml->SetHtml("hcur", E(trackLabelOf(prefs.mTrackIndex)));
+                rml->SetHtml("hlapshint", guide.mFreePlay ? "Not used on a free-play track" : "Suggested: " + std::to_string(guide.mSuggestedLaps));
+                const bool codeOk = PrivateCodeOk(hostCode);
+                rml->SetHtml("hwarn", codeOk ? std::string() : "<p class=\"accent\">A private code needs 6 to 16 characters.</p>");
+                rml->SetHtml("hcreate", E(needsDownload ? "Download & Create" : (hostCode[0] != '\0' ? "Create Private Race" : "Create Race")));
+                rml->SetClass("hcreate", "disabled", !codeOk || hostTrack == nullptr || trackDownload.Active());
+            };
+            auto openHost = [&]() {
+                closeDialogs();
+                rHostOpen = true; problem.clear();
+                std::snprintf(rHostLapsText, sizeof rHostLapsText, "%d", laps);
+                std::string html = "<div id=\"dialogbox\"><p class=\"cardhead\">Host a race</p><div id=\"dleft\"><p class=\"label\">Track</p><div class=\"trackcur\" id=\"hcur\"></div>"
+                    "<input type=\"text\" class=\"text\" id=\"hq\" data-id=\"hq\" value=\"\"/><div id=\"hlist\"></div><div id=\"hbrief\"></div>"
+                    "<p class=\"label\">Laps<span class=\"val\" id=\"hlapsval\">" + std::string(rHostLapsText) + "</span> <span class=\"note\" id=\"hlapshint\"></span></p>"
+                    "<input type=\"range\" class=\"range\" id=\"hlaps\" data-id=\"hlaps\" min=\"1\" max=\"10\" step=\"1\" value=\"" + std::to_string(laps) + "\"/>"
+                    "<div class=\"toggle" + std::string(weapons ? " on" : "") + "\" id=\"hweapons\" data-id=\"hweapons\"><span class=\"box\"></span><span class=\"tlabel\">Weapons enabled</span></div>"
+                    "<p class=\"label\">Private code <span class=\"note\">6 to 16 characters; empty for a public race</span></p><input type=\"text\" class=\"text\" id=\"hcode\" data-id=\"hcode\" value=\"" + E(hostCode) + "\"/>"
+                    "<div id=\"hwarn\"></div></div><div id=\"dright\"><div id=\"dside\"></div></div>"
+                    "<div id=\"dbuttons\"><button class=\"act big\" id=\"hcreate\" data-id=\"hcreate\">Create Race</button><button class=\"act quiet back\" data-id=\"hcancel\">Cancel</button></div></div>";
+                rml->SetHtml("dialog", html);
+                rml->SetClass("dialog", "hide", false);
+                rml->SetSideTarget("dside");
+                fillHostList();
+                refreshHost();
+            };
+            auto openPrivate = [&]() {
+                closeDialogs();
+                rPrivOpen = true; problem.clear();
+                rml->SetHtml("dialog", "<div id=\"dialogbox\" class=\"small\"><p class=\"cardhead\">Join a private race</p><p class=\"note\">Private races are not listed. Type the race number and the code your friend gave you.</p>"
+                    "<p class=\"label\">Race number</p><input type=\"text\" class=\"text\" id=\"pn\" data-id=\"pn\" value=\"\"/><p class=\"label\">Code</p><input type=\"text\" class=\"text\" id=\"pc\" data-id=\"pc\" value=\"\"/>"
+                    "<div id=\"dbuttons\"><button class=\"act disabled\" id=\"pjoin\" data-id=\"pjoin\" style=\"width:100dp\">Join</button><button class=\"act quiet disabled\" id=\"pwatch\" data-id=\"pwatch\" style=\"width:100dp\">Watch</button><button class=\"act quiet back\" data-id=\"pcancel\" style=\"width:100dp\">Cancel</button></div></div>");
+                rml->SetClass("dialog", "hide", false);
+                raceNumber[0] = joinCode[0] = '\0';
+            };
+            if (requestHostPopup) { requestHostPopup = false; openHost(); }   // (the screenshot hook asks through these two)
+            if (requestPrivatePopup) { requestPrivatePopup = false; openPrivate(); }
+            HoverNetRml::FormOutcome rOutcome;
+            std::vector<HoverNetRml::FormEvent> rEvents;
+            rOutcome = rml->Frame(rEvents, framesShown, std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit);
+            if (rOutcome == HoverNetRml::FormOutcome::eClose) { running = false; g_QuitConfirmed = true; }
+            else if (rOutcome == HoverNetRml::FormOutcome::eCancel || rOutcome == HoverNetRml::FormOutcome::eSave) {
+                if (rHostOpen || rPrivOpen) { if (!trackDownload.Active()) closeDialogs(); }
+                else if (rWaiting) lobby.Cancel();
+                else { if (rConnected) lobby.Close(); running = false; }
+            }
+            for (const HoverNetRml::FormEvent& e : rEvents) {
+                if (e.id == "name") { std::snprintf(nameBuffer, 33, "%s", e.text.c_str()); }
+                else if (e.id == "name#enter" || e.id == "entername") { std::snprintf(nameBuffer, 33, "%s", e.id == "name#enter" ? e.text.c_str() : nameBuffer); submitName(); }
+                else if (e.id == "back") { if (rConnected) lobby.Close(); running = false; }
+                else if (e.id == "retry") { showCard = false; autoPending = true; autoAttempt = false; connectingFrames = 0; problem.clear(); lobby.Close(); }
+                else if (e.id == "official") { settings = AuthServerSettings(); AuthServerSettings official; SaveAuthServerSettings(official); showCard = false; autoPending = true; autoAttempt = false; connectingFrames = 0; problem.clear(); lobby.Close(); }
+                else if (e.id == "race") { if (e.index >= 0 && e.index < static_cast<int>(rRaces.size())) selectedRaceId = rRaces[static_cast<std::size_t>(e.index)].id; }
+                else if (e.id == "join") { if (const Protocol3::RaceInfo* r = pickedRace()) if (!r->started && r->joined < r->players) joinListedRace(*r); }
+                else if (e.id == "watch") { if (const Protocol3::RaceInfo* r = pickedRace()) watchListedRace(*r); }
+                else if (e.id == "cancelwatch") lobby.CancelQueuedWatch();
+                else if (e.id == "host") openHost();
+                else if (e.id == "private") openPrivate();
+                else if (e.id == "start") lobby.StartRace();
+                else if (e.id == "leave") lobby.Cancel();
+                else if (e.id == "chat") std::snprintf(chatInput, sizeof chatInput, "%s", e.text.c_str());
+                else if (e.id == "chat#enter" || e.id == "send") {
+                    if (e.id == "chat#enter") std::snprintf(chatInput, sizeof chatInput, "%s", e.text.c_str());
+                    if (chatInput[0] != '\0') { lobby.SendChat(chatInput); chatInput[0] = '\0'; rml->SetInput("chatinput", ""); }
+                    rml->FocusElement("chatinput");
+                }
+                else if (e.id == "hq") { rHostFilter = e.text; fillHostList(); }
+                else if (e.id == "ht") { if (e.index >= 0 && e.index < Tracks().Count()) { prefs.mTrackIndex = e.index; fillHostList(); refreshHost(); } }
+                else if (e.id == "hlaps") { laps = std::max(1, std::min(10, static_cast<int>(e.value + 0.5f))); rml->SetHtml("hlapsval", std::to_string(laps)); }
+                else if (e.id == "hweapons") weapons = e.on;
+                else if (e.id == "hcode") { std::snprintf(hostCode, sizeof hostCode, "%s", e.text.c_str()); refreshHost(); }
+                else if (e.id == "hcancel") { if (!trackDownload.Active()) closeDialogs(); }
+                else if (e.id == "hcreate") {
+                    const TrackEntry* hostTrack = Tracks().Get(prefs.mTrackIndex);
+                    if (hostTrack != nullptr && PrivateCodeOk(hostCode) && !trackDownload.Active()) {
+                        if (!hostTrack->mInstalled && hostTrack->mHasDownload) { afterDownload = AfterDownload::eHost; trackDownload.Begin({*hostTrack}, 1); }
+                        else createRace();
+                    }
+                }
+                else if (e.id == "pn") { std::snprintf(raceNumber, sizeof raceNumber, "%s", e.text.c_str()); }
+                else if (e.id == "pc") { std::snprintf(joinCode, sizeof joinCode, "%s", e.text.c_str()); }
+                else if (e.id == "pjoin" || e.id == "pwatch") {
+                    const std::uint32_t number = static_cast<std::uint32_t>(std::strtoul(raceNumber, nullptr, 10));
+                    if (number != 0 && joinCode[0] != '\0') { if (e.id == "pjoin") lobby.Join(number, joinCode); else lobby.Spectate(number, joinCode); closeDialogs(); }
+                }
+                else if (e.id == "pcancel") closeDialogs();
+                if (rPrivOpen && (e.id == "pn" || e.id == "pc")) {
+                    const bool valid = std::strtoul(raceNumber, nullptr, 10) != 0 && joinCode[0] != '\0';
+                    rml->SetClass("pjoin", "disabled", !valid); rml->SetClass("pwatch", "disabled", !valid);
+                }
+            }
+            // a track download (a listed race, the host dialog's track, or the race about to start) is shown over the screen
+            if (TrackDownloadJob* job = trackDownload.Job()) {
+                if (!job->Finished()) {
+                    const long long totalBytes = std::max<long long>(1, job->TotalBytes());
+                    rml->SetBusy("Downloading track", job->CurrentName() + "   " + FormatMegabytes(job->BytesDone()) + " of " + FormatMegabytes(totalBytes), std::min(1.0f, static_cast<float>(job->BytesDone()) / static_cast<float>(totalBytes)), "");
+                }
+                else {
+                    Tracks().Refresh();
+                    const bool ok = job->Succeeded();
+                    const std::string error = job->Error();
+                    trackDownload.Reset();
+                    rml->SetBusy("", "", -1.0f, "");
+                    for (TrackPreview& preview : previews) if (preview.mTexture != nullptr && !preview.mLoaded) { SDL_DestroyTexture(preview.mTexture); preview = TrackPreview(); }
+                    const AfterDownload what = afterDownload;
+                    afterDownload = AfterDownload::eNone;
+                    if (ok) {
+                        if (what == AfterDownload::eJoin) lobby.Join(afterDownloadRace, "");
+                        else if (what == AfterDownload::eWatch) lobby.WatchWhenStarted(afterDownloadRace, "");
+                        else if (what == AfterDownload::eHost) createRace();
+                    }
+                    else { if (what == AfterDownload::eNone) trackDownloadFailed = true; else problem = "The track download did not finish: " + error; }
+                    if (rHostOpen) refreshHost();
+                }
+            }
+            if (rHostOpen) rml->SetClass("hcreate", "disabled", !PrivateCodeOk(hostCode) || trackDownload.Active());
+            // ---- what is on the screen
+            rml->SetClass("entry", "hide", rConnected);
+            rml->SetClass("grid", "hide", !rConnected);
+            {
+                const std::string status = rConnected ? (settings.custom ? "Connected to " + settings.address : std::string("Connected to the HoverNet server")) + " as " + name : std::string();
+                if (status != rSigStatus) { rSigStatus = status; rml->SetHtml("status", E(status)); }
+            }
+            if (!rConnected) {
+                const std::string sig = std::to_string(nameKnown) + std::to_string(showCard) + std::to_string(static_cast<int>(rState)) + lobby.Message() + problem;
+                if (sig != rSigEntry) {
+                    rSigEntry = sig;
+                    std::string html;
+                    const std::string err = problem.empty() ? std::string() : "<p class=\"accent\">" + E(problem) + "</p>";
+                    if (!nameKnown) {
+                        html = "<p class=\"cardhead\">WELCOME, RACER</p><p class=\"note\">Choose the name other drivers will see in the lobby.</p><input type=\"text\" class=\"text\" id=\"namein\" data-id=\"name\" value=\"" + E(nameBuffer) + "\"/>" + err +
+                               "<button class=\"act big\" data-id=\"entername\">ENTER THE LOBBY</button><button class=\"act quiet back\" data-id=\"back\">Back to Menu</button>";
+                    }
+                    else if (showCard) {
+                        html = "<p class=\"cardhead\">CAN'T REACH THE SERVER</p><p class=\"note\">This is the HoverNet server you chose in Settings. Check it there, or go back to the official HoverNet server.</p>";
+                        if (rState == OnlineLobby::State::eFailed || (rState == OnlineLobby::State::eIdle && !lobby.Message().empty())) html += "<p class=\"accent\">" + E(lobby.Message()) + "</p>";
+                        html += err + "<button class=\"act big\" data-id=\"retry\">TRY AGAIN</button><button class=\"act quiet\" data-id=\"official\">Use the official HoverNet server</button><button class=\"act quiet back\" data-id=\"back\">Back to Menu</button>";
+                    }
+                    else html = "<p class=\"cardhead\">CONNECTING</p><p class=\"note\">Looking for the HoverNet server...</p><button class=\"act quiet back\" data-id=\"back\">Back to Menu</button>";
+                    rml->SetHtml("entrycard", html);
+                    if (!nameKnown && !rFocusedName) { rFocusedName = true; rml->FocusElement("namein"); }
+                }
+            }
+            else {
+                const Protocol3::RaceInfo* picked = pickedRace();
+                if (picked == nullptr && !rWaiting && !rRaces.empty() && std::getenv("HOVERNET_TEST_AUTH_SELECT") != nullptr) { selectedRaceId = rRaces[0].id; picked = &rRaces[0]; }
+                rml->SetClass("listpanel", "hide", rWaiting);
+                rml->SetClass("userspanel", "hide", rWaiting);
+                // the top row: list, details, actions
+                std::string sig = std::to_string(static_cast<int>(rState)) + "|" + std::to_string(selectedRaceId) + "|" + lobby.Notice() + "|" + problem + "|" + std::to_string(lobby.QueuedWatchId()) + "|" + hostedCode + "|" + std::to_string(trackDownload.Active());
+                for (const auto& r : rRaces) sig += "|" + std::to_string(r.id) + ":" + std::to_string(r.joined) + (r.started ? "s" : "w");
+                if (rWaiting) { sig += "|" + lobby.Ack().track + std::to_string(lobby.Ack().laps) + std::to_string(lobby.Ack().raceId); for (const auto& m : lobby.GetRoster().members) sig += "|" + std::to_string(m.first) + m.second; }
+                if (sig != rSigTop) {
+                    rSigTop = sig;
+                    auto infoRow = [&](const std::string& label, const std::string& value) { return "<p class=\"irow\"><span class=\"ilabel\">" + E(label) + "</span>" + E(value) + "</p>"; };
+                    std::string races, details, actions;
+                    if (!rWaiting) {
+                        if (rRaces.empty()) races = "<p class=\"note\">No open races - host one to get started</p>";
+                        for (std::size_t i = 0; i < rRaces.size(); ++i) {
+                            const auto& r = rRaces[i];
+                            races += "<button class=\"item" + std::string(r.id == selectedRaceId ? " cur" : "") + "\" data-id=\"race\" data-index=\"" + std::to_string(i) + "\">" + E(r.track + "  (" + std::to_string(r.joined) + "/" + std::to_string(r.players) + ")" + (r.started ? "  (racing)" : "")) + "</button>";
+                        }
+                    }
+                    rml->SetHtml("detailshead", rWaiting ? "Your race" : "Game details");
+                    rml->SetClass("detailsbody", "nomap", false);
+                    if (rWaiting) {
+                        const Protocol3::HelloAck& ack = lobby.Ack();
+                        const Protocol3::Roster& roster = lobby.GetRoster();
+                        const TrackBriefing briefing = BriefingFor(FindHostableTrack(ack.track));
+                        details += infoRow("Track:", ack.track.empty() ? "-" : ack.track);
+                        if (!ack.track.empty()) {
+                            details += infoRow("Laps:", briefing.mFreePlay ? "none (free play)" : std::to_string(ack.laps));
+                            details += infoRow("Weapons:", ack.weapons ? "On" : "Off");
+                            if (ack.raceId != 0) details += infoRow("Race:", "number " + std::to_string(ack.raceId));
+                        }
+                        if (ack.raceId != 0 && !hostedCode.empty()) details += "<p class=\"accent\">Private race: tell your friends number " + std::to_string(ack.raceId) + " and code " + E(hostedCode) + ". They type both under \"Join a private race\".</p>";
+                        details += "<p class=\"cardhead\">Players (" + std::to_string(roster.members.size()) + " / " + std::to_string(roster.seats != 0 ? static_cast<int>(roster.seats) : static_cast<int>(ack.players)) + ")</p>";
+                        for (const auto& member : roster.members) details += "<p class=\"bullet\">" + E(member.second + (member.first == ack.player ? " (you)" : "") + (member.first == 0 ? " - host" : "")) + "</p>";
+                        if (roster.members.empty()) details += "<p class=\"bullet\">" + E(name + " (you)" + (lobby.IsHost() ? " - host" : "")) + "</p>";
+                        const bool alone = roster.members.size() < 2;
+                        if (lobby.IsHost()) actions += "<button class=\"act big\" data-id=\"start\">Start Race</button><p class=\"note\">" + std::string(alone ? "Others can still join until you start." : "Start the race when you are ready.") + "</p>";
+                        else actions += "<p class=\"note\">Waiting for the host to start the race...</p>";
+                        actions += "<button class=\"act quiet\" data-id=\"leave\">Leave Race</button>";
+                    }
+                    else if (picked != nullptr) {
+                        const int trackIndex = FindHostableTrack(picked->track);
+                        const TrackBriefing briefing = BriefingFor(trackIndex);
+                        details += infoRow("Track:", picked->track) + infoRow("Laps:", briefing.mFreePlay ? "none (free play)" : std::to_string(picked->laps)) + infoRow("Weapons:", picked->weapons ? "On" : "Off") +
+                                   infoRow("Players:", std::to_string(picked->joined) + " / " + std::to_string(picked->players));
+                        if (trackIndex >= 0) details += infoRow("Style:", briefing.mCharacter + " - " + briefing.mDifficulty);
+                        details += infoRow("Status:", picked->started ? "Race in progress" : "Waiting for players") + infoRow("Race:", "number " + std::to_string(picked->id));
+                        if (trackIndex >= 0 && !briefing.mDescription.empty()) details += "<p class=\"note\">" + E(briefing.mDescription) + "</p>";
+                    }
+                    else { details = "<p class=\"note\">Select a race in the list to see its track, laps, weapons and players, or host your own.</p>"; rml->SetClass("detailsbody", "nomap", true); }
+                    if (!rWaiting) {
+                        const bool canJoin = picked != nullptr && !picked->started && picked->joined < picked->players;
+                        const TrackEntry* joinTrack = picked != nullptr ? Tracks().Get(Tracks().Find(picked->track)) : nullptr;
+                        const bool needsDownload = joinTrack != nullptr && !joinTrack->mInstalled && joinTrack->mHasDownload;
+                        actions += std::string("<button class=\"act big") + (canJoin ? "" : " disabled") + "\" data-id=\"join\">" + (needsDownload ? "Download &amp; Join" : "Join Game") + "</button>";
+                        if (lobby.QueuedWatchId() != 0) actions += "<button class=\"act quiet\" data-id=\"cancelwatch\">Waiting for the race to start (click to cancel)</button>";
+                        else actions += std::string("<button class=\"act quiet") + (picked != nullptr ? "" : " disabled") + "\" data-id=\"watch\">Watch Race</button>";
+                        actions += "<div class=\"gap\"></div><button class=\"act big\" data-id=\"host\">HOST A RACE</button><button class=\"act quiet\" data-id=\"private\">Join a private race</button>";
+                    }
+                    if (!lobby.Notice().empty() || !problem.empty()) actions += "<div class=\"gap\"></div>" + (lobby.Notice().empty() ? std::string() : "<p class=\"accent\">" + E(lobby.Notice()) + "</p>") + (problem.empty() ? std::string() : "<p class=\"accent\">" + E(problem) + "</p>");
+                    actions += "<div class=\"gap\"></div><button class=\"act quiet back\" data-id=\"back\">Back to Menu</button>";
+#ifdef HOVERNET_WEB
+                    if (rWaiting) actions += "<p class=\"note\">Keep this tab in front: your browser pauses a tab you cannot see.</p>";
+#endif
+                    if (!rWaiting) rml->SetHtml("racelist", races);
+                    rml->SetHtml("info", details);
+                    rml->SetHtml("actions", actions);
+                }
+                // who is here
+                if (!rWaiting) {
+                    std::string usersSig = std::to_string(lobby.UsersTotal());
+                    for (const std::string& u : lobby.Users()) usersSig += "|" + u;
+                    if (usersSig != rSigUsers) {
+                        rSigUsers = usersSig;
+                        rml->SetHtml("usershead", "In the lobby (" + std::to_string(lobby.UsersTotal() > 0 ? lobby.UsersTotal() : 1) + ")");
+                        std::string html;
+                        bool listedYou = false;
+                        for (const std::string& user : lobby.Users()) { html += "<p class=\"bullet\">" + E(user) + (!listedYou && user == name ? " (you)" : "") + "</p>"; if (user == name) listedYou = true; }
+                        if (lobby.Users().empty()) html += "<p class=\"bullet\">" + E(name) + " (you)</p>";
+                        if (lobby.UsersTotal() > static_cast<int>(lobby.Users().size())) html += "<p class=\"note\">+ " + std::to_string(lobby.UsersTotal() - static_cast<int>(lobby.Users().size())) + " more</p>";
+                        rml->SetHtml("users", html);
+                    }
+                }
+                // the chat
+                const std::string chatSig = std::to_string(lobby.ChatLines().size()) + (rWaiting ? "w" : "l");
+                if (chatSig != rSigChat) {
+                    rSigChat = chatSig;
+                    rml->SetHtml("chathead", rWaiting ? "Race chat" : "Lobby chat");
+                    std::string html;
+                    for (const std::string& line : lobby.ChatLines()) html += "<p class=\"chatline\">" + E(line) + "</p>";
+                    rml->SetHtml("chatlines", html);
+                    rml->ScrollToEnd("chatlines");
+                }
+                if (focusChat) { focusChat = false; rml->FocusElement("chatinput"); }   // (the loop above asks for it once the lobby is open)
+            }
+            continue;
+        }
+#endif
         SDL_Renderer* renderer = graphics.GetRenderer();
         SDL_RenderSetLogicalSize(renderer, 0, 0);
         ImGui_ImplSDLRenderer2_NewFrame();
@@ -9837,7 +10167,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     StartMarketCatalogueRefresh(pFrameLimit >= 0);   // the Track Market's list of tracks, fetched in the background
     ApplyMarketCatalogueUpdate();
 #ifdef HOVERNET_HAVE_RMLUI
-    if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this menu (docs/rmlui.md); anything it cannot do falls back to the menu below
+    if (UseRmlUi(pFrameLimit) && std::getenv("HOVERNET_TEST_MENU") == nullptr) {   // the RmlUi version of this menu (docs/rmlui.md); anything it cannot do falls back to the menu below (the test hook that opens a screen straight from the menu uses the older menu)
         HoverNetRml::MainMenuInfo info;
         info.assetDir = SourcePath("NetTarget/LinuxClient/assets");
         info.version = HOVERNET_VERSION;

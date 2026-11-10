@@ -132,8 +132,11 @@ enum class FormOutcome { eNone, eSave, eCancel, eClose };
 class FormScreen
 {
 public:
+    // `document` is the markup file in ui/. Anything but the default form.rml is a "free" screen: the caller fills regions of it with SetHtml and hears clicks, changes and Enter on
+    // any element that carries a data-id attribute (the event's id is that data-id; data-index, if present, is its index; a text or range input reports its value and "<id>#enter"
+    // when Enter is pressed in it). Elements with a tab-index take the arrow keys; Escape is eCancel; the class "back" gives the back sound; "hide" hides an element.
     FormScreen(SDL_Window* window, SDL_Renderer* renderer, const std::string& assetDir, const std::string& title, bool reducedMotion, std::function<void(Sound)> sound,
-               int restoreW, int restoreH);
+               int restoreW, int restoreH, const std::string& document = "form.rml");
     ~FormScreen();
     FormScreen(const FormScreen&) = delete;
     FormScreen& operator=(const FormScreen&) = delete;
@@ -147,6 +150,13 @@ public:
     void SetSlider(const std::string& id, float value);
     void SetSelect(const std::string& id, int index, const std::string& shown);
     void SetLayout(bool wide, bool tabs);                                // wide: a second column on the right for a picture; tabs: show the tab bar
+    // Free screens (see the constructor): replace the content of an element, switch a class, set an input's value, focus an element, scroll one to its end.
+    void SetHtml(const std::string& id, const std::string& rml);
+    void SetClass(const std::string& id, const std::string& cls, bool on);
+    void SetInput(const std::string& id, const std::string& value);
+    void FocusElement(const std::string& id);
+    void ScrollToEnd(const std::string& id);
+    static std::string Escape(const std::string& text);
     void SetCardWidth(int dp);                                           // the card and footer are this wide (a table wants more than a form)
     void SetFooter(const std::string& saveLabel, const std::string& cancelLabel);   // an empty cancel label leaves one wide button
     // While capturing, the next key (or controller button) is reported as a "capturekey" (index = SDL scancode) or "capturebutton" (index = SDL button) event instead of moving the
@@ -154,6 +164,7 @@ public:
     void SetCapture(bool keys, bool buttons);
     // A picture beside the controls (the track map): called every frame, returns the texture to draw (null = none) and sets crop to the part to show. The caller owns it.
     void SetSideImage(std::function<SDL_Texture*(SDL_Rect&)> image);
+    void SetSideTarget(const std::string& id);   // the element the side image is drawn in (default "side")
     // A box over everything with a message, an optional progress bar (fraction < 0: none) and one button (a "busy" event when pressed); empty title hides it.
     void SetBusy(const std::string& title, const std::string& line, float fraction, const std::string& buttonLabel);
     // One frame: input, update, drawing. Fills `events` with what the player changed.

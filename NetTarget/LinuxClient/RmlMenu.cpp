@@ -688,6 +688,37 @@ public:
     // choosers: id -> every choice and the chosen one; the filter box narrows the list shown to the first 60 matches
     struct Chooser { std::vector<std::string> items; int selected = 0; };
     std::map<std::string, Chooser> choosers;
+    bool generic = false;                  // a free screen: events come from data-id elements (see FormScreen's constructor)
+    Rml::Element* lastHover = nullptr;
+
+    void ProcessGeneric(Rml::Event& pEvent)
+    {
+        Rml::Element* e = pEvent.GetTargetElement();
+        while (e != nullptr && e->GetAttribute<Rml::String>("data-id", "").empty()) e = e->GetParentNode();
+        if (e == nullptr) { if (pEvent.GetId() == Rml::EventId::Mouseover) lastHover = nullptr; return; }
+        const Rml::String id = e->GetAttribute<Rml::String>("data-id", "");
+        const bool input = e->GetTagName() == "input";
+        if (pEvent.GetId() == Rml::EventId::Mouseover) {
+            if (e != lastHover && !input && sound) sound(Sound::eHover);
+            lastHover = e;
+            return;
+        }
+        FormEvent event;
+        event.id = id;
+        event.index = e->GetAttribute<int>("data-index", 0);
+        if (pEvent.GetId() == Rml::EventId::Change) {
+            if (!input) return;
+            event.text = pEvent.GetParameter<Rml::String>("value", "");
+            event.value = pEvent.GetParameter<float>("value", static_cast<float>(std::atof(event.text.c_str())));
+            pending.push_back(event);
+            return;
+        }
+        if (input) return;   // a click in an input only focuses it
+        if (e->IsClassSet("disabled")) return;
+        if (sound) sound(e->IsClassSet("back") ? Sound::eBack : Sound::eClick);
+        if (e->IsClassSet("toggle")) { const bool on = !e->IsClassSet("on"); e->SetClass("on", on); event.on = on; }
+        pending.push_back(event);
+    }
 
     static std::string Lower(std::string pText) { for (char& c : pText) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return pText; }
 
@@ -715,6 +746,7 @@ public:
 
     void ProcessEvent(Rml::Event& pEvent) override
     {
+        if (generic) { ProcessGeneric(pEvent); return; }
         Rml::Element* element = pEvent.GetCurrentElement();
         const Rml::String id = element->GetId();
         if (pEvent.GetId() == Rml::EventId::Mouseover) { if (sound && (element->IsClassSet("act") || element->IsClassSet("tab") || element->IsClassSet("toggle") || element->IsClassSet("arrow") || element->IsClassSet("item") || element->IsClassSet("chooserbtn"))) sound(Sound::eHover); return; }
@@ -812,12 +844,13 @@ struct FormScreen::Impl
     std::vector<std::string> script;     // test hook HOVERNET_TEST_RML: "tab:2", "click:name", "text:name=Tester", "enter", "down" ...
     int tabCount = 0;
     std::function<SDL_Texture*(SDL_Rect&)> sideImage;
+    std::string sideId = "side";
     bool busyFocused = false;
     bool captureKeys = false, captureButtons = false;
 };
 
 FormScreen::FormScreen(SDL_Window* pWindow, SDL_Renderer* pRenderer, const std::string& pAssetDir, const std::string& pTitle, bool, std::function<void(Sound)> pSound,
-                       int pRestoreW, int pRestoreH)
+                       int pRestoreW, int pRestoreH, const std::string& pDocument)
     : mImpl(new Impl)
 {
     Impl& m = *mImpl;
@@ -836,8 +869,12 @@ FormScreen::FormScreen(SDL_Window* pWindow, SDL_Renderer* pRenderer, const std::
     if (m.context != nullptr) m.ss->Resize(m.context, m.width, m.height);
     Rml::LoadFontFace(pAssetDir + "/Inter-Variable.ttf", true);
     Rml::LoadFontFace(pAssetDir + "/Oxanium-Variable.ttf", false);
-    m.document = m.context != nullptr ? m.context->LoadDocument(pAssetDir + "/ui/form.rml") : nullptr;
-    if (m.document == nullptr) { std::fprintf(stderr, "RmlUi form: could not load %s/ui/form.rml\n", pAssetDir.c_str()); return; }
+    m.document = m.context != nullptr ? m.context->LoadDocument(pAssetDir + "/ui/" + pDocument) : nullptr;
+    if (m.document == nullptr) { std::fprintf(stderr, "RmlUi form: could not load %s/ui/%s\n", pAssetDir.c_str(), pDocument.c_str()); return; }
+    if (pDocument != "form.rml") {
+        m.listener.generic = true;
+        for (const char* type : {"click", "mouseover", "change"}) m.document->AddEventListener(type, &m.listener);
+    }
     if (Rml::Element* title = m.document->GetElementById("title")) title->SetInnerRML(Escaped(pTitle));
     for (const char* id : {"save", "cancel"}) if (Rml::Element* button = m.document->GetElementById(id)) { button->AddEventListener("click", &m.listener); button->AddEventListener("mouseover", &m.listener); }
     m.document->Show();
@@ -946,6 +983,13 @@ void FormScreen::SetLayout(bool pWide, bool pTabs)
     if (Rml::Element* footer = m.document->GetElementById("footer")) footer->SetClass("wide", pWide);
 }
 
+std::string FormScreen::Escape(const std::string& pText) { return Escaped(pText); }
+void FormScreen::SetHtml(const std::string& pId, const std::string& pRml) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) e->SetInnerRML(pRml); }
+void FormScreen::SetClass(const std::string& pId, const std::string& pClass, bool pOn) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) e->SetClass(pClass, pOn); }
+void FormScreen::SetInput(const std::string& pId, const std::string& pValue) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) if (auto* control = dynamic_cast<Rml::ElementFormControl*>(e)) control->SetValue(pValue); }
+void FormScreen::FocusElement(const std::string& pId) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) e->Focus(); }
+void FormScreen::ScrollToEnd(const std::string& pId) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) e->SetScrollTop(e->GetScrollHeight()); }
+
 void FormScreen::SetCardWidth(int pDp)
 {
     Impl& m = *mImpl;
@@ -962,6 +1006,7 @@ void FormScreen::SetFooter(const std::string& pSave, const std::string& pCancel)
 
 void FormScreen::SetCapture(bool pKeys, bool pButtons) { mImpl->captureKeys = pKeys; mImpl->captureButtons = pButtons; }
 
+void FormScreen::SetSideTarget(const std::string& pId) { mImpl->sideId = pId; }
 void FormScreen::SetSideImage(std::function<SDL_Texture*(SDL_Rect&)> pImage) { mImpl->sideImage = std::move(pImage); }
 
 void FormScreen::SetBusy(const std::string& pTitle, const std::string& pLine, float pFraction, const std::string& pButton)
@@ -1078,6 +1123,12 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
             if (key == SDLK_UP) { focusStep(true); continue; }
             if (!typing && key == SDLK_LEFT && arrowOnSelect(false)) continue;
             if (!typing && key == SDLK_RIGHT && arrowOnSelect(true)) continue;
+            if (typing && m.listener.generic && (key == SDLK_RETURN || key == SDLK_KP_ENTER) && focused != nullptr && !focused->GetAttribute<Rml::String>("data-id", "").empty()) {
+                FormEvent e; e.id = focused->GetAttribute<Rml::String>("data-id", "") + "#enter";
+                if (auto* control = dynamic_cast<Rml::ElementFormControl*>(focused)) e.text = control->GetValue();
+                m.listener.pending.push_back(e);
+                continue;
+            }
             if (!typing && (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_SPACE)) { if (focused != nullptr) focused->Click(); continue; }
         }
         if (event.type == SDL_CONTROLLERBUTTONDOWN) {
@@ -1101,7 +1152,7 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
     if (m.sideImage) {   // the picture beside the controls (the track map), inside the #side box
         SDL_Rect crop = {0, 0, 0, 0};
         SDL_Texture* image = m.sideImage(crop);
-        Rml::Element* side = m.document->GetElementById("side");
+        Rml::Element* side = m.document->GetElementById(m.sideId);
         if (image != nullptr && side != nullptr && side->IsVisible() && crop.w > 0 && crop.h > 0) {
             const Rml::Vector2f origin = side->GetAbsoluteOffset(Rml::Box::BORDER), size = side->GetBox().GetSize(Rml::Box::BORDER);
             const float aspect = static_cast<float>(crop.w) / static_cast<float>(crop.h);
