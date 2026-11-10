@@ -693,6 +693,7 @@ public:
     struct Chooser { std::vector<std::string> items; int selected = 0; };
     std::map<std::string, Chooser> choosers;
     bool generic = false;                  // a free screen: events come from data-id elements (see FormScreen's constructor)
+    std::map<std::string, std::string> programmatic;   // inputs the caller set by SetInput: the change event that sets reports is not the player's
     Rml::Element* lastHover = nullptr;
 
     void ProcessGeneric(Rml::Event& pEvent)
@@ -714,6 +715,12 @@ public:
             if (!input) return;
             event.text = pEvent.GetParameter<Rml::String>("value", "");
             event.value = pEvent.GetParameter<float>("value", static_cast<float>(std::atof(event.text.c_str())));
+            auto set = programmatic.find(e->GetId());
+            if (set != programmatic.end()) {   // the caller's own SetInput: not a change by the player
+                const bool same = std::atof(set->second.c_str()) == static_cast<double>(event.value) && (e->GetAttribute<Rml::String>("type", "text") != "text" || set->second == event.text);
+                programmatic.erase(set);
+                if (same) return;
+            }
             pending.push_back(event);
             return;
         }
@@ -849,6 +856,7 @@ struct FormScreen::Impl
     int tabCount = 0;
     std::function<SDL_Texture*(SDL_Rect&)> sideImage;
     std::string sideId = "side";
+    std::vector<std::pair<std::string, std::function<SDL_Texture*(SDL_Rect&)>>> images;
     bool busyFocused = false;
     bool captureKeys = false, captureButtons = false;
 };
@@ -990,7 +998,14 @@ void FormScreen::SetLayout(bool pWide, bool pTabs)
 std::string FormScreen::Escape(const std::string& pText) { return Escaped(pText); }
 void FormScreen::SetHtml(const std::string& pId, const std::string& pRml) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) e->SetInnerRML(pRml); }
 void FormScreen::SetClass(const std::string& pId, const std::string& pClass, bool pOn) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) e->SetClass(pClass, pOn); }
-void FormScreen::SetInput(const std::string& pId, const std::string& pValue) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) if (auto* control = dynamic_cast<Rml::ElementFormControl*>(e)) control->SetValue(pValue); }
+void FormScreen::SetInput(const std::string& pId, const std::string& pValue)
+{
+    Rml::Element* e = mImpl->document->GetElementById(pId);
+    auto* control = dynamic_cast<Rml::ElementFormControl*>(e);
+    if (control == nullptr) return;
+    mImpl->listener.programmatic[pId] = pValue;
+    control->SetValue(pValue);   // (the change it reports, now or at the next update, is matched against the entry in ProcessGeneric; an entry that is never matched only ever equals a value the player did not change)
+}
 void FormScreen::FocusElement(const std::string& pId) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) e->Focus(); }
 void FormScreen::ScrollToEnd(const std::string& pId) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) e->SetScrollTop(e->GetScrollHeight()); }
 
@@ -1010,6 +1025,21 @@ void FormScreen::SetFooter(const std::string& pSave, const std::string& pCancel)
 
 void FormScreen::SetCapture(bool pKeys, bool pButtons) { mImpl->captureKeys = pKeys; mImpl->captureButtons = pButtons; }
 
+void FormScreen::SetImage(const std::string& pId, std::function<SDL_Texture*(SDL_Rect&)> pImage)
+{
+    for (auto& entry : mImpl->images) if (entry.first == pId) { entry.second = std::move(pImage); return; }
+    mImpl->images.emplace_back(pId, std::move(pImage));
+}
+bool FormScreen::ElementBox(const std::string& pId, SDL_FRect& pBox) const
+{
+    Impl& m = *mImpl;
+    Rml::Element* e = m.document->GetElementById(pId);
+    if (e == nullptr || !e->IsVisible()) return false;
+    const Rml::Vector2f origin = e->GetAbsoluteOffset(Rml::Box::BORDER), size = e->GetBox().GetSize(Rml::Box::BORDER);
+    const float f = static_cast<float>(m.ss->factor);
+    pBox = SDL_FRect{origin.x / f, origin.y / f, size.x / f, size.y / f};
+    return true;
+}
 void FormScreen::SetSideTarget(const std::string& pId) { mImpl->sideId = pId; }
 void FormScreen::SetSideImage(std::function<SDL_Texture*(SDL_Rect&)> pImage) { mImpl->sideImage = std::move(pImage); }
 
@@ -1159,6 +1189,24 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
         Rml::Element* side = m.document->GetElementById(m.sideId);
         if (image != nullptr && side != nullptr && side->IsVisible() && crop.w > 0 && crop.h > 0) {
             const Rml::Vector2f origin = side->GetAbsoluteOffset(Rml::Box::BORDER), size = side->GetBox().GetSize(Rml::Box::BORDER);
+            const float aspect = static_cast<float>(crop.w) / static_cast<float>(crop.h);
+            float w = size.x, h = w / aspect;
+            if (h > size.y) { h = size.y; w = h * aspect; }
+            const SDL_FRect to = {origin.x + (size.x - w) * 0.5f, origin.y + (size.y - h) * 0.5f, w, h};
+            SDL_SetTextureAlphaMod(image, 255);
+            SDL_RenderCopyF(m.renderer, image, &crop, &to);
+        }
+    }
+    {   // the extra pictures (a free screen's preview and canvas), unless a dialog covers the screen
+        Rml::Element* dialog = m.document->GetElementById("dialog");
+        const bool covered = dialog != nullptr && !dialog->IsClassSet("hide");
+        for (auto& entry : m.images) {
+            Rml::Element* target = m.document->GetElementById(entry.first);
+            if (covered || target == nullptr || !target->IsVisible()) continue;
+            SDL_Rect crop = {0, 0, 0, 0};
+            SDL_Texture* image = entry.second(crop);
+            if (image == nullptr || crop.w <= 0 || crop.h <= 0) continue;
+            const Rml::Vector2f origin = target->GetAbsoluteOffset(Rml::Box::BORDER), size = target->GetBox().GetSize(Rml::Box::BORDER);
             const float aspect = static_cast<float>(crop.w) / static_cast<float>(crop.h);
             float w = size.x, h = w / aspect;
             if (h > size.y) { h = size.y; w = h * aspect; }

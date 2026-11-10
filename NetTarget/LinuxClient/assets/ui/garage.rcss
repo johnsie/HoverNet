@@ -1,0 +1,73 @@
+body { font-family: Inter; font-size: 16dp; color: #f4f5f8; width: 100%; height: 100%; }
+p, h1, div { display: block; }
+.hide { display: none; }
+#header { position: absolute; left: 3%; right: 3%; top: 10dp; height: 86dp; }
+#eyebrow { color: #fa737a; font-size: 14dp; margin: 0; }
+h1 { font-family: Oxanium; font-size: 32dp; font-weight: bold; margin: 0; }
+#subtitle { color: #8b8fa3; font-size: 14dp; margin: 2dp 0 0 0; }
+#cols { position: absolute; left: 3%; right: 3%; top: 100dp; bottom: 100dp; }
+.col { position: absolute; top: 0; bottom: 0; box-sizing: border-box; background-color: #13131af5; border-radius: 10dp; padding: 12dp 14dp; }
+#leftcol { left: 0; width: 49%; }
+#rightcol { right: 0; width: 49%; }
+#previewbox { position: absolute; left: 14dp; right: 14dp; top: 12dp; height: 200dp; }
+#preview { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+#spinrow { position: absolute; left: 14dp; right: 14dp; top: 218dp; height: 42dp; }
+#spinrow .toggle { position: absolute; left: 0; top: 0; width: 190dp; margin: 0; }
+#yawrow { position: absolute; left: 200dp; right: 0; top: 0; }
+#controls { position: absolute; left: 14dp; right: 8dp; top: 264dp; bottom: 12dp; padding-right: 6dp; }
+#canvasbox { position: absolute; left: 14dp; right: 14dp; top: 12dp; height: 250dp; }
+#canvas { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+#rightscroll { position: absolute; left: 14dp; right: 8dp; top: 270dp; bottom: 12dp; padding-right: 6dp; }
+.scroll { overflow-y: auto; }
+#footer { position: absolute; left: 3%; right: 3%; bottom: 14dp; height: 48dp; }
+#footer button { width: 100%; margin: 0; }
+#gstatus { position: absolute; left: 3%; right: 3%; bottom: 68dp; height: 26dp; color: #8cf2a6; font-size: 14dp; }
+
+.heading { font-family: Oxanium; font-size: 19dp; color: #fa737a; margin: 12dp 0 6dp 0; }
+.note { color: #8b8fa3; font-size: 13dp; margin: 3dp 0 6dp 0; }
+.accent { color: #8cf2a6; font-size: 14dp; margin: 6dp 0; }
+.label { color: #e6e8f0; margin: 8dp 0 4dp 0; }
+.btnrow { display: block; }
+.chip { display: inline-block; box-sizing: border-box; padding: 8dp 12dp; margin: 0 4dp 4dp 0; font-family: Oxanium; font-size: 15dp; font-weight: bold; color: #ffffff; background-color: #2b2e3e; tab-index: auto; cursor: pointer; transition: background-color 0.12s cubic-out; }
+.chip:hover, .chip:focus { background-color: #3a3e54; }
+.chip.sel { background-color: #dc3546; }
+.chip.disabled { background-color: #22242f; color: #6a6e82; cursor: default; }
+.swatches { display: block; margin: 2dp 0 4dp 0; }
+.swatch { display: inline-block; width: 24dp; height: 24dp; margin: 0 4dp 4dp 0; border-width: 2dp; border-color: #00000000; tab-index: auto; cursor: pointer; }
+.swatch:hover, .swatch:focus { border-color: #8b8fa3; }
+.swatch.sel { border-color: #ffffff; }
+.srow { display: flex; flex-direction: row; align-items: center; margin: 2dp 0; }
+.slabel { flex: 0 0 90dp; color: #d6d9e6; font-size: 15dp; }
+.srow input.range { flex: 1 1 0; width: auto; margin: 4dp 0; }
+.sval { flex: 0 0 auto; width: 74dp; text-align: right; color: #fa737a; font-size: 14dp; }
+
+button.act { display: block; box-sizing: border-box; width: 100%; padding: 10dp; margin: 6dp 0 4dp 0; text-align: center; font-family: Oxanium; font-size: 17dp; font-weight: bold; color: #ffffff; background-color: #dc3546; tab-index: auto; cursor: pointer; transition: background-color transform 0.12s cubic-out; }
+button.act.quiet { background-color: #2b2e3e; }
+button.act:hover, button.act:focus { background-color: #f04a5b; transform: scale(1.02); }
+button.act.quiet:hover, button.act.quiet:focus { background-color: #3a3e54; }
+input.text { display: block; box-sizing: border-box; width: 100%; padding: 9dp 10dp; color: #ffffff; background-color: #0b0c11; border-width: 1dp; border-color: #303342; border-radius: 6dp; font-size: 16dp; cursor: text; }
+input.text:focus { border-color: #fa737a; }
+input.text selection { background-color: #dc3546; color: #ffffff; }
+input.range { display: block; box-sizing: border-box; width: 100%; height: 24dp; margin: 6dp 0; tab-index: auto; }
+input.range slidertrack { height: 8dp; margin-top: 8dp; background-color: #303342; }
+input.range sliderbar { width: 20dp; height: 20dp; margin-top: -6dp; background-color: #dc3546; cursor: pointer; }
+input.range sliderbar:hover, input.range:focus sliderbar { background-color: #f04a5b; }
+input.range sliderarrowdec, input.range sliderarrowinc { width: 0dp; height: 0dp; display: none; }
+.toggle { display: block; box-sizing: border-box; padding: 8dp 6dp; margin: 3dp 0; tab-index: auto; cursor: pointer; transition: background-color 0.12s cubic-out; }
+.toggle:hover, .toggle:focus { background-color: #1f2230; }
+.toggle .box { display: inline-block; width: 20dp; height: 20dp; vertical-align: middle; background-color: #0b0c11; border-width: 2dp; border-color: #4a4f66; margin-right: 10dp; }
+.toggle.on .box { background-color: #dc3546; border-color: #fa737a; }
+.toggle .tlabel { vertical-align: middle; }
+.slot { display: block; box-sizing: border-box; width: 100%; padding: 9dp 10dp; margin-bottom: 3dp; text-align: left; color: #e6e8f0; background-color: #171a24; tab-index: auto; cursor: pointer; transition: background-color 0.12s cubic-out; }
+.slot:hover, .slot:focus { background-color: #2b3046; }
+.slot.sel { background-color: #dc3546; color: #ffffff; }
+
+#dialog { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: #000000b8; }
+#dialogbox { position: absolute; left: 50%; top: 50%; width: 420dp; margin-left: -210dp; margin-top: -130dp; padding: 22dp; background-color: #13131a; border-radius: 12dp; }
+.cardhead { font-family: Oxanium; font-size: 22dp; color: #fa737a; margin: 0 0 10dp 0; }
+
+scrollbarvertical { width: 10dp; }
+scrollbarvertical slidertrack { width: 10dp; background-color: #1b1e2a; }
+scrollbarvertical sliderbar { width: 10dp; min-height: 30dp; background-color: #3f4560; }
+scrollbarvertical sliderbar:hover { background-color: #5a6285; }
+scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0dp; height: 0dp; display: none; }

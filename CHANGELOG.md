@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Added
+- **The Garage is an RmlUi screen too (the default on the desktop and in the browser).** Hull, shape sliders, body and trim colours (swatches and red/green/blue sliders), the paint canvas (painted with the pointer: pencil, eraser, fill, pick, mirror, undo), patterns, colour sets, decals with their unlock hints, the paint palette, slots, saving, the unsaved-changes question and the web account buttons, with the same logic as the older screen. Free screens in the form engine gained pictures in elements (`SetImage`) and a way to ask where an element is; setting an input from the program no longer reports a change. Checked: screenshots with a demo design and scripted clicks (a pattern, a hull, a decal, a colour set, a paint colour all took effect), `HoverNetGarageDecals` (which uses the older screen) and the camera rule. Not checked: painting by dragging the pointer (the pointer is read the same way as the older screen's, but I could not drive it headless), the browser, Windows, a controller. The only screens still on ImGui now are the sign-in gate, the tutorial overlay, the race HUD and the tools.
+
 ## 2.3.48 - 2026-11-10
 
 _Released at the owner's request without waiting for the test suite. The GitHub and GitLab runs of 2.3.44 to 2.3.47 had not been looked at when this was cut._

@@ -7387,6 +7387,273 @@ void RunGarageScreen(SDL2GraphicsBackend& graphics, MR_ResourceLib& resources, i
     std::vector<int> testDecals;
     if (const char* list = std::getenv("HOVERNET_TEST_GARAGE_CLICK_DECAL")) for (const char* c = list; *c != 0;) { testDecals.push_back(std::atoi(c)); while (*c != 0 && *c != ',') ++c; if (*c == ',') ++c; }
     int testClickX = -1, testClickY = -1;
+#ifdef HOVERNET_HAVE_RMLUI
+    // The RmlUi version of this screen (docs/rmlui.md): the same design, tools, patterns, decals, slots and saving; the paint canvas is a picture drawn into its element and painted with the
+    // pointer as before. Not used by the tests that click the ImGui widgets; if it cannot load, the ImGui screen below runs.
+    if (UseRmlUi(pFrameLimit) && testDecals.empty() && std::getenv("HOVERNET_TEST_HOVER") == nullptr) {
+        std::unique_ptr<HoverNetRml::FormScreen> rml(new HoverNetRml::FormScreen(
+            graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "GARAGE", LoadReducedMotion(),
+            [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight, "garage.rml"));
+        if (rml->Ok()) {
+            using Escape = HoverNetRml::FormScreen;
+            auto E = [](const std::string& text) { return Escape::Escape(text); };
+            constexpr int kPaint = Authority::kPaintSize;
+            SDL_Texture* paintTexture = SDL_CreateTexture(graphics.GetRenderer(), SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, kPaint, kPaint);
+            if (paintTexture != nullptr) SDL_SetTextureScaleMode(paintTexture, SDL_ScaleModeNearest);
+            static const std::uint8_t kSwatches[][3] = {{220, 30, 35}, {240, 120, 20}, {245, 215, 30}, {40, 175, 70}, {30, 185, 190}, {40, 90, 225}, {130, 60, 210}, {235, 70, 170}, {245, 245, 245}, {30, 30, 36}};
+            const int swatchCount = static_cast<int>(sizeof(kSwatches) / sizeof(kSwatches[0]));
+            auto slider = [&](const std::string& id, const std::string& label, int low, int high, int value) {
+                return "<div class=\"srow\"><span class=\"slabel\">" + E(label) + "</span><input type=\"range\" class=\"range\" id=\"in_" + id + "\" data-id=\"" + id + "\" min=\"" + std::to_string(low) + "\" max=\"" + std::to_string(high) + "\" step=\"1\" value=\"" + std::to_string(value) +
+                       "\"/><span class=\"sval\" id=\"v_" + id + "\"></span></div>";
+            };
+            auto chip = [&](const std::string& id, int index, const std::string& label, bool selected, bool locked = false) {
+                return "<button class=\"chip" + std::string(selected ? " sel" : "") + (locked ? " disabled" : "") + "\" id=\"" + id + std::to_string(index) + "\" data-id=\"" + id + "\" data-index=\"" + std::to_string(index) + "\">" + E(label) + "</button>";
+            };
+            auto swatch = [&](const std::string& id, int index, int r, int g, int b) {
+                return "<div class=\"swatch\" id=\"" + id + std::to_string(index) + "\" data-id=\"" + id + "\" data-index=\"" + std::to_string(index) + "\" style=\"background-color: rgb(" + std::to_string(r) + "," + std::to_string(g) + "," + std::to_string(b) + ");\"></div>";
+            };
+            auto percent = [](int v) { return (v >= 0 ? "+" : "") + std::to_string(v) + "%"; };
+            // ---- the left column: hull, shape, colours (built once; the values are set in place)
+            {
+                std::string html = "<p class=\"heading\">HULL</p><div class=\"btnrow\">";
+                for (int c = 0; c < Authority::kCraftCount; ++c) html += chip("hull", c, Authority::CraftName(c), design.craft == c);
+                html += "</div><p class=\"note\">Speed, weight and handling come from the craft you pick before the race, never from this design.</p><p class=\"heading\">SHAPE</p>";
+                html += slider("len", "Length", 0, 2 * shapeLimit, shapeLimit) + slider("wid", "Width", 0, 2 * shapeLimit, shapeLimit) + slider("hei", "Height", 0, 2 * shapeLimit, shapeLimit) + slider("nose", "Nose", 0, 2 * taperLimit, taperLimit);   // (a slider that runs from -n to n showed its knob wrongly at 0 in RmlUi, so these run from 0 and are offset by n)
+                html += "<button class=\"act quiet\" data-id=\"shapereset\">Reset shape</button>";
+                if (shapeLimit < Authority::kMaxShapePercent) html += "<p class=\"note\">The sliders reach further as you level up (now +/-" + std::to_string(shapeLimit) + "%, up to +/-" + std::to_string(Authority::kMaxShapePercent) + "% at level 9).</p>";
+                html += "<p class=\"heading\">COLOURS</p>";
+                for (const char* which : {"b", "t"}) {
+                    const bool body = which[0] == 'b';
+                    html += std::string("<p class=\"label\">") + (body ? "Body" : "Trim") + "</p><div class=\"swatches\">";
+                    for (int i = 0; i < swatchCount; ++i) html += swatch(std::string(which) + "sw", i, kSwatches[i][0], kSwatches[i][1], kSwatches[i][2]);
+                    html += "</div>" + slider(std::string(which) + "R", "Red", 0, 255, 0) + slider(std::string(which) + "G", "Green", 0, 255, 0) + slider(std::string(which) + "B", "Blue", 0, 255, 0) + slider(std::string(which) + "A", "Amount", 0, 100, 0);
+                }
+                rml->SetHtml("controls", html);
+            }
+            // ---- the right column: tools, patterns, colour sets, decals, palette, my craft (built once; the parts that change are updated in place)
+            {
+                std::string html = "<p class=\"heading\">PAINT</p><div class=\"btnrow\">";
+                const char* tools[] = {"Pencil", "Eraser", "Fill", "Pick"};
+                for (int t = 0; t < 4; ++t) html += chip("tool", t, tools[t], tool == t);
+                html += "</div><div class=\"btnrow\"><div class=\"toggle\" id=\"mirror\" data-id=\"mirror\"><span class=\"box\"></span><span class=\"tlabel\">Mirror left and right</span></div>";
+                html += "<button class=\"chip\" data-id=\"undo\">Undo</button><button class=\"chip\" data-id=\"clearpaint\">Clear paint</button></div>";
+                html += "<p class=\"label\">Patterns (replace the paint, in the selected colour)</p><div class=\"btnrow\">";
+                for (int p = 0; p < HoverNetCraft::kPatternCount; ++p) { const bool locked = garageLevel < HoverNetCraft::PatternLevel(p); html += chip("pattern", p, locked ? "Level " + std::to_string(HoverNetCraft::PatternLevel(p)) : std::string(HoverNetCraft::PatternName(p)), false, locked); }
+                html += "</div><p class=\"label\">Colour sets</p><div class=\"btnrow\">";
+                for (int t = 0; t < HoverNetCraft::kThemeCount; ++t) { const bool locked = garageLevel < HoverNetCraft::ThemeLevel(t); html += chip("theme", t, locked ? "Level " + std::to_string(HoverNetCraft::ThemeLevel(t)) : std::string(HoverNetCraft::ThemeName(t)), false, locked); }
+                html += "</div><p class=\"label\">Decals (click the canvas to stamp, in the selected colour)</p><div class=\"btnrow\" id=\"decals\"></div><p class=\"note\" id=\"decalhint\"></p>";
+                html += "<p class=\"label\">Paint colours</p><div class=\"swatches\" id=\"palette\"></div>" + slider("pR", "Red", 0, 255, 0) + slider("pG", "Green", 0, 255, 0) + slider("pB", "Blue", 0, 255, 0);
+                html += "<p class=\"note\">The paint wraps round the hull panels; use Mirror for symmetrical stripes.</p><p class=\"heading\">MY CRAFT</p>";
+                html += "<input type=\"text\" class=\"text\" id=\"in_name\" data-id=\"name\" maxlength=\"" + std::to_string(Authority::kMaxDesignNameBytes) + "\" value=\"\"/><div id=\"slots\"></div>";
+                html += "<button class=\"act\" data-id=\"save\">Save to this slot and use it in races</button><button class=\"act quiet\" data-id=\"stock\">Race with the standard paint (stock craft)</button><button class=\"act quiet\" data-id=\"delete\">Delete this slot</button>";
+#ifdef HOVERNET_WEB
+                html += "<p class=\"heading\">OUTIVA ACCOUNT</p>";
+                if (gAccountsOffered && !gSignedIn) html += "<p class=\"note\">You are playing as a guest. Sign in with Outiva (reload the page) to keep your crafts on your account.</p>";
+                html += "<button class=\"act\" data-id=\"acctsave\">Save local slots to account</button><button class=\"act quiet\" data-id=\"acctload\">Restore account slots (replaces local)</button><p class=\"note\" id=\"acctstatus\"></p>";
+#endif
+                rml->SetHtml("rightscroll", html);
+            }
+            std::string shownDecals, shownSlots, shownStatus, shownDialog;
+            auto setSlider = [&](const std::string& id, int value, const std::string& text) { rml->SetInput("in_" + id, std::to_string(value)); rml->SetHtml("v_" + id, E(text)); };
+            auto refreshColourRows = [&]() {
+                for (int w = 0; w < 2; ++w) {
+                    const std::string p = w == 0 ? "b" : "t";
+                    const std::array<std::uint8_t, 3>& rgb = w == 0 ? design.body : design.accent;
+                    const std::uint8_t strength = w == 0 ? design.bodyStrength : design.accentStrength;
+                    setSlider(p + "R", rgb[0], std::to_string(rgb[0])); setSlider(p + "G", rgb[1], std::to_string(rgb[1])); setSlider(p + "B", rgb[2], std::to_string(rgb[2]));
+                    const int amount = strength * 100 / 255;
+                    setSlider(p + "A", amount, amount == 0 ? "off" : std::to_string(amount) + "%");
+                    for (int i = 0; i < swatchCount; ++i) rml->SetClass(p + "sw" + std::to_string(i), "sel", strength > 0 && rgb[0] == kSwatches[i][0] && rgb[1] == kSwatches[i][1] && rgb[2] == kSwatches[i][2]);
+                }
+            };
+            auto refreshShape = [&]() {
+                setSlider("len", design.length + shapeLimit, percent(design.length)); setSlider("wid", design.width + shapeLimit, percent(design.width)); setSlider("hei", design.height + shapeLimit, percent(design.height)); setSlider("nose", design.taper + taperLimit, percent(design.taper));
+                for (int c = 0; c < Authority::kCraftCount; ++c) rml->SetClass("hull" + std::to_string(c), "sel", design.craft == c);
+            };
+            auto refreshPalette = [&]() {
+                std::string html;
+                for (int i = 1; i < Authority::kPaintColours; ++i) html += swatch("pcol", i, design.palette[i][0], design.palette[i][1], design.palette[i][2]);
+                rml->SetHtml("palette", html);
+                for (int i = 1; i < Authority::kPaintColours; ++i) rml->SetClass("pcol" + std::to_string(i), "sel", colour == i);
+                setSlider("pR", design.palette[colour][0], std::to_string(design.palette[colour][0])); setSlider("pG", design.palette[colour][1], std::to_string(design.palette[colour][1])); setSlider("pB", design.palette[colour][2], std::to_string(design.palette[colour][2]));
+            };
+            auto refreshTools = [&]() {
+                for (int t = 0; t < 4; ++t) rml->SetClass("tool" + std::to_string(t), "sel", tool == t);
+                rml->SetClass("mirror", "on", mirror);
+                for (int d = 0; d < HoverNetCraft::kDecalCount; ++d) rml->SetClass("decal" + std::to_string(d), "sel", tool == 4 && decal == d);
+            };
+            auto refreshSlots = [&]() {
+                std::string html;
+                const int active = store.Active();
+                for (int i = 0; i < HoverNetCraft::kSavedDesigns; ++i) {
+                    CraftDesign saved;
+                    const bool have = store.Load(i, saved);
+                    html += "<button class=\"slot" + std::string(slot == i ? " sel" : "") + "\" data-id=\"slot\" data-index=\"" + std::to_string(i) + "\">" + E(std::to_string(i + 1) + "  " + (have ? (saved.name.empty() ? "(unnamed)" : saved.name) : std::string("(empty)")) + (active == i ? "   - used in races" : "")) + "</button>";
+                }
+                if (html != shownSlots) { shownSlots = html; rml->SetHtml("slots", html); }
+            };
+            auto refreshDecals = [&]() {
+                std::string html, hint;
+                for (int d = 0; d < HoverNetCraft::kDecalCount; ++d) html += chip("decal", d, HoverNetCraft::DecalName(d), tool == 4 && decal == d, !HoverNetCraft::DecalOpen(d, garageAchievements));
+                for (int d = 0; d < HoverNetCraft::kDecalCount && hint.empty(); ++d) if (!HoverNetCraft::DecalOpen(d, garageAchievements)) hint = std::string("Next decal: ") + HoverNetCraft::DecalName(d) + " - " + HoverNetCraft::DecalEarnedBy(d);
+                if (html + hint != shownDecals) { shownDecals = html + hint; rml->SetHtml("decals", html); rml->SetHtml("decalhint", E(hint)); }
+            };
+            auto refreshAll = [&]() { refreshShape(); refreshColourRows(); refreshPalette(); refreshTools(); refreshSlots(); refreshDecals(); rml->SetInput("in_name", design.name); };
+            refreshAll();
+            rml->SetImage("preview", [&](SDL_Rect& crop) -> SDL_Texture* { if (previewTexture == nullptr || !previewOk) return nullptr; crop = SDL_Rect{0, 0, kPreviewW, kPreviewH}; return previewTexture; });
+            rml->SetImage("canvas", [&](SDL_Rect& crop) -> SDL_Texture* { crop = SDL_Rect{0, 0, kPaint, kPaint}; return paintTexture; });
+            std::vector<std::uint32_t> paintPixels(static_cast<std::size_t>(kPaint) * kPaint);
+            int frame = 0;
+            const int limit = pFrameLimit;   // (a scripted run, HOVERNET_TEST_RML, keeps its own limit: steps start at frame 60)
+            while (running && (limit < 0 || frame < limit)) {
+                ++frame;
+                if (frame % 20 == 0 && std::getenv("HOVERNET_RML_DEBUG") != nullptr) { std::printf("RMLDEBUG garage frame %d at %u ms, previewOk %d\n", frame, SDL_GetTicks(), previewOk ? 1 : 0); std::fflush(stdout); }
+                if (std::getenv("HOVERNET_TEST_GARAGE_ESC") != nullptr && frame == 5) { SDL_Event esc; SDL_zero(esc); esc.type = SDL_KEYDOWN; esc.key.keysym.sym = SDLK_ESCAPE; esc.key.keysym.scancode = SDL_SCANCODE_ESCAPE; esc.key.state = SDL_PRESSED; SDL_PushEvent(&esc); }
+                const Uint32 now = SDL_GetTicks();
+                if (spin) yaw = std::fmod(yaw + 30.0f * static_cast<float>(now - lastTick) / 1000.0f, 360.0f);
+                lastTick = now;
+#ifdef HOVERNET_WEB
+                const int newAccountCraftRevision = hovernet_js_account_craft_revision();
+                if (newAccountCraftRevision != accountCraftRevision) {
+                    accountCraftRevision = newAccountCraftRevision;
+                    slot = store.Active(); if (slot < 0) slot = 0;
+                    if (!store.Load(slot, design)) design = CraftDesign();
+                    undo.clear(); status = "Restored account designs to this browser."; shownHash = 0; refreshAll();
+                }
+#endif
+                // the paint canvas: its picture, and the pointer on it
+                for (int y = 0; y < kPaint; ++y)
+                    for (int x = 0; x < kPaint; ++x) {
+                        const std::uint8_t index = design.paint[static_cast<std::size_t>(y) * kPaint + x];
+                        std::uint32_t r = ((x + y) & 1) != 0 ? 52 : 66, g = r, b = ((x + y) & 1) != 0 ? 60 : 76;
+                        if (index != 0) { r = design.palette[index][0]; g = design.palette[index][1]; b = design.palette[index][2]; }
+                        paintPixels[static_cast<std::size_t>(y) * kPaint + x] = 0xFF000000u | (b << 16) | (g << 8) | r;
+                    }
+                if (paintTexture != nullptr) SDL_UpdateTexture(paintTexture, nullptr, paintPixels.data(), kPaint * 4);
+                const bool dialogOpen = pendingLeave != 0;
+                {
+                    int mx = 0, my = 0;
+                    const bool down = (SDL_GetMouseState(&mx, &my) & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
+                    SDL_FRect box;
+                    if (down && !dialogOpen && rml->ElementBox("canvas", box)) {
+                        const float side = std::min(box.w, box.h), ox = box.x + (box.w - side) * 0.5f, oy = box.y + (box.h - side) * 0.5f;
+                        if (static_cast<float>(mx) >= ox && static_cast<float>(my) >= oy && static_cast<float>(mx) < ox + side && static_cast<float>(my) < oy + side) {
+                            const int x = std::max(0, std::min(kPaint - 1, static_cast<int>((static_cast<float>(mx) - ox) / side * kPaint)));
+                            const int y = std::max(0, std::min(kPaint - 1, static_cast<int>((static_cast<float>(my) - oy) / side * kPaint)));
+                            const bool strokeStart = !strokeActive;
+                            if (!strokeActive) { if (tool != 4) pushUndo(); strokeActive = true; }
+                            const std::uint8_t value = tool == 1 ? 0 : static_cast<std::uint8_t>(colour);
+                            if (tool == 4) { if (strokeStart) stampDecal(x, y); }
+                            else if (tool == 3) { const std::uint8_t picked = design.paint[static_cast<std::size_t>(y) * kPaint + x]; if (picked != 0) { colour = picked; refreshPalette(); } tool = 0; refreshTools(); }
+                            else if (tool == 2) { floodFill(x, y, value); if (mirror) floodFill(kPaint - 1 - x, y, value); }
+                            else { design.paint[static_cast<std::size_t>(y) * kPaint + x] = value; if (mirror) design.paint[static_cast<std::size_t>(y) * kPaint + (kPaint - 1 - x)] = value; }
+                        }
+                    }
+                    if (!down) strokeActive = false;
+                }
+                std::vector<HoverNetRml::FormEvent> events;
+                const HoverNetRml::FormOutcome outcome = rml->Frame(events, frame, limit);
+                if (outcome == HoverNetRml::FormOutcome::eClose) { if (leaveGarage(true)) running = false; }
+                else if (outcome == HoverNetRml::FormOutcome::eCancel || outcome == HoverNetRml::FormOutcome::eSave) { if (pendingLeave != 0) pendingLeave = 0; else if (leaveGarage(false)) running = false; }
+                for (const HoverNetRml::FormEvent& e : events) {
+                    const std::string& id = e.id;
+                    const int index = e.index;
+                    auto clamp = [](int v, int lo, int hi) { return std::max(lo, std::min(hi, v)); };
+                    const int value = static_cast<int>(e.value + (e.value >= 0 ? 0.5f : -0.5f));
+                    if (id == "back") { if (leaveGarage(false)) running = false; }
+                    else if (id == "spin") { spin = e.on; rml->SetClass("yawrow", "hide", spin); }
+                    else if (id == "yaw") yaw = e.value;
+                    else if (id == "hull") { design.craft = static_cast<std::uint8_t>(clamp(index, 0, Authority::kCraftCount - 1)); refreshShape(); }
+                    else if (id == "len") { design.length = static_cast<std::int8_t>(clamp(value - shapeLimit, -shapeLimit, shapeLimit)); rml->SetHtml("v_len", percent(design.length)); }
+                    else if (id == "wid") { design.width = static_cast<std::int8_t>(clamp(value - shapeLimit, -shapeLimit, shapeLimit)); rml->SetHtml("v_wid", percent(design.width)); }
+                    else if (id == "hei") { design.height = static_cast<std::int8_t>(clamp(value - shapeLimit, -shapeLimit, shapeLimit)); rml->SetHtml("v_hei", percent(design.height)); }
+                    else if (id == "nose") { design.taper = static_cast<std::int8_t>(clamp(value - taperLimit, -taperLimit, taperLimit)); rml->SetHtml("v_nose", percent(design.taper)); }
+                    else if (id == "shapereset") { design.length = design.width = design.height = design.taper = 0; refreshShape(); }
+                    else if ((id == "bsw" || id == "tsw") && index >= 0 && index < swatchCount) {
+                        std::array<std::uint8_t, 3>& rgb = id == "bsw" ? design.body : design.accent; std::uint8_t& strength = id == "bsw" ? design.bodyStrength : design.accentStrength;
+                        rgb = {{kSwatches[index][0], kSwatches[index][1], kSwatches[index][2]}}; if (strength == 0) strength = 255; refreshColourRows();
+                    }
+                    else if (id.size() == 2 && (id[0] == 'b' || id[0] == 't') && (id[1] == 'R' || id[1] == 'G' || id[1] == 'B' || id[1] == 'A')) {
+                        std::array<std::uint8_t, 3>& rgb = id[0] == 'b' ? design.body : design.accent; std::uint8_t& strength = id[0] == 'b' ? design.bodyStrength : design.accentStrength;
+                        if (id[1] == 'A') strength = static_cast<std::uint8_t>(clamp(value, 0, 100) * 255 / 100);
+                        else { rgb[id[1] == 'R' ? 0 : id[1] == 'G' ? 1 : 2] = static_cast<std::uint8_t>(clamp(value, 0, 255)); if (strength == 0) strength = 255; }
+                        const int amount = strength * 100 / 255;
+                        rml->SetHtml(std::string("v_") + id, id[1] == 'A' ? (amount == 0 ? std::string("off") : std::to_string(amount) + "%") : std::to_string(clamp(value, 0, 255)));
+                        for (int i = 0; i < swatchCount; ++i) rml->SetClass(std::string(1, id[0]) + "sw" + std::to_string(i), "sel", strength > 0 && rgb[0] == kSwatches[i][0] && rgb[1] == kSwatches[i][1] && rgb[2] == kSwatches[i][2]);
+                    }
+                    else if (id == "tool") { tool = clamp(index, 0, 3); refreshTools(); }
+                    else if (id == "mirror") mirror = e.on;
+                    else if (id == "undo") { if (!undo.empty()) { design.paint = undo.back(); undo.pop_back(); } }
+                    else if (id == "clearpaint") { pushUndo(); design.paint.fill(0); }
+                    else if (id == "pattern" && index >= 0 && index < HoverNetCraft::kPatternCount && garageLevel >= HoverNetCraft::PatternLevel(index)) {
+                        pushUndo(); design.paint.fill(0);
+                        const int last = kPaint - 1;
+                        for (int y = 0; y < kPaint; ++y) for (int x = 0; x < kPaint; ++x) if (HoverNetCraft::PatternCovers(index, x, y) || (mirror && HoverNetCraft::PatternCovers(index, last - x, y))) design.paint[static_cast<std::size_t>(y) * kPaint + x] = static_cast<std::uint8_t>(colour);
+                    }
+                    else if (id == "theme" && index >= 0 && index < HoverNetCraft::kThemeCount && garageLevel >= HoverNetCraft::ThemeLevel(index)) {
+                        for (int i = 1; i < Authority::kPaintColours; ++i) { const std::uint8_t* c = HoverNetCraft::ThemeColour(index, i); design.palette[i] = {{c[0], c[1], c[2]}}; }
+                        refreshPalette();
+                    }
+                    else if (id == "decal" && index >= 0 && index < HoverNetCraft::kDecalCount && HoverNetCraft::DecalOpen(index, garageAchievements)) {
+                        tool = 4; decal = index;
+                        if (decalPlaced && design.paint == decalResult) { design.paint = decalBase; if (!undo.empty()) undo.pop_back(); }
+                        decalBase = design.paint;
+                        stampDecal(kPaint / 2, kPaint / 2);
+                        decalResult = design.paint; decalPlaced = true;
+                        status = std::string(HoverNetCraft::DecalName(index)) + " decal added. Click the canvas to place another.";
+                        refreshTools(); refreshDecals();
+                    }
+                    else if (id == "pcol" && index >= 1 && index < Authority::kPaintColours) { colour = index; if (tool == 1) tool = 0; refreshPalette(); refreshTools(); }
+                    else if (id.size() == 2 && id[0] == 'p' && (id[1] == 'R' || id[1] == 'G' || id[1] == 'B')) {
+                        design.palette[colour][id[1] == 'R' ? 0 : id[1] == 'G' ? 1 : 2] = static_cast<std::uint8_t>(clamp(value, 0, 255));
+                        rml->SetHtml(std::string("v_") + id, std::to_string(clamp(value, 0, 255)));
+                    }
+                    else if (id == "name") design.name = Authority::SanitiseCraftDesign([&] { CraftDesign d = design; d.name = e.text; return d; }()).name;
+                    else if (id == "slot" && index >= 0 && index < HoverNetCraft::kSavedDesigns) {
+                        CraftDesign saved;
+                        const bool have = store.Load(index, saved);
+                        slot = index; design = have ? saved : CraftDesign(); lastSavedDesign = design; undo.clear();
+                        status = have ? "Loaded the craft in slot " + std::to_string(index + 1) + "." : "Empty slot " + std::to_string(index + 1) + ".";
+                        refreshAll();
+                    }
+                    else if (id == "save") { if (saveCurrent()) { refreshAll(); } }
+                    else if (id == "stock") { store.SetActive(-1); status = "Your races use the stock craft."; refreshSlots(); }
+                    else if (id == "delete") { store.Delete(slot); design = CraftDesign(); lastSavedDesign = design; undo.clear(); status = "Deleted."; refreshAll(); }
+#ifdef HOVERNET_WEB
+                    else if (id == "acctsave") hovernet_js_account_craft_save();
+                    else if (id == "acctload") hovernet_js_account_craft_load();
+#endif
+                    else if (id == "leave_save") { const bool closing = pendingLeave == 2; if (saveCurrent()) { if (closing) g_QuitConfirmed = true; running = false; pendingLeave = 0; } }
+                    else if (id == "leave_discard") { if (pendingLeave == 2) g_QuitConfirmed = true; running = false; pendingLeave = 0; }
+                    else if (id == "leave_keep") pendingLeave = 0;
+                }
+                // the status line, the unsaved-changes question, and the preview
+                if (status != shownStatus) { shownStatus = status; rml->SetHtml("gstatus", E(status)); refreshSlots(); }
+                {
+                    const std::string dialog = pendingLeave == 0 ? std::string() : "<div id=\"dialogbox\"><p class=\"cardhead\">Unsaved craft</p><p class=\"note\">You changed this craft since you last saved it. Save it before you leave the Garage?</p>"
+                        "<button class=\"act\" data-id=\"leave_save\">Save and leave</button><button class=\"act quiet\" data-id=\"leave_discard\">Leave without saving</button><button class=\"act quiet back\" data-id=\"leave_keep\">Keep editing</button></div>";
+                    if (dialog != shownDialog) { shownDialog = dialog; rml->SetHtml("dialog", dialog); rml->SetClass("dialog", "hide", dialog.empty()); }
+                }
+#ifdef HOVERNET_WEB
+                { char accountStatus[160] = {}; hovernet_js_account_craft_status(accountStatus, sizeof accountStatus); rml->SetHtml("acctstatus", E(accountStatus)); }
+#endif
+                const std::uint64_t hash = Authority::CraftDesignHash(design);
+                const int yawNow = static_cast<int>(yaw) / 2 * 2;
+                if (previewTexture != nullptr && (hash != shownHash || yawNow != shownYaw || design.craft != shownCraft) && (now - lastBuild >= 80 || !previewOk)) {
+                    const CraftDesign shown = Authority::SanitiseCraftDesign(design);
+                    previewOk = HoverNetCraft::RenderCraftPreview(resources, shown.IsPlain() ? nullptr : &shown, shown.craft, yawNow, paletteWords.data(), kPreviewW, kPreviewH, rgba);
+                    if (previewOk) SDL_UpdateTexture(previewTexture, nullptr, rgba.data(), kPreviewW * 4);
+                    shownHash = hash; shownYaw = yawNow; shownCraft = design.craft; lastBuild = now;
+                }
+            }
+            if (paintTexture != nullptr) SDL_DestroyTexture(paintTexture);
+            rml.reset();
+            if (previewTexture != nullptr) SDL_DestroyTexture(previewTexture);
+            if (ownsImGuiContext) { ImGui_ImplSDLRenderer2_Shutdown(); ImGui_ImplSDL2_Shutdown(); ImGui::DestroyContext(); }
+            return;
+        }
+    }
+#endif
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
         if (!testDecals.empty()) {

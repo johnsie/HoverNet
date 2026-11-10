@@ -164,6 +164,10 @@ public:
     void SetCapture(bool keys, bool buttons);
     // A picture beside the controls (the track map): called every frame, returns the texture to draw (null = none) and sets crop to the part to show. The caller owns it.
     void SetSideImage(std::function<SDL_Texture*(SDL_Rect&)> image);
+    // More pictures over free screens: `image` is called every frame for the element `id`; it returns the texture to draw there (null = none) and the part of it to show. They are drawn
+    // fitted inside the element, over the markup, and hidden while a "dialog" element is shown. The caller owns the textures.
+    void SetImage(const std::string& id, std::function<SDL_Texture*(SDL_Rect&)> image);
+    bool ElementBox(const std::string& id, SDL_FRect& boxInWindowPixels) const;   // where an element is, for the caller's own pointer handling (false: not shown)
     void SetSideTarget(const std::string& id);   // the element the side image is drawn in (default "side")
     // A box over everything with a message, an optional progress bar (fraction < 0: none) and one button (a "busy" event when pressed); empty title hides it.
     void SetBusy(const std::string& title, const std::string& line, float fraction, const std::string& buttonLabel);

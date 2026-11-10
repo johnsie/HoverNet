@@ -45,7 +45,8 @@ glyphs unhinted. RmlUi 5.1's `robin_hood.h` needs `<cstdint>` first on current c
 | Replays | Built (My races with delete confirmation, Server replays with a track filter, the "follow which craft" question). |
 | Loading screen | Built (one frame: track name, style and difficulty, faint map, tip, ring of dots). |
 | Online lobby | Built (name entry, connecting and "can't reach" cards, race list, details with map, actions, waiting room, chat, users, the Host a race and Join a private race dialogs, track download over the screen). Not used by the two tests that click the ImGui widgets (`HoverNetOnlineScreenClicks`, `HoverNetStartRace`). |
-| Not built | **Garage** (a paint editor: canvas painting with the pointer, tools, 3D preview), the browser **sign-in gate** (web only), the **tutorial overlay and the race HUD** (drawn over the live race every frame; the HUD is not to be changed), ImGui-only tools (the track editor stays on ImGui). |
+| Garage | Built (hull, shape sliders, body and trim colours, the paint canvas painted with the pointer, tools, patterns, colour sets, decals, palette, slots, saving, the unsaved-changes question, the web account buttons). Not used by `HoverNetGarageDecals`, which clicks the ImGui widgets. |
+| Not built | The browser **sign-in gate** (web only), the **tutorial overlay and the race HUD** (drawn over the live race every frame; the HUD is not to be changed), ImGui-only tools (the track editor stays on ImGui). |
 
 The form engine also has "free screens" (`FormScreen` with another markup file, `lobby.rml`): the caller fills regions with `SetHtml` and hears clicks, changes and Enter on any element with a `data-id`.
 

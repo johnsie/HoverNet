@@ -1,0 +1,24 @@
+<rml>
+<head>
+	<title>HoverNet</title>
+	<link type="text/rcss" href="garage.rcss"/>
+</head>
+<body>
+	<div id="header"><p id="eyebrow">HOVERNET</p><h1 id="title">GARAGE</h1><p id="subtitle">Design the shape, colours and paint of your craft. It changes how it looks, never how it drives.</p></div>
+	<div id="cols">
+		<div id="leftcol" class="col">
+			<div id="previewbox"><div id="preview"></div></div>
+			<div id="spinrow"><div class="toggle on" id="spin" data-id="spin"><span class="box"></span><span class="tlabel">Turn the craft</span></div>
+				<div id="yawrow" class="hide"><input type="range" class="range" id="in_yaw" data-id="yaw" min="0" max="359" step="1" value="25"/></div></div>
+			<div id="controls" class="scroll"></div>
+		</div>
+		<div id="rightcol" class="col">
+			<div id="canvasbox"><div id="canvas"></div></div>
+			<div id="rightscroll" class="scroll"></div>
+		</div>
+	</div>
+	<div id="footer"><button class="act quiet back" data-id="back" tab-index="auto">Back</button></div>
+	<div id="gstatus"></div>
+	<div id="dialog" class="hide"></div>
+</body>
+</rml>
