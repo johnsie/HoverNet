@@ -233,7 +233,7 @@
     var Module = {
       canvas: document.getElementById('canvas'),
       // The new RmlUi screens are the default (docs/rmlui.md); ?menu=imgui (or the older ?menu=classic) brings back the older ImGui ones.
-      preRun: [function () { if (/[?&]menu=(imgui|classic)\b/.test(location.search)) ENV.HOVERNET_RML_MENU = '0'; else if (/[?&]menu=rml\b/.test(location.search)) ENV.HOVERNET_RML_MENU = '1'; if (/[?&]rmldebug\b/.test(location.search)) ENV.HOVERNET_RML_DEBUG = '1'; var ss = /[?&]rmlss=(\d)/.exec(location.search); if (ss) ENV.HOVERNET_RML_SS = ss[1]; if (/[?&]nocraft\b/.test(location.search)) ENV.HOVERNET_NO_MENU_CRAFT = '1'; if (/[?&]testmusic\b/.test(location.search)) ENV.HOVERNET_TEST_MUSIC = '1'; }],
+      preRun: [function () { if (/[?&]menu=(imgui|classic)\b/.test(location.search)) ENV.HOVERNET_RML_MENU = '0'; else if (/[?&]menu=rml\b/.test(location.search)) ENV.HOVERNET_RML_MENU = '1'; if (/[?&]rmldebug\b/.test(location.search)) ENV.HOVERNET_RML_DEBUG = '1'; var ss = /[?&]rmlss=(\d)/.exec(location.search); if (ss) ENV.HOVERNET_RML_SS = ss[1]; if (/[?&]nocraft\b/.test(location.search)) ENV.HOVERNET_NO_MENU_CRAFT = '1'; if (/[?&]testmusic\b/.test(location.search)) ENV.HOVERNET_TEST_MUSIC = '1'; if (/[?&]testaudio\b/.test(location.search)) ENV.HOVERNET_TEST_AUDIO = '1'; }],
       // Game data is fetched under the build's own address, so an old cached copy of it can never be mixed with a new page.
       locateFile: function (path) { return window.HN_BUILD ? path + '?v=' + encodeURIComponent(window.HN_BUILD) : path; },
       print: function(text) { console.log(text); logLine(text); },

@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+- Web: the audio buffer is 4096 samples (93 ms, was 46 ms) so the music rides out a slow menu frame (the browser only runs the audio callback between frames). **Not verified by ear**: reported as skipping in the main menu; headless Chrome shows the mixer costs under 4 ms per buffer and its callbacks arrive in bursts that look the same with either size, so it cannot show the fix. `HOVERNET_TEST_AUDIO` (page parameter `?testaudio`) prints the callback gaps.
+
 ## 2.3.53 - 2026-11-10
 
 _Released at the owner's request without waiting for the test suite._

@@ -165,11 +165,34 @@ void MixMusic(Sint16* out, size_t frames)
     }
 }
 
+#ifdef __EMSCRIPTEN__
+double gMixWorstMs = 0.0;
+#endif
+
 void SDLCALL MixAudio(void*, Uint8* stream, int length)
 {
     const size_t frameCount = static_cast<size_t>(length) / (2 * sizeof(Sint16));
+#ifdef __EMSCRIPTEN__
+    // HOVERNET_TEST_AUDIO: how late the browser asks for the next buffer (a request later than the buffer lasts is a gap in the sound).
+    static const bool watch = std::getenv("HOVERNET_TEST_AUDIO") != nullptr;
+    if (watch) {
+        static Uint32 last = 0, windowStart = 0; static int calls = 0, late = 0; static Uint32 worst = 0;
+        const Uint32 now = SDL_GetTicks();
+        const Uint32 budget = static_cast<Uint32>(frameCount * 1000 / 44100);
+        if (last != 0) { const Uint32 gap = now - last; ++calls; if (gap > budget + budget / 2) ++late; if (gap > worst) worst = gap; }
+        last = now;
+        if (windowStart == 0) windowStart = now;
+        if (now - windowStart >= 3000) { std::printf("AUDIOTEST buffer %u ms, calls %d, late %d, worst gap %u ms, worst mix %.1f ms\n", budget, calls, late, worst, gMixWorstMs); gMixWorstMs = 0.0; std::fflush(stdout); calls = late = 0; worst = 0; windowStart = now; }
+    }
+#endif
+#ifdef __EMSCRIPTEN__
+    const double startedAt = emscripten_get_now();
+#endif
     gMixer.Mix(reinterpret_cast<Sint16*>(stream), frameCount, gMasterVolume);
     MixMusic(reinterpret_cast<Sint16*>(stream), frameCount);
+#ifdef __EMSCRIPTEN__
+    gMixWorstMs = std::max(gMixWorstMs, emscripten_get_now() - startedAt);
+#endif
 }
 }
 
@@ -189,7 +212,7 @@ namespace MR_SoundServer
         desired.format = AUDIO_S16SYS;
         desired.channels = 2;
 #ifdef __EMSCRIPTEN__
-        desired.samples = 2048;   // in a browser the audio callback shares the page's thread: a bigger buffer rides out a slow frame without a gap
+        desired.samples = 4096;   // in a browser the audio callback shares the page's thread and only runs between frames: 93 ms of sound in hand rides out a slow frame (2048 = 46 ms skipped on frames longer than that)
 #else
         desired.samples = 1024;
 #endif
