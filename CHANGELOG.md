@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+### Fixed
+- **The craft's shadow sat on top of part of the craft (graphics-card path).** The card applies the shadow after the whole scene is drawn, and it darkened every pixel at about the shadow's distance, which includes the craft's own lower hull (and anything else standing on the floor beside it). The processor path never did this because it draws the shadow before the craft. The card's shadow step now skips pixels tagged as a craft or an object. `HoverNetGpuScene` has a new check (a craft-tagged quad and a wall-tagged quad under one shadow: only the wall darkens); it fails without the fix. Seen fixed in a capture of the craft on the card path (llvmpipe); not seen on a real GPU.
+
 ### Changed
 - **Measured on the development laptop (i7-1165G7, Iris Xe, 60 Hz screen, a 1024x768 race, ClassicH, autoplay) after the pacing change:** with the effects off (level 0) the whole frame takes 16.7 ms (a locked 60 frames a second); with everything on (level 5) 18 to 19 ms (about 54 frames a second); Automatic starts at 5 on this machine and stays there for 3,600 frames. Before the change the same laptop drew 25 to 30 frames a second. `HOVERNET_PROFILE_LOOP=1` prints, every 300 frames, where a frame goes (simulation, drawing the 3D view, the picture passes and showing it, the rest). Not measured: a larger window, a long race, other machines.
 

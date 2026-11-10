@@ -398,7 +398,7 @@ void main() {
 // The scene over the processor's picture (the sky and the HUD): the HUD stays, the card's scene replaces everything it drew, and the craft's shadow darkens the floor.
 const char* kCompose = R"(
 in vec2 vUv; out vec4 o;
-uniform sampler2D uBase; uniform sampler2D uSceneColour; uniform sampler2D uMask; uniform highp usampler2D uSceneDepth;
+uniform sampler2D uBase; uniform sampler2D uSceneColour; uniform sampler2D uMask; uniform highp usampler2D uSceneDepth; uniform highp usampler2D uSceneTag;
 uniform ivec2 uSize; uniform int uHasMask, uShadowCount; uniform vec4 uShadowA[16]; uniform vec2 uShadowB[16];
 void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
@@ -407,8 +407,11 @@ void main() {
     uint z = texelFetch(uSceneDepth, p, 0).r;
     if (z == 65535u) { o = vec4(base, 1.0); return; }
     vec3 c = texelFetch(uSceneColour, p, 0).rgb;
+    // A craft's shadow lies on the floor under it, so it must not darken the craft itself or the other things standing there (their pixels are at about the shadow's depth): the processor
+    // gets this by drawing the shadow before them; here the scene is already drawn, so the surface tags say which pixels are a craft (5) or an object (4).
+    uint tag = texelFetch(uSceneTag, p, 0).r;
     for (int i = 0; i < 16; ++i) {
-        if (i >= uShadowCount) break;
+        if (i >= uShadowCount || tag == 5u || tag == 4u) break;
         vec2 d = (vec2(p) - uShadowA[i].xy) / uShadowA[i].zw;
         if (dot(d, d) < 1.0 && float(z) * 4.0 >= uShadowB[i].x - uShadowB[i].y) c *= 0.87;
     }
@@ -898,9 +901,9 @@ bool GpuFinisher::Process(std::uint8_t* rgb, int width, int height, const Option
         const std::vector<GpuSceneSink::ShadowEllipse>& shadows = mScene.Shadows();
         const int shadowCount = static_cast<int>(std::min<std::size_t>(shadows.size(), 16));
         for (int i = 0; i < shadowCount; ++i) { sa[i * 4] = static_cast<float>(shadows[i].cx); sa[i * 4 + 1] = static_cast<float>(shadows[i].cy); sa[i * 4 + 2] = static_cast<float>(shadows[i].rx); sa[i * 4 + 3] = static_cast<float>(shadows[i].ry); sb[i * 2] = static_cast<float>(shadows[i].depthMm); sb[i * 2 + 1] = static_cast<float>(shadows[i].marginMm); }
-        m.Bind(0, m.texSrc); m.Bind(1, m.texSColour); m.Bind(2, m.texMask); m.Bind(3, m.texSDepth);
+        m.Bind(0, m.texSrc); m.Bind(1, m.texSColour); m.Bind(2, m.texMask); m.Bind(3, m.texSDepth); m.Bind(4, m.texSTag);
         g.UseProgram(m.progCompose);
-        m.Set1i(m.progCompose, "uBase", 0); m.Set1i(m.progCompose, "uSceneColour", 1); m.Set1i(m.progCompose, "uMask", 2); m.Set1i(m.progCompose, "uSceneDepth", 3);
+        m.Set1i(m.progCompose, "uBase", 0); m.Set1i(m.progCompose, "uSceneColour", 1); m.Set1i(m.progCompose, "uMask", 2); m.Set1i(m.progCompose, "uSceneDepth", 3); m.Set1i(m.progCompose, "uSceneTag", 4);
         m.Set1i(m.progCompose, "uHasMask", hasMask ? 1 : 0); m.Set1i(m.progCompose, "uShadowCount", shadowCount); m.Set2i(m.progCompose, "uSize", width, height);
         g.Uniform4fv(g.GetUniformLocation(m.progCompose, "uShadowA"), 16, sa);
         g.Uniform2fv(g.GetUniformLocation(m.progCompose, "uShadowB"), 16, sb);

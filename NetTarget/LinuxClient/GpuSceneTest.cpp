@@ -115,6 +115,34 @@ int main()
         const bool done = gpu.Process(rgb.data(), W, H, options, hints, nullptr);
         if (view == 0) Check(done, "the card finishes a frame with a scene");
         if (view == 0) {
+            // A craft's shadow darkens the floor under it, and neither the craft itself nor an object next to it: two flat quads side by side at the same depth, one tagged as a craft (5)
+            // and one as a wall (3), under one shadow ellipse that covers both. Only the wall may get darker.
+            gpu.Scene().Clear(); card.SetSceneSink(&gpu.Scene()); card.Clear(255); card.ClearZ();
+            const float depthMm = 6000.0f;
+            const int flat = MR_RESERVED_COLORS_BEGINNING + 20;
+            std::array<MR_UInt8, 768> bright = palette;   // a colour that is certainly not black
+            bright[flat * 3] = 210; bright[flat * 3 + 1] = 190; bright[flat * 3 + 2] = 170;
+            gpu.SetPalette(bright.data());
+            auto quad = [&](float yLeft, float yRight, MR_UInt8 tag) {
+                const MR_SceneVertex v[6] = {{depthMm, yLeft, 1500, 0, 0}, {depthMm, yRight, 1500, 1, 0}, {depthMm, yRight, -1500, 1, 1}, {depthMm, yLeft, 1500, 0, 0}, {depthMm, yRight, -1500, 1, 1}, {depthMm, yLeft, -1500, 0, 1}};   // two triangles
+                gpu.Scene().Triangles(v, 6, nullptr, static_cast<MR_UInt8>(flat), tag);
+            };
+            quad(2500.0f, 0.0f, 5);     // left of the middle (y is to the left): the craft
+            quad(0.0f, -2500.0f, 3);    // right of the middle: a wall
+            std::vector<std::uint8_t> plain(rgb.size(), 0), shaded(rgb.size(), 0);
+            HoverNetGfx::FrameHints h2 = hints;
+            const bool a = gpu.Process(plain.data(), W, H, options, h2, nullptr);
+            gpu.Scene().Clear(); card.SetSceneSink(&gpu.Scene()); card.Clear(255); card.ClearZ();
+            quad(2500.0f, 0.0f, 5); quad(0.0f, -2500.0f, 3);
+            gpu.Scene().Shadow(hints.projCenterX, hints.projCenterY, 100, 80, 6000, 2000);
+            const bool b = gpu.Process(shaded.data(), W, H, options, h2, nullptr);
+            const std::size_t left = (static_cast<std::size_t>(hints.projCenterY) * W + hints.projCenterX - 40) * 3, right = (static_cast<std::size_t>(hints.projCenterY) * W + hints.projCenterX + 40) * 3;
+            Check(a && b && plain[left] > 20 && plain[right] > 20, "the shadow test's two quads are drawn");
+            Check(shaded[left] == plain[left] && shaded[left + 1] == plain[left + 1], "a shadow does not darken the craft's own pixels");
+            Check(shaded[right] < plain[right] && shaded[right] > plain[right] * 8 / 10, "but it darkens the wall beside it (about 13%)");
+            gpu.SetPalette(palette.data());
+        }
+        if (view == 0) {
             // glows (the engine glow, sparks, embers) are drawn by the card after the scene, so they show over it
             gpu.Scene().Clear(); card.SetSceneSink(&gpu.Scene()); card.Clear(255); card.ClearZ(); draw(card);
             const HoverNetGfx::GlowSprite sprite{W / 2.0f, H / 2.0f, 24.0f, 24.0f, 255, 200, 100, 1.0f};
