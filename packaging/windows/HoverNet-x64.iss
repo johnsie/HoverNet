@@ -21,9 +21,9 @@ SolidCompression=yes
 Source: "{#SourceDir}\HoverNet.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "{#SourceDir}\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\NetTarget\ThirdParty\imgui\LICENSE.txt"; DestDir: "{app}\licenses"; DestName: "imgui-LICENSE.txt"; Flags: ignoreversion
-Source: "{#SourceDir}\NetTarget\ThirdParty\rmlui\LICENSE.txt"; DestDir: "{app}\licenses"; DestName: "rmlui-LICENSE.txt"; Flags: ignoreversion
-Source: "{#SourceDir}\NetTarget\ThirdParty\freetype\docs\FTL.TXT"; DestDir: "{app}\licenses"; DestName: "freetype-FTL.txt"; Flags: ignoreversion
+Source: "{#SourceDir}\licenses\imgui-LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "{#SourceDir}\licenses\rmlui-LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "{#SourceDir}\licenses\freetype-FTL.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "{#SourceDir}\ObjFac1.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\SDL2.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; DestName: "vc_redist.x64.exe"; Flags: deleteafterinstall

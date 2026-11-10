@@ -365,9 +365,16 @@ jobs:
           Copy-Item "NetTarget\Tracks\*.trk" "$x64Release\NetTarget\Tracks\" -Force
           Copy-Item "NetTarget\CommunityTracks.tsv" "$x64Release\NetTarget\CommunityTracks.tsv" -Force
           Copy-Item "LICENSE", "THIRD_PARTY_NOTICES.md" "$x64Release\" -Force   # the licence conditions travel with the binaries
+          New-Item -ItemType Directory -Force "$x64Release\licenses" | Out-Null   # the licence texts of the libraries built into the game (validate-windows-x64-package.ps1 checks them)
+          Copy-Item "NetTarget\ThirdParty\imgui\LICENSE.txt" "$x64Release\licenses\imgui-LICENSE.txt" -Force
+          Copy-Item "NetTarget\ThirdParty\rmlui\LICENSE.txt" "$x64Release\licenses\rmlui-LICENSE.txt" -Force
+          Copy-Item "NetTarget\ThirdParty\freetype\docs\FTL.TXT" "$x64Release\licenses\freetype-FTL.txt" -Force
           foreach ($pattern in "*.bmp", "*.ttf", "*-OFL.txt") {
             Copy-Item "NetTarget\LinuxClient\assets\$pattern" "$x64Release\NetTarget\LinuxClient\assets\" -Force
           }
+          Copy-Item "NetTarget\LinuxClient\assets\menu-hovercraft-source.png" "$x64Release\NetTarget\LinuxClient\assets\" -Force
+          New-Item -ItemType Directory -Force "$x64Release\NetTarget\LinuxClient\assets\ui" | Out-Null   # the RmlUi screens' markup and style sheets
+          Copy-Item "NetTarget\LinuxClient\assets\ui\*" "$x64Release\NetTarget\LinuxClient\assets\ui\" -Force
           & "scripts\validate-windows-x64-package.ps1" -ReleaseDir $x64Release -RequireVCRedist
           $env:HOVERNET_X64_RELEASE_DIR = (Resolve-Path $x64Release).Path
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "packaging\windows\HoverNet-x64.iss"
