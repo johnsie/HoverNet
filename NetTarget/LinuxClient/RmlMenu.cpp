@@ -908,7 +908,8 @@ void FormScreen::SetFields(const std::vector<FormField>& pFields)
             break;
         case FormField::Type::eRow:
             html += "<div class=\"row\"><div class=\"rtext\"><p class=\"rmain\">" + Escaped(f.label) + "</p>" + (f.hint.empty() ? Rml::String() : "<p class=\"rsub\">" + Escaped(f.hint) + "</p>") + "</div>" +
-                    (f.text.empty() ? Rml::String() : "<button class=\"act quiet rbtn\" id=\"f_" + id + "\">" + Escaped(f.text) + "</button>") + "</div>";
+                    (f.text.empty() ? Rml::String() : "<button class=\"act quiet rbtn\" id=\"f_" + id + "\">" + Escaped(f.text) + "</button>") +
+                    (f.suffix.empty() ? Rml::String() : "<button class=\"act quiet rbtn\" id=\"f_" + id + "_2\">" + Escaped(f.suffix) + "</button>") + "</div>";
             break;
         case FormField::Type::eChooser: {
             FormListener::Chooser chooser; chooser.items = f.items; chooser.selected = f.selected;
@@ -922,6 +923,7 @@ void FormScreen::SetFields(const std::vector<FormField>& pFields)
     }
     host->SetInnerRML(html);
     for (const FormField& f : pFields) {
+        if (f.type == FormField::Type::eRow && !f.suffix.empty()) if (Rml::Element* second = m.document->GetElementById("f_" + f.id + "_2")) { second->AddEventListener("click", &m.listener); second->AddEventListener("mouseover", &m.listener); }
         Rml::Element* e = m.document->GetElementById("f_" + f.id);
         if (e == nullptr) continue;
         switch (f.type) {

@@ -7900,6 +7900,184 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
     auto formatMs = [](long long ms, char* out, std::size_t n) { std::snprintf(out, n, "%lld:%02lld.%02lld", ms / 60000, (ms % 60000) / 1000, (ms % 1000) / 10); };
     auto formatDate = [](std::uint32_t unixSeconds, char* out, std::size_t n) { std::snprintf(out, n, "%s", UkDateTime(unixSeconds).c_str()); };
 
+#ifdef HOVERNET_HAVE_RMLUI
+    if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this screen (docs/rmlui.md): my races, server replays and the "follow which craft" question; if it cannot load, the ImGui screen below runs
+        using HoverNetRml::FormField;
+        std::unique_ptr<HoverNetRml::FormScreen> form(new HoverNetRml::FormScreen(
+            graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "WATCH A REPLAY", LoadReducedMotion(),
+            [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight));
+        if (form->Ok()) {
+            form->SetLayout(false, true);
+            form->SetCardWidth(760);
+            form->SetFooter("Back", "");
+            std::vector<std::string> tabNames = {"MY RACES"};
+#if defined(HOVERNET_AUTH)
+            tabNames.push_back("SERVER REPLAYS");
+#endif
+            int tab = std::max(0, std::min(static_cast<int>(tabNames.size()) - 1, wantTab));
+            form->SetTabs(tabNames, tab);
+            auto note = [](const std::string& text) { FormField f; f.type = FormField::Type::eNote; f.label = text; return f; };
+            auto heading = [](const std::string& text) { FormField f; f.type = FormField::Type::eHeading; f.label = text; return f; };
+            auto row = [](const std::string& id, const std::string& title, const std::string& sub, const std::string& button) { FormField f; f.type = FormField::Type::eRow; f.id = id; f.label = title; f.hint = sub; f.text = button; return f; };
+            auto button = [](const std::string& id, const std::string& label, bool quiet) { FormField f; f.type = FormField::Type::eButton; f.id = id; f.label = label; f.quiet = quiet; return f; };
+            std::string shown;
+            int frame = 0;
+            const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
+            while (running && !started && (limit < 0 || frame < limit)) {
+                ++frame;
+                std::vector<HoverNetRml::FormEvent> events;
+                const HoverNetRml::FormOutcome outcome = form->Frame(events, frame, limit);
+                std::string startPath;
+                int startSlot = 0;
+                std::string startNote;
+                if (outcome == HoverNetRml::FormOutcome::eSave || outcome == HoverNetRml::FormOutcome::eCancel) { if (craftChoice.active) craftChoice.active = false; else running = false; }
+                else if (outcome == HoverNetRml::FormOutcome::eClose) { g_QuitConfirmed = true; running = false; }
+#if defined(HOVERNET_AUTH)
+                if (tab == 1 && !serverTried) { serverTried = true; if (!ConnectLobbyForReplays(server)) message = "The server address is not usable. Check it in the HoverNet servers screen."; }
+                server.Pump();
+                if (server.GetState() == OnlineLobby::State::eBrowsing && needReplays) { server.RefreshReplays(serverTrack == 0 ? std::string() : Tracks().Get(serverTrack - 1)->mName); needReplays = false; }
+                std::vector<std::uint8_t> downloaded;
+                if (downloadSlotId != 0 && server.TakeReplay(downloaded)) {
+                    library.MakeDirectory();
+                    std::FILE* f = std::fopen(cachePath.c_str(), "wb");
+                    const bool written = f != nullptr && std::fwrite(downloaded.data(), 1, downloaded.size(), f) == downloaded.size();
+                    if (f != nullptr) std::fclose(f);
+                    if (written) { startPath = cachePath; startSlot = downloadSlot; startNote = downloadNote; }
+                    else message = "Could not save the replay on this device.";
+                    downloadSlotId = 0;
+                }
+                else if (downloadSlotId != 0 && !server.Downloading()) {
+                    message = server.ReplayNotice().empty() ? "The replay could not be downloaded." : server.ReplayNotice();
+                    downloadSlotId = 0;
+                }
+#endif
+                bool refresh = false;
+                for (const HoverNetRml::FormEvent& e : events) {
+                    if (e.id == "tab") { tab = e.index; form->SetTabs(tabNames, tab); refresh = true; craftChoice.active = false; }
+                    else if (e.id == "cancelcraft") { craftChoice.active = false; refresh = true; }
+                    else if (e.id.compare(0, 5, "craft") == 0 && craftChoice.active) {   // "Follow which craft?": the slot chosen
+                        const int chosen = std::atoi(e.id.c_str() + 5);
+                        g_nextReplayNames = craftChoice.slotNames;
+                        std::string noteText;
+                        if (chosen == craftChoice.mySlot) noteText = "you";
+                        else if (chosen == craftChoice.winnerSlot) noteText = craftChoice.winnerName.empty() ? std::string("the winner") : "the winner, " + craftChoice.winnerName;
+#if defined(HOVERNET_AUTH)
+                        if (craftChoice.server) { downloadSlotId = craftChoice.id; downloadSlot = chosen; downloadNote = noteText; server.FetchReplay(craftChoice.id); }
+                        else
+#endif
+                        { startPath = craftChoice.path; startSlot = chosen; startNote = noteText; }
+                        craftChoice.active = false;
+                        refresh = true;
+                    }
+                    else if (e.id.compare(0, 2, "m:") == 0) {   // my races: m:<n> watch, m:<n>_2 delete
+                        const bool del = e.id.size() > 2 && e.id.find("_2") != std::string::npos;
+                        const int index = std::atoi(e.id.c_str() + 2);
+                        if (index >= 0 && index < static_cast<int>(entries.size())) {
+                            const ReplayLibrary::Entry& entry = entries[static_cast<std::size_t>(index)];
+                            if (del) {
+                                if (confirmDelete == index) { library.Remove(entry.name); entries = library.List(); confirmDelete = -1; }
+                                else confirmDelete = index;
+                            }
+                            else if (entry.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.path = entry.path; craftChoice.title = entry.track; craftChoice.players = entry.players; craftChoice.mySlot = entry.mySlot; craftChoice.slotNames = entry.names; }
+                            else { g_nextReplayNames = entry.names; startPath = entry.path; startSlot = 0; }
+                            refresh = true;
+                        }
+                    }
+#if defined(HOVERNET_AUTH)
+                    else if (e.id == "track") { serverTrack = e.index; needReplays = true; }
+                    else if (e.id == "retry") { serverTried = false; needReplays = true; server.Close(); message.clear(); }
+                    else if (e.id.compare(0, 2, "s:") == 0 && downloadSlotId == 0 && server.ReplaysLoaded()) {
+                        const std::size_t n = static_cast<std::size_t>(std::atoi(e.id.c_str() + 2));
+                        if (n < server.Replays().size()) {
+                            const Protocol3::ReplayInfo& r = server.Replays()[n];
+                            message.clear();
+                            if (r.players > 1) askCraftFor(r);
+                            else { downloadSlotId = r.id; downloadSlot = 0; downloadNote.clear(); server.FetchReplay(r.id); }
+                            refresh = true;
+                        }
+                    }
+#endif
+                }
+                std::string signature = std::to_string(tab) + "|" + std::to_string(entries.size()) + "|" + std::to_string(confirmDelete) + "|" + message + "|" + std::to_string(craftChoice.active);
+#if defined(HOVERNET_AUTH)
+                signature += "|" + std::to_string(static_cast<int>(server.GetState())) + server.Message() + "|" + std::to_string(serverTrack) + "|" + std::to_string(server.ReplaysLoaded()) + std::to_string(server.ReplaysLoaded() ? server.Replays().size() : 0) + "|" +
+                             std::to_string(downloadSlotId) + "/" + std::to_string(downloadSlotId != 0 ? server.DownloadPercent() : 0);
+#endif
+                if (refresh || signature != shown) {
+                    shown = signature;
+                    std::vector<FormField> f;
+                    if (craftChoice.active) {
+                        f.push_back(heading(craftChoice.title + ": which craft do you want to follow?"));
+                        f.push_back(note("You can switch craft while it plays with [ and ]."));
+                        for (int slot = 0; slot < craftChoice.players; ++slot) {
+                            std::string suffix;
+                            if (slot == craftChoice.mySlot) suffix += "  (you)";
+                            if (slot == craftChoice.winnerSlot) { char t[32]; formatMs(craftChoice.winnerMs, t, sizeof t); suffix += std::string("  (winner") + (craftChoice.winnerName.empty() ? std::string() : " " + craftChoice.winnerName) + ", " + t + ")"; }
+                            const std::string who = slot < static_cast<int>(craftChoice.slotNames.size()) && !craftChoice.slotNames[static_cast<std::size_t>(slot)].empty() ? " - " + craftChoice.slotNames[static_cast<std::size_t>(slot)] : std::string();
+                            f.push_back(button("craft" + std::to_string(slot), "PLAYER " + std::to_string(slot + 1) + who + suffix, false));
+                        }
+                        f.push_back(button("cancelcraft", "CANCEL", true));
+                    }
+                    else if (tab == 0) {
+                        if (entries.empty()) {
+                            f.push_back(note("No saved races yet."));
+                            f.push_back(note("A race on a HoverNet server that you take part in, or watch from its first moment, is saved here when it ends (the newest " + std::to_string(ReplayLibrary::kKeep) + " are kept). Nothing is sent anywhere: the files stay on this device. The Server replays tab has everyone's races."));
+                        }
+                        for (int index = 0; index < static_cast<int>(entries.size()); ++index) {
+                            const ReplayLibrary::Entry& e = entries[static_cast<std::size_t>(index)];
+                            if (e.valid) {
+                                const long long seconds = e.durationMs() / 1000;
+                                FormField r = row("m:" + std::to_string(index), e.track, e.when + "   " + std::to_string(e.players) + " player" + (e.players == 1 ? "" : "s") + ", " + std::to_string(e.laps) + " lap" + (e.laps == 1 ? "" : "s") + ", " + std::to_string(seconds / 60) + ":" + (seconds % 60 < 10 ? "0" : "") + std::to_string(seconds % 60), "WATCH");
+                                r.suffix = confirmDelete == index ? "SURE? DELETE" : "DELETE";
+                                f.push_back(r);
+                            }
+                            else { FormField r = row("m:" + std::to_string(index), "Damaged file", e.name, ""); r.suffix = confirmDelete == index ? "SURE? DELETE" : "DELETE"; f.push_back(r); }
+                        }
+                    }
+#if defined(HOVERNET_AUTH)
+                    else {
+                        if (server.GetState() == OnlineLobby::State::eFailed) { f.push_back(note(server.Message().empty() ? "Could not reach the server." : server.Message())); f.push_back(button("retry", "TRY AGAIN", false)); }
+                        else if (server.GetState() != OnlineLobby::State::eBrowsing) f.push_back(note("Connecting to the server..."));
+                        else {
+                            { FormField c; c.type = FormField::Type::eSelect; c.id = "track"; c.label = "Track"; c.options.push_back("All tracks"); for (int t = 0; t < officialTracks; ++t) c.options.push_back(Tracks().Get(t)->mName); c.selected = serverTrack; f.push_back(c); }
+                            if (server.ListsUnreadable() && !server.ReplaysLoaded()) f.push_back(note("The server answered in a form this version of the game cannot read: the game needs updating."));
+                            else if (!server.ReplaysLoaded()) f.push_back(note("Loading the list..."));
+                            else if (server.Replays().empty()) f.push_back(note(std::string("The server has no replays") + (serverTrack == 0 ? "" : " of this track") + " yet."));
+                            for (std::size_t i = 0; i < server.Replays().size(); ++i) {
+                                const Protocol3::ReplayInfo& r = server.Replays()[i];
+                                const long long seconds = static_cast<long long>(r.ticks) * ReplayFormat::kFrameMs / 1000;
+                                std::string sub = UkDateTime(r.savedAt) + "   " + std::to_string(r.players) + " player" + (r.players == 1 ? "" : "s") + ", " + std::to_string(r.laps) + " lap" + (r.laps == 1 ? "" : "s") + ", " + std::to_string(seconds / 60) + ":" + (seconds % 60 < 10 ? "0" : "") + std::to_string(seconds % 60);
+                                if (r.finishers.empty()) sub += "\nNo results recorded";
+                                for (std::size_t k = 0; k < r.finishers.size(); ++k) {
+                                    const Protocol3::ReplayFinisher& fin = r.finishers[k];
+                                    char time[32] = "did not finish";
+                                    if (fin.ms > 0) formatMs(fin.ms, time, sizeof time);
+                                    sub += "\n" + std::to_string(k + 1) + ". " + (fin.name.empty() ? "Player " + std::to_string(fin.slot + 1) : fin.name) + (fin.craft < Authority::kCraftCount ? std::string(" (") + Authority::CraftName(fin.craft) + ")" : std::string()) + "   " + time;
+                                }
+                                f.push_back(row("s:" + std::to_string(i), r.track, sub, downloadSlotId == r.id ? "DOWNLOADING " + std::to_string(server.DownloadPercent()) + "%" : std::string("WATCH")));
+                            }
+                        }
+                    }
+#endif
+                    if (!message.empty()) f.push_back(note(message));
+                    form->SetFields(f);
+                }
+                if (!startPath.empty()) {
+                    bool fatal = false;
+                    message = start(startPath, startSlot, startNote, fatal);
+                    if (message.empty()) started = true;
+                    else if (fatal) { g_QuitConfirmed = true; running = false; }
+                    confirmDelete = -1;
+                }
+            }
+#if defined(HOVERNET_AUTH)
+            if (!started) server.Close();
+#endif
+            return started;
+        }
+    }
+#endif
+
     while (running && !started && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
         SDL_Event event;

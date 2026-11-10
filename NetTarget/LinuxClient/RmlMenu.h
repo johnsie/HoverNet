@@ -103,7 +103,7 @@ struct FormField
     std::string suffix;              // eSlider: shown after the number, for example "%"
     std::vector<std::string> options; int selected = 0;           // eSelect
     bool quiet = false;              // eButton: the quieter style
-    // eRow: a table row: `label` is its title, `hint` the smaller line under it, `text` the label of a button on its right (empty: none; the button's click is an event named by `id`).
+    // eRow: a table row: `label` is its title, `hint` the smaller line under it, `text` the label of a button on its right (empty: none; the button's click is an event named by `id`), `suffix` a second button beside it (its event is `id` + "_2").
     std::vector<std::string> items;  // eChooser: every choice (a filter box narrows a long list to the first 60 matches); `selected` is the current one, `label` above it
 };
 
