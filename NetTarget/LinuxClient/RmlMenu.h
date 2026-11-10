@@ -92,7 +92,7 @@ int RunChoiceMenu(SDL_Window* window, SDL_Renderer* renderer, const ChoiceInfo& 
 // The caller keeps its own state and side effects: it describes the fields, and every frame hears what the player changed.
 struct FormField
 {
-    enum class Type { eHeading, eNote, eText, eToggle, eSlider, eSelect, eButton, eChooser };
+    enum class Type { eHeading, eNote, eText, eToggle, eSlider, eSelect, eButton, eChooser, eRow };
     Type type = Type::eNote;
     std::string id;                  // events and updates name a field by this
     std::string label;               // the label (a heading's or note's own text)
@@ -103,6 +103,7 @@ struct FormField
     std::string suffix;              // eSlider: shown after the number, for example "%"
     std::vector<std::string> options; int selected = 0;           // eSelect
     bool quiet = false;              // eButton: the quieter style
+    // eRow: a table row: `label` is its title, `hint` the smaller line under it, `text` the label of a button on its right (empty: none; the button's click is an event named by `id`).
     std::vector<std::string> items;  // eChooser: every choice (a filter box narrows a long list to the first 60 matches); `selected` is the current one, `label` above it
 };
 
@@ -135,6 +136,7 @@ public:
     void SetSlider(const std::string& id, float value);
     void SetSelect(const std::string& id, int index, const std::string& shown);
     void SetLayout(bool wide, bool tabs);                                // wide: a second column on the right for a picture; tabs: show the tab bar
+    void SetCardWidth(int dp);                                           // the card and footer are this wide (a table wants more than a form)
     void SetFooter(const std::string& saveLabel, const std::string& cancelLabel);   // an empty cancel label leaves one wide button
     // While capturing, the next key (or controller button) is reported as a "capturekey" (index = SDL scancode) or "capturebutton" (index = SDL button) event instead of moving the
     // focus; Escape reports "capturecancel". For screens that remap controls.

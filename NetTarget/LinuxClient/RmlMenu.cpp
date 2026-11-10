@@ -906,6 +906,10 @@ void FormScreen::SetFields(const std::vector<FormField>& pFields)
         case FormField::Type::eButton:
             html += "<button class=\"act" + Rml::String(f.quiet ? " quiet" : "") + "\" id=\"f_" + id + "\">" + Escaped(f.label) + "</button>";
             break;
+        case FormField::Type::eRow:
+            html += "<div class=\"row\"><div class=\"rtext\"><p class=\"rmain\">" + Escaped(f.label) + "</p>" + (f.hint.empty() ? Rml::String() : "<p class=\"rsub\">" + Escaped(f.hint) + "</p>") + "</div>" +
+                    (f.text.empty() ? Rml::String() : "<button class=\"act quiet rbtn\" id=\"f_" + id + "\">" + Escaped(f.text) + "</button>") + "</div>";
+            break;
         case FormField::Type::eChooser: {
             FormListener::Chooser chooser; chooser.items = f.items; chooser.selected = f.selected;
             m.listener.choosers[f.id] = chooser;
@@ -922,7 +926,7 @@ void FormScreen::SetFields(const std::vector<FormField>& pFields)
         if (e == nullptr) continue;
         switch (f.type) {
         case FormField::Type::eText: case FormField::Type::eSlider: e->AddEventListener("change", &m.listener); break;
-        case FormField::Type::eToggle: case FormField::Type::eButton: case FormField::Type::eChooser: e->AddEventListener("click", &m.listener); e->AddEventListener("mouseover", &m.listener); break;
+        case FormField::Type::eToggle: case FormField::Type::eButton: case FormField::Type::eRow: case FormField::Type::eChooser: e->AddEventListener("click", &m.listener); e->AddEventListener("mouseover", &m.listener); break;
         case FormField::Type::eSelect:
             for (const char* suffix : {"_prev", "_next"}) if (Rml::Element* arrow = m.document->GetElementById("f_" + f.id + suffix)) { arrow->AddEventListener("click", &m.listener); arrow->AddEventListener("mouseover", &m.listener); }
             break;
@@ -938,6 +942,13 @@ void FormScreen::SetLayout(bool pWide, bool pTabs)
     Impl& m = *mImpl;
     if (Rml::Element* card = m.document->GetElementById("card")) { card->SetClass("wide", pWide); card->SetClass("notabs", !pTabs); }
     if (Rml::Element* footer = m.document->GetElementById("footer")) footer->SetClass("wide", pWide);
+}
+
+void FormScreen::SetCardWidth(int pDp)
+{
+    Impl& m = *mImpl;
+    const std::string width = std::to_string(pDp) + "dp", margin = "-" + std::to_string(pDp / 2) + "dp";
+    for (const char* id : {"card", "footer"}) if (Rml::Element* e = m.document->GetElementById(id)) { e->SetProperty("width", width); e->SetProperty("margin-left", margin); }
 }
 
 void FormScreen::SetFooter(const std::string& pSave, const std::string& pCancel)

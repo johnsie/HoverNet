@@ -8214,6 +8214,213 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
     auto formatDate = [](std::uint32_t unixSeconds, char* out, std::size_t n) { std::snprintf(out, n, "%s", UkDateTime(unixSeconds).c_str()); };
     bool printedReport = false, printedWinners = false, printedLeague = false, printedBreaks = false;
 
+#ifdef HOVERNET_HAVE_RMLUI
+    if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this screen (docs/rmlui.md): the same four tabs and data; if it cannot load, the ImGui screen below runs
+        using HoverNetRml::FormField;
+        std::unique_ptr<HoverNetRml::FormScreen> form(new HoverNetRml::FormScreen(
+            graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "LEADERBOARDS", LoadReducedMotion(),
+            [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight));
+        if (form->Ok()) {
+            form->SetLayout(false, true);
+            form->SetCardWidth(760);
+            form->SetFooter("Back", "");
+            const std::vector<std::string> tabNames = {"RECORDS BROKEN", "ALL RECORDS", "RECENT WINNERS", "MONTHLY LEAGUE"};
+            // the ImGui screen numbers its tabs all-records first; this one has the newest records first
+            int tab = wantTab == 3 ? 0 : wantTab == 0 ? 1 : wantTab == 1 ? 2 : wantTab == 2 ? 3 : 0;
+            form->SetTabs(tabNames, tab);
+            std::vector<std::string> trackItems;
+            for (int i = 0; i < Tracks().Count(); ++i) { const TrackEntry* e = Tracks().Get(i); trackItems.push_back(e == nullptr ? std::string() : e->mName + (e->mOfficial ? "" : "  -  community")); }
+            static const char* const monthNames[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+            auto monthLabel = [&](const std::string& key) -> std::string { const int m = key.size() == 7 ? std::atoi(key.substr(5, 2).c_str()) : 0; return m >= 1 && m <= 12 ? std::string(monthNames[m - 1]) + " " + key.substr(0, 4) : key; };
+            auto note = [](const std::string& text) { FormField f; f.type = FormField::Type::eNote; f.label = text; return f; };
+            auto heading = [](const std::string& text) { FormField f; f.type = FormField::Type::eHeading; f.label = text; return f; };
+            auto row = [](const std::string& id, const std::string& title, const std::string& sub, const std::string& button) { FormField f; f.type = FormField::Type::eRow; f.id = id; f.label = title; f.hint = sub; f.text = button; return f; };
+            const char* unreadable = "The server answered in a form this version of the game cannot read: the game needs updating.";
+            std::vector<std::function<void()>> watchers;   // a row's button n starts watchers[n]
+            std::string shown;                              // what the fields were last built from; they are rebuilt only when it changes (a rebuild puts the list back at the top)
+            int frame = 0;
+            const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
+            while (running && !started && (limit < 0 || frame < limit)) {
+                ++frame;
+                std::vector<HoverNetRml::FormEvent> events;
+                const HoverNetRml::FormOutcome outcome = form->Frame(events, frame, limit);
+                if (outcome == HoverNetRml::FormOutcome::eSave || outcome == HoverNetRml::FormOutcome::eCancel) running = false;
+                else if (outcome == HoverNetRml::FormOutcome::eClose) { g_QuitConfirmed = true; running = false; }
+                if (!serverTried) { serverTried = true; if (!ConnectLobbyForReplays(server)) message = "The server address is not usable. Check it in the HoverNet servers screen."; }
+                server.Pump();
+                if (server.GetState() == OnlineLobby::State::eBrowsing) {
+                    if (need && officialTracks > 0) { server.RefreshRecords(Tracks().Get(track)->mName, laps); need = false; }
+                    if (needWinners) { server.RefreshWinners(); needWinners = false; }
+                    if (needLeague) { server.RefreshLeague(leagueMonth); needLeague = false; }
+                    if (needBreaks) { server.RefreshRecordBreaks(); needBreaks = false; }
+                }
+                std::vector<std::uint8_t> downloaded;
+                if (downloadId != 0 && server.TakeReplay(downloaded)) {
+                    cacheFolder.MakeDirectory();
+                    std::FILE* f = std::fopen(cachePath.c_str(), "wb");
+                    const bool written = f != nullptr && std::fwrite(downloaded.data(), 1, downloaded.size(), f) == downloaded.size();
+                    if (f != nullptr) std::fclose(f);
+                    if (written) { startPath = cachePath; startSlot = downloadSlot; startNote = downloadNote; }
+                    else message = "Could not save the replay on this device.";
+                    downloadId = 0;
+                }
+                else if (downloadId != 0 && !trackDownload.Active() && !server.Downloading()) {
+                    message = server.ReplayNotice().empty() ? "The replay could not be downloaded." : server.ReplayNotice();
+                    downloadId = 0;
+                }
+                bool refresh = false;
+                for (const HoverNetRml::FormEvent& e : events) {
+                    if (e.id == "tab") { tab = e.index; form->SetTabs(tabNames, tab); refresh = true; }
+                    else if (e.id == "track") { track = std::max(0, std::min(Tracks().Count() - 1, e.index)); need = true; laps = 0; }
+                    else if (e.id == "kind") {
+                        laps = 0;
+                        if (e.index > 0 && server.RecordsLoaded() && e.index - 1 < static_cast<int>(server.Records().availableLaps.size())) laps = server.Records().availableLaps[static_cast<std::size_t>(e.index - 1)];
+                        need = true;
+                    }
+                    else if (e.id == "month") {
+                        if (server.LeagueLoaded()) {
+                            std::vector<std::string> months; months.push_back(server.League().currentMonth);
+                            for (const Protocol3::LeagueMonthWinner& w : server.League().pastWinners) months.push_back(w.month);
+                            if (e.index >= 0 && e.index < static_cast<int>(months.size())) { leagueMonth = months[static_cast<std::size_t>(e.index)] == server.League().currentMonth ? std::string() : months[static_cast<std::size_t>(e.index)]; needLeague = true; }
+                        }
+                    }
+                    else if (e.id == "retry") { serverTried = false; need = needWinners = needLeague = needBreaks = true; server.Close(); message.clear(); }
+                    else if (e.id.size() > 2 && e.id[0] == 'w' && e.id[1] == ':' && downloadId == 0 && !trackDownload.Active()) {
+                        const std::size_t n = static_cast<std::size_t>(std::atoi(e.id.c_str() + 2));
+                        if (n < watchers.size()) watchers[n]();
+                        refresh = true;
+                    }
+                }
+                // what the screen would show: rebuilt when this changes
+                std::string signature = std::to_string(tab) + "|" + std::to_string(static_cast<int>(server.GetState())) + "|" + server.Message() + "|" + message + "|" + std::to_string(track) + "|" + std::to_string(laps) + "|" + std::to_string(downloadId) +
+                    "|" + std::to_string(server.RecordsLoaded()) + std::to_string(server.WinnersLoaded()) + std::to_string(server.LeagueLoaded()) + std::to_string(server.RecordBreaksLoaded()) + std::to_string(server.ListsUnreadable());
+                if (server.RecordsLoaded()) signature += "|r" + std::to_string(server.Records().boards.size()) + server.Records().track + std::to_string(server.Records().laps);
+                if (server.WinnersLoaded()) signature += "|w" + std::to_string(server.Winners().size());
+                if (server.RecordBreaksLoaded()) signature += "|b" + std::to_string(server.RecordBreaks().size());
+                if (server.LeagueLoaded()) signature += "|l" + server.League().month + std::to_string(server.League().standings.size());
+                if (refresh || signature != shown) {
+                    shown = signature;
+                    watchers.clear();
+                    std::vector<FormField> f;
+                    auto watchButton = [&](const std::string& title, std::uint64_t replayId, int slot, const std::string& noteText, const std::string& trackName, const std::string& racer, const std::string& sub, const std::string& label) {
+                        watchers.push_back([&, replayId, slot, noteText, trackName, racer]() { watchReplay(replayId, slot, noteText, trackName, racer); });
+                        f.push_back(row("w:" + std::to_string(watchers.size() - 1), title, sub, downloadId == replayId ? "DOWNLOADING..." : label));
+                    };
+                    if (server.GetState() == OnlineLobby::State::eFailed) {
+                        f.push_back(note(server.Message().empty() ? "Could not reach the server." : server.Message()));
+                        FormField b; b.type = FormField::Type::eButton; b.id = "retry"; b.label = "TRY AGAIN"; f.push_back(b);
+                    }
+                    else if (server.GetState() != OnlineLobby::State::eBrowsing) f.push_back(note("Connecting to the server..."));
+                    else if (tab == 0) {
+                        f.push_back(note("The latest records: a time that beat the best lap or the best race time of a craft on a track, or the first time on one (it sets the record)."));
+                        if (server.ListsUnreadable() && !server.RecordBreaksLoaded()) f.push_back(note(unreadable));
+                        else if (!server.RecordBreaksLoaded()) f.push_back(note("Loading the records..."));
+                        else if (server.RecordBreaks().empty()) f.push_back(note("No record has been broken yet."));
+                        for (const Protocol3::RecordBreakEntry& b : server.RecordBreaks()) {
+                            char time[32], before[32];
+                            formatMs(b.ms, time, sizeof time); formatMs(b.previousMs, before, sizeof before);
+                            const std::string craft = Authority::CraftName(b.craft), who = b.name.empty() ? "player" : b.name;
+                            std::string kind = b.lap ? "Fastest lap, " + craft : "Fastest race, " + std::to_string(b.raceLaps) + " lap" + (b.raceLaps == 1 ? "" : "s") + ", " + craft;
+                            std::string what = b.previousMs == 0 ? who + "  " + time + "  set the first record" : who + "  " + time + "  beat  " + (b.previousName.empty() ? "player" : b.previousName) + "  " + before;
+                            watchButton(b.track, b.replay, b.slot, b.lap ? "the fastest lap" : "the record holder", b.track, b.name, UkDateTime(b.savedAt) + "   " + kind + "\n" + what, "WATCH");
+                        }
+                    }
+                    else if (tab == 1) {
+                        f.push_back(note("The best times of everyone who races on this server, for each craft."));
+                        if (Tracks().Count() > 0) { FormField c; c.type = FormField::Type::eChooser; c.id = "track"; c.label = "Track"; c.items = trackItems; c.selected = track; f.push_back(c); }
+                        FormField k; k.type = FormField::Type::eSelect; k.id = "kind"; k.label = "Show"; k.options.push_back("Fastest laps"); k.selected = 0;
+                        if (server.RecordsLoaded()) for (std::uint8_t l : server.Records().availableLaps) { k.options.push_back("Fastest races: " + std::to_string(l) + " lap" + (l == 1 ? "" : "s")); if (laps == l) k.selected = static_cast<int>(k.options.size()) - 1; }
+                        f.push_back(k);
+                        if (server.ListsUnreadable() && !server.RecordsLoaded()) f.push_back(note(unreadable));
+                        else if (!server.RecordsLoaded()) f.push_back(note("Loading the leaderboard..."));
+                        else {
+                            const std::string trackName = Tracks().Get(track)->mName;
+                            const long long mine = laps == 0 ? myBests.LapBest(trackName) : myBests.RaceBest(trackName, laps);
+                            if (mine) { char t[32]; formatMs(mine, t, sizeof t); f.push_back(note(std::string("Your best on this device: ") + t + " (any craft)")); }
+                            if (server.Records().boards.empty()) f.push_back(note("No times for this yet. Times come from races on the server; races against the clock on your own do not count."));
+                            for (int craft = 0; craft < Authority::kCraftCount; ++craft) {
+                                const Protocol3::RecordBoard* board = nullptr;
+                                for (const Protocol3::RecordBoard& b : server.Records().boards) if (b.craft == craft) board = &b;
+                                f.push_back(heading(Authority::CraftName(craft)));
+                                if (board == nullptr || board->entries.empty()) { f.push_back(note("No times yet")); continue; }
+                                for (std::size_t i = 0; i < board->entries.size(); ++i) {
+                                    const Protocol3::RecordEntry& e = board->entries[i];
+                                    char time[32]; formatMs(e.ms, time, sizeof time);
+                                    const std::string who = e.name.empty() ? "player " + std::to_string(e.slot + 1) : e.name;
+                                    watchButton(std::to_string(i + 1) + ".  " + who + "   " + time, e.replay, e.slot, laps == 0 ? "the fastest lap" : "the record holder", trackName, e.name, UkDateTime(e.savedAt), "WATCH");
+                                }
+                            }
+                        }
+                    }
+                    else if (tab == 2) {
+                        f.push_back(note("Who won the latest races. A race is listed only if two or more different players were in it."));
+                        if (server.ListsUnreadable() && !server.WinnersLoaded()) f.push_back(note(unreadable));
+                        else if (!server.WinnersLoaded()) f.push_back(note("Loading the winners..."));
+                        else if (server.Winners().empty()) f.push_back(note("No races with two or more players have been won yet."));
+                        for (const Protocol3::WinnerEntry& w : server.Winners()) {
+                            char time[32]; formatMs(w.ms, time, sizeof time);
+                            std::string craft = w.craft < Authority::kCraftCount ? std::string(" (") + Authority::CraftName(w.craft) + ")" : std::string();
+                            watchButton(w.track, w.replay, w.slot, "the winner", w.track, w.name, UkDateTime(w.savedAt) + "   " + std::to_string(w.laps) + " lap" + (w.laps == 1 ? "" : "s") + ", " + std::to_string(w.players) + " players\nWinner: " + (w.name.empty() ? "player" : w.name) + craft + "   " + time, "WATCH");
+                        }
+                    }
+                    else {
+                        f.push_back(note("Win a race: 3 points. Only races where two or more players on different devices finished count. It starts again on the 1st of every month (UTC)."));
+                        if (server.ListsUnreadable() && !server.LeagueLoaded()) f.push_back(note(unreadable));
+                        else if (!server.LeagueLoaded()) f.push_back(note("Loading the league..."));
+                        else {
+                            const Protocol3::LeagueData& lg = server.League();
+                            FormField m; m.type = FormField::Type::eSelect; m.id = "month"; m.label = "Month";
+                            std::vector<std::string> months; months.push_back(lg.currentMonth);
+                            for (const Protocol3::LeagueMonthWinner& w : lg.pastWinners) months.push_back(w.month);
+                            for (std::size_t i = 0; i < months.size(); ++i) { m.options.push_back(monthLabel(months[i]) + (months[i] == lg.currentMonth ? "  (this month)" : "")); if (months[i] == lg.month) m.selected = static_cast<int>(i); }
+                            f.push_back(m);
+                            f.push_back(heading(monthLabel(lg.month) + (lg.month == lg.currentMonth ? " so far" : "")));
+                            if (lg.standings.empty()) f.push_back(note("Nobody has scored yet."));
+                            for (std::size_t i = 0; i < lg.standings.size(); ++i) { const Protocol3::LeagueRow& r = lg.standings[i]; f.push_back(row("", std::to_string(i + 1) + ".  " + r.name + "   " + std::to_string(r.points) + " point" + (r.points == 1 ? "" : "s"), std::to_string(r.wins) + " win" + (r.wins == 1 ? "" : "s") + ", " + std::to_string(r.races) + " race" + (r.races == 1 ? "" : "s"), "")); }
+                            f.push_back(heading("Winners of earlier months"));
+                            if (lg.pastWinners.empty()) f.push_back(note("No month has finished yet."));
+                            for (const Protocol3::LeagueMonthWinner& w : lg.pastWinners) f.push_back(note(w.name.empty() ? monthLabel(w.month) + ":  nobody scored" : monthLabel(w.month) + ":  " + w.name + "  (" + std::to_string(w.points) + " points)"));
+                            f.push_back(heading(std::to_string(lg.currentYear) + " so far"));
+                            if (lg.yearStandings.empty()) f.push_back(note("Nobody has scored yet this year."));
+                            for (std::size_t i = 0; i < lg.yearStandings.size() && i < 5; ++i) f.push_back(note(std::to_string(i + 1) + ".  " + lg.yearStandings[i].name + "   " + std::to_string(lg.yearStandings[i].points) + " points"));
+                            f.push_back(heading("Winners of earlier years"));
+                            if (lg.yearWinners.empty()) f.push_back(note("The winner of each year is announced here when the year ends."));
+                            for (const Protocol3::LeagueYearWinner& w : lg.yearWinners) f.push_back(note(w.name.empty() ? std::to_string(w.year) + ":  nobody scored" : std::to_string(w.year) + ":  " + w.name + "  (" + std::to_string(w.points) + " points)"));
+                        }
+                    }
+                    if (!message.empty()) f.push_back(note(message));
+                    form->SetFields(f);
+                }
+                // a community track this computer does not have is downloaded before the replay is fetched
+                if (TrackDownloadJob* job = trackDownload.Job()) {
+                    if (!job->Finished()) {
+                        const long long totalBytes = std::max<long long>(1, job->TotalBytes());
+                        form->SetBusy("Downloading track", job->CurrentName() + "   " + FormatMegabytes(job->BytesDone()) + " of " + FormatMegabytes(totalBytes), std::min(1.0f, static_cast<float>(job->BytesDone()) / static_cast<float>(totalBytes)), "Cancel");
+                        for (const HoverNetRml::FormEvent& e : events) if (e.id == "busy") job->Cancel();
+                    }
+                    else {
+                        Tracks().Refresh();
+                        const bool ok = job->Succeeded();
+                        trackDownload.Reset();
+                        form->SetBusy("", "", -1.0f, "");
+                        if (ok && pendingWatch.id != 0) { const std::uint64_t id = pendingWatch.id; pendingWatch.id = 0; downloadId = id; downloadSlot = pendingWatch.slot; downloadNote = pendingWatch.note; server.FetchReplay(id); }
+                        else { pendingWatch.id = 0; downloadId = 0; }
+                    }
+                }
+                if (!startPath.empty()) {
+                    bool fatal = false;
+                    message = start(startPath, startSlot, startNote, fatal);
+                    startPath.clear();
+                    if (message.empty()) started = true;
+                    else if (fatal) { g_QuitConfirmed = true; running = false; }
+                }
+            }
+            if (!started) server.Close();
+            return started;
+        }
+    }
+#endif
+
     while (running && !started && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
         SDL_Event event;

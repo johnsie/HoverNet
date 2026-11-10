@@ -115,3 +115,11 @@ scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0dp;
 .chooserbtn { text-align: left; padding: 11dp 12dp; background-color: #0b0c11; border-width: 1dp; border-color: #4a4f66; font-family: Inter; font-weight: normal; font-size: 16dp; }
 .chooserbtn:hover, .chooserbtn:focus { background-color: #171a24; border-color: #fa737a; transform: none; }
 #side { background-color: #0b0c11; border-width: 1dp; border-color: #303342; border-radius: 6dp; padding: 10dp; box-sizing: border-box; }
+
+/* table rows (Leaderboards, Replays): a title with a smaller line under it, and a button on the right */
+.row { display: flex; flex-direction: row; align-items: center; box-sizing: border-box; padding: 8dp 4dp; border-width: 0 0 1dp 0; border-color: #232634; }
+.rtext { flex: 1 1 0; }
+.rmain { color: #f4f5f8; margin: 0; }
+.rsub { color: #8b8fa3; font-size: 13dp; margin: 2dp 0 0 0; }
+button.rbtn { flex: 0 0 auto; width: 120dp; margin: 0 0 0 12dp; padding: 8dp; font-size: 15dp; }
+.rsub { white-space: pre-line; }
