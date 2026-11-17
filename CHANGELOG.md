@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.64 - 2026-11-17
+
+_Released at the owner's request without the full test suite. Run on the final build: scripts/test-modern-flow.sh checks 1 to 4, the track-browser and Garage round trips by hand, the camera-rule test; the classic menu test passed on the build before the modern flow was added._
+
 - **Modern menus (the default), with the classic ones one switch away** (Settings > "Modern menus", or `HOVERNET_MENU_STYLE=classic`; see docs/menu-flow.md). The main menu has a **Continue** card (the last race, one big RACE button). CHOOSE A TRACK opens **one race screen**: the track as a card (plan with pads in colour, briefing, your best), your own craft turning, laps and weapons chips, CHANGE TRACK (the track browser), EDIT IN GARAGE (and back), one RACE button, over the live 3D track. After an offline race the results screen offers **RACE AGAIN** first (F2), **CHOOSE ANOTHER TRACK** and MAIN MENU. The online lobby is unchanged (a waiting-room lobby and "Race now" are not built yet; see the roadmap).
 - _Checked (Linux, headless, screenshots of the main menu and the race screen): builds; `scripts/test-modern-flow.sh` (new, ctest `HoverNetModernFlow`). `scripts/test-rml-menu.sh` now runs in the classic style. Not run: the full suite, Windows, the web build, a download from the race screen. The track-browser and Garage round trips from the race screen were run once by hand and are in the new test._
 
