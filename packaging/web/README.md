@@ -204,3 +204,9 @@ A measurement of the live page (a first visit: 27.3 MB on the wire, about 6 s to
 
 Not changed: the `SERVER_USED=` cookie on every response (it comes from the HAProxy in front of Apache, not from this repository), and the audio, which still uses the browser's deprecated `ScriptProcessorNode`
 (moving it to an AudioWorklet is a larger change to the audio backend).
+
+## ?reset and ?perf
+
+`?reset` on the page address removes the saved display and performance settings (the files named in `hoverNetDisplaySettingFiles` in `web-pre.js`) and keeps names, craft designs, records, controls and the account.
+`?perf` shows a small box with the browser's frame rate next to the game's, the graphics card, the power state and the saved display settings. A setting saved by an older version can make the page slow;
+these two are the way to see it and to get out of it without the browser's site-data screens.

@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+- **`?reset` for the web page** (a saved setting from an older version made the page slow for the owner): open the page with `?reset` (for example https://hovernet.outiva.com/?reset) to remove the saved display and performance settings (graphics look, race view and race detail, UI scale, menu style, menu backdrop, window size, fullscreen, reduced motion, high contrast); your name, craft designs, records, controls and account are kept, and the address is cleaned so the next visit does not reset again. The `?perf` box now also lists the saved settings it finds.
+- _Checked: in headless Chrome on the GPU, saved `race_view` and `ui_scale` were removed by `?reset`, the saved name was kept, the address was cleaned and the result persisted across a reload._
+
 ## 2.3.69 - 2026-11-17
 
 _Released at the owner's request without the full test suite. Run on this build: the page's scripts parse; the new `?perf` box was checked in a browser on the real GPU; the deploy-check warnings fire against the live site as expected. Not run: the web build of this exact commit, the smoke test, Windows, the server config on a real Apache (it takes effect only when the host's Apache site file is replaced: packaging/web/setup-host.sh, then a reload)._

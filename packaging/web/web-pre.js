@@ -163,6 +163,20 @@ hoverNetWindow.hoverNetLoadCraftAccount = function() {
     hoverNetWindow.hoverNetCraftStatus = 'Could not restore craft designs from the account.';
   }).finally(function() { hoverNetWindow.hoverNetCraftBusy = false; });
 };
+// ?reset on the page address: removes the saved display and performance settings (graphics look, race view and race detail, UI scale, menu style, window size, motion and contrast
+// options) so the game starts with its defaults; names, craft designs, records, controls and the account are kept. A setting saved by an older version (a heavy graphics look, a large
+// race picture) can make the page slow, and this is the way back without digging through the browser's site data. The address is cleaned afterwards so the next visit does not reset again.
+var hoverNetDisplaySettingFiles = ['graphics', 'race_view', 'race_detail', 'ui_scale', 'menu_style', 'menu_backdrop', 'window_size', 'fullscreen', 'reduced_motion', 'high_contrast'];
+function hoverNetResetDisplaySettings() {
+  var removed = [];
+  hoverNetDisplaySettingFiles.forEach(function(name) {
+    var path = hoverNetConfigPath + '/hovernet/' + name;
+    try { if (FS.analyzePath(path).exists) { FS.unlink(path); removed.push(name); } } catch (e) {}
+  });
+  console.info('HoverNet: saved display settings removed: ' + (removed.length ? removed.join(', ') : 'none were saved'));
+  hoverNetSync(false);
+  try { hoverNetWindow.history.replaceState(null, '', hoverNetWindow.location.pathname + hoverNetWindow.location.search.replace(/([?&])reset\b&?/, '$1').replace(/[?&]$/, '') + hoverNetWindow.location.hash); } catch (e) {}
+}
 Module.preRun = Module.preRun || [];
 Module.preRun.push(function() {
   // Emscripten creates /home and /home/web_user as default directories.
@@ -172,6 +186,7 @@ Module.preRun.push(function() {
   FS.mount(IDBFS, {}, '/home/web');
   addRunDependency('hovernet-idbfs');
   hoverNetSync(true, function() {
+    if (/[?&]reset\b/.test(hoverNetWindow.location ? hoverNetWindow.location.search : '')) hoverNetResetDisplaySettings();   // ?reset: forget the saved display and performance settings, then play with the defaults
     hoverNetAccount().then(function() { removeRunDependency('hovernet-idbfs'); });
   });
   hoverNetWindow.setInterval(function() { hoverNetSync(false); }, 15000);

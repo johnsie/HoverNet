@@ -873,6 +873,19 @@
       } catch (err) {}
       var battery = 'n/a';
       if (navigator.getBattery) navigator.getBattery().then(function (b) { battery = (b.charging ? 'charging ' : 'on battery ') + Math.round(b.level * 100) + '%'; battery += ' (hardware: ' + (b.charging ? 'plugged in' : 'unplugged') + ')'; });
+      // The display and performance settings the browser has saved for the game (a setting from an older version can make the page slow; ?reset clears them).
+      function savedSettings() {
+        try {
+          var out = [], names = ['graphics', 'race_view', 'race_detail', 'ui_scale', 'menu_style', 'menu_backdrop', 'reduced_motion'];
+          names.forEach(function (n) {
+            var path = '/home/web/.config/hovernet/' + n;
+            if (!Module.FS.analyzePath(path).exists) return;
+            var text = Module.FS.readFile(path, { encoding: 'utf8' }).replace(/\s+/g, ' ').trim();
+            out.push(n + '=' + (n === 'graphics' ? (/preset\s+(\w+)/.exec(text) || [0, text])[1] : text.slice(0, 20)));
+          });
+          return out.length ? out.join('  ') : 'none (defaults)';
+        } catch (err) { return '?'; }
+      }
       var raf = 0, worst = 0, last = performance.now(), gameLast = 0, gameFps = 0, shown = performance.now();
       function frame(t) {
         raf++; worst = Math.max(worst, t - last); last = t;
@@ -886,7 +899,8 @@
                             'window         : ' + innerWidth + 'x' + innerHeight + '  dpr ' + devicePixelRatio + '  zoom~' + Math.round(devicePixelRatio * 100) + '%\n' +
                             'gpu            : ' + gpu + '\n' +
                             'power          : ' + battery + '\n' +
-                            'cores          : ' + (navigator.hardwareConcurrency || '?') + '   tab ' + document.visibilityState;
+                            'cores          : ' + (navigator.hardwareConcurrency || '?') + '   tab ' + document.visibilityState + '\n' +
+                            'saved settings : ' + savedSettings();   // (add ?reset to the address to clear these)
           raf = 0; worst = 0; shown = t;
         }
         requestAnimationFrame(frame);
