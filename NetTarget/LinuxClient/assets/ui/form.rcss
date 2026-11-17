@@ -114,7 +114,7 @@ scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0dp;
 /* the chooser button reads as a field, not as a call to action */
 .chooserbtn { text-align: left; padding: 11dp 12dp; background-color: #0b0c11; border-width: 1dp; border-color: #4a4f66; font-family: Inter; font-weight: normal; font-size: 16dp; }
 .chooserbtn:hover, .chooserbtn:focus { background-color: #171a24; border-color: #fa737a; transform: none; }
-#side { background-color: #0b0c11; border-width: 1dp; border-color: #303342; border-radius: 6dp; padding: 10dp; box-sizing: border-box; }
+#side { background-color: #0b0c11b4; border-width: 1dp; border-color: #303342; border-radius: 6dp; padding: 10dp; box-sizing: border-box; }
 
 /* table rows (Leaderboards, Replays): a title with a smaller line under it, and a button on the right */
 .row { display: flex; flex-direction: row; align-items: center; box-sizing: border-box; padding: 8dp 4dp; border-width: 0 0 1dp 0; border-color: #232634; }

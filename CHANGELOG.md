@@ -6,7 +6,7 @@ and how to roll one back.
 
 ## Unreleased
 
-- **The orbiting track backdrop no longer slows the menu**: it is drawn on its own thread at 320x200, at most about ten pictures a second and about a third of one core, and it gives up the live view for a still picture if pictures take too long (the menu only copies the newest finished picture). Loading and drawing levels are serialised by one lock (`HoverNetPlan::LevelLock`).
+- **The orbiting track backdrop no longer slows the menu**: a background thread draws one ring of 36 pictures round the track once (320x200, at most about ten a second and about a third of one core), then the menu only fades between them, so it costs next to nothing afterwards. Settings has a new switch, "3D track behind the race setup screen" (off on a slow computer); `menu_backdrop` in the config folder holds it. Where the 3D view draws nothing it is now see-through (the menu's own backdrop shows, not black), and the map box beside the controls is slightly glassy. Loading and drawing levels are serialised by one lock (`HoverNetPlan::LevelLock`).
 - **Faster "Download all community tracks" on desktop**: up to six tracks are fetched at once. On the web page the button is gone (the browser fetched them one at a time, about a thousand requests; tracks still download when picked). The download dialog is restyled (lit panel, red top edge, large title, rounded glowing bar).
 - _Checked: builds; the setup screen and a race start after it in a headless run; the downloader smoke test (ctest) and the camera-rule test pass. Not checked: the speed on a slow machine (I have none), a real multi-track download over the network, the web build, Windows._
 

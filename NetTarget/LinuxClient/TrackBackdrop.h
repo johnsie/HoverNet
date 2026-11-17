@@ -34,20 +34,23 @@ private:
     Impl* mImpl;
 };
 
-// The orbit on its own thread, so a slow machine never slows the menu: the thread opens the track, then draws the view as fast as a modest share of one core allows (it sleeps at
-// least as long as each picture took, and gives up the live orbit for a single still picture if pictures take too long), and the menu only ever copies the newest finished picture.
+// The orbit, drawn once and played back: a thread opens the track and draws a ring of pictures all the way round it, at a gentle pace (it sleeps at least as long as each picture took), and
+// then the menu only fades between them, which costs nothing. Until the ring is complete the newest picture is shown. A slow machine pays a few seconds of background work once per track and never
+// slows the menu.
 class FlyoverWorker
 {
 public:
+    static constexpr int kRing = 36;       // pictures round the track, one every ten degrees
+    struct Frame { int index = 0, width = 0, height = 0; std::vector<std::uint8_t> rgba; };
     FlyoverWorker();
     ~FlyoverWorker();
     FlyoverWorker(const FlyoverWorker&) = delete;
     FlyoverWorker& operator=(const FlyoverWorker&) = delete;
-    void SetTrack(const std::string& path, const std::string& name);   // a different track: the thread opens it (the old picture stays until the new one is ready)
-    void SetAngle(float degrees);                                       // where the eye is on the orbit
-    void SetStill(bool still);                                          // draw once and stop (Reduced motion, or a machine that is too slow)
-    // Copies the newest finished picture if there is one the caller has not had yet. Returns true and fills `rgba`, `width` and `height`.
-    bool TakeFrame(std::vector<std::uint8_t>& rgba, int& width, int& height);
+    void SetTrack(const std::string& path, const std::string& name);   // a different track: the ring is drawn again (pictures of the old one stop arriving)
+    void SetStill(bool still);                                          // draw only the first picture (Reduced motion)
+    int Generation() const;                                             // counts up each time SetTrack starts a new ring, so the caller can drop the pictures it holds
+    // Moves the pictures finished since the last call into `out` (in order). Returns how many.
+    int TakeFrames(std::vector<Frame>& out);
     bool Failed() const;                                                // the track could not be opened
 private:
     struct Impl;

@@ -1324,6 +1324,7 @@ void SaveLocalRacePrefs(const HostPrefs& prefs)
 // second (it never blocks input and never touches the race picture). Each screen loop calls this once per frame with its own key (HN_SCREEN_FADE). Off for the
 // screenshot hooks and with HOVERNET_NO_FADE, so the regression captures stay what they were.
 bool LoadReducedMotion();   // defined with the other settings below
+bool LoadMenuBackdrop();    // likewise
 float LoadUiScale();         // likewise
 
 #ifdef HOVERNET_HAVE_RMLUI
@@ -2204,6 +2205,25 @@ bool LoadReducedMotion()
 void SaveReducedMotion(bool enabled)
 {
     std::ofstream out(ReducedMotionPath());
+    out << (enabled ? 1 : 0) << '\n';
+}
+
+std::string MenuBackdropPath()
+{
+    return ConfigDirPath() + "/menu_backdrop";
+}
+
+// The live 3D track behind the race setup screen: on unless the player turned it off (Settings, or this file holding 0).
+bool LoadMenuBackdrop()
+{
+    std::ifstream in(MenuBackdropPath());
+    int enabled = 1;
+    return !(in >> enabled) || enabled != 0;
+}
+
+void SaveMenuBackdrop(bool enabled)
+{
+    std::ofstream out(MenuBackdropPath());
     out << (enabled ? 1 : 0) << '\n';
 }
 
@@ -4943,47 +4963,61 @@ struct LocalRaceSetup
 // Built when the track changes (a fraction of a second), for tracks that are on this computer. HOVERNET_NO_BACKDROP=1 leaves it out; Reduced motion holds the first picture still.
 struct TrackBackdropShow
 {
-    // The live orbit is drawn on its own thread (TrackBackdrop.h), so a slow machine never slows the menu: this only copies the newest finished picture to a texture and draws it.
+    // The orbit is drawn once, on its own thread, as a ring of pictures (TrackBackdrop.h); the menu then fades between them, which costs next to nothing and cannot slow a slow machine.
     std::unique_ptr<HoverNetBackdrop::FlyoverWorker> worker;
-    SDL_Texture* live = nullptr;
-    int liveW = 0, liveH = 0;
-    std::vector<std::uint8_t> pixels;
-    int builtFor = -2;
+    std::vector<SDL_Texture*> ring;
+    int ready = 0, builtFor = -2, generation = -1;
     Uint32 since = 0;
-    void Clear() { if (live != nullptr) { SDL_DestroyTexture(live); live = nullptr; } liveW = liveH = 0; }
+    void Clear() { for (SDL_Texture*& t : ring) if (t != nullptr) { SDL_DestroyTexture(t); t = nullptr; } ready = 0; }
     ~TrackBackdropShow() { worker.reset(); Clear(); }
     void Prepare(SDL_Renderer*, int index)
     {
         if (index == builtFor) return;
         builtFor = index; since = SDL_GetTicks();
+        Clear();
         const TrackEntry* entry = Tracks().Get(index);
-        if (entry == nullptr || !entry->mInstalled || std::getenv("HOVERNET_NO_BACKDROP") != nullptr) { if (worker) worker->SetStill(true); Clear(); return; }
+        if (entry == nullptr || !entry->mInstalled || std::getenv("HOVERNET_NO_BACKDROP") != nullptr || !LoadMenuBackdrop()) return;
         if (!worker) worker.reset(new HoverNetBackdrop::FlyoverWorker);
-        worker->SetStill(false);
-        worker->SetTrack(Tracks().PathFor(entry->mName), entry->mName);   // opened on the thread; the old picture stays until the new one is ready
+        worker->SetStill(LoadReducedMotion());
+        worker->SetTrack(Tracks().PathFor(entry->mName), entry->mName);
+        generation = worker->Generation();
+        ring.assign(HoverNetBackdrop::FlyoverWorker::kRing, nullptr);
     }
     void Draw(SDL_Renderer* renderer, int w, int h, bool still)
     {
-        if (!worker) return;
-        const float seconds = static_cast<float>(SDL_GetTicks() - since) / 1000.0f;
-        worker->SetAngle(200.0f + (still ? 0.0f : 5.0f * seconds));   // a slow turn
-        if (still) worker->SetStill(true);
-        int fw = 0, fh = 0;
-        if (worker->TakeFrame(pixels, fw, fh) && fw > 0 && fh > 0) {
-            if (live == nullptr || fw != liveW || fh != liveH) {
-                Clear();
-                live = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, fw, fh);
-                if (live != nullptr) { SDL_SetTextureBlendMode(live, SDL_BLENDMODE_BLEND); SDL_SetTextureScaleMode(live, SDL_ScaleModeLinear); liveW = fw; liveH = fh; }
+        if (!worker || ring.empty()) return;
+        std::vector<HoverNetBackdrop::FlyoverWorker::Frame> frames;
+        if (worker->TakeFrames(frames) > 0 && worker->Generation() == generation) {
+            for (HoverNetBackdrop::FlyoverWorker::Frame& f : frames) {
+                if (f.index < 0 || f.index >= static_cast<int>(ring.size()) || f.width <= 0) continue;
+                SDL_Texture* t = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, f.width, f.height);
+                if (t == nullptr) continue;
+                SDL_UpdateTexture(t, nullptr, f.rgba.data(), f.width * 4);
+                SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureScaleMode(t, SDL_ScaleModeLinear);
+                if (ring[static_cast<std::size_t>(f.index)] != nullptr) SDL_DestroyTexture(ring[static_cast<std::size_t>(f.index)]);
+                ring[static_cast<std::size_t>(f.index)] = t;
+                ready = std::max(ready, f.index + 1);
             }
-            if (live != nullptr) SDL_UpdateTexture(live, nullptr, pixels.data(), fw * 4);
         }
-        if (live == nullptr) return;
-        const float tw = static_cast<float>(liveW), th = static_cast<float>(liveH);
-        float dw = static_cast<float>(w), dh = dw * th / tw;
-        if (dh < h) { dh = static_cast<float>(h); dw = dh * tw / th; }
-        const SDL_FRect to = {(w - dw) * 0.5f, (h - dh) * 0.5f, dw, dh};
-        SDL_SetTextureAlphaMod(live, 255);
-        SDL_RenderCopyF(renderer, live, nullptr, &to);
+        if (ready == 0) return;
+        const int n = static_cast<int>(ring.size());
+        const bool complete = ready >= n;
+        auto drawTexture = [&](SDL_Texture* t, Uint8 alpha) {
+            int tw = 0, th = 0; SDL_QueryTexture(t, nullptr, nullptr, &tw, &th);
+            float dw = static_cast<float>(w), dh = dw * th / tw;
+            if (dh < h) { dh = static_cast<float>(h); dw = dh * tw / th; }
+            const SDL_FRect to = {(w - dw) * 0.5f, (h - dh) * 0.5f, dw, dh};
+            SDL_SetTextureAlphaMod(t, alpha);
+            SDL_RenderCopyF(renderer, t, nullptr, &to);
+        };
+        if (still || !complete) drawTexture(ring[static_cast<std::size_t>(still ? 0 : ready - 1)], 255);   // until the ring is whole, the newest picture
+        else {   // a slow turn: half a picture a second, the next one fading in over the last
+            const float position = std::fmod(static_cast<float>(SDL_GetTicks() - since) / 1000.0f * 0.5f, static_cast<float>(n));
+            const int i = static_cast<int>(position) % n;
+            drawTexture(ring[static_cast<std::size_t>(i)], 255);
+            drawTexture(ring[static_cast<std::size_t>((i + 1) % n)], static_cast<Uint8>((position - std::floor(position)) * 255.0f));
+        }
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer, 8, 6, 16, 150);
         const SDL_Rect veil = {0, 0, w, h};
@@ -5616,6 +5650,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     GraphicsSettings graphicsSettings = LoadGraphicsSettings();
     bool showGhost = LoadShowGhost();
     bool reducedMotion = LoadReducedMotion();
+    bool menuBackdrop = LoadMenuBackdrop();
     const bool currentHighContrast = LoadHighContrast();
     bool highContrast = currentHighContrast;
     bool fullscreen = currentFullscreen;
@@ -5754,6 +5789,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                     f.push_back(slider("uiscale", "UI Scale", uiScalePercent, 75.0f, 150.0f, "%", "Applies to the other menus, and to this one the next time it opens."));
                     f.push_back(toggle("largehud", "Large HUD text", largeHudText, "Keeps race information and chat at the font's native size."));
                     f.push_back(toggle("reduced", "Reduced motion", reducedMotion, "Turns off menu animations and the moving effects in a race."));
+                    f.push_back(toggle("backdrop", "3D track behind the race setup screen", menuBackdrop, "Draws the chosen track turning slowly behind the screen. Turn it off on a slow computer."));
                     f.push_back(toggle("ghost", "Show my best run as a ghost", showGhost, "Draws your fastest run on this track beside your craft, so you race your own best time. It never touches the race."));
                     f.push_back(toggle("contrast", "High contrast menus", highContrast, "Strengthens text, borders, fields, and focus states (the older menus; these menus already have strong contrast)."));
                 }
@@ -5846,6 +5882,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                     else if (id == "uiscale") uiScalePercent = e.value;
                     else if (id == "largehud") largeHudText = e.on;
                     else if (id == "reduced") reducedMotion = e.on;
+                    else if (id == "backdrop") { menuBackdrop = e.on; SaveMenuBackdrop(e.on); }
                     else if (id == "ghost") showGhost = e.on;
                     else if (id == "contrast") highContrast = e.on;
                     else if (id == "preset") { graphicsSettings.preset = presets[std::max(0, std::min(2, e.index))]; refresh = true; }
