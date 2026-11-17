@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.63 - 2026-11-17
+
+_Released at the owner's request without the full test suite (see the checks listed below)._
+
 - **A live orbiting 3D view of the track behind the race setup screen** (replacing the two still pictures). It is a preview camera only: `MR_Observer::RenderFlyover` draws every floor and wall of the level from an eye that circles the track, tilted down; the race view and its camera are untouched (render golden frames and `scripts/test-camera-rule.sh` pass; the script now also checks that only the menu backdrop calls it, and `docs/camera.md` records the owner's carve-out). The flat map beside the controls no longer turns (the turning drawing is off; `HOVERNET_SPIN_MAP=1` brings it back). `HOVERNET_NO_FLYOVER=1` uses the still pictures; `HOVERNET_NO_BACKDROP=1` turns the backdrop off.
 - _Checked (Linux, headless, screenshots at four angles of ClassicH): the orbit frames the track; render goldens, camera rule and track-plan tests pass. Not run: the full suite, Windows, the web build; the orbit on a very large or odd track; how it looks on a real GPU window (the headless run is software)._
 
