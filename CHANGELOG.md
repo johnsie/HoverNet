@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.58 - 2026-11-17
+
+_Released at the owner's request without waiting for the full test suite (only the graphics ctests were run)._
+
 - Graphics (High quality): the craft's hull now picks up the colour of the floor around it, so over water the ring turns blue, as in the original-engine web version. The more coloured the floor, the stronger; a grey floor changes almost nothing. Checked on Linux in a native capture on NL Waterway (the ring is visibly blue-grey) and with the graphics ctests (ModernGraphics, scenes, RenderGolden, CameraRule, GpuFinish: pass). Not checked: Windows, the browser build, Medium/Low quality (the craft pass only runs at High), or other tracks. The camera is untouched.
 
 ## 2.3.57 - 2026-11-17
