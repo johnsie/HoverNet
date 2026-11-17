@@ -103,3 +103,8 @@ button:active { transform: scale(0.97); }
 .grid button:hover, .grid button:focus { background-color: #3a2230; decorator: gradient( vertical #56303f #33202a ); border-color: #fa737a; }
 .grid button.quiet { background-color: #272a3a; decorator: gradient( vertical #323650 #1f2230 ); border-color: #4a4f6a #333750 #1a1c28 #333750; }
 .grid button.quiet:hover, .grid button.quiet:focus { decorator: gradient( vertical #404668 #272b42 ); border-color: #fa737a; }
+
+.hide { display: none; }
+/* Quit: a plain, low key button under the doors, red only when pointed at */
+button.quit { margin: 6dp 0 0 0; padding: 9dp 10dp; font-size: 15dp; color: #aeb2c6; background-color: #00000000; decorator: none; border-color: #2a2d40; }
+button.quit:hover, button.quit:focus { color: #ffffff; background-color: #3a1c25; decorator: none; border-color: #fa737a; }

@@ -10545,6 +10545,9 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         if (profile.xp > 0 || profile.races > 0) { info.level = profile.Level(); info.levelTitle = HoverNetCraft::LevelTitle(profile.Level()); info.levelProgress = profile.LevelProgress(); }
         info.tutorialDone = HoverNetTutorial::HasCompleted(ConfigDirPath());
         info.reducedMotion = LoadReducedMotion();
+#ifndef __EMSCRIPTEN__
+        info.showQuit = true;
+#endif
         info.sound = [](HoverNetRml::Sound sound) {
             if (std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST sound %s\n", sound == HoverNetRml::Sound::eHover ? "hover" : sound == HoverNetRml::Sound::eClick ? "click" : "back"); std::fflush(stdout); }
             PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack);

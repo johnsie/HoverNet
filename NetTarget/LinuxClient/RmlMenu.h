@@ -27,6 +27,7 @@ struct MainMenuInfo
     int level = 0;               // 0 = no level line yet (a new player)
     std::string levelTitle;
     float levelProgress = 0.0f;  // 0..1 towards the next level
+    bool showQuit = false;       // desktop: a Quit button under the doors (it asks "Quit HoverNet?" first); the browser has none
     bool tutorialDone = false;   // the Tutorial button is quiet once it has been done
     // The player's own craft, turning: called every frame with the angle in degrees, it returns the picture to draw (null = none, and the stock picture in the markup
     // is shown instead) and sets cropOut to the part of it to show. The caller owns the texture. reducedMotion keeps the entrance animations of the pictures still.

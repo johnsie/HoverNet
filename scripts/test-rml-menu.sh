@@ -15,8 +15,9 @@ check() { local got; got=$(chose "$1"); if [ "$got" = "$2" ]; then echo "ok   $3
 check "enter" online "Enter on the first button (RACE ONLINE has the focus when it opens)"
 check "down,enter" offline "Down, Enter"
 check "down,down,enter" leaderboards "Down, Down, Enter"
-check "up,enter" settings "Up from the first button wraps to the last"
-for id in online offline leaderboards garage tutorial settings; do check "click:$id" "$id" "a real mouse click on $id"; done
+check "up,enter" quit "Up from the first button wraps to the last (Quit, shown on the desktop)"
+check "up,up,enter" settings "Up, Up, Enter"
+for id in online offline leaderboards garage tutorial settings quit; do check "click:$id" "$id" "a real mouse click on $id"; done
 # The interface sounds: moving with the keys ticks, choosing clicks (the sounds are the game's own; the hook logs each one).
 snd=$(HOVERNET_TEST_RML="down,down,enter" timeout -s KILL 25 "$client" --play --frames 150 2>&1 | grep -a "^RMLTEST sound" | sed 's/^RMLTEST sound //' | head -3 | tr '\n' ' ')
 if [ "$snd" = "hover hover click " ]; then echo "ok   two keystrokes tick twice and Enter clicks: $snd"; else echo "FAIL: sounds were '$snd', wanted 'hover hover click'"; fail=1; fi
@@ -26,11 +27,11 @@ if [ "$got" = "menu" ]; then echo "ok   the results screen opens after a race an
 # The pause menu in a real race (Escape at frame 60 of an autoplay race, then Down and Enter): the second button is chosen.
 pick=$(HOVERNET_TEST_PAUSE_AT_FRAME=60 HOVERNET_TEST_RML="down,enter" timeout -s KILL 60 "$client" --play --track "The River" --autoplay --frames 100000 2>&1 | grep -a "^RMLTEST choice" | head -1 | sed 's/^RMLTEST choice //')
 if [ "$pick" = "1" ]; then echo "ok   the pause menu opens in a race and the second button (Down, Enter) is chosen: 1"; else echo "FAIL: pause menu: wanted choice 1, got '${pick:-nothing}'"; fail=1; fi
-# The Settings hub is the same kind of screen: Up from the main menu's first button reaches Settings; in the hub Up wraps to Back (the fifth button).
-hub=$(HOVERNET_TEST_RML="up,enter" timeout -s KILL 40 "$client" --play --frames 100000 2>&1 | grep -a "^RMLTEST choice" | head -1 | sed 's/^RMLTEST choice //')
+# The Settings hub is the same kind of screen: Up, Up from the main menu's first button reaches Settings (Quit is the last door); in the hub Up wraps to Back (the fifth button).
+hub=$(HOVERNET_TEST_RML="up,up,enter;up,enter" timeout -s KILL 40 "$client" --play --frames 100000 2>&1 | grep -a "^RMLTEST choice" | head -1 | sed 's/^RMLTEST choice //')
 if [ "$hub" = "4" ]; then echo "ok   Settings opens the hub, and its Back button is the fifth: 4"; else echo "FAIL: settings hub: wanted choice 4, got '${hub:-nothing}'"; fail=1; fi
 # The Settings form (main menu > Settings > Game settings): tabs, a toggle, a text field, all through the real event path, each reported with its new value.
-form=$(HOVERNET_TEST_RML="up,enter;enter;tab:1,click:f_mute,tab:0,text:name=Tester" timeout -s KILL 50 "$client" --play --frames 100000 2>&1 | grep -a "^RMLTEST form" | head -6 | tr '\n' '|')
+form=$(HOVERNET_TEST_RML="up,up,enter;enter;tab:1,click:f_mute,tab:0,text:name=Tester" timeout -s KILL 50 "$client" --play --frames 100000 2>&1 | grep -a "^RMLTEST form" | head -6 | tr '\n' '|')
 case "$form" in
   *"form tab "*"index=1"*"form mute "*"on=1"*"form tab "*"index=0"*"form name text=[Tester]"*) echo "ok   the Settings form: a tab, the Mute toggle and the name field each report their change";;
   *) echo "FAIL: settings form events were: $form"; fail=1;;
@@ -42,7 +43,7 @@ case "$setup" in
   *) echo "FAIL: local race setup events were: $setup"; fail=1;;
 esac
 # Controls: choose Jump, press J; the remap is reported as the key's scancode (J = 13), and the screen leaves with Back.
-ctl=$(HOVERNET_TEST_RML="up,enter;down,enter;click:f_key4,press:J,click:save" timeout -s KILL 50 "$client" --play --frames 100000 2>&1 | grep -a "^RMLTEST form capturekey" | head -1)
+ctl=$(HOVERNET_TEST_RML="up,up,enter;down,enter;click:f_key4,press:J,click:save" timeout -s KILL 50 "$client" --play --frames 100000 2>&1 | grep -a "^RMLTEST form capturekey" | head -1)
 case "$ctl" in
   *"index=13"*) echo "ok   Controls: choosing Jump and pressing J remaps it (scancode 13)";;
   *) echo "FAIL: controls remap event was: '$ctl'"; fail=1;;

@@ -38,6 +38,7 @@ public:
         else if (id == "garage") *mResult = Choice::eGarage;
         else if (id == "tutorial") *mResult = Choice::eTutorial;
         else if (id == "settings") *mResult = Choice::eSettings;
+        else if (id == "quit") *mResult = Choice::eQuitRequested;
         if (*mResult != Choice::eNone && std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST chose %s\n", id.c_str()); std::fflush(stdout); }
     }
 private:
@@ -234,20 +235,20 @@ void DrawResultsBackdrop(SDL_Renderer* pRenderer, int pWidth, int pHeight, int p
     }
 }
 
-const char* const kButtons[] = {"online", "offline", "leaderboards", "garage", "tutorial", "settings"};   // in the order the arrow keys walk them
-constexpr int kButtonCount = 6;
+const char* const kButtons[] = {"online", "offline", "leaderboards", "garage", "tutorial", "settings", "quit"};   // in the order the arrow keys walk them (quit only where it is shown)
 
 void MoveFocus(Rml::ElementDocument* pDocument, int pStep, const std::function<void(Sound)>& pSound)
 {
     if (pSound) pSound(Sound::eHover);
+    std::vector<Rml::Element*> walk;
+    for (const char* id : kButtons) if (Rml::Element* button = pDocument->GetElementById(id)) if (!button->IsClassSet("hide")) walk.push_back(button);
+    if (walk.empty()) return;
+    const int count = static_cast<int>(walk.size());
     int at = -1;
     Rml::Element* focused = pDocument->GetFocusLeafNode();
-    for (int i = 0; i < kButtonCount; ++i) {
-        Rml::Element* button = pDocument->GetElementById(kButtons[i]);
-        if (button != nullptr && (button == focused)) at = i;
-    }
-    const int next = at < 0 ? 0 : (at + pStep + kButtonCount) % kButtonCount;
-    if (Rml::Element* button = pDocument->GetElementById(kButtons[next])) button->Focus();
+    for (int i = 0; i < count; ++i) if (walk[static_cast<size_t>(i)] == focused) at = i;
+    const int next = at < 0 ? 0 : (at + pStep + count) % count;
+    walk[static_cast<size_t>(next)]->Focus();
 }
 }  // namespace
 
@@ -285,6 +286,7 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
         }
         else level->SetProperty("display", "none");
     }
+    if (Rml::Element* quit = document->GetElementById("quit")) quit->SetClass("hide", !pInfo.showQuit);
     if (pInfo.tutorialDone) if (Rml::Element* tutorial = document->GetElementById("tutorial")) tutorial->SetClass("quiet", true);
 
     ChooseListener listener(&result, pInfo.sound);
