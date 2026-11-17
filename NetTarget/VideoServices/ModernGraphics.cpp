@@ -46,7 +46,7 @@ void AddGlow(std::uint8_t* rgb, int width, int height, float cx, float cy, float
 Options Presenter::OptionsForLevel(const Options& allowed, int level)
 {
     Options o = allowed;
-    level = std::max(0, std::min(kMaxLevel, level));
+    level = std::max(0, std::min(int(kMaxLevel), level));
     o.quality = std::min(allowed.quality, level >= 5 ? 2 : level >= 3 ? 1 : 0);
     if (level < 1) o.shadows = false;
     if (level < 2) { o.lighting = false; o.halos = false; }
@@ -235,7 +235,7 @@ void Presenter::Process(std::uint8_t* rgb, int width, int height, const Options&
     const bool automatic = requested.automatic && requested.adaptive;
     if (automatic) {
         // The first frame: a machine with a graphics card doing the passes starts at the top, any other at the level the caller gave (a phone or a browser starts lower).
-        if (!mLevelStarted) { mLevelStarted = true; mLevel = (requested.gpuFinish && FinisherActive()) ? kMaxLevel : std::max(0, std::min(kMaxLevel, requested.startLevel)); mSlowFrames = mFastFrames = 0; mRaiseAfter = 240; }
+        if (!mLevelStarted) { mLevelStarted = true; mLevel = (requested.gpuFinish && FinisherActive()) ? kMaxLevel : std::max(0, std::min(int(kMaxLevel), requested.startLevel)); mSlowFrames = mFastFrames = 0; mRaiseAfter = 240; }
         options = OptionsForLevel(requested, mLevel);
         mQualityCap = options.quality;
     }

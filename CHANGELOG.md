@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.61 - 2026-11-17
+
+- Fixed the "Full test suite under ASan and UBSan" CI build failing to link (`undefined reference to Presenter::kMaxLevel`): `ModernGraphics.cpp` bound a `static constexpr` member to a reference (`std::min`), which needs a definition in C++14 at -O0. It now passes a copy. No behaviour change.
+- _Checked: `ModernGraphics.cpp` compiled at -O0 with g++ and the object has no `kMaxLevel` symbol. Not run: the sanitizer job itself, the test suite. Released at the owner's request._
+
 ## 2.3.60 - 2026-11-17
 
 _Released at the owner's request without running the test suite for this change (only screenshots at two window sizes)._
