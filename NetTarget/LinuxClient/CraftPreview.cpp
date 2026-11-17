@@ -1,3 +1,4 @@
+#include <cmath>
 #include "../MainCharacter/StdAfx.h"
 #include "CraftPreview.h"
 
@@ -19,8 +20,9 @@ namespace
 constexpr int kPreviewSlot = 15;   // the slot the preview borrows in CraftLook; no race is running while the Garage is open
 }
 
+namespace { constexpr double kRaiseLens = 2.3; }
 bool RenderCraftPreview(MR_ResourceLib& pLib, const Authority::CraftDesign* pDesign, int pCraft, int pYawDegrees, const std::uint32_t* pPalette256,
-                        int pWidth, int pHeight, std::vector<std::uint32_t>& pRgba, bool pTransparentBackground)
+                        int pWidth, int pHeight, std::vector<std::uint32_t>& pRgba, bool pTransparentBackground, int pViewRaise)
 {
     static const int kActors[5] = {MR_ELECTRO_CAR, MR_HITECH_CAR, MR_BITURBO_CAR, 19, MR_MANTA_CRAFT};
     if (pCraft < 0 || pCraft > 4 || pWidth < 16 || pHeight < 16) return false;
@@ -42,7 +44,10 @@ bool RenderCraftPreview(MR_ResourceLib& pLib, const Authority::CraftDesign* pDes
     std::vector<MR_UInt32> colour(static_cast<std::size_t>(pWidth) * pHeight, 0);
     viewport.SetColourBuffer(colour.data(), pPalette256);
     viewport.SetTextureFiltering(TRUE);
-    viewport.SetupCameraPosition(MR_3DCoordinate(-extent * 14 / 10, 0, (lo.mZ + hi.mZ) / 2 - extent / 25), 0, 0);
+    const int raise = extent * pViewRaise / 100;
+    // Raising the eye while looking level moves the craft down the picture; the finished picture is shifted back up by that many rows (the view has no tilt, only a raised eye).
+    const int shiftRows = static_cast<int>(std::lround(static_cast<double>(raise) / (extent * 1.4) * 0.5 * pHeight * kRaiseLens));
+    viewport.SetupCameraPosition(MR_3DCoordinate(-extent * 14 / 10, 0, (lo.mZ + hi.mZ) / 2 - extent / 25 + raise), 0, 0);
     viewport.Clear(255);
     viewport.ClearZ();
     MR_PositionMatrix matrix;
@@ -57,13 +62,16 @@ bool RenderCraftPreview(MR_ResourceLib& pLib, const Authority::CraftDesign* pDes
     for (int y = 0; y < pHeight; ++y) {
         for (int x = 0; x < pWidth; ++x) {
             const std::size_t at = static_cast<std::size_t>(y) * pWidth + x;
+            const int sy = y + shiftRows;   // the row of the drawn picture that lands here
+            if (sy < 0 || sy >= pHeight) { pRgba[at] = pTransparentBackground ? 0u : 0xFF1A1A20u; continue; }
+            const std::size_t from = static_cast<std::size_t>(sy) * pWidth + x;
             std::uint32_t rgb;
-            if (indices[at] == 255 && pTransparentBackground) { pRgba[at] = 0; continue; }
-            if (indices[at] == 255) {   // not drawn: a soft dark gradient with a lighter floor
+            if (indices[from] == 255 && pTransparentBackground) { pRgba[at] = 0; continue; }
+            if (indices[from] == 255) {   // not drawn: a soft dark gradient with a lighter floor
                 const int shade = 26 + y * 22 / pHeight + (y > pHeight * 7 / 10 ? 14 : 0);
                 rgb = (static_cast<std::uint32_t>(shade) << 16) | (static_cast<std::uint32_t>(shade) << 8) | static_cast<std::uint32_t>(shade + 6);
             }
-            else rgb = colour[at] != 0 ? colour[at] : pPalette256[indices[at]];
+            else rgb = colour[from] != 0 ? colour[from] : pPalette256[indices[from]];
             pRgba[at] = 0xFF000000u | ((rgb & 255) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 255);
         }
     }

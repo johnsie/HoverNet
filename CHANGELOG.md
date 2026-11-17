@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+- Main menu: the craft is drawn at 840x630 instead of 560x420 (it was enlarged and looked pixelated on high-resolution laptop screens) and from a little above, so the cockpit, top and engine show instead of a flat side-on view. The Garage keeps its level view. Checked on Linux: a native menu capture and the `HoverNetCraftLook`, `HoverNetRmlMenu`, `HoverNetGarageDecals`, `HoverNetGarageUnlocks`, `HoverNetRenderGolden` and `HoverNetCameraRule` ctests pass. Not checked: a real high-DPI laptop, Windows, the browser build, the redraw cost on slow machines (the picture has 2.25 times the pixels). The race camera is untouched; this is the menu's own craft picture.
+
 ## 2.3.58 - 2026-11-17
 
 _Released at the owner's request without waiting for the full test suite (only the graphics ctests were run)._

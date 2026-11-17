@@ -133,6 +133,14 @@ int main()
     Check(total > 100 && redder > total / 4, "the body tint shows in the picture");
 
     // The Garage preview draws each craft, stock and designed, and the two differ.
+    if (const char* dump = std::getenv("HOVERNET_CRAFT_DUMP")) if (const char* raise = std::getenv("HOVERNET_CRAFT_RAISE")) {   // look at the main menu's raised view: HOVERNET_CRAFT_RAISE=<percent>
+        for (int yaw : {25, 115, 205, 295}) {
+            std::vector<std::uint32_t> img;
+            if (!HoverNetCraft::RenderCraftPreview(lib, nullptr, 0, yaw, gWords.data(), 1120, 840, img, true, std::atoi(raise))) break;
+            char path[256]; std::snprintf(path, sizeof path, "%s/raised%d.ppm", dump, yaw);
+            if (FILE* f = std::fopen(path, "wb")) { std::fprintf(f, "P6\n1120 840\n255\n"); for (std::uint32_t q : img) { const bool on = (q >> 24) > 8; std::fputc(on ? q & 255 : 30, f); std::fputc(on ? (q >> 8) & 255 : 30, f); std::fputc(on ? (q >> 16) & 255 : 36, f); } std::fclose(f); }
+        }
+    }
     for (int c = 0; c < 5; ++c) {
         std::vector<std::uint32_t> a, b;
         char what[120];

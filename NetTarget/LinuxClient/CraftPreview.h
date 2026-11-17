@@ -15,7 +15,8 @@ namespace HoverNetCraft
 // wearing pDesign (nullptr = stock). pPalette256 is the game's palette as 0x00RRGGBB words. False when the craft's model is missing.
 // MR_ResBitmap::SetColourPalette must have been called (the design's tint and paint are drawn in true colour).
 bool RenderCraftPreview(MR_ResourceLib& pLib, const Authority::CraftDesign* pDesign, int pCraft, int pYawDegrees, const std::uint32_t* pPalette256,
-                        int pWidth, int pHeight, std::vector<std::uint32_t>& pRgba, bool pTransparentBackground = false);   // transparent: pixels the craft does not cover get alpha 0 (the main menu)
+                        int pWidth, int pHeight, std::vector<std::uint32_t>& pRgba, bool pTransparentBackground = false,
+                        int pViewRaise = 0);   // pViewRaise: the eye rises this many percent of the craft's length above its middle (the picture is shifted to keep the craft centred), so the top of the craft shows; 0 = the Garage's level view   // transparent: pixels the craft does not cover get alpha 0 (the main menu)
 }
 
 #endif

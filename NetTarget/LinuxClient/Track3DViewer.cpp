@@ -10527,6 +10527,7 @@ enum class MenuChoice
 // The first player screen. A bounded/headless run still defaults to Local Play
 // if no button is activated, preserving the automated gameplay contract.
 // The object library, for the craft turning on the main menu (set by the caller before the menu opens; null = the menu keeps its picture).
+constexpr int kMenuViewRaise = 30;   // the main menu shows the craft from a little above (percent of its length), so the cockpit and top show; the Garage keeps its level view
 MR_ResourceLib* gMenuCraftResources = nullptr;
 
 MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
@@ -10549,7 +10550,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack);
         };
         // The player's own craft, as on the ImGui menu: the saved design from the Garage, drawn by the Garage's preview code into a texture that is redrawn as it turns.
-        constexpr int kCraftW = 560, kCraftH = 420;
+        constexpr int kCraftW = 840, kCraftH = 630;   // drawn larger than shown on most screens, so it stays sharp on a laptop's high-resolution display
         SDL_Texture* rmlCraftTexture = nullptr;
         std::vector<std::uint32_t> rmlCraftPixels, rmlPalette(256, 0);
         Authority::CraftDesign rmlCraftDesign;
@@ -10581,7 +10582,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                     rmlCropKnown = true;
                     int x0 = kCraftW, y0 = kCraftH, x1 = -1, y1 = -1;
                     for (int angle = 0; angle < 360; angle += 30) {
-                        if (!HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, angle, rmlPalette.data(), kCraftW, kCraftH, rmlCraftPixels, true)) break;
+                        if (!HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, angle, rmlPalette.data(), kCraftW, kCraftH, rmlCraftPixels, true, kMenuViewRaise)) break;
                         for (int y = 0; y < kCraftH; ++y) for (int x = 0; x < kCraftW; ++x) if ((rmlCraftPixels[static_cast<std::size_t>(y) * kCraftW + x] >> 24) > 8) { x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y); }
                     }
                     rmlCraftYaw = -1000;   // the picture drawn for the next frame is the one for its own angle
@@ -10593,7 +10594,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                 }
                 if (yaw != rmlCraftYaw && (now - rmlCraftBuilt >= 40 || !rmlCraftReady)) {
                     rmlCraftReady = HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, yaw,
-                                                                      rmlPalette.data(), kCraftW, kCraftH, rmlCraftPixels, true);
+                                                                      rmlPalette.data(), kCraftW, kCraftH, rmlCraftPixels, true, kMenuViewRaise);
                     if (rmlCraftReady) SDL_UpdateTexture(rmlCraftTexture, nullptr, rmlCraftPixels.data(), kCraftW * 4);
                     rmlCraftYaw = yaw; rmlCraftBuilt = now;
                 }
@@ -10657,7 +10658,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
     }
 
     // The player's own craft, turning slowly on the menu with the design saved in the Garage (the same drawing as the Garage preview, on a clear background).
-    constexpr int kMenuCraftW = 560, kMenuCraftH = 420;
+    constexpr int kMenuCraftW = 840, kMenuCraftH = 630;
     SDL_Texture* menuCraftTexture = nullptr;
     std::vector<std::uint32_t> menuCraftPixels, menuPaletteWords(256, 0);
     Authority::CraftDesign menuCraftDesign;
@@ -10810,7 +10811,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             const Uint32 nowTicks = SDL_GetTicks();
             if (yawNow != menuCraftShownYaw && (nowTicks - menuCraftLastBuild >= 40 || !menuCraftReady)) {
                 menuCraftReady = HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, menuCraftDesign.IsPlain() ? nullptr : &menuCraftDesign, menuCraftDesign.craft, yawNow,
-                                                                   menuPaletteWords.data(), kMenuCraftW, kMenuCraftH, menuCraftPixels, true);
+                                                                   menuPaletteWords.data(), kMenuCraftW, kMenuCraftH, menuCraftPixels, true, kMenuViewRaise);
                 if (menuCraftReady) SDL_UpdateTexture(menuCraftTexture, nullptr, menuCraftPixels.data(), kMenuCraftW * 4);
                 menuCraftShownYaw = yawNow; menuCraftLastBuild = nowTicks;
             }
