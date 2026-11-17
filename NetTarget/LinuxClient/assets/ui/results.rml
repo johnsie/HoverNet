@@ -26,6 +26,7 @@
 		<div id="actions" class="reveal">
 			<button id="lobby" class="primary">RETURN TO LOBBY</button>
 			<button id="menu" class="quiet">MAIN MENU</button>
+			<p id="keys" class="keys"><span class="cap">F2</span> <span id="f2what">main menu</span> &nbsp;&nbsp; <span class="cap">Esc</span> main menu</p>
 		</div>
 	</div>
 </body>

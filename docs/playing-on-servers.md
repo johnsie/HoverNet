@@ -38,7 +38,7 @@ If the server refuses something, the screen says why in plain words (full, resta
 
 - You drive as always. Your craft feels immediate even on a slow connection; the server's answer quietly corrects it.
 - **Chat** in the race: just type, and press **Enter** to send. It works after you have finished too.
-- **When you cross the finish line the race goes on.** You are told to press **Enter** for your results; take your time, drive on, chat.
+- **When you cross the finish line the race goes on.** You are told to press **F2** for your results (Enter is the chat key); take your time, drive on, chat.
   On a touch screen use **MENU**. The results screen lets you keep driving, start another race, or go back to the servers.
 - **In the browser, keep the HoverNet tab in front** while you host, wait for a race or race: a browser pauses a tab you cannot see, so a race that starts while you are looking at another tab starts without you.
 - **Watching:** **Left** and **Right** (or **[** and **]**) move the camera to the other craft.

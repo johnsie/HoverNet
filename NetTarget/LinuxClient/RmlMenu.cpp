@@ -472,6 +472,7 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
     set("opened", pInfo.opened);
     set("unlocked", pInfo.unlocked);
     if (!pInfo.online) if (Rml::Element* lobby = document->GetElementById("lobby")) lobby->SetProperty("display", "none");
+    if (pInfo.online) { set("f2what", "lobby"); }
 
     ResultsListener listener(&result, pInfo.sound);
     for (const char* id : {"lobby", "menu"}) if (Rml::Element* button = document->GetElementById(id)) { button->AddEventListener("click", &listener); button->AddEventListener("mouseover", &listener); }
@@ -516,7 +517,7 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
             const std::string& step = script[static_cast<size_t>((frames - 60) / 4)];
             SDL_Event scripted; SDL_zero(scripted);
             scripted.type = SDL_KEYDOWN; scripted.key.state = SDL_PRESSED;
-            scripted.key.keysym.sym = step == "down" ? SDLK_DOWN : step == "up" ? SDLK_UP : step == "enter" ? SDLK_RETURN : SDLK_ESCAPE;
+            scripted.key.keysym.sym = step == "down" ? SDLK_DOWN : step == "up" ? SDLK_UP : step == "enter" ? SDLK_F2 : SDLK_ESCAPE;
             SDL_PushEvent(&scripted);
         }
         SDL_Event event;
@@ -531,7 +532,10 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
                     if (Rml::Element* e = document->GetElementById(other)) e->Focus();
                     continue;
                 }
-                if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_SPACE) { if (Rml::Element* f = document->GetFocusLeafNode()) f->Click(); continue; }
+                // F2 returns (to the lobby after an online race, otherwise the main menu). Enter and Space do nothing here: Enter is the chat key, and a chat line sent as the race ends
+                // must not choose a button.
+                if (key == SDLK_F2) { if (pInfo.sound) pInfo.sound(Sound::eClick); result = pInfo.online ? ResultsChoice::eLobby : ResultsChoice::eMainMenu; if (std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST results chose %s\n", pInfo.online ? "lobby" : "menu"); std::fflush(stdout); } break; }
+                if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_SPACE) continue;
             }
             if (event.type == SDL_CONTROLLERBUTTONDOWN) {
                 const int b = event.cbutton.button;

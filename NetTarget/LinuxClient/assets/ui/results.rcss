@@ -15,7 +15,9 @@ p, h1, div { display: block; }
 	margin-left: -320dp;
 	margin-top: -210dp;
 	padding: 26dp 30dp;
-	background-color: #101018f2;
+	background-color: #090b12;
+	border-radius: 0dp;
+	decorator: gradient( vertical #141824 #090b12 );
 	text-align: center;
 	opacity: 0;
 	transform: translateY(40dp);
@@ -72,3 +74,9 @@ button:active { transform: scale(0.97); }
 
 /* a bounded (test) run and Reduced motion: everything is shown at once, with no transitions */
 body.instant #card, body.instant .reveal, body.instant #barfill, body.instant button { transition: none; }
+
+/* sports-broadcast look: solid plate, red title rule, gold key caps */
+#card { border-width: 4dp 0 0 0; border-color: #d6263a; }
+hr { background-color: #ffd25a; height: 2dp; }
+.keys { margin-top: 14dp; color: #aeb2c6; font-size: 15dp; }
+.cap { display: inline-block; padding: 2dp 9dp; margin: 0 4dp; font-family: Oxanium; font-weight: bold; color: #15110a; background-color: #ffd25a; }

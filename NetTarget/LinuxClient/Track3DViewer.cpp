@@ -4691,6 +4691,10 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                     running = false;
                 }
             }
+            else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F2 && event.key.repeat == 0) {   // F2: back to the lobby (online) or the main menu
+                choice = pWasOnline ? PostRaceChoice::eOnlineLobby : PostRaceChoice::eMainMenu;
+                running = false;
+            }
             else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
                 choice = PostRaceChoice::eMainMenu;
                 running = false;
@@ -4887,7 +4891,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             }
             ImGui::Spacing();
         }
-        HoverNetHint("Esc / B: main menu");
+        HoverNetHint(pWasOnline ? "F2: lobby   |   Esc / B: main menu" : "F2 / Esc / B: main menu");
         ImGui::EndChild();
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor();
@@ -6939,41 +6943,56 @@ void DrawChatPrompt(const ImVec2& origin, const ImVec2& display, const std::stri
 
 void DrawFinishPrompt(const ImVec2& origin, const ImVec2& display, bool touch)
 {
+    // A sports-broadcast caption: a solid dark plate with slanted ends, a red title bar with a bright rule under it, and the key drawn as a key cap.
     ImDrawList* draw = ImGui::GetForegroundDrawList();
     ImFont* body = ImGui::GetIO().Fonts->Fonts[0];
     ImFont* big = gHoverNetDisplayFont != nullptr ? gHoverNetDisplayFont : body;
     const float scale = std::max(0.7f, std::min(1.5f, display.y / 768.0f));
     const char* title = "RACE COMPLETE";
     const char* before = touch ? "Tap " : "Press ";
-    const char* key = touch ? "MENU" : "ENTER";
-    const char* after = touch ? " for your results" : " for your results";
+    const char* key = touch ? "MENU" : "F2";
+    const char* after = " for your results";
     const char* note = touch ? "" : "Esc opens the pause menu, not your results.";
-    const float titleSize = 38.0f * scale, lineSize = 24.0f * scale, noteSize = 16.0f * scale;
+    const float titleSize = 40.0f * scale, lineSize = 24.0f * scale, noteSize = 16.0f * scale;
     const ImVec2 titleBox = big->CalcTextSizeA(titleSize, FLT_MAX, 0.0f, title);
     const float beforeW = body->CalcTextSizeA(lineSize, FLT_MAX, 0.0f, before).x, keyW = big->CalcTextSizeA(lineSize, FLT_MAX, 0.0f, key).x, afterW = body->CalcTextSizeA(lineSize, FLT_MAX, 0.0f, after).x;
-    const float keyPad = 12.0f * scale;
+    const float keyPad = 14.0f * scale, slant = 18.0f * scale;
     const float lineW = beforeW + keyW + keyPad * 2.0f + afterW;
     const float noteW = body->CalcTextSizeA(noteSize, FLT_MAX, 0.0f, note).x;
-    const float width = std::max(std::max(titleBox.x, lineW), noteW) + 56.0f * scale;
-    const float height = titleBox.y + lineSize + 30.0f * scale + (note[0] != 0 ? noteSize + 14.0f * scale : 0.0f) + 26.0f * scale;
+    const float width = std::max(std::max(titleBox.x, lineW), noteW) + 90.0f * scale;
+    const float barH = titleBox.y + 16.0f * scale, ruleH = 4.0f * scale;
+    const float lowerH = lineSize + 34.0f * scale + (note[0] != 0 ? noteSize + 8.0f * scale : 0.0f);
+    const float height = barH + ruleH + lowerH;
     const float cx = origin.x + display.x * 0.5f;
-    const float top = origin.y + display.y * 0.30f;
-    draw->AddRectFilled(ImVec2(cx - width * 0.5f, top), ImVec2(cx + width * 0.5f, top + height), IM_COL32(8, 10, 16, 215), 16.0f * scale);
-    draw->AddRect(ImVec2(cx - width * 0.5f, top), ImVec2(cx + width * 0.5f, top + height), IM_COL32(120, 215, 140, 170), 16.0f * scale, 0, 2.0f);
-    float y = top + 14.0f * scale;
-    draw->AddText(big, titleSize, ImVec2(cx - titleBox.x * 0.5f, y), IM_COL32(130, 230, 155, 255), title);
-    y += titleBox.y + 10.0f * scale;
+    const float x0 = cx - width * 0.5f, x1 = cx + width * 0.5f, top = origin.y + display.y * 0.28f;
+    // soft shadow, then the plate
+    for (int i = 3; i >= 1; --i) {
+        const float grow = 5.0f * scale * static_cast<float>(i);
+        const ImVec2 sh[4] = {ImVec2(x0 + slant - grow, top - grow + 6.0f * scale), ImVec2(x1 + grow, top - grow + 6.0f * scale), ImVec2(x1 - slant + grow, top + height + grow + 6.0f * scale), ImVec2(x0 - grow, top + height + grow + 6.0f * scale)};
+        draw->AddConvexPolyFilled(sh, 4, IM_COL32(0, 0, 0, 38));
+    }
+    const ImVec2 plate[4] = {ImVec2(x0 + slant, top), ImVec2(x1, top), ImVec2(x1 - slant, top + height), ImVec2(x0, top + height)};
+    draw->AddConvexPolyFilled(plate, 4, IM_COL32(9, 11, 18, 255));
+    const ImVec2 bar[4] = {ImVec2(x0 + slant, top), ImVec2(x1, top), ImVec2(x1 - slant * barH / height, top + barH), ImVec2(x0 + slant - slant * barH / height, top + barH)};
+    draw->AddConvexPolyFilled(bar, 4, IM_COL32(214, 38, 58, 255));
+    const float ry0 = top + barH, ry1 = top + barH + ruleH;
+    const ImVec2 rule[4] = {ImVec2(x0 + slant - slant * barH / height, ry0), ImVec2(x1 - slant * barH / height, ry0), ImVec2(x1 - slant * (barH + ruleH) / height, ry1), ImVec2(x0 + slant - slant * (barH + ruleH) / height, ry1)};
+    draw->AddConvexPolyFilled(rule, 4, IM_COL32(255, 214, 90, 255));
+    draw->AddText(big, titleSize, ImVec2(cx - titleBox.x * 0.5f + 2.0f * scale, top + 8.0f * scale + 2.0f * scale), IM_COL32(0, 0, 0, 120), title);
+    draw->AddText(big, titleSize, ImVec2(cx - titleBox.x * 0.5f, top + 8.0f * scale), IM_COL32(255, 255, 255, 255), title);
+    float y = top + barH + ruleH + 17.0f * scale;
     float x = cx - lineW * 0.5f;
-    const float lineH = lineSize;
-    draw->AddText(body, lineSize, ImVec2(x, y + 2.0f * scale), IM_COL32(240, 242, 248, 255), before);
+    draw->AddText(body, lineSize, ImVec2(x, y + 2.0f * scale), IM_COL32(244, 246, 250, 255), before);
     x += beforeW;
-    // the key, drawn as a key cap
-    draw->AddRectFilled(ImVec2(x, y - 3.0f * scale), ImVec2(x + keyW + keyPad * 2.0f, y + lineH + 5.0f * scale), IM_COL32(250, 115, 122, 255), 8.0f * scale);
-    draw->AddText(big, lineSize, ImVec2(x + keyPad, y + 1.0f * scale), IM_COL32(20, 12, 16, 255), key);
+    // the key, as a slanted key cap
+    const float kh0 = y - 4.0f * scale, kh1 = y + lineSize + 6.0f * scale, ks = 6.0f * scale;
+    const ImVec2 cap[4] = {ImVec2(x + ks, kh0), ImVec2(x + keyW + keyPad * 2.0f, kh0), ImVec2(x + keyW + keyPad * 2.0f - ks, kh1), ImVec2(x, kh1)};
+    draw->AddConvexPolyFilled(cap, 4, IM_COL32(255, 214, 90, 255));
+    draw->AddText(big, lineSize, ImVec2(x + keyPad, y + 1.0f * scale), IM_COL32(20, 14, 10, 255), key);
     x += keyW + keyPad * 2.0f;
-    draw->AddText(body, lineSize, ImVec2(x, y + 2.0f * scale), IM_COL32(240, 242, 248, 255), after);
-    y += lineH + 18.0f * scale;
-    if (note[0] != 0) draw->AddText(body, noteSize, ImVec2(cx - noteW * 0.5f, y), IM_COL32(160, 164, 178, 255), note);
+    draw->AddText(body, lineSize, ImVec2(x, y + 2.0f * scale), IM_COL32(244, 246, 250, 255), after);
+    y += lineSize + 16.0f * scale;
+    if (note[0] != 0) draw->AddText(body, noteSize, ImVec2(cx - noteW * 0.5f, y), IM_COL32(150, 156, 174, 255), note);
 }
 
 void DrawGameOverlay(SDL2GraphicsBackend& graphics, SDL_Renderer* renderer, const HudText* hud)
@@ -7082,7 +7101,7 @@ void ShowLoadingScreen(SDL2GraphicsBackend& graphics, const std::string& trackNa
         "A missile takes a moment to recharge. The HUD says when it is ready.",
         "Design your own craft in the Garage: other players see it in online races.",
         "Your best run on each track is kept as a ghost you can race against.",
-        "Press Enter after the finish line for your results and race options.",
+        "Press F2 after the finish line for your results and race options.",
         "The Tutorial in the main menu teaches every control in one short lap.",
     };
     if (std::getenv("HOVERNET_NO_LOADING_SCREEN") != nullptr || graphics.GetRenderer() == nullptr) return;
@@ -12574,7 +12593,7 @@ int RunClient(int argc, char** argv)
     bool finishAnnounced = false;
     bool restartLocal = false;   // restart the local race with the same settings (pause menu, results screen)
     bool toMainMenu = false;     // set by a menu that says "main menu" (and by an online lobby that was left); acted on at the top of the next frame
-    // Finishing does not take the race away: the player is told they can press Enter for the results and race options, and may drive
+    // Finishing does not take the race away: the player is told they can press F2 for the results and race options, and may drive
     // on as long as they like (some like to stay on the track). The times are kept from the moment of the finish.
     bool resultsPending = false;
     Uint32 lastResultsHint = 0;
@@ -12967,7 +12986,7 @@ int RunClient(int argc, char** argv)
 #ifdef HOVERNET_GAME2_PLAYER
         if (canChat() && !SDL_IsTextInputActive()) SDL_StartTextInput();   // menus opened from the race stop it
 #endif
-        bool openResults = false;   // Enter (or the controller's Back button) after a finish: show the results and race options
+        bool openResults = false;   // F2 (or the controller's Back button) after a finish: show the results and race options
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
@@ -13044,7 +13063,7 @@ int RunClient(int argc, char** argv)
                 if (std::getenv("HOVERNET_TEST_WATCH") != nullptr) { std::printf("WATCHTEST camera distance %d%%\n", kChasePercents[chaseStep]); std::fflush(stdout); }
             }
 #endif
-            else if (resultsPending && ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN && event.key.repeat == 0) ||
+            else if (resultsPending && ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F2 && event.key.repeat == 0) ||   // F2, not Enter: Enter sends chat
                                         (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK))) {
                 openResults = true;
             }
@@ -13723,7 +13742,7 @@ int RunClient(int argc, char** argv)
                 if (sTestFrames == 80) {
                     SDL_Event key;
                     SDL_memset(&key, 0, sizeof(key));
-                    key.type = SDL_KEYDOWN; key.key.state = SDL_PRESSED; key.key.keysym.sym = SDLK_RETURN; key.key.keysym.scancode = SDL_SCANCODE_RETURN;
+                    key.type = SDL_KEYDOWN; key.key.state = SDL_PRESSED; key.key.keysym.sym = SDLK_F2; key.key.keysym.scancode = SDL_SCANCODE_F2;
                     SDL_PushEvent(&key);
                 }
             }
@@ -13791,13 +13810,13 @@ int RunClient(int argc, char** argv)
                 }
                 else {
                     session.AddMessage(HoverNetIsTouchDevice() ? "Finished! Keep driving, or press MENU for race options"
-                                                               : "Finished! Keep driving, or press Enter for your results");
+                                                               : "Finished! Keep driving, or press F2 for your results");
                     if (testFinish) { std::printf("FINISHTEST finished, race still running\n"); std::fflush(stdout); }
                 }
             }
             else if (resultsPending && !resultsSeen && !openResults && SDL_GetTicks() - lastResultsHint > 12000) {
                 lastResultsHint = SDL_GetTicks();
-                session.AddMessage(HoverNetIsTouchDevice() ? "Press MENU for race options" : "Press Enter for your results and race options");
+                session.AddMessage(HoverNetIsTouchDevice() ? "Press MENU for race options" : "Press F2 for your results and race options");
             }
             gFinishPromptVisible = resultsPending && !resultsSeen && !openResults && !replay.active;
             gFinishPromptTouch = HoverNetIsTouchDevice();
@@ -13852,7 +13871,7 @@ int RunClient(int argc, char** argv)
                     continue;
                 }
                 SDL_StartTextInput();   // the results screen stops text input; chat needs it back
-                session.AddMessage("Press Enter for your results again, or ESC for race options");
+                session.AddMessage("Press F2 for your results again, or ESC for race options");
                 resultsSeen = true;
             }
             if (onlineClient.IsConnected() && localClientId >= 0) {
@@ -14232,6 +14251,20 @@ int RunClient(int argc, char** argv)
             std::fflush(stdout);
             gLoopProfile.frames = 0; gLoopProfile.process = gLoopProfile.render = gLoopProfile.present = 0; gLoopProfile.windowStart = nowProfile;
         }
+#ifdef HOVERNET_GAME2_PLAYER
+        if (const char* finishShot = std::getenv("HOVERNET_TEST_SHOT_FINISH")) {   // test switch (with HOVERNET_TEST_FINISH): the race picture with the finish box up, to <file>.bmp
+            static int finishShotFrames = 0;
+            if (++finishShotFrames == 60) {
+                int w = 0, h = 0;
+                SDL_Renderer* shotRenderer = graphics.GetRenderer();
+                if (SDL_GetRendererOutputSize(shotRenderer, &w, &h) == 0) if (SDL_Surface* shot = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888)) {
+                    SDL_RenderReadPixels(shotRenderer, nullptr, SDL_PIXELFORMAT_ARGB8888, shot->pixels, shot->pitch);
+                    SDL_SaveBMP(shot, finishShot);
+                    SDL_FreeSurface(shot);
+                }
+            }
+        }
+#endif
 #ifdef HOVERNET_GAME2_PLAYER
         if (const char* missileShots = std::getenv("HOVERNET_TEST_SHOT_MISSILE")) {   // test switch: up to 12 pictures (every third frame) while a missile is in flight, to <prefix>N.bmp
             static int shots = 0;

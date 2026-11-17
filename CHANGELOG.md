@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+- After a race, **F2** (not Enter) opens the results, and on the results screen F2 returns to the lobby (online) or the main menu. Enter and Space no longer choose anything there, so a chat line sent as the race ends cannot pick a button. Esc and the controller buttons are unchanged.
+- The "RACE COMPLETE" box is now a solid broadcast-style plate (slanted ends, red title bar with a gold rule, gold F2 key cap), and the results card is solid with a red top edge and key hints.
+- _Checked: scripts/test-finish-flow.sh and scripts/test-rml-menu.sh pass (native, Linux, headless); a screenshot of the in-race box. Not seen: the restyled results card (the capture run did not reach it), the older ImGui results screen (F2 added, Enter still activates a focused button there), the web build, Windows._
+
 ## 2.3.61 - 2026-11-17
 
 - Fixed the "Full test suite under ASan and UBSan" CI build failing to link (`undefined reference to Presenter::kMaxLevel`): `ModernGraphics.cpp` bound a `static constexpr` member to a reference (`std::min`), which needs a definition in C++14 at -O0. It now passes a copy. No behaviour change.
