@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.60 - 2026-11-17
+
+_Released at the owner's request without running the test suite for this change (only screenshots at two window sizes)._
+
 - Main menu: on a wide window the spinning craft's tail or engine could slide under the panel and be cut off. The craft's room is now measured to the panel's real left edge. Checked on Linux at 1753x856 (the reported size) and 1280x720 (screenshots; the craft stays clear of the panel). Not checked: Windows, every other window shape, the browser build.
 
 ## 2.3.59 - 2026-11-17
