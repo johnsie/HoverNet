@@ -5031,6 +5031,36 @@ bool ReadSurfaceTexture(const void* pElement, HoverNetPlan::Texture& pOut)
     return true;
 }
 
+// The turning craft for the web page: the craft is drawn by the game's software renderer, which is slow in WebAssembly, so instead of redrawing it every few frames it is drawn once for each of
+// 36 angles (as they are first reached) and the picture between two angles is a blend of the two. After one turn it costs only the blend.
+struct CraftRing
+{
+    static constexpr int kN = 36;
+    std::vector<std::uint32_t> frames[kN];
+    bool have[kN] = {};
+    std::vector<std::uint32_t> mix;
+    template <typename Render>
+    const std::vector<std::uint32_t>& Get(double yawDegrees, Render render)
+    {
+        const double pos = std::fmod(std::max(0.0, yawDegrees), 360.0) / (360.0 / kN);
+        const int i = static_cast<int>(pos) % kN, j = (i + 1) % kN;
+        const float f = static_cast<float>(pos - std::floor(pos));
+        int drawn = 0;
+        for (int k : {i, j}) if (!have[k] && drawn < 1) { have[k] = render(k * (360 / kN), frames[k]); ++drawn; }   // at most one new picture a call
+        if (!have[i]) return mix;   // nothing drawn yet
+        if (!have[j] || f < 0.02f) { mix = frames[i]; return mix; }
+        mix.resize(frames[i].size());
+        const int wgt = static_cast<int>(f * 256.0f);
+        for (std::size_t p = 0; p < mix.size(); ++p) {
+            const std::uint32_t a = frames[i][p], b = frames[j][p];
+            std::uint32_t out = 0;
+            for (int shift = 0; shift < 32; shift += 8) { const int ca = static_cast<int>((a >> shift) & 255), cb = static_cast<int>((b >> shift) & 255); out |= static_cast<std::uint32_t>(ca + (cb - ca) * wgt / 256) << shift; }
+            mix[p] = out;
+        }
+        return mix;
+    }
+};
+
 struct TrackBackdropShow
 {
     // The chosen track as a lit neon scene (TrackScene.h), drawn with the graphics card and orbiting slowly. The level is read on another thread when the track changes, so choosing a track never stalls the screen.
@@ -5067,18 +5097,22 @@ struct TrackBackdropShow
         const std::string path = Tracks().PathFor(entry->mName), name = entry->mName;
         HoverNetPlan::SetTextureReader(&ReadSurfaceTexture);
         const bool real = std::getenv("HOVERNET_FLAT_TRACK") == nullptr;   // the game's own floor and wall pictures on the track; HOVERNET_FLAT_TRACK=1 for plain lit slabs
+#ifdef __EMSCRIPTEN__
+        pending = std::async(std::launch::deferred, [path, name, real]() { return HoverNetPlan::BuildPlan(path, name, 8, real); });   // no background thread on the page: it is read when first drawn (a short pause once)
+#else
         pending = std::async(std::launch::async, [path, name, real]() { return HoverNetPlan::BuildPlan(path, name, 8, real); });
+#endif
     }
     void Draw(SDL_Renderer* renderer, int w, int h, bool still)
     {
         if (!textured) {
-            if (pending.valid() && pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            if (pending.valid() && (pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready || pending.wait_for(std::chrono::seconds(0)) == std::future_status::deferred)) {
                 plan = pending.get();
                 for (const HoverNetPlan::Texture& tex : plan.textures) {   // each picture four by four, so a floor can repeat it (the card does not wrap textures)
                     SDL_Texture* t = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, tex.width * 4, tex.height * 4);
                     if (t != nullptr) {
                         std::vector<std::uint8_t> tiled(static_cast<std::size_t>(tex.width) * 4 * tex.height * 4 * 4);
-                        for (int y = 0; y < tex.height * 4; ++y) for (int x = 0; x < tex.width * 4; ++x) std::memcpy(&tiled[(static_cast<std::size_t>(y) * tex.width * 4 + x) * 4], &tex.rgba[(static_cast<std::size_t>(y % tex.height) * tex.width + (x % tex.width)) * 4], 4);
+                        for (int y = 0; y < tex.height * 4; ++y) for (int rep = 0; rep < 4; ++rep) std::memcpy(&tiled[(static_cast<std::size_t>(y) * tex.width * 4 + static_cast<std::size_t>(rep) * tex.width) * 4], &tex.rgba[static_cast<std::size_t>(y % tex.height) * tex.width * 4], static_cast<std::size_t>(tex.width) * 4);
                         SDL_UpdateTexture(t, nullptr, tiled.data(), tex.width * 4 * 4);
                         SDL_SetTextureScaleMode(t, SDL_ScaleModeLinear);
                     }
@@ -10993,7 +11027,12 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
     std::vector<TrackPreview> plans(static_cast<std::size_t>(Tracks().Count()));
     const bool reducedMotion = LoadReducedMotion();
     const bool autoStartForTest = std::getenv("HOVERNET_TEST_AUTO_START") != nullptr;
+#ifdef __EMSCRIPTEN__
+    constexpr int kW = 420, kH = 315;   // smaller on the page: the craft is drawn by the CPU there
+#else
     constexpr int kW = 640, kH = 480;
+#endif
+    CraftRing webRing;
     for (bool again = true; again;) {
         again = false;
         bool browse = false, garage = false, running = true;
@@ -11039,11 +11078,20 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
                     craftYaw = -1000;
                     if (x1 > x0 && y1 > y0) craftCrop = SDL_Rect{std::max(0, x0 - 10), std::max(0, y0 - 10), std::min(kW, x1 + 11) - std::max(0, x0 - 10), std::min(kH, y1 + 11) - std::max(0, y0 - 10)};
                 }
+#ifdef __EMSCRIPTEN__
+                if (craftTexture != nullptr) {
+                    const std::vector<std::uint32_t>& px = webRing.Get(reducedMotion ? 28.0 : std::fmod(SDL_GetTicks() / 1000.0 * 22.0, 360.0), [&](int angle, std::vector<std::uint32_t>& out) {
+                        return HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, design.IsPlain() ? nullptr : &design, design.craft, angle, palette.data(), kW, kH, out, true, kMenuViewRaise); });
+                    if (!px.empty()) { SDL_UpdateTexture(craftTexture, nullptr, px.data(), kW * 4); craftReady = true; }
+                }
+                (void)yaw; (void)now; (void)craftBuilt; (void)craftYaw;
+#else
                 if (craftTexture != nullptr && yaw != craftYaw && (now - craftBuilt >= 40 || !craftReady)) {
                     craftReady = HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, design.IsPlain() ? nullptr : &design, design.craft, yaw, palette.data(), kW, kH, craftPixels, true, kMenuViewRaise);
                     if (craftReady) SDL_UpdateTexture(craftTexture, nullptr, craftPixels.data(), kW * 4);
                     craftYaw = yaw; craftBuilt = now;
                 }
+#endif
                 crop = craftCrop;
                 return craftReady ? craftTexture : nullptr;
             });
@@ -11187,7 +11235,12 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack);
         };
         // The player's own craft, as on the ImGui menu: the saved design from the Garage, drawn by the Garage's preview code into a texture that is redrawn as it turns.
+#ifdef __EMSCRIPTEN__
+        constexpr int kCraftW = 560, kCraftH = 420;   // smaller on the page: the craft is drawn by the CPU there
+#else
         constexpr int kCraftW = 840, kCraftH = 630;   // drawn larger than shown on most screens, so it stays sharp on a laptop's high-resolution display
+#endif
+        CraftRing rmlRing;
         SDL_Texture* rmlCraftTexture = nullptr;
         std::vector<std::uint32_t> rmlCraftPixels, rmlPalette(256, 0);
         Authority::CraftDesign rmlCraftDesign;
@@ -11229,12 +11282,21 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                         rmlCrop = SDL_Rect{x0, y0, x1 - x0 + 1, y1 - y0 + 1};
                     }
                 }
+#ifdef __EMSCRIPTEN__
+                {
+                    const std::vector<std::uint32_t>& px = rmlRing.Get(static_cast<double>(yaw), [&](int angle, std::vector<std::uint32_t>& out) {
+                        return HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, angle, rmlPalette.data(), kCraftW, kCraftH, out, true, kMenuViewRaise); });
+                    if (!px.empty()) { SDL_UpdateTexture(rmlCraftTexture, nullptr, px.data(), kCraftW * 4); rmlCraftReady = true; }
+                    (void)rmlCraftBuilt;
+                }
+#else
                 if (yaw != rmlCraftYaw && (now - rmlCraftBuilt >= 40 || !rmlCraftReady)) {
                     rmlCraftReady = HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, yaw,
                                                                       rmlPalette.data(), kCraftW, kCraftH, rmlCraftPixels, true, kMenuViewRaise);
                     if (rmlCraftReady) SDL_UpdateTexture(rmlCraftTexture, nullptr, rmlCraftPixels.data(), kCraftW * 4);
                     rmlCraftYaw = yaw; rmlCraftBuilt = now;
                 }
+#endif
                 crop = rmlCrop;
                 return rmlCraftReady ? rmlCraftTexture : nullptr;
             };

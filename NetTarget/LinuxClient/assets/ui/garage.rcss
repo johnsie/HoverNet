@@ -2,7 +2,7 @@ body { font-family: Inter; font-size: 16dp; color: #f4f5f8; width: 100%; height:
 p, h1, div { display: block; }
 .hide { display: none; }
 #header { position: absolute; left: 3%; right: 3%; top: 10dp; height: 86dp; }
-#eyebrow { color: #fa737a; font-size: 14dp; margin: 0; }
+#eyebrow { font-family: Inter; font-weight: bold; color: #ff9ba3; font-size: 14dp; margin: 0; }
 h1 { font-family: Oxanium; font-size: 32dp; font-weight: bold; margin: 0; }
 #subtitle { color: #8b8fa3; font-size: 14dp; margin: 2dp 0 0 0; }
 #cols { position: absolute; left: 3%; right: 3%; top: 100dp; bottom: 100dp; }
@@ -39,7 +39,7 @@ h1 { font-family: Oxanium; font-size: 32dp; font-weight: bold; margin: 0; }
 .srow { display: flex; flex-direction: row; align-items: center; margin: 2dp 0; }
 .slabel { flex: 0 0 90dp; color: #d6d9e6; font-size: 15dp; }
 .srow input.range { flex: 1 1 0; width: auto; margin: 4dp 0; }
-.sval { flex: 0 0 auto; width: 74dp; text-align: right; color: #fa737a; font-size: 14dp; }
+.sval { font-family: Inter; font-weight: bold; flex: 0 0 auto; width: 74dp; text-align: right; color: #ff9ba3; font-size: 14dp; }
 
 button.act { display: block; box-sizing: border-box; width: 100%; padding: 10dp; margin: 6dp 0 4dp 0; text-align: center; font-family: Oxanium; font-size: 17dp; font-weight: bold; color: #ffffff; background-color: #dc3546; tab-index: auto; cursor: pointer; transition: background-color transform 0.12s cubic-out; }
 button.act.quiet { background-color: #2b2e3e; }

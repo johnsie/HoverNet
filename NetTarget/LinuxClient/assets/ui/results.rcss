@@ -26,7 +26,7 @@ p, h1, div { display: block; }
 #card.show { opacity: 1; transform: translateY(0dp); }
 h1 { font-family: Oxanium; font-size: 44dp; font-weight: bold; margin: 0; }
 h1.victory { color: #ffd25a; }
-.coral { color: #fa737a; font-size: 16dp; margin: 2dp 0; }
+.coral { font-family: Inter; font-weight: bold; color: #ff9ba3; font-size: 16dp; margin: 2dp 0; }
 .dim { color: #8b8fa3; font-size: 15dp; }
 .gold { color: #ffd25a; font-size: 15dp; margin: 3dp 0; }
 hr { height: 1dp; margin: 14dp 0; background-color: #303342; }

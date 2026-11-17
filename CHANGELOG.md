@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+- **Smoother menus on the web page**: the 3D track scene now draws in a few big batches instead of hundreds of small draw calls (the cost that weighed most in the browser); on the page the turning craft is drawn once per angle and blended between (it used to be redrawn by the CPU every few frames) and at a smaller size, the track is read without a background thread, and the textures upload faster.
+- **Clearer small labels**: the small red labels (OFFICIAL, YOUR CRAFT, LAPS, WEAPONS, the eyebrow lines) are now bold, slightly larger and a lighter pink, in the body font, because the thin display font at that size broke up on screen.
+- _Checked: builds on desktop and as WebAssembly (the page's code compiles); a desktop screenshot of the race screen (the scene is unchanged, the labels are clearer); the camera-rule test. Not measured: how much faster it runs in Edge (I have no browser profile of it here), and the web smoke test was not run._
+
 ## 2.3.65 - 2026-11-17
 
 _Released at the owner's request without the full test suite. Run on this build: the render golden frames, the camera-rule test and the track-plan test; scripts/test-modern-flow.sh checks 1 to 5 passed on the build before the textured track scene (check 6, the Garage round trip, had a test bug, now fixed and not re-run). Screenshots of the race screen and the track browser. Not run: Windows, the web build, a real GPU window, the main-menu track backdrop._

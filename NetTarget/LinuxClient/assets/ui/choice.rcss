@@ -8,7 +8,7 @@ body {
 p, h1, div { display: block; }
 #brand { position: absolute; left: 54dp; top: 56dp; animation: 0.6s cubic-out fade-down; }
 h1 { font-family: Oxanium; font-size: 46dp; font-weight: bold; margin: 0; }
-.coral { color: #fa737a; font-size: 16dp; margin: 3dp 0; }
+.coral { font-family: Inter; font-weight: bold; color: #ff9ba3; font-size: 16dp; margin: 3dp 0; }
 .dim { color: #8b8fa3; font-size: 15dp; margin: 3dp 0; }
 @keyframes fade-down {
 	from { opacity: 0; transform: translateY(-22dp); }

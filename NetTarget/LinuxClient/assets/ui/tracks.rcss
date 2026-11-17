@@ -2,7 +2,7 @@ body { font-family: Inter; font-size: 15dp; color: #f4f5f8; width: 100%; height:
 p, h1, div, span.blk { display: block; }
 .hide { display: none; }
 #header { position: absolute; left: 3%; right: 3%; top: 12dp; height: 70dp; }
-#eyebrow { color: #fa737a; font-size: 14dp; margin: 0; }
+#eyebrow { font-family: Inter; font-weight: bold; color: #ff9ba3; font-size: 14dp; margin: 0; }
 h1 { font-family: Oxanium; font-size: 32dp; font-weight: bold; margin: 0; }
 #count { position: absolute; right: 0; top: 22dp; color: #8b8fa3; font-size: 15dp; margin: 0; }
 #rule { position: absolute; left: 0; right: 0; top: 62dp; height: 3dp; decorator: gradient( horizontal #e02a43 #e02a4300 ); }
@@ -17,7 +17,7 @@ h1 { font-family: Oxanium; font-size: 32dp; font-weight: bold; margin: 0; }
 .card:hover, .card:focus { border-color: #fa737a; background-color: #1d1d2c; }
 .card.sel { border-color: #ffd25a; }
 .th { height: 112dp; text-align: center; margin-bottom: 6dp; background-color: #0a0a12; border-radius: 6dp; }
-.kind { font-family: Oxanium; font-size: 12dp; color: #fa737a; margin: 0; }
+.kind { font-family: Inter; font-weight: bold;  font-size: 14dp; color: #ff9ba3; margin: 0; }
 .nm { font-family: Oxanium; font-size: 18dp; font-weight: bold; color: #ffffff; margin: 1dp 0 2dp 0; height: 22dp; overflow: hidden; }
 .meta { color: #9aa0b8; font-size: 13dp; margin: 0; }
 .rec { color: #ffd25a; font-size: 13dp; margin: 2dp 0 0 0; height: 17dp; }

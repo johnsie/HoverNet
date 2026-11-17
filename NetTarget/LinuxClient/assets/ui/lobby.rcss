@@ -2,7 +2,7 @@ body { font-family: Inter; font-size: 16dp; color: #f4f5f8; width: 100%; height:
 p, h1, div { display: block; }
 .hide { display: none; }
 #header { position: absolute; left: 4%; right: 4%; top: 14dp; height: 78dp; text-align: left; }
-#eyebrow { color: #fa737a; font-size: 14dp; margin: 0; }
+#eyebrow { font-family: Inter; font-weight: bold; color: #ff9ba3; font-size: 14dp; margin: 0; }
 h1 { font-family: Oxanium; font-size: 34dp; font-weight: bold; margin: 0; }
 #status { position: absolute; right: 0; top: 24dp; color: #8b8fa3; font-size: 15dp; margin: 0; text-align: right; }
 #rule { position: absolute; left: 0; right: 0; top: 70dp; height: 3dp; decorator: gradient( horizontal #e02a43 #e02a4300 ); }
@@ -35,7 +35,7 @@ h1 { font-family: Oxanium; font-size: 34dp; font-weight: bold; margin: 0; }
 .chatline { color: #d6d9e6; margin: 0 0 3dp 0; font-size: 15dp; }
 
 .note { color: #8b8fa3; font-size: 14dp; margin: 4dp 0 8dp 0; }
-.accent { color: #fa737a; font-size: 14dp; margin: 6dp 0; }
+.accent { font-family: Inter; font-weight: bold; color: #ff9ba3; font-size: 14dp; margin: 6dp 0; }
 .irow { margin: 0 0 4dp 0; font-size: 15dp; }
 .ilabel { color: #9d9db0; display: inline-block; width: 84dp; }
 .item { display: block; box-sizing: border-box; width: 100%; padding: 9dp 10dp; text-align: left; color: #e6e8f0; background-color: #171a24; margin-bottom: 3dp; tab-index: auto; cursor: pointer; transition: background-color 0.12s cubic-out; }

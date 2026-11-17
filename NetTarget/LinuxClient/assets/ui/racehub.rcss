@@ -2,7 +2,7 @@ body { font-family: Inter; font-size: 16dp; color: #f4f5f8; width: 100%; height:
 p, h1, h2, div { display: block; }
 .hide { display: none; }
 #header { position: absolute; left: 4%; right: 4%; top: 14dp; height: 70dp; }
-#eyebrow { color: #fa737a; font-size: 14dp; margin: 0; }
+#eyebrow { font-family: Inter; font-weight: bold; color: #ff9ba3; font-size: 14dp; margin: 0; }
 h1 { font-family: Oxanium; font-size: 36dp; font-weight: bold; margin: 0; }
 h2 { font-family: Oxanium; font-size: 30dp; font-weight: bold; margin: 0 0 4dp 0; color: #ffffff; }
 #rule { position: absolute; left: 0; right: 0; top: 62dp; height: 3dp; decorator: gradient( horizontal #e02a43 #e02a4300 ); }
@@ -18,11 +18,11 @@ h2 { font-family: Oxanium; font-size: 30dp; font-weight: bold; margin: 0 0 4dp 0
 
 #tinfo { position: absolute; left: 20dp; right: 20dp; top: 18dp; bottom: 76dp; }
 #trackbtns { position: absolute; left: 20dp; right: 20dp; bottom: 18dp; height: 48dp; }
-.kind { font-family: Oxanium; font-size: 13dp; color: #fa737a; margin: 0 0 4dp 0; }
+.kind { font-family: Inter; font-weight: bold;  font-size: 14dp; color: #ff9ba3; margin: 0 0 4dp 0; }
 .meta { color: #aab0c8; font-size: 15dp; margin: 0 0 10dp 0; }
 .desc { color: #8b8fa3; font-size: 14dp; margin: 0 0 10dp 0; }
 .best { color: #ffd25a; font-size: 15dp; margin: 0; }
-.dl { color: #fa737a; font-size: 14dp; margin: 8dp 0 0 0; }
+.dl { font-family: Inter; font-weight: bold; color: #ff9ba3; font-size: 14dp; margin: 8dp 0 0 0; }
 .note { color: #8b8fa3; font-size: 13dp; margin: 4dp 0 10dp 0; }
 
 #craftimg { position: absolute; left: 14dp; right: 14dp; top: 8dp; height: 56%; }

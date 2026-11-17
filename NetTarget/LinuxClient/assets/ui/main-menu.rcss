@@ -24,7 +24,7 @@ p, h1, div { display: block; }
 
 #brand { position: absolute; left: 48dp; top: 40dp; animation: 0.7s cubic-out fade-down; }
 h1 { font-family: Oxanium; font-size: 46dp; font-weight: bold; margin: 0; }
-.coral { color: #fa737a; font-size: 16dp; margin: 2dp 0; }
+.coral { font-family: Inter; font-weight: bold; color: #ff9ba3; font-size: 16dp; margin: 2dp 0; }
 .dim { color: #8b8fa3; font-size: 15dp; margin: 2dp 0; }
 @keyframes fade-down {
 	from { opacity: 0; transform: translateY(-24dp); }
@@ -89,7 +89,7 @@ button:active { transform: scale(0.97); }
 .eyebrow { font-family: Oxanium; font-size: 15dp; margin: 2dp 0 12dp 0; }
 .glow { background-color: #dc354633; }
 
-.pitch { color: #fa737a; font-size: 14dp; margin: 6dp 0 16dp 0; text-align: center; }
+.pitch { font-family: Inter; font-weight: bold; color: #ff9ba3; font-size: 14dp; margin: 6dp 0 16dp 0; text-align: center; }
 .grid { margin-top: 6dp; }
 .grid button { display: inline-block; width: 48%; margin-right: 2%; font-size: 17dp; padding: 12dp 6dp; }
 .grid button#garage, .grid button#settings { margin-right: 0; margin-left: 0; }
@@ -111,7 +111,7 @@ button.quit:hover, button.quit:focus { color: #ffffff; background-color: #3a1c25
 
 /* the Continue card: the last race, one click away */
 #continue { margin: 0 0 14dp 0; padding: 14dp 16dp 4dp 16dp; border-radius: 12dp; background-color: #1b1522; decorator: gradient( vertical #2b1a2a #171220 ); border-width: 1dp; border-color: #5a2b3c; }
-.cap { font-family: Oxanium; font-size: 13dp; color: #fa737a; margin: 0 0 2dp 0; }
+.cap { font-family: Inter; font-weight: bold;  font-size: 14dp; color: #ff9ba3; margin: 0 0 2dp 0; }
 .ctrack { font-family: Oxanium; font-size: 28dp; font-weight: bold; color: #ffffff; margin: 0; }
 .cdetail { color: #aab0c8; font-size: 15dp; margin: 2dp 0 12dp 0; }
 #continue button { margin-bottom: 10dp; }
