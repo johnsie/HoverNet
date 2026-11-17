@@ -1,0 +1,23 @@
+<rml>
+<head>
+	<title>HoverNet tracks</title>
+	<link type="text/rcss" href="tracks.rcss"/>
+	<link type="text/rcss" href="look.rcss"/>
+</head>
+<body>
+	<div id="header"><p id="eyebrow">HOVERNET</p><h1>TRACK BROWSER</h1><p id="count"></p><div id="rule"></div></div>
+	<div id="bar">
+		<div id="filters"></div>
+		<div id="sorts"></div>
+		<input type="text" id="search" class="text" data-id="search" placeholder="Search tracks" maxlength="40"/>
+	</div>
+	<div id="grid"></div>
+	<div id="pager">
+		<button class="act quiet pg" data-id="prev" tab-index="auto">Previous</button>
+		<span id="pageinfo"></span>
+		<button class="act quiet pg" data-id="next" tab-index="auto">Next</button>
+	</div>
+	<div id="legend"><span class="dot fuel"></span> fuel <span class="dot boost"></span> boost <span class="dot finish"></span> finish line <span class="dot power"></span> power-up <span class="tint">lighter floor = higher up</span></div>
+	<div id="footer"><button class="act quiet back" data-id="back" tab-index="auto">Back</button></div>
+</body>
+</rml>

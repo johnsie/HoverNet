@@ -594,6 +594,14 @@ add_executable(HoverNetTrackValidator
 add_dependencies(HoverNetTrackValidator HoverNetHeadlessObjFac1)
 target_link_libraries(HoverNetTrackValidator PRIVATE HoverNetModelCore HoverNetPortableUtil)
 
+add_executable(HoverNetTrackPlanTest
+    NetTarget/LinuxClient/TrackPlanTest.cpp
+    NetTarget/LinuxClient/TrackPlan.cpp
+)
+
+add_dependencies(HoverNetTrackPlanTest HoverNetHeadlessObjFac1)
+target_link_libraries(HoverNetTrackPlanTest PRIVATE HoverNetModelCore HoverNetPortableUtil)
+
 add_executable(HoverNetFactorySmoke
     NetTarget/LinuxClient/FactorySmoke.cpp
 )
@@ -853,6 +861,8 @@ add_executable(HoverNetGame2Player
     NetTarget/LinuxClient/CraftStore.cpp
     NetTarget/LinuxClient/CraftPreview.cpp
     NetTarget/LinuxClient/TrackCatalog.cpp
+    NetTarget/LinuxClient/TrackPlan.cpp
+    NetTarget/LinuxClient/TrackBackdrop.cpp
     NetTarget/LinuxClient/TrackDownloader.cpp
     NetTarget/LinuxClient/Gunzip.cpp
     NetTarget/LinuxClient/Sha256.cpp
@@ -1110,6 +1120,9 @@ if(BUILD_TESTING AND NOT WIN32)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     # The modern look on real race frames: the classic frame is untouched without it, the look shows shadows, trail and glow, and repeats.
     # The camera is off limits (CLAUDE.md rule 7, docs/camera.md): its reference values are still in the source and the graphics code does not touch it.
+    add_test(NAME HoverNetTrackPlan
+        COMMAND HoverNetTrackPlanTest "${CMAKE_SOURCE_DIR}/NetTarget/Tracks/Switchback.trk" Switchback
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME HoverNetCameraRule
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/test-camera-rule.sh
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

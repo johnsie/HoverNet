@@ -912,6 +912,7 @@ struct FormScreen::Impl
     std::vector<std::string> script;     // test hook HOVERNET_TEST_RML: "tab:2", "click:name", "text:name=Tester", "enter", "down" ...
     int tabCount = 0;
     std::function<SDL_Texture*(SDL_Rect&)> sideImage;
+    std::function<void(SDL_Renderer*, int, int)> backdropDraw;
     std::string sideId = "side";
     std::vector<std::pair<std::string, std::function<SDL_Texture*(SDL_Rect&)>>> images;
     bool busyFocused = false;
@@ -1103,6 +1104,7 @@ bool FormScreen::ElementBox(const std::string& pId, SDL_FRect& pBox) const
     return true;
 }
 void FormScreen::SetSideTarget(const std::string& pId) { mImpl->sideId = pId; }
+void FormScreen::SetBackdropDraw(std::function<void(SDL_Renderer*, int, int)> pDraw) { mImpl->backdropDraw = std::move(pDraw); }
 void FormScreen::SetSideImage(std::function<SDL_Texture*(SDL_Rect&)> pImage) { mImpl->sideImage = std::move(pImage); }
 
 void FormScreen::SetBusy(const std::string& pTitle, const std::string& pLine, float pFraction, const std::string& pButton)
@@ -1244,6 +1246,7 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
     m.context->Update();
     m.ss->Begin();
     DrawGridBackdrop(m.renderer, m.ss->W(), m.ss->H(), 1, m.ss->factor);
+    if (m.backdropDraw) m.backdropDraw(m.renderer, m.ss->W(), m.ss->H());
     m.context->Render();
     if (m.sideImage) {   // the picture beside the controls (the track map), inside the #side box
         SDL_Rect crop = {0, 0, 0, 0};

@@ -170,6 +170,8 @@ public:
     // fitted inside the element, over the markup, and hidden while a "dialog" element is shown. The caller owns the textures.
     void SetImage(const std::string& id, std::function<SDL_Texture*(SDL_Rect&)> image);
     bool ElementBox(const std::string& id, SDL_FRect& boxInWindowPixels) const;   // where an element is, for the caller's own pointer handling (false: not shown)
+    // A picture behind everything (the real track, for the race setup screen): called every frame after the plain backdrop and before the markup, with the supersampled drawing size.
+    void SetBackdropDraw(std::function<void(SDL_Renderer*, int, int)> draw);
     void SetSideTarget(const std::string& id);   // the element the side image is drawn in (default "side")
     // A box over everything with a message, an optional progress bar (fraction < 0: none) and one button (a "busy" event when pressed); empty title hides it.
     void SetBusy(const std::string& title, const std::string& line, float fraction, const std::string& buttonLabel);

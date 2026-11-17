@@ -12,6 +12,8 @@
 #include "GuestName.h"
 #include "../ObjFacTools/CraftLook.h"
 #include "TrackCatalog.h"
+#include "TrackPlan.h"
+#include "TrackBackdrop.h"
 #include "TrackDownloader.h"
 #include <atomic>
 #include <thread>
@@ -919,9 +921,22 @@ TrackPreview LoadTrackPreview(SDL_Renderer* renderer, const char* trackName)
     }
 
     try {
-        MR_RecordFile track;
         const std::string path = Tracks().PathFor(trackName);
         if (path.empty()) return preview;
+        if (std::getenv("HOVERNET_OLD_TRACK_MAP") == nullptr) {   // the plan drawn from the real level, with its pads in colour (TrackPlan.h); the stored map below is the fallback
+            const HoverNetPlan::Plan plan = HoverNetPlan::BuildPlan(path, trackName, 640);
+            if (plan.ok) {
+                preview.mWidth = plan.width; preview.mHeight = plan.height;
+                preview.mTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, plan.width, plan.height);
+                if (preview.mTexture != nullptr) {
+                    SDL_UpdateTexture(preview.mTexture, nullptr, plan.rgba.data(), plan.width * 4);
+                    SDL_SetTextureBlendMode(preview.mTexture, SDL_BLENDMODE_BLEND);
+                    SDL_SetTextureScaleMode(preview.mTexture, SDL_ScaleModeLinear);
+                    return preview;
+                }
+            }
+        }
+        MR_RecordFile track;
         if (!track.OpenForRead(path.c_str()) || track.GetNbRecords() < 4) return preview;
 
         std::array<MR_UInt8, MR_NB_COLORS * 3> palette{};
@@ -4924,6 +4939,224 @@ struct LocalRaceSetup
     bool weapons = false;
 };
 
+// The real track in 3D behind a menu (TrackBackdrop.h): pictures of the race view of the chosen track, a slow drift and a fade between them, under a dark veil so the panels stay readable.
+// Built when the track changes (a fraction of a second), for tracks that are on this computer. HOVERNET_NO_BACKDROP=1 leaves it out; Reduced motion holds the first picture still.
+struct TrackBackdropShow
+{
+    std::vector<SDL_Texture*> textures;
+    int builtFor = -2;
+    Uint32 since = 0;
+    void Clear() { for (SDL_Texture* t : textures) if (t != nullptr) SDL_DestroyTexture(t); textures.clear(); }
+    ~TrackBackdropShow() { Clear(); }
+    void Prepare(SDL_Renderer* renderer, int index)
+    {
+        if (index == builtFor) return;
+        builtFor = index; since = SDL_GetTicks(); Clear();
+        const TrackEntry* entry = Tracks().Get(index);
+        if (entry == nullptr || !entry->mInstalled || std::getenv("HOVERNET_NO_BACKDROP") != nullptr) return;
+        std::vector<HoverNetBackdrop::Picture> pictures;
+        if (HoverNetBackdrop::Render(Tracks().PathFor(entry->mName), entry->mName, 640, 480, 2, 300, pictures) <= 0) return;
+        for (const HoverNetBackdrop::Picture& p : pictures) {
+            SDL_Texture* t = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, p.width, p.height);
+            if (t == nullptr) continue;
+            SDL_UpdateTexture(t, nullptr, p.rgba.data(), p.width * 4);
+            SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
+            SDL_SetTextureScaleMode(t, SDL_ScaleModeLinear);
+            textures.push_back(t);
+        }
+    }
+    void Draw(SDL_Renderer* renderer, int w, int h, bool still) const
+    {
+        if (textures.empty()) return;
+        const float seconds = static_cast<float>(SDL_GetTicks() - since) / 1000.0f;
+        const float cycle = std::fmod(seconds, 14.0f * static_cast<float>(textures.size()));
+        const std::size_t shown = static_cast<std::size_t>(cycle / 14.0f) % textures.size();
+        const float into = std::fmod(cycle, 14.0f);                        // seconds into this picture
+        auto drawOne = [&](std::size_t i, float alpha, float age) {
+            int tw = 0, th = 0; SDL_QueryTexture(textures[i], nullptr, nullptr, &tw, &th);
+            const float zoom = still ? 1.06f : 1.04f + 0.06f * std::min(1.0f, age / 14.0f);
+            float dw = static_cast<float>(w) * zoom, dh = dw * th / tw;
+            if (dh < h * zoom) { dh = static_cast<float>(h) * zoom; dw = dh * tw / th; }
+            const float drift = still ? 0.0f : (age / 14.0f - 0.5f) * 0.03f * w;
+            const SDL_FRect to = {(w - dw) * 0.5f + drift, (h - dh) * 0.5f, dw, dh};
+            SDL_SetTextureAlphaMod(textures[i], static_cast<Uint8>(std::max(0.0f, std::min(1.0f, alpha)) * 255.0f));
+            SDL_RenderCopyF(renderer, textures[i], nullptr, &to);
+        };
+        drawOne(shown, 1.0f, into);
+        if (!still && textures.size() > 1 && into > 11.0f) drawOne((shown + 1) % textures.size(), (into - 11.0f) / 3.0f, 0.0f);   // the next one fades in over the last three seconds
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 8, 6, 16, 150);
+        const SDL_Rect veil = {0, 0, w, h};
+        SDL_RenderFillRect(renderer, &veil);
+    }
+};
+
+// The whole track seen from above, tilted and slowly turning, drawn into `target` (the aerial view on the race setup screen). It is a picture of the plan (TrackPlan.h) with its own fixed
+// view: it has nothing to do with the race camera and never touches it. Higher floors are drawn higher and lighter; each shape gets a darker slab under it so bridges and ramps read as solid.
+void DrawSpinningTrack(SDL_Renderer* pRenderer, SDL_Texture* pTarget, int pW, int pH, const HoverNetPlan::Plan& pPlan, float pYawDegrees)
+{
+    SDL_Texture* previous = SDL_GetRenderTarget(pRenderer);
+    SDL_SetRenderTarget(pRenderer, pTarget);
+    SDL_SetRenderDrawBlendMode(pRenderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(pRenderer, 0, 0, 0, 0);
+    SDL_RenderClear(pRenderer);
+    const float yaw = pYawDegrees * 3.14159265f / 180.0f, cy = std::cos(yaw), sy = std::sin(yaw);
+    const float pitch = 56.0f * 3.14159265f / 180.0f, tilt = std::sin(pitch), lift = std::cos(pitch);
+    const float scale = 0.74f * static_cast<float>(pW);
+    const float ox = pW * 0.5f, oy = pH * 0.52f;
+    const float heightScale = 0.10f;   // how far the highest floor stands above the lowest, in units of the track's longer side
+    auto project = [&](float x, float y, float h, float drop) {
+        const float rx = x * cy - y * sy, ry = x * sy + y * cy;
+        return SDL_FPoint{ox + rx * scale, oy - (ry * tilt + (h * heightScale - drop) * lift) * scale};
+    };
+    auto fill = [&](const std::vector<SDL_FPoint>& poly, SDL_Color colour) {
+        std::vector<SDL_Vertex> v(poly.size());
+        for (std::size_t i = 0; i < poly.size(); ++i) { v[i].position = poly[i]; v[i].color = colour; v[i].tex_coord = SDL_FPoint{0, 0}; }
+        std::vector<int> idx;
+        for (std::size_t i = 1; i + 1 < poly.size(); ++i) { idx.push_back(0); idx.push_back(static_cast<int>(i)); idx.push_back(static_cast<int>(i + 1)); }
+        SDL_RenderGeometry(pRenderer, nullptr, v.data(), static_cast<int>(v.size()), idx.data(), static_cast<int>(idx.size()));
+    };
+    // a soft shadow on the ground under the whole track
+    for (const HoverNetPlan::Plan::Shape& shape : pPlan.shapes) {
+        std::vector<SDL_FPoint> poly;
+        for (std::size_t i = 0; i + 1 < shape.xy.size(); i += 2) poly.push_back(project(shape.xy[i], shape.xy[i + 1], 0.0f, 0.045f));
+        fill(poly, SDL_Color{0, 0, 0, 70});
+    }
+    for (const HoverNetPlan::Plan::Shape& shape : pPlan.shapes) {
+        std::vector<SDL_FPoint> top, slab;
+        for (std::size_t i = 0; i + 1 < shape.xy.size(); i += 2) {
+            top.push_back(project(shape.xy[i], shape.xy[i + 1], shape.h, 0.0f));
+            slab.push_back(project(shape.xy[i], shape.xy[i + 1], shape.h, 0.022f));
+        }
+        if (top.size() < 3) continue;
+        fill(slab, SDL_Color{20, 24, 52, 255});
+        const float t = shape.h;
+        fill(top, SDL_Color{static_cast<Uint8>(58 + 46 * t), static_cast<Uint8>(66 + 52 * t), static_cast<Uint8>(112 + 62 * t), 255});
+    }
+    const HoverNetPlan::Colours& colours = HoverNetPlan::PadColours();
+    for (const HoverNetPlan::Plan::Mark& mark : pPlan.marks) {
+        const std::uint8_t* c = mark.kind == 0 ? colours.fuel : mark.kind == 1 ? colours.boost : mark.kind == 2 ? colours.finish : colours.power;
+        const float radius = (mark.kind == 2 ? 0.016f : mark.kind == 3 ? 0.009f : 0.012f) * scale;
+        const SDL_FPoint centre = project(mark.x, mark.y, mark.h, -0.004f);
+        std::vector<SDL_FPoint> ring;
+        for (int i = 0; i < 14; ++i) ring.push_back(SDL_FPoint{centre.x + std::cos(i * 0.4488f) * radius, centre.y + std::sin(i * 0.4488f) * radius * tilt});
+        fill(ring, SDL_Color{c[0], c[1], c[2], 255});
+    }
+    SDL_SetRenderTarget(pRenderer, previous);
+}
+
+#ifdef HOVERNET_HAVE_RMLUI
+// The track browser (assets/ui/tracks.rml): cards with a plan of each track drawn from its real level (TrackPlan.h), filters, sorting, a search box and pages. Returns the
+// catalog index chosen, or -1 when the player went back. Presentation only: it changes nothing but which track the caller selects.
+int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, int pCurrent, int pFrameLimit)
+{
+    using HoverNetRml::FormField;
+    std::unique_ptr<HoverNetRml::FormScreen> form(new HoverNetRml::FormScreen(
+        graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "TRACK BROWSER", LoadReducedMotion(),
+        [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight, "tracks.rml"));
+    if (!form->Ok()) return -1;
+    // Only the four tracks of the original HoverRace are "official" here; Switchback, Metro Spiral and Tidal Causeway ship with the game but are community tracks (owner, 2026-11-17).
+    auto isOfficial = [](const TrackEntry* e) { return e->mOfficial && (e->mName == "ClassicH" || e->mName == "Steeplechase" || e->mName == "The Alley2" || e->mName == "The River"); };
+    const int total = Tracks().Count();
+    constexpr int kPerPage = 8;
+    std::vector<TrackPreview> previews(static_cast<std::size_t>(total));
+    int filter = 0, sort = 0, page = 0, chosen = -1;
+    std::string search;
+    std::vector<int> view;
+    const char* const filterNames[] = {"All", "Official", "Community", "On this computer"};
+    const char* const sortNames[] = {"Original order", "A-Z", "Smallest first"};
+    auto lower = [](std::string text) { for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return text; };
+    auto rebuild = [&]() {
+        view.clear();
+        const std::string needle = lower(search);
+        for (int i = 0; i < total; ++i) {
+            const TrackEntry* e = Tracks().Get(i);
+            if (e == nullptr) continue;
+            if (filter == 1 && !isOfficial(e)) continue;
+            if (filter == 2 && isOfficial(e)) continue;
+            if (filter == 3 && !e->mInstalled) continue;
+            if (!needle.empty() && lower(e->mName).find(needle) == std::string::npos) continue;
+            view.push_back(i);
+        }
+        if (sort == 1) std::stable_sort(view.begin(), view.end(), [&](int a, int b) { return lower(Tracks().Get(a)->mName) < lower(Tracks().Get(b)->mName); });
+        if (sort == 2) std::stable_sort(view.begin(), view.end(), [&](int a, int b) { return Tracks().Get(a)->mRooms < Tracks().Get(b)->mRooms; });
+    };
+    auto pages = [&]() { return std::max(1, (static_cast<int>(view.size()) + kPerPage - 1) / kPerPage); };
+    auto draw = [&]() {
+        page = std::max(0, std::min(page, pages() - 1));
+        std::string chips;
+        for (int i = 0; i < 4; ++i) chips += std::string("<div class=\"chip") + (i == filter ? " sel" : "") + "\" data-id=\"filter\" data-index=\"" + std::to_string(i) + "\">" + filterNames[i] + "</div>";
+        form->SetHtml("filters", chips);
+        chips.clear();
+        for (int i = 0; i < 3; ++i) chips += std::string("<div class=\"chip") + (i == sort ? " sel" : "") + "\" data-id=\"sort\" data-index=\"" + std::to_string(i) + "\">" + sortNames[i] + "</div>";
+        form->SetHtml("sorts", chips);
+        std::string cards;
+        for (int slot = 0; slot < kPerPage; ++slot) {
+            const std::size_t at = static_cast<std::size_t>(page * kPerPage + slot);
+            if (at >= view.size()) break;
+            const int index = view[at];
+            const TrackEntry* e = Tracks().Get(index);
+            const TrackBriefing guide = BriefingFor(index);
+            std::string meta = guide.mDifficulty == "Unrated" ? guide.mCharacter : guide.mDifficulty + " - " + guide.mCharacter;
+            if (!e->mInstalled) meta += "  -  " + FormatMegabytes(e->mDownloadBytes) + " to download";
+            std::string rec;
+            if (e->mInstalled) {
+                const long long lap = pBests.LapBest(e->mName);
+                if (lap > 0) { char t[32]; FormatRaceTime(static_cast<MR_SimulationTime>(lap), t, sizeof(t)); rec = std::string("Best lap ") + t; }
+            }
+            cards += std::string("<div class=\"card") + (index == pCurrent ? " sel" : "") + "\" id=\"card" + std::to_string(slot) + "\" data-id=\"pick\" data-index=\"" + std::to_string(index) + "\">" +
+                     "<div class=\"th\" id=\"th" + std::to_string(slot) + "\">" + (e->mInstalled ? "" : "<p class=\"dl\">Download to see the plan</p>") + "</div><p class=\"kind\">" + (e->mMarket ? "MARKET" : isOfficial(e) ? "OFFICIAL" : "COMMUNITY") + "</p><p class=\"nm\">" +
+                     HoverNetRml::FormScreen::Escape(e->mName) + "</p><p class=\"meta\">" + HoverNetRml::FormScreen::Escape(meta) + "</p><p class=\"rec\">" + HoverNetRml::FormScreen::Escape(rec) + "</p></div>";
+        }
+        form->SetHtml("grid", cards.empty() ? "<p class=\"meta\">No track matches.</p>" : cards);
+        form->SetHtml("count", std::to_string(view.size()) + " of " + std::to_string(total) + " tracks");
+        form->SetHtml("pageinfo", "Page " + std::to_string(page + 1) + " of " + std::to_string(pages()));
+    };
+    int loadBudget = 0;
+    for (int slot = 0; slot < kPerPage; ++slot) {
+        form->SetImage("th" + std::to_string(slot), [&, slot](SDL_Rect& crop) -> SDL_Texture* {
+            const std::size_t at = static_cast<std::size_t>(page * kPerPage + slot);
+            if (at >= view.size()) return nullptr;
+            TrackPreview& preview = previews[static_cast<std::size_t>(view[at])];
+            if (!preview.mLoaded && !preview.mWaitingForDownload && loadBudget > 0) {   // a couple of plans per frame, so a page of twelve fills in without a pause
+                --loadBudget;
+                preview = LoadTrackPreview(graphics.GetRenderer(), Tracks().Get(view[at])->mName.c_str());
+            }
+            if (preview.mTexture == nullptr) return nullptr;
+            crop = SDL_Rect{0, 0, preview.mWidth, preview.mHeight};
+            return preview.mTexture;
+        });
+    }
+    rebuild();
+    for (std::size_t i = 0; i < view.size(); ++i) if (view[i] == pCurrent) page = static_cast<int>(i) / kPerPage;
+    draw();
+    int frame = 0;
+    const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
+    bool running = true;
+    while (running && (limit < 0 || frame < limit)) {
+        ++frame;
+        loadBudget = 2;
+        std::vector<HoverNetRml::FormEvent> events;
+        const HoverNetRml::FormOutcome outcome = form->Frame(events, frame, limit);
+        bool redraw = false;
+        for (const HoverNetRml::FormEvent& e : events) {
+            if (e.id == "pick") { chosen = e.index; running = false; }
+            else if (e.id == "filter") { filter = std::max(0, std::min(3, e.index)); page = 0; rebuild(); redraw = true; }
+            else if (e.id == "sort") { sort = std::max(0, std::min(2, e.index)); page = 0; rebuild(); redraw = true; }
+            else if (e.id == "next") { page = std::min(pages() - 1, page + 1); redraw = true; }
+            else if (e.id == "prev") { page = std::max(0, page - 1); redraw = true; }
+            else if (e.id == "search" || e.id == "search#enter") { if (e.text != search) { search = e.text; page = 0; rebuild(); redraw = true; } }
+            else if (e.id == "back") running = false;
+        }
+        if (outcome != HoverNetRml::FormOutcome::eNone) running = false;
+        if (redraw) draw();
+    }
+    for (TrackPreview& preview : previews) if (preview.mTexture != nullptr) SDL_DestroyTexture(preview.mTexture);
+    form.reset();
+    return chosen;
+}
+#endif
+
 // Lets the player pick track/laps/weapons for an offline race instead of
 // silently reusing whatever was already loaded (always ClassicH, 1 lap,
 // weapons on -- see main()'s startup load) -- reachable from the main menu's
@@ -4967,6 +5200,9 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     bool autoStartForTest = std::getenv("HOVERNET_TEST_AUTO_START") != nullptr;
 
 #ifdef HOVERNET_HAVE_RMLUI
+    for (bool browseAgain = true; browseAgain;) {
+    browseAgain = false;
+    bool browseRequested = false;   // the Browse button: close this screen, show the track browser, come back with the track it chose
     if (UseRmlUi(pFrameLimit)) {   // the RmlUi version of this screen (docs/rmlui.md): the same choices, briefing, records, map and download; if it cannot load, the ImGui screen below runs
         using HoverNetRml::FormField;
         std::unique_ptr<HoverNetRml::FormScreen> form(new HoverNetRml::FormScreen(
@@ -4996,6 +5232,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                 const TrackEntry* entry = selectedEntry();
                 std::vector<FormField> f;
                 { FormField c; c.type = FormField::Type::eChooser; c.id = "track"; c.label = "Track"; c.items = items; c.selected = prefs.mTrackIndex; f.push_back(c); }
+                { FormField b; b.type = FormField::Type::eButton; b.id = "browse"; b.quiet = true; b.label = "Browse all tracks with pictures"; f.push_back(b); }
                 { FormField h; h.type = FormField::Type::eHeading; h.label = "Course briefing"; f.push_back(h); }
                 f.push_back(note("Style: " + guide.mCharacter + "     Difficulty: " + guide.mDifficulty));
                 f.push_back(note(guide.mDescription));
@@ -5009,7 +5246,30 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                 form->SetFooter(needsDownloadNow() ? "Download & Start Race" : "Start Race", "Cancel");
                 form->SetSaveEnabled(!download.Active());
             };
+            // The aerial: the whole track tilted and slowly turning (for a track that is on this computer; Reduced motion holds it still, HOVERNET_NO_SPIN keeps the flat plan).
+            constexpr int kSpinW = 720, kSpinH = 960;
+            SDL_Texture* spinTexture = nullptr;
+            HoverNetPlan::Plan spinPlan;
+            int spinPlanTrack = -1;
+            const bool reducedMotion = LoadReducedMotion();
+            TrackBackdropShow backdrop;
+            form->SetBackdropDraw([&](SDL_Renderer* renderer, int w, int h) { backdrop.Prepare(renderer, prefs.mTrackIndex); backdrop.Draw(renderer, w, h, reducedMotion); });
             form->SetSideImage([&](SDL_Rect& crop) -> SDL_Texture* {
+                const TrackEntry* chosen = selectedEntry();
+                if (chosen != nullptr && chosen->mInstalled && std::getenv("HOVERNET_NO_SPIN") == nullptr) {
+                    if (spinPlanTrack != prefs.mTrackIndex) { spinPlanTrack = prefs.mTrackIndex; spinPlan = HoverNetPlan::BuildPlan(Tracks().PathFor(chosen->mName), chosen->mName, 8); }
+                    if (spinPlan.ok && !spinPlan.shapes.empty()) {
+                        if (spinTexture == nullptr) {
+                            spinTexture = SDL_CreateTexture(graphics.GetRenderer(), SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, kSpinW, kSpinH);
+                            if (spinTexture != nullptr) SDL_SetTextureBlendMode(spinTexture, SDL_BLENDMODE_BLEND);
+                        }
+                        if (spinTexture != nullptr) {
+                            DrawSpinningTrack(graphics.GetRenderer(), spinTexture, kSpinW, kSpinH, spinPlan, reducedMotion ? 28.0f : static_cast<float>(SDL_GetTicks() % 40000) * 0.009f);
+                            crop = SDL_Rect{0, 0, kSpinW, kSpinH};
+                            return spinTexture;
+                        }
+                    }
+                }
                 TrackPreview& preview = trackPreviews[static_cast<std::size_t>(prefs.mTrackIndex)];
                 if (!preview.mLoaded) preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(prefs.mTrackIndex).c_str());
                 if (preview.mTexture == nullptr) return nullptr;
@@ -5020,7 +5280,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             int frame = 0;
             const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
             bool closeRequested = false;
-            while (running && (limit < 0 || frame < limit)) {
+            while (running && !browseRequested && (limit < 0 || frame < limit)) {
                 ++frame;
                 std::vector<HoverNetRml::FormEvent> events;
                 HoverNetRml::FormOutcome outcome = form->Frame(events, frame, limit);
@@ -5030,6 +5290,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                     if (e.id == "track") { prefs.mTrackIndex = std::max(0, std::min(Tracks().Count() - 1, e.index)); refresh = true; }
                     else if (e.id == "laps") { prefs.mLaps = static_cast<int>(e.value + 0.5f); form->SetHint("laps", bestsText()); }
                     else if (e.id == "weapons") prefs.mWeapons = e.on;
+                    else if (e.id == "browse") browseRequested = true;
                     else if (e.id == "dlall") { const std::vector<TrackEntry> missing = Tracks().MissingDownloads(); if (!download.Active()) { download.Begin(missing, 0); startAfterDownload = false; } }
                     else if (e.id == "busy") {
                         if (TrackDownloadJob* job = download.Job()) { if (!job->Finished()) job->Cancel(); else { download.Reset(); startAfterDownload = false; form->SetBusy("", "", -1.0f, ""); refresh = true; } }
@@ -5062,10 +5323,17 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                     show();
                 }
             }
+            if (spinTexture != nullptr) SDL_DestroyTexture(spinTexture);
             form.reset();
             if (closeRequested && ConfirmQuit(graphics, buffer, viewport, font)) g_QuitConfirmed = true;
+            if (browseRequested && !closeRequested) {
+                const int picked = RunTrackBrowser(graphics, personalBests, prefs.mTrackIndex, pFrameLimit);
+                if (picked >= 0) prefs.mTrackIndex = picked;
+                browseAgain = true;
+            }
         }
         else form.reset();
+    }
     }
 #endif
 

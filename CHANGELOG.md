@@ -6,6 +6,15 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.62 - 2026-11-17
+
+_Released at the owner's request without the full test suite. The RmlUi menu test (scripts/test-rml-menu.sh) passed in full on the build before the 3D backdrop was added, and on the final build up to the results-screen check, where it was stopped for the release; the camera-rule test and the finish-flow test pass on the final build._
+
+- **Track plans from the real level**: the race setup screen now draws the selected track from its level data (floor shapes, higher floors lighter, pads in colour: fuel red, boost orange, finish gold, power-ups cyan) instead of the stored flat map (`HOVERNET_OLD_TRACK_MAP=1` brings that back). A tilted, slowly turning aerial of the whole track is shown there for tracks on this computer (Reduced motion holds it still; `HOVERNET_NO_SPIN=1` keeps the flat plan).
+- **The real 3D track behind the race setup screen**: two pictures of the game's own race view of the chosen track (the start, and a few seconds into a scripted drive) drift and fade under a dark veil (`HOVERNET_NO_BACKDROP=1` turns it off; Reduced motion holds one picture still). It is drawn by the unchanged race renderer; the race camera is untouched (`scripts/test-camera-rule.sh` passes). Not a live orbiting camera.
+- **Track browser**: "Browse all tracks with pictures" on the race setup screen opens cards with a plan, difficulty, style and your best lap, with filters (All, Official, Community, On this computer), sorting, a search box and pages. Only the four original tracks are labelled Official; Switchback, Metro Spiral and Tidal Causeway are community tracks.
+- _Checked (Linux, headless, screenshots): the plans of seven bundled tracks, the setup screen, the browser. `HoverNetTrackPlan` (ctest) added. Not run: the full suite, Windows, the web build. Not done from the Neo ideas: the real 3D track behind the menus, craft stat bars, a RACE slab, a controls legend, the splash screen (see docs/roadmap-3.0.md)._
+
 - After a race, **F2** (not Enter) opens the results, and on the results screen F2 returns to the lobby (online) or the main menu. Enter and Space no longer choose anything there, so a chat line sent as the race ends cannot pick a button. Esc and the controller buttons are unchanged.
 - The "RACE COMPLETE" box is now a solid broadcast-style plate (slanted ends, red title bar with a gold rule, gold F2 key cap), and the results card is solid with a red top edge and key hints.
 - _Checked: scripts/test-finish-flow.sh and scripts/test-rml-menu.sh pass (native, Linux, headless); a screenshot of the in-race box. Not seen: the restyled results card (the capture run did not reach it), the older ImGui results screen (F2 added, Enter still activates a focused button there), the web build, Windows._

@@ -258,6 +258,21 @@ Limits to keep in mind: the web build gets the same code, but its picture passes
 frame); and the floating-point parts of the look (sparks, glow) are only promised to repeat on the same machine, so they are checked by property
 (`scripts/test-modern-graphics.sh`, `HoverNetModernGraphics`), not by committed hashes.
 
+### Menu and track-selection ideas from HoverRace Neo
+
+*Added 17 November 2026, after a review of the HoverRace Neo browser game (game.hoverraceneo.com). Ideas only: nothing is copied from it (its code, art and wording are its own). All of it is presentation: no rules-version change.*
+
+| # | Idea | State |
+| --- | --- | --- |
+| 1 | **Zone-coloured track plans**: draw each track from its real level (floor shapes, higher floors lighter so bridges show, a bright edge) with the pads in colour: fuel red, boost orange, finish line gold, power-ups cyan. | **Done** (`NetTarget/LinuxClient/TrackPlan.*`, `HoverNetTrackPlanTest`). Used by the race setup screen and the track browser. Open: use it for the in-race minimap too. |
+| 2 | **A picture on every track.** | **Partly done**: every track that is on this computer has a plan in the track browser. Open: plans for community tracks that are not downloaded yet (needs thumbnails built once into the track pack manifest, with length and difficulty), and a plan on the online lobby's track list. |
+| 3 | **A track browser panel**: cards with a plan, difficulty and style, your best lap, filter tabs, sorting, a search box, pages, keyboard and controller navigation. | **Done** (`assets/ui/tracks.rml`, opened from "Browse all tracks with pictures" on the race setup screen). Open: track length in km (needs measuring the route), favourites, the online host screen. |
+| 4 | **The real track behind the menus, and the whole track turning from above.** | **Done in two parts.** (a) The race setup screen shows the real 3D track behind its panels: two pictures of the game's own race view (the start line, and a few seconds into a scripted drive; `TrackBackdrop.*`, drawn by the unchanged `MR_Observer`, camera untouched) that drift slowly and fade into each other under a dark veil; for tracks on this computer; Reduced motion holds one still. (b) A tilted, slowly turning drawing of the whole track on the same screen. **Not done: a live orbiting camera over the track** as Neo has: the renderer draws from inside a room, so a high orbit needs a different view, and that is a camera change CLAUDE.md rule 7 reserves for the owner. Also open: the backdrop on the main menu and the track browser, and drawing it on a worker thread (it takes a fraction of a second when the track changes). |
+| 5 | **Craft stat bars** (speed, acceleration, jump, fuel, weight) when choosing a craft. | **Not started.** |
+| 6 | **A stronger start button** (a slanted, glowing RACE slab as the one obvious action). | **Not started.** |
+| 7 | **A controls legend on the race setup screen** (keys as key caps). | **Not started.** |
+| 8 | **A better opening splash screen using the game's own art** (the hovercraft pictures in `assets/`). | **Not started.** The only splash in the code is the browser's sign-in gate (`RunSignInGate`), which cannot be run natively here. |
+
 ### Browser client and SDL2 parity
 
 The browser client is a supported target of the shared HoverNet client. It must never
