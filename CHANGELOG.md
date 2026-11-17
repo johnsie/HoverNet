@@ -6,6 +6,12 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.69 - 2026-11-17
+
+_Released at the owner's request without the full test suite. Run on this build: the page's scripts parse; the new `?perf` box was checked in a browser on the real GPU; the deploy-check warnings fire against the live site as expected. Not run: the web build of this exact commit, the smoke test, Windows, the server config on a real Apache (it takes effect only when the host's Apache site file is replaced: packaging/web/setup-host.sh, then a reload)._
+
+- **A performance box for the web page**: open the page with `?perf` (for example https://hovernet.outiva.com/?perf) and a small box in the corner shows how the browser is really running the game: the frame rate the browser offers next to the frames the game draws, the slowest frame, the window size and zoom, the graphics card, the power state and the number of cores. If the browser offers only about 30 frames a second, something is capping it (Edge's Efficiency mode, an energy saver, an extension); if it offers 60 and the game draws fewer, the game is the slow part. Nothing is sent anywhere.
+
 - **Web page weight and caching** (from a measurement of the live page): the server config now compresses `HoverNet.data` (about 25 MB down to about 17) by type as well as by file name, and keeps the file's ETag on compressed answers (`DeflateAlterETag NoChange`) so a repeat visit gets a 304 for `HoverNet.wasm` and `HoverNet.js` instead of downloading 2 MB again; `scripts/check-web-deploy.sh` warns when either is missing. The page no longer asks for `HoverNetMusic.bin` unless the build has the music as a separate file (`<meta name="hn-music">`), and has a favicon (no more 404). **These server changes only take effect when the host's Apache site file is replaced** (`packaging/web/setup-host.sh`, then reload Apache). The `SERVER_USED` cookie (from HAProxy) and the deprecated `ScriptProcessorNode` audio warning are not changed.
 - _Checked: the page's scripts parse; the new deploy checks warn against the live site as expected (data uncompressed, wasm ETag answers 200). Not checked: the new server config on a real Apache (nothing was deployed to the host), the page with the music meta in a full browser run._
 

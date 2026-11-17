@@ -857,5 +857,42 @@
     }, { capture: true });
   </script>
   {{{ SCRIPT }}}
+  <script>
+    // Diagnostics: open the page with ?perf and a small box shows how the browser is really running the game (so a slow machine can be told apart from a slow game).
+    // The frame rate the browser offers (requestAnimationFrame) next to the frames the game drew: if the browser offers only 30, something is capping it (Efficiency mode,
+    // an energy saver, a power plan or an extension); if it offers 60 and the game draws fewer, the game is the slow part. Nothing is sent anywhere.
+    (function () {
+      if (!/[?&]perf\b/.test(location.search)) return;
+      var box = document.createElement('pre');
+      box.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99998;margin:0;padding:8px 10px;background:rgba(0,0,0,.78);color:#9ff0a8;font:12px/1.35 ui-monospace,monospace;border-radius:8px;pointer-events:none;white-space:pre';
+      document.body.appendChild(box);
+      var gpu = '?';
+      try {
+        var c = document.createElement('canvas'), g = c.getContext('webgl2') || c.getContext('webgl'), e = g && g.getExtension('WEBGL_debug_renderer_info');
+        gpu = g ? (e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER)) : 'no WebGL';
+      } catch (err) {}
+      var battery = 'n/a';
+      if (navigator.getBattery) navigator.getBattery().then(function (b) { battery = (b.charging ? 'charging ' : 'on battery ') + Math.round(b.level * 100) + '%'; battery += ' (hardware: ' + (b.charging ? 'plugged in' : 'unplugged') + ')'; });
+      var raf = 0, worst = 0, last = performance.now(), gameLast = 0, gameFps = 0, shown = performance.now();
+      function frame(t) {
+        raf++; worst = Math.max(worst, t - last); last = t;
+        if (t - shown >= 1000) {
+          var frames = -1; try { frames = Module.ccall ? Module.ccall('hovernet_frames', 'number', [], []) : -1; } catch (err) {}
+          gameFps = frames >= 0 ? Math.round((frames - gameLast) * 1000 / (t - shown)) : -1; if (frames >= 0) gameLast = frames;
+          var rafFps = Math.round(raf * 1000 / (t - shown));
+          box.textContent = 'browser offers : ' + rafFps + ' fps' + (rafFps <= 33 ? '   <-- capped near 30: Efficiency / energy saver?' : '') + '\n' +
+                            'game draws     : ' + (gameFps < 0 ? '?' : gameFps + ' fps') + '\n' +
+                            'slowest frame  : ' + Math.round(worst) + ' ms\n' +
+                            'window         : ' + innerWidth + 'x' + innerHeight + '  dpr ' + devicePixelRatio + '  zoom~' + Math.round(devicePixelRatio * 100) + '%\n' +
+                            'gpu            : ' + gpu + '\n' +
+                            'power          : ' + battery + '\n' +
+                            'cores          : ' + (navigator.hardwareConcurrency || '?') + '   tab ' + document.visibilityState;
+          raf = 0; worst = 0; shown = t;
+        }
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    })();
+  </script>
 </body>
 </html>
