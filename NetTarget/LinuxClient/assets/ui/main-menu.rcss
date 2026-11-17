@@ -61,7 +61,7 @@ button {
 	padding: 14dp 10dp;
 	margin-bottom: 10dp;
 	text-align: center;
-	font-family: Inter;
+	font-family: Oxanium;
 	font-size: 18dp;
 	font-weight: bold;
 	color: #ffffff;
@@ -78,15 +78,18 @@ button.quiet:hover { background-color: #3a3e54; }
 button:focus { background-color: #ff5a6c; transform: scale(1.025); }
 button.quiet:focus { background-color: #4a4f6c; }
 button:active { transform: scale(0.97); }
-#online { animation: 1.6s sine-in-out infinite online-pulse; }
-@keyframes online-pulse {
-	from { background-color: #dc3546; }
-	50%  { background-color: #ee4457; }
-	to   { background-color: #dc3546; }
+/* a soft red glow around the main button, breathing slowly */
+.glow { padding: 5dp; margin: 0 -5dp 4dp -5dp; border-radius: 19dp; background-color: #dc354626; animation: 2.2s sine-in-out infinite glow-pulse; }
+.glow button { margin-bottom: 0; }
+@keyframes glow-pulse {
+	from { background-color: #dc354622; }
+	50%  { background-color: #dc354655; }
+	to   { background-color: #dc354622; }
 }
-#online:hover { animation: none; }
+.eyebrow { font-family: Oxanium; font-size: 15dp; margin: 2dp 0 12dp 0; }
+.glow { background-color: #dc354633; }
 
-.pitch { color: #fa737a; font-size: 14dp; margin: -2dp 0 12dp 0; text-align: center; }
+.pitch { color: #fa737a; font-size: 14dp; margin: 6dp 0 16dp 0; text-align: center; }
 .grid { margin-top: 6dp; }
 .grid button { display: inline-block; width: 48%; margin-right: 2%; font-size: 17dp; padding: 12dp 6dp; }
 .grid button#garage, .grid button#settings { margin-right: 0; margin-left: 0; }
@@ -94,3 +97,9 @@ button:active { transform: scale(0.97); }
 
 #footer { position: absolute; left: 22dp; bottom: 14dp; color: #6c7086; font-size: 13dp; }
 
+
+/* the four smaller doors: dark tiles with a red tint, not another wall of red */
+.grid button { background-color: #2a1c25; decorator: gradient( vertical #402533 #26171f ); border-color: #7a3546 #52283a #1f1217 #52283a; margin-bottom: 10dp; font-size: 17dp; }
+.grid button:hover, .grid button:focus { background-color: #3a2230; decorator: gradient( vertical #56303f #33202a ); border-color: #fa737a; }
+.grid button.quiet { background-color: #272a3a; decorator: gradient( vertical #323650 #1f2230 ); border-color: #4a4f6a #333750 #1a1c28 #333750; }
+.grid button.quiet:hover, .grid button.quiet:focus { decorator: gradient( vertical #404668 #272b42 ); border-color: #fa737a; }

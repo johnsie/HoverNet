@@ -2,6 +2,7 @@
 <head>
 	<title>HoverNet</title>
 	<link type="text/rcss" href="garage.rcss"/>
+	<link type="text/rcss" href="look.rcss"/>
 </head>
 <body>
 	<div id="header"><p id="eyebrow">HOVERNET</p><h1 id="title">GARAGE</h1><p id="subtitle">Design the shape, colours and paint of your craft. It changes how it looks, never how it drives.</p></div>

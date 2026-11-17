@@ -2,6 +2,7 @@
 <head>
 	<title>HoverNet</title>
 	<link type="text/rcss" href="lobby.rcss"/>
+	<link type="text/rcss" href="look.rcss"/>
 </head>
 <body>
 	<div id="header"><p id="eyebrow">ONLINE MULTIPLAYER</p><h1 id="title">HOVERNET LOBBY</h1><p id="status"></p><div id="rule"></div></div>

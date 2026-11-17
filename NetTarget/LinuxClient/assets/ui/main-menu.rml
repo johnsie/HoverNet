@@ -2,6 +2,7 @@
 <head>
 	<title>HoverNet</title>
 	<link type="text/rcss" href="main-menu.rcss"/>
+	<link type="text/rcss" href="look.rcss"/>
 </head>
 <body>
 	<div id="hero"><img src="../menu-hovercraft-source.png"/></div>
@@ -14,9 +15,9 @@
 		</div>
 	</div>
 	<div id="panel">
-		<p class="coral">READY TO RACE?</p>
+		<p class="coral eyebrow">READY TO RACE?</p>
 		<hr/>
-		<button id="online" class="primary">RACE ONLINE</button>
+		<div class="glow"><button id="online" class="primary">RACE ONLINE</button></div>
 		<p class="pitch">Race real players. Climb the ranks.</p>
 		<button id="offline" class="quiet primary">PRACTICE OFFLINE</button>
 		<div class="grid">

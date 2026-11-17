@@ -1,0 +1,64 @@
+/* The shared look of the menus: panels, buttons, tabs, inputs. Linked after each screen's own sheet, so it refines what they set (colour names are theirs). */
+
+/* ---- panels: a soft dark glass card with a lit top edge ---- */
+#panel, #card {
+	border-width: 1dp;
+	border-color: #3a3e54 #2a2d40 #1b1d2b #2a2d40;
+	border-radius: 18dp;
+	decorator: gradient( vertical #1d1e2af4 #0f1016f4 );
+}
+hr { height: 2dp; margin: 10dp 0 18dp 0; background-color: #fa737a55; border-radius: 1dp; }
+
+/* ---- every button: rounded, a lit top edge, a darker bottom edge ---- */
+button, .tab, .arrow, .chip, .slot {
+	border-width: 1dp;
+	border-radius: 11dp;
+}
+/* the main (red) buttons */
+button.primary, button.act, #footer button {
+	background-color: #dc3546;
+	decorator: gradient( vertical #f6586d #cc2b41 );
+	border-color: #ff9ba6 #e5465a #a61d2f #e5465a;
+}
+button.primary:hover, button.act:hover, #footer button:hover,
+button.primary:focus, button.act:focus, #footer button:focus {
+	background-color: #f04a5b;
+	decorator: gradient( vertical #ff7487 #da3248 );
+	border-color: #ffc2c9 #ff6577 #b32235 #ff6577;
+}
+button.primary:active, button.act:active, #footer button:active { decorator: gradient( vertical #cc2b41 #f6586d ); }
+/* the quiet (dark) buttons */
+button.quiet, button.act.quiet, #footer button.quiet, .arrow, .tab {
+	background-color: #272a3a;
+	decorator: gradient( vertical #323650 #1f2230 );
+	border-color: #4a4f6a #333750 #1a1c28 #333750;
+}
+button.quiet:hover, button.act.quiet:hover, #footer button.quiet:hover, .arrow:hover, .tab:hover,
+button.quiet:focus, button.act.quiet:focus, #footer button.quiet:focus, .tab:focus {
+	background-color: #343958;
+	decorator: gradient( vertical #404668 #272b42 );
+	border-color: #fa737a;
+}
+.tab.sel { background-color: #dc3546; decorator: gradient( vertical #f6586d #cc2b41 ); border-color: #ff9ba6 #e5465a #a61d2f #e5465a; }
+.chip.sel, .slot.sel { decorator: gradient( vertical #f6586d #cc2b41 ); border-color: #ff9ba6 #e5465a #a61d2f #e5465a; }
+button.disabled, button.act.disabled, #footer button.disabled {
+	background-color: #2a2025;
+	decorator: gradient( vertical #33272d #281e23 );
+	border-color: #433339 #382a30 #231a1e #382a30;
+	color: #8b8fa3;
+}
+
+/* ---- fields ---- */
+input.text, .select {
+	border-width: 1dp;
+	border-radius: 9dp;
+	border-color: #13141c #2a2d40 #3a3e54 #2a2d40;
+	background-color: #0a0b10;
+}
+input.text:focus, .select:focus { border-color: #fa737a; }
+.toggle .box { border-radius: 6dp; }
+.toggle.on .box { decorator: gradient( vertical #f6586d #cc2b41 ); }
+input.range slidertrack { border-radius: 4dp; }
+input.range sliderbar { border-radius: 11dp; decorator: gradient( vertical #f6586d #cc2b41 ); }
+scrollbarvertical slidertrack { border-radius: 6dp; }
+scrollbarvertical sliderbar { border-radius: 6dp; }

@@ -58,3 +58,8 @@ scrollbarvertical { width: 12dp; }
 scrollbarvertical slidertrack { width: 12dp; background-color: #1b1e2a; }
 scrollbarvertical sliderbar { width: 12dp; min-height: 36dp; background-color: #3f4560; }
 scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0dp; height: 0dp; display: none; }
+
+button { background-color: #272a3a; decorator: gradient( vertical #323650 #1f2230 ); border-width: 1dp; border-color: #4a4f6a #333750 #1a1c28 #333750; border-radius: 11dp; }
+button:hover, button:focus { decorator: gradient( vertical #404668 #272b42 ); border-color: #fa737a; }
+
+#panel .coral { margin: 2dp 0 12dp 0; }

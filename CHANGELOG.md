@@ -6,6 +6,8 @@ and how to roll one back.
 
 ## Unreleased
 
+- Menus: the buttons and panels were restyled (new shared sheet `assets/ui/look.rcss`): rounded buttons with a lit top edge and gradient, dark glass panels with a soft border, a slow red glow around Race Online, dark red-tinted tiles for the smaller doors, rounded fields, tabs and sliders. Main menu, hub, settings and the other RmlUi screens share it. Checked on Linux with screenshots of the main menu, the Settings hub and the Settings form, and the `HoverNetRmlMenu` and `HoverNetCameraRule` ctests. Not checked: the lobby, garage, results and sign-in screens by eye, Windows, the browser build.
+
 - Main menu: the craft is drawn at 840x630 instead of 560x420 (it was enlarged and looked pixelated on high-resolution laptop screens) and from a little above, so the cockpit, top and engine show instead of a flat side-on view. The Garage keeps its level view. Checked on Linux: a native menu capture and the `HoverNetCraftLook`, `HoverNetRmlMenu`, `HoverNetGarageDecals`, `HoverNetGarageUnlocks`, `HoverNetRenderGolden` and `HoverNetCameraRule` ctests pass. Not checked: a real high-DPI laptop, Windows, the browser build, the redraw cost on slow machines (the picture has 2.25 times the pixels). The race camera is untouched; this is the menu's own craft picture.
 
 ## 2.3.58 - 2026-11-17

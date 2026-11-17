@@ -2,6 +2,7 @@
 <head>
 	<title>HoverNet</title>
 	<link type="text/rcss" href="signin.rcss"/>
+	<link type="text/rcss" href="look.rcss"/>
 </head>
 <body>
 	<div id="card" class="hide">

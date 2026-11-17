@@ -2,6 +2,7 @@
 <head>
 	<title>HoverNet</title>
 	<link type="text/rcss" href="choice.rcss"/>
+	<link type="text/rcss" href="look.rcss"/>
 </head>
 <body>
 	<div id="brand">
