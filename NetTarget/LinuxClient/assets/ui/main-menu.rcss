@@ -40,7 +40,7 @@ h1 { font-family: Oxanium; font-size: 46dp; font-weight: bold; margin: 0; }
 	position: absolute;
 	right: 4%;
 	top: 50%;
-	margin-top: -200dp;
+	margin-top: -320dp;
 	width: 420dp;
 	max-width: 42%;
 	padding: 24dp 26dp;
@@ -108,3 +108,10 @@ button:active { transform: scale(0.97); }
 /* Quit: a plain, low key button under the doors, red only when pointed at */
 button.quit { margin: 6dp 0 0 0; padding: 9dp 10dp; font-size: 15dp; color: #aeb2c6; background-color: #00000000; decorator: none; border-color: #2a2d40; }
 button.quit:hover, button.quit:focus { color: #ffffff; background-color: #3a1c25; decorator: none; border-color: #fa737a; }
+
+/* the Continue card: the last race, one click away */
+#continue { margin: 0 0 14dp 0; padding: 14dp 16dp 4dp 16dp; border-radius: 12dp; background-color: #1b1522; decorator: gradient( vertical #2b1a2a #171220 ); border-width: 1dp; border-color: #5a2b3c; }
+.cap { font-family: Oxanium; font-size: 13dp; color: #fa737a; margin: 0 0 2dp 0; }
+.ctrack { font-family: Oxanium; font-size: 28dp; font-weight: bold; color: #ffffff; margin: 0; }
+.cdetail { color: #aab0c8; font-size: 15dp; margin: 2dp 0 12dp 0; }
+#continue button { margin-bottom: 10dp; }

@@ -1,0 +1,45 @@
+<rml>
+<head>
+	<title>HoverNet race</title>
+	<link type="text/rcss" href="racehub.rcss"/>
+	<link type="text/rcss" href="look.rcss"/>
+</head>
+<body>
+	<div id="header"><p id="eyebrow">HOVERNET</p><h1>RACE</h1><div id="rule"></div></div>
+	<div id="stage">
+		<div id="trackcard" class="glass">
+			<div id="planbox"></div>
+			<div id="tinfo">
+				<p id="kind" class="kind">OFFICIAL</p>
+				<h2 id="tname">ClassicH</h2>
+				<p id="tmeta" class="meta"></p>
+				<p id="tdesc" class="desc"></p>
+				<p id="tbest" class="best"></p>
+				<p id="tdl" class="dl hide"></p>
+			</div>
+			<div id="trackbtns">
+				<button class="ghost" id="browse" data-id="browse" tab-index="auto">CHANGE TRACK</button>
+			</div>
+		</div>
+		<div id="side">
+			<div id="craftcard" class="glass">
+				<div id="craftimg"></div>
+				<p class="kind">YOUR CRAFT</p>
+				<h2 id="cname">Basic</h2>
+				<button class="ghost" id="garage" data-id="garage" tab-index="auto">EDIT IN GARAGE</button>
+			</div>
+			<div id="optcard" class="glass">
+				<p class="kind">LAPS</p>
+				<div id="laps"></div>
+				<p id="lapsnote" class="note"></p>
+				<p class="kind">WEAPONS</p>
+				<div id="weap"></div>
+			</div>
+		</div>
+	</div>
+	<div id="startbar"><button id="start" class="racebtn" data-id="start" tab-index="auto">RACE</button></div>
+	<div id="legend"><span class="dot fuel"></span> fuel <span class="dot boost"></span> boost <span class="dot finish"></span> finish line <span class="dot power"></span> power-up</div>
+	<div id="footer"><button class="act quiet back" data-id="back" tab-index="auto">Back</button></div>
+	<div id="busy"><div id="busybox"><p id="busytitle"></p><p id="busyline"></p><div id="busybar"><div id="busyfill"></div></div><button id="busybutton" class="act quiet">Cancel</button></div></div>
+</body>
+</rml>

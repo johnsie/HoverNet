@@ -28,6 +28,8 @@ struct MainMenuInfo
     std::string levelTitle;
     float levelProgress = 0.0f;  // 0..1 towards the next level
     bool showQuit = false;       // desktop: a Quit button under the doors (it asks "Quit HoverNet?" first); the browser has none
+    // The modern flow's "Continue" card: the last track, one click to race it again (empty continueTrack = no card). offlineLabel names the practice door.
+    std::string continueTrack, continueDetail, offlineLabel;
     bool tutorialDone = false;   // the Tutorial button is quiet once it has been done
     // The player's own craft, turning: called every frame with the angle in degrees, it returns the picture to draw (null = none, and the stock picture in the markup
     // is shown instead) and sets cropOut to the part of it to show. The caller owns the texture. reducedMotion keeps the entrance animations of the pictures still.
@@ -36,7 +38,7 @@ struct MainMenuInfo
     std::function<void(Sound)> sound;   // the game's interface sounds (null = silent)
 };
 
-enum class Choice { eNone, eOnline, eOffline, eLeaderboards, eGarage, eTutorial, eSettings, eBack, eQuitRequested };
+enum class Choice { eNone, eOnline, eOffline, eLeaderboards, eGarage, eTutorial, eSettings, eBack, eQuitRequested, eQuickRace };
 
 // Shows the menu until a door is chosen (or, with frameLimit >= 0, for that many frames and then eNone). The caller keeps its own event loop out of the way:
 // this one polls SDL events itself. The renderer's logical size is set to the window's own while it runs and put back to restoreW x restoreH.
@@ -56,11 +58,12 @@ struct ResultsInfo
     bool levelUp = false;
     float levelProgress = 0.0f;                           // 0..1 on the level bar
     bool online = false;                                  // offers RETURN TO LOBBY as well
+    bool again = false;                                   // the modern flow, offline: RACE AGAIN (the same track, laps and weapons) and CHOOSE ANOTHER TRACK
     bool reducedMotion = false;
     std::function<void(Sound)> sound;
 };
 
-enum class ResultsChoice { eNone, eLobby, eMainMenu, eQuitRequested };
+enum class ResultsChoice { eNone, eLobby, eMainMenu, eQuitRequested, eAgain, eNewRace };
 
 // Runs until a door is chosen (or, with frameLimit >= 0, for that many frames, all parts shown at once). Same event and logical-size rules as RunMainMenu.
 ResultsChoice RunResults(SDL_Window* window, SDL_Renderer* renderer, const ResultsInfo& info, int frameLimit, int restoreW, int restoreH);

@@ -1325,6 +1325,7 @@ void SaveLocalRacePrefs(const HostPrefs& prefs)
 // screenshot hooks and with HOVERNET_NO_FADE, so the regression captures stay what they were.
 bool LoadReducedMotion();   // defined with the other settings below
 bool LoadMenuBackdrop();    // likewise
+bool ModernMenus();         // likewise: the modern menu flow (Continue card, one race screen, Race again) or the classic menus
 float LoadUiScale();         // likewise
 
 #ifdef HOVERNET_HAVE_RMLUI
@@ -2225,6 +2226,27 @@ void SaveMenuBackdrop(bool enabled)
 {
     std::ofstream out(MenuBackdropPath());
     out << (enabled ? 1 : 0) << '\n';
+}
+
+std::string MenuStylePath()
+{
+    return ConfigDirPath() + "/menu_style";
+}
+
+// Which menu flow: the modern one (a Continue card, one race screen, Race again after a race) or the classic one (the menus as they were: setup form, then race, then results with Main menu).
+// The setting is saved; HOVERNET_MENU_STYLE=classic or =modern overrides it (tests, support).
+bool ModernMenus()
+{
+    if (const char* forced = std::getenv("HOVERNET_MENU_STYLE")) return std::string(forced) != "classic";
+    std::ifstream in(MenuStylePath());
+    std::string word;
+    return !(in >> word) || word != "classic";
+}
+
+void SaveMenuStyle(bool modern)
+{
+    std::ofstream out(MenuStylePath());
+    out << (modern ? "modern" : "classic") << '\n';
 }
 
 std::string HighContrastPath()
@@ -4671,6 +4693,7 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             if (!names.empty()) info.unlocked = "Unlocked: " + names;
         }
         info.online = pWasOnline;
+        info.again = ModernMenus() && !pWasOnline;   // the modern flow, offline: RACE AGAIN and CHOOSE ANOTHER TRACK come first
         info.reducedMotion = LoadReducedMotion();
         info.sound = [](HoverNetRml::Sound sound) {
             if (std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST sound %s\n", sound == HoverNetRml::Sound::eHover ? "hover" : sound == HoverNetRml::Sound::eClick ? "click" : "back"); std::fflush(stdout); }
@@ -4682,6 +4705,8 @@ PostRaceChoice RunPostRaceScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         switch (picked) {
         case HoverNetRml::ResultsChoice::eLobby: return PostRaceChoice::eOnlineLobby;
         case HoverNetRml::ResultsChoice::eMainMenu: return PostRaceChoice::eMainMenu;
+        case HoverNetRml::ResultsChoice::eAgain: return PostRaceChoice::eRestartRace;
+        case HoverNetRml::ResultsChoice::eNewRace: return PostRaceChoice::eNewLocalRace;
         case HoverNetRml::ResultsChoice::eQuitRequested: if (ConfirmQuit(graphics, buffer, viewport, font)) return PostRaceChoice::eQuit; break;   // changed their mind: the ImGui screen below
         case HoverNetRml::ResultsChoice::eNone: if (pFrameLimit >= 0) return PostRaceChoice::eMainMenu; break;
         }
@@ -5201,9 +5226,19 @@ int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, 
 // same way RunMainMenu defaults to Local Play, so bounded test runs still
 // terminate deterministically instead of bouncing between this and the main
 // menu forever.
+#ifdef HOVERNET_HAVE_RMLUI
+bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetup& pOut);   // the modern race screen, defined with the main menu code below
+#endif
+
 LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                                  const MR_Sprite& font, int pFrameLimit)
 {
+#ifdef HOVERNET_HAVE_RMLUI
+    if (ModernMenus() && UseRmlUi(pFrameLimit)) {   // the modern flow: one race screen (if it cannot load, the classic setup screen below runs)
+        LocalRaceSetup modern;
+        if (RunRaceScreen(graphics, pFrameLimit, modern)) return modern;
+    }
+#endif
     // Renders through Dear ImGui against the SDL_Renderer directly, exactly
     // like RunLobbyScreen -- buffer/viewport/font are unused now, kept only so
     // callers (which still pass them for the pre-ImGui menus) don't change.
@@ -5651,6 +5686,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     bool showGhost = LoadShowGhost();
     bool reducedMotion = LoadReducedMotion();
     bool menuBackdrop = LoadMenuBackdrop();
+    bool menuModern = ModernMenus();
     const bool currentHighContrast = LoadHighContrast();
     bool highContrast = currentHighContrast;
     bool fullscreen = currentFullscreen;
@@ -5789,7 +5825,8 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                     f.push_back(slider("uiscale", "UI Scale", uiScalePercent, 75.0f, 150.0f, "%", "Applies to the other menus, and to this one the next time it opens."));
                     f.push_back(toggle("largehud", "Large HUD text", largeHudText, "Keeps race information and chat at the font's native size."));
                     f.push_back(toggle("reduced", "Reduced motion", reducedMotion, "Turns off menu animations and the moving effects in a race."));
-                    f.push_back(toggle("backdrop", "3D track behind the race setup screen", menuBackdrop, "Draws the chosen track turning slowly behind the screen. Turn it off on a slow computer."));
+                    f.push_back(toggle("backdrop", "3D track behind the race screen", menuBackdrop, "Draws the chosen track turning slowly behind the screen. Turn it off on a slow computer."));
+                    f.push_back(toggle("modernmenus", "Modern menus", menuModern, "The Continue card, one race screen and Race again. Turn it off for the classic menus (takes effect the next time a menu opens)."));
                     f.push_back(toggle("ghost", "Show my best run as a ghost", showGhost, "Draws your fastest run on this track beside your craft, so you race your own best time. It never touches the race."));
                     f.push_back(toggle("contrast", "High contrast menus", highContrast, "Strengthens text, borders, fields, and focus states (the older menus; these menus already have strong contrast)."));
                 }
@@ -5883,6 +5920,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                     else if (id == "largehud") largeHudText = e.on;
                     else if (id == "reduced") reducedMotion = e.on;
                     else if (id == "backdrop") { menuBackdrop = e.on; SaveMenuBackdrop(e.on); }
+                    else if (id == "modernmenus") { menuModern = e.on; SaveMenuStyle(e.on); }
                     else if (id == "ghost") showGhost = e.on;
                     else if (id == "contrast") highContrast = e.on;
                     else if (id == "preset") { graphicsSettings.preset = presets[std::max(0, std::min(2, e.index))]; refresh = true; }
@@ -10848,6 +10886,7 @@ enum class MenuChoice
     eWatchReplay,     // reached from the hub (and by the test hooks)
     eControls,
     eTutorial,
+    eQuickRace,       // the Continue card: the last local race again, at once
 };
 
 // The first player screen. A bounded/headless run still defaults to Local Play
@@ -10855,6 +10894,179 @@ enum class MenuChoice
 // The object library, for the craft turning on the main menu (set by the caller before the menu opens; null = the menu keeps its picture).
 constexpr int kMenuViewRaise = 30;   // the main menu shows the craft from a little above (percent of its length), so the cockpit and top show; the Garage keeps its level view
 MR_ResourceLib* gMenuCraftResources = nullptr;
+
+#ifdef HOVERNET_HAVE_RMLUI
+// The modern race screen (assets/ui/racehub.rml): everything about the next race on one screen, with one big RACE button. The chosen track as a card with its plan (pads in colour), its briefing and
+// your best lap, over the live 3D backdrop; your own craft, turning; laps and weapons as chips; Change track opens the track browser, Edit in Garage opens the Garage and comes back.
+// Returns false when the screen could not load (the classic setup screen runs instead). Nothing here changes how a race plays.
+bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetup& pOut)
+{
+    HostPrefs prefs = LoadLocalRacePrefs();
+    PersonalBests personalBests;
+    personalBests.Load(ConfigDirPath() + "/personal_bests");
+    DownloadUi download;
+    bool startAfterDownload = false, cancelled = false, closeRequested = false, builtOnce = false;
+    TrackBackdropShow backdrop;
+    std::vector<TrackPreview> plans(static_cast<std::size_t>(Tracks().Count()));
+    const bool reducedMotion = LoadReducedMotion();
+    const bool autoStartForTest = std::getenv("HOVERNET_TEST_AUTO_START") != nullptr;
+    constexpr int kW = 640, kH = 480;
+    for (bool again = true; again;) {
+        again = false;
+        bool browse = false, garage = false, running = true;
+        std::unique_ptr<HoverNetRml::FormScreen> form(new HoverNetRml::FormScreen(
+            graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "RACE", reducedMotion,
+            [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight, "racehub.rml"));
+        if (std::getenv("HOVERNET_RACE_DEBUG")) std::fprintf(stderr, "racescreen: form ok=%d\n", form->Ok() ? 1 : 0);
+        if (!form->Ok()) return builtOnce;   // the first time: the classic screen runs; after the Garage or the browser: carry on with what was chosen
+        builtOnce = true;
+
+        // the player's own craft, turning (the same drawing as the main menu)
+        SDL_Texture* craftTexture = nullptr;
+        std::vector<std::uint32_t> craftPixels;
+        std::array<std::uint32_t, 256> palette{};
+        Authority::CraftDesign design;
+        bool craftReady = false;
+        int craftYaw = -1000;
+        Uint32 craftBuilt = 0;
+        if (gMenuCraftResources != nullptr && graphics.GetRenderPalette() != nullptr && std::getenv("HOVERNET_NO_MENU_CRAFT") == nullptr) {
+            const MR_UInt8* palette768 = graphics.GetRenderPalette();
+            for (int i = 0; i < 256; ++i) palette[static_cast<std::size_t>(i)] = (static_cast<std::uint32_t>(palette768[i * 3]) << 16) | (static_cast<std::uint32_t>(palette768[i * 3 + 1]) << 8) | palette768[i * 3 + 2];
+            MR_ResBitmap::SetColourPalette(palette768, 1.0f, false);
+            MR_ResBitmap::SetBakePalette(palette768);
+            const HoverNetCraft::CraftStore store(ConfigDirPath());
+            int slot = store.Active();
+            if (slot < 0) slot = 0;
+            if (!store.Load(slot, design)) design = Authority::CraftDesign();
+            design = Authority::SanitiseCraftDesign(design);
+            craftTexture = SDL_CreateTexture(graphics.GetRenderer(), SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, kW, kH);
+            if (craftTexture != nullptr) SDL_SetTextureBlendMode(craftTexture, SDL_BLENDMODE_BLEND);
+            SDL_Rect craftCrop = SDL_Rect{0, 0, kW, kH};
+            bool cropKnown = false;
+            form->SetImage("craftimg", [&](SDL_Rect& crop) -> SDL_Texture* {
+                const int yaw = reducedMotion ? 28 : static_cast<int>(SDL_GetTicks() / 1000.0 * 22.0) % 360 / 2 * 2;
+                const Uint32 now = SDL_GetTicks();
+                if (!cropKnown && craftTexture != nullptr) {   // the box that holds the craft at every angle it turns through, so it fills its space
+                    cropKnown = true;
+                    int x0 = kW, y0 = kH, x1 = -1, y1 = -1;
+                    for (int angle = 0; angle < 360; angle += 60) {
+                        if (!HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, design.IsPlain() ? nullptr : &design, design.craft, angle, palette.data(), kW, kH, craftPixels, true, kMenuViewRaise)) break;
+                        for (int y = 0; y < kH; ++y) for (int x = 0; x < kW; ++x) if ((craftPixels[static_cast<std::size_t>(y) * kW + x] >> 24) > 8) { x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y); }
+                    }
+                    craftYaw = -1000;
+                    if (x1 > x0 && y1 > y0) craftCrop = SDL_Rect{std::max(0, x0 - 10), std::max(0, y0 - 10), std::min(kW, x1 + 11) - std::max(0, x0 - 10), std::min(kH, y1 + 11) - std::max(0, y0 - 10)};
+                }
+                if (craftTexture != nullptr && yaw != craftYaw && (now - craftBuilt >= 40 || !craftReady)) {
+                    craftReady = HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, design.IsPlain() ? nullptr : &design, design.craft, yaw, palette.data(), kW, kH, craftPixels, true, kMenuViewRaise);
+                    if (craftReady) SDL_UpdateTexture(craftTexture, nullptr, craftPixels.data(), kW * 4);
+                    craftYaw = yaw; craftBuilt = now;
+                }
+                crop = craftCrop;
+                return craftReady ? craftTexture : nullptr;
+            });
+        }
+        form->SetImage("planbox", [&](SDL_Rect& crop) -> SDL_Texture* {
+            TrackPreview& preview = plans[static_cast<std::size_t>(prefs.mTrackIndex)];
+            if (!preview.mLoaded) preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(prefs.mTrackIndex).c_str());
+            if (preview.mTexture == nullptr) return nullptr;
+            crop = SDL_Rect{0, 0, preview.mWidth, preview.mHeight};
+            return preview.mTexture;
+        });
+        form->SetBackdropDraw([&](SDL_Renderer* renderer, int w, int h) { backdrop.Prepare(renderer, prefs.mTrackIndex); backdrop.Draw(renderer, w, h, reducedMotion); });
+
+        auto entry = [&]() { return Tracks().Get(prefs.mTrackIndex); };
+        auto needsDownload = [&]() { const TrackEntry* e = entry(); return e != nullptr && !e->mInstalled; };
+        auto show = [&]() {
+            const TrackEntry* e = entry();
+            if (e == nullptr) return;
+            const TrackBriefing guide = BriefingFor(prefs.mTrackIndex);
+            const bool original = e->mOfficial && (e->mName == "ClassicH" || e->mName == "Steeplechase" || e->mName == "The Alley2" || e->mName == "The River");
+            form->SetHtml("kind", e->mMarket ? "MARKET TRACK" : original ? "OFFICIAL" : "COMMUNITY");
+            form->SetHtml("tname", HoverNetRml::FormScreen::Escape(e->mName));
+            form->SetHtml("tmeta", HoverNetRml::FormScreen::Escape(guide.mDifficulty == "Unrated" ? guide.mCharacter : guide.mDifficulty + "  -  " + guide.mCharacter));
+            form->SetHtml("tdesc", HoverNetRml::FormScreen::Escape(guide.mDescription));
+            std::string best;
+            const long long lap = personalBests.LapBest(e->mName), race = personalBests.RaceBest(e->mName, prefs.mLaps);
+            char t[32];
+            if (lap > 0) { FormatRaceTime(static_cast<MR_SimulationTime>(lap), t, sizeof(t)); best = std::string("Best lap ") + t; }
+            if (race > 0) { FormatRaceTime(static_cast<MR_SimulationTime>(race), t, sizeof(t)); best += std::string(best.empty() ? "" : "   -   ") + "Best " + std::to_string(prefs.mLaps) + (prefs.mLaps == 1 ? " lap " : " laps ") + t; }
+            form->SetHtml("tbest", HoverNetRml::FormScreen::Escape(best));
+            form->SetClass("tdl", "hide", !needsDownload());
+            if (needsDownload()) form->SetHtml("tdl", "Not on this computer yet: it downloads (" + HoverNetRml::FormScreen::Escape(FormatMegabytes(e->mDownloadBytes)) + ") when you start.");
+            std::string laps;
+            for (int v : {1, 3, 5, 7, 10}) laps += std::string("<div class=\"chip") + (v == prefs.mLaps ? " sel" : "") + "\" data-id=\"laps\" data-index=\"" + std::to_string(v) + "\">" + std::to_string(v) + "</div>";
+            form->SetHtml("laps", guide.mFreePlay ? std::string("<p class=\"note\">Free play: no laps to complete.</p>") : laps);
+            form->SetHtml("lapsnote", guide.mFreePlay ? "" : "Suggested: " + std::to_string(guide.mSuggestedLaps));
+            form->SetHtml("weap", std::string("<div class=\"chip") + (prefs.mWeapons ? " sel" : "") + "\" data-id=\"weapons\" data-index=\"1\">ON</div><div class=\"chip" + (prefs.mWeapons ? "" : " sel") + "\" data-id=\"weapons\" data-index=\"0\">OFF</div>");
+            form->SetHtml("cname", HoverNetRml::FormScreen::Escape(std::string(Authority::CraftName(design.craft)) + (design.IsPlain() ? "" : "  -  your design")));
+            form->SetHtml("start", needsDownload() ? "DOWNLOAD &amp; RACE" : "RACE");
+        };
+        if (std::getenv("HOVERNET_RACE_DEBUG")) std::fprintf(stderr, "racescreen: before show\n");
+        show();
+        if (std::getenv("HOVERNET_RACE_DEBUG")) std::fprintf(stderr, "racescreen: shown\n");
+        form->FocusElement("start");
+        int frame = 0;
+        const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
+        while (running && !browse && !garage && (limit < 0 || frame < limit)) {
+            ++frame;
+            std::vector<HoverNetRml::FormEvent> events;
+            if (std::getenv("HOVERNET_RACE_DEBUG") && (frame < 4 || frame % 10 == 0)) std::fprintf(stderr, "racescreen: frame %d at %u ms\n", frame, static_cast<unsigned>(SDL_GetTicks()));
+            HoverNetRml::FormOutcome outcome = form->Frame(events, frame, limit);
+            bool refresh = false, start = autoStartForTest && frame == 1;
+            for (const HoverNetRml::FormEvent& e : events) {
+                if (e.id == "start") start = true;
+                else if (e.id == "laps") { prefs.mLaps = std::max(1, std::min(20, e.index)); refresh = true; }
+                else if (e.id == "weapons") { prefs.mWeapons = e.index != 0; refresh = true; }
+                else if (e.id == "browse") browse = true;
+                else if (e.id == "garage" && gMenuCraftResources != nullptr) garage = true;
+                else if (e.id == "back") { cancelled = true; running = false; }
+                else if (e.id == "busy") {
+                    if (TrackDownloadJob* job = download.Job()) { if (!job->Finished()) job->Cancel(); else { download.Reset(); startAfterDownload = false; form->SetBusy("", "", -1.0f, ""); refresh = true; } }
+                }
+            }
+            if (start && !download.Active()) {
+                const TrackEntry* e = entry();
+                if (e != nullptr && !e->mInstalled) { download.Begin({*e}, 0); startAfterDownload = true; }
+                else running = false;
+            }
+            else if (outcome == HoverNetRml::FormOutcome::eCancel && !download.Active()) { cancelled = true; running = false; }
+            else if (outcome == HoverNetRml::FormOutcome::eClose) { cancelled = true; running = false; closeRequested = true; }
+            if (TrackDownloadJob* job = download.Job()) {   // a download is under way: shown over the screen until it ends
+                if (!job->Finished()) {
+                    const long long totalBytes = std::max<long long>(1, job->TotalBytes());
+                    form->SetBusy("Downloading track", job->CurrentName() + "   " + FormatMegabytes(job->BytesDone()) + " of " + FormatMegabytes(totalBytes), std::min(1.0f, static_cast<float>(job->BytesDone()) / static_cast<float>(totalBytes)), "Cancel");
+                }
+                else {
+                    Tracks().Refresh();
+                    if (job->Succeeded()) { download.Reset(); form->SetBusy("", "", -1.0f, ""); if (startAfterDownload) { startAfterDownload = false; running = false; } else refresh = true; }
+                    else if (job->Cancelled() && job->Error().empty()) { download.Reset(); startAfterDownload = false; form->SetBusy("", "", -1.0f, ""); refresh = true; }
+                    else form->SetBusy("The download did not finish", job->Error(), -1.0f, "OK");
+                }
+            }
+            if (refresh) {
+                for (TrackPreview& preview : plans) if (preview.mTexture != nullptr && !preview.mLoaded) { SDL_DestroyTexture(preview.mTexture); preview = TrackPreview(); }
+                show();
+            }
+        }
+        if (craftTexture != nullptr) SDL_DestroyTexture(craftTexture);
+        form.reset();
+        if (closeRequested && ConfirmQuit(graphics)) g_QuitConfirmed = true;
+        if (browse && !closeRequested) {
+            const int picked = RunTrackBrowser(graphics, personalBests, prefs.mTrackIndex, pFrameLimit);
+            if (picked >= 0) prefs.mTrackIndex = picked;
+            again = true;
+        }
+        else if (garage && !closeRequested) { RunGarageScreen(graphics, *gMenuCraftResources, pFrameLimit); again = true; }
+    }
+    pOut.confirmed = !cancelled;
+    pOut.trackName = TrackNameAt(prefs.mTrackIndex);
+    pOut.laps = prefs.mLaps;
+    pOut.weapons = prefs.mWeapons;
+    if (pOut.confirmed) SaveLocalRacePrefs(prefs);
+    return true;
+}
+#endif
+
 
 MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR_3DViewPort& viewport,
                        const MR_Sprite& font, int pFrameLimit)
@@ -10874,6 +11086,19 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 #ifndef __EMSCRIPTEN__
         info.showQuit = true;
 #endif
+        if (ModernMenus()) {   // the Continue card: the last local race, if its track is on this computer
+            const HostPrefs last = LoadLocalRacePrefs();
+            const TrackEntry* lastTrack = Tracks().Get(last.mTrackIndex);
+            if (lastTrack != nullptr && lastTrack->mInstalled) {
+                PersonalBests bests;
+                bests.Load(ConfigDirPath() + "/personal_bests");
+                info.continueTrack = lastTrack->mName;
+                info.continueDetail = std::to_string(last.mLaps) + (last.mLaps == 1 ? " lap" : " laps") + (last.mWeapons ? "  -  weapons on" : "  -  weapons off");
+                const long long lap = bests.LapBest(lastTrack->mName);
+                if (lap > 0) { char t[32]; FormatRaceTime(static_cast<MR_SimulationTime>(lap), t, sizeof(t)); info.continueDetail += std::string("  -  best lap ") + t; }
+            }
+            info.offlineLabel = "CHOOSE A TRACK";
+        }
         info.sound = [](HoverNetRml::Sound sound) {
             if (std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST sound %s\n", sound == HoverNetRml::Sound::eHover ? "hover" : sound == HoverNetRml::Sound::eClick ? "click" : "back"); std::fflush(stdout); }
             PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack);
@@ -10936,6 +11161,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         switch (picked) {
         case HoverNetRml::Choice::eOnline: return MenuChoice::eOnlineLobby;
         case HoverNetRml::Choice::eOffline: return MenuChoice::eLocalPlay;
+        case HoverNetRml::Choice::eQuickRace: return MenuChoice::eQuickRace;
         case HoverNetRml::Choice::eLeaderboards: return MenuChoice::eLeaderboards;
         case HoverNetRml::Choice::eGarage: return MenuChoice::eGarage;
         case HoverNetRml::Choice::eTutorial: return MenuChoice::eTutorial;
@@ -12670,6 +12896,13 @@ int RunClient(int argc, char** argv)
             else if (choice == MenuChoice::eGarage) {
                 RunGarageScreen(graphics, resources, frameLimit);
                 pickingMode = !g_QuitConfirmed;
+            }
+            else if (choice == MenuChoice::eQuickRace) {   // the Continue card: the last local race (track, laps, weapons) again at once
+                const HostPrefs last = LoadLocalRacePrefs();
+                if (!loadLocalRace(TrackNameAt(last.mTrackIndex), last.mLaps, last.mWeapons)) {
+                    std::printf("Could not load '%s'; returning to the main menu\n", TrackNameAt(last.mTrackIndex).c_str());
+                    pickingMode = !g_QuitConfirmed;
+                }
             }
             else if (autoPlay) {
                 if (!loadLocalRace(initialTrackName, 1, true)) { mainMenuFailed = true; return false; }

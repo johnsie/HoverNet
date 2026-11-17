@@ -258,6 +258,21 @@ Limits to keep in mind: the web build gets the same code, but its picture passes
 frame); and the floating-point parts of the look (sparks, glow) are only promised to repeat on the same machine, so they are checked by property
 (`scripts/test-modern-graphics.sh`, `HoverNetModernGraphics`), not by committed hashes.
 
+### Menu flow: modern and classic
+
+*Added 17 November 2026, after a review of how a player gets from the main menu to a race and back (see [menu-flow.md](menu-flow.md)).*
+
+| # | Item | State |
+| --- | --- | --- |
+| 1 | **A switch**: Modern menus (default) or Classic, in Settings and with `HOVERNET_MENU_STYLE`. | **Done.** |
+| 2 | **Continue card** on the main menu: the last race, one click. | **Done.** |
+| 3 | **One race screen**: track card with plan and briefing, your craft turning, laps and weapons chips, change track, edit in Garage, one RACE button, over the live 3D track. | **Done** (`racehub.rml`, `RunRaceScreen`). Open: a mode tab (practice, online, time trial) and bots. |
+| 4 | **Race again** and **Choose another track** on the results screen (offline). | **Done.** Open: the gap to your best and your ghost on the results card; "Next track". |
+| 5 | **Pause menu**: shorter, with the rest under "More"; a one-key restart. | **Not started.** |
+| 6 | **Online "Race now"** (join the best open race or start one that begins by itself), a **waiting-room lobby** (track card, player cards with ready ticks, chat drawer, countdown), **rematch**. | **Not started.** The lobby is the most complex screen (queues, spectators, private codes) and needs a server to test; the classic lobby is unchanged in both styles. |
+| 7 | **One look and one navigation** across every screen: a top bar (name, level, craft), a controls-hint bar for keyboard and gamepad, screens that slide, the lobby, Garage and Settings restyled like the new screens. | **Partly done**: the main menu, race screen, results, track browser and download dialog share the new look. Open: the rest. |
+| 8 | **Settings**: Performance, Balanced and Quality presets, changes that apply at once with a "keep these?" revert, a search box. | **Not started.** |
+
 ### Menu and track-selection ideas from HoverRace Neo
 
 *Added 17 November 2026, after a review of the HoverRace Neo browser game (game.hoverraceneo.com). Ideas only: nothing is copied from it (its code, art and wording are its own). All of it is presentation: no rules-version change.*

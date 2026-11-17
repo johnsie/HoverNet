@@ -39,6 +39,7 @@ public:
         else if (id == "tutorial") *mResult = Choice::eTutorial;
         else if (id == "settings") *mResult = Choice::eSettings;
         else if (id == "quit") *mResult = Choice::eQuitRequested;
+        else if (id == "quick") *mResult = Choice::eQuickRace;
         if (*mResult != Choice::eNone && std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST chose %s\n", id.c_str()); std::fflush(stdout); }
     }
 private:
@@ -235,7 +236,9 @@ void DrawResultsBackdrop(SDL_Renderer* pRenderer, int pWidth, int pHeight, int p
     }
 }
 
-const char* const kButtons[] = {"online", "offline", "leaderboards", "garage", "tutorial", "settings", "quit"};   // in the order the arrow keys walk them (quit only where it is shown)
+Rml::String Escaped(const std::string& pText);   // defined below
+
+const char* const kButtons[] = {"quick", "online", "offline", "leaderboards", "garage", "tutorial", "settings", "quit"};   // in the order the arrow keys walk them (quit only where it is shown)
 
 void MoveFocus(Rml::ElementDocument* pDocument, int pStep, const std::function<void(Sound)>& pSound)
 {
@@ -287,13 +290,23 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
         else level->SetProperty("display", "none");
     }
     if (Rml::Element* quit = document->GetElementById("quit")) quit->SetClass("hide", !pInfo.showQuit);
+    {   // the Continue card of the modern flow
+        const bool card = !pInfo.continueTrack.empty();
+        if (Rml::Element* box = document->GetElementById("continue")) box->SetClass("hide", !card);
+        if (Rml::Element* quick = document->GetElementById("quick")) quick->SetClass("hide", !card);
+        if (card) {
+            if (Rml::Element* e = document->GetElementById("ctrack")) e->SetInnerRML(Escaped(pInfo.continueTrack));
+            if (Rml::Element* e = document->GetElementById("cdetail")) e->SetInnerRML(Escaped(pInfo.continueDetail));
+        }
+        if (!pInfo.offlineLabel.empty()) if (Rml::Element* e = document->GetElementById("offline")) e->SetInnerRML(Escaped(pInfo.offlineLabel));
+    }
     if (pInfo.tutorialDone) if (Rml::Element* tutorial = document->GetElementById("tutorial")) tutorial->SetClass("quiet", true);
 
     ChooseListener listener(&result, pInfo.sound);
     for (const char* id : kButtons) if (Rml::Element* button = document->GetElementById(id)) { button->AddEventListener("click", &listener); button->AddEventListener("mouseover", &listener); }
     if (pInfo.reducedMotion) document->SetClass("still", true);
     document->Show();
-    if (Rml::Element* first = document->GetElementById("online")) first->Focus();
+    if (Rml::Element* first = document->GetElementById(pInfo.continueTrack.empty() ? "online" : "quick")) first->Focus();
 
     // Test hook HOVERNET_TEST_RML="down,down,enter" or "click:garage": scripted input through the real event path, one step every few frames once the opening animation is over.
     std::vector<std::string> script;
@@ -380,6 +393,16 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
         }
         context->Render();
         ss.End();
+        {   // a scripted run (HOVERNET_TEST_RML) with HOVERNET_CAPTURE_RML: the frame just before its first keystroke, as on the other screens
+            const char* scripted = std::getenv("HOVERNET_CAPTURE_RML");
+            if (scripted != nullptr && std::getenv("HOVERNET_TEST_RML") != nullptr && frames == 62) {
+                if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888)) {
+                    SDL_RenderReadPixels(pRenderer, nullptr, SDL_PIXELFORMAT_ARGB8888, surface->pixels, surface->pitch);
+                    SDL_SaveBMP(surface, (std::string(scripted) + ".menu.bmp").c_str());
+                    SDL_FreeSurface(surface);
+                }
+            }
+        }
         if (const char* shot = std::getenv("HOVERNET_CAPTURE_MENU")) {   // the same capture hook as the ImGui menu: the last frame of a bounded run
             if (pFrameLimit >= 0 && frames == pFrameLimit) {
                 if (SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888)) {
@@ -412,6 +435,8 @@ public:
         if (mSound) mSound(Sound::eClick);
         if (id == "lobby") *mResult = ResultsChoice::eLobby;
         else if (id == "menu") *mResult = ResultsChoice::eMainMenu;
+        else if (id == "again") *mResult = ResultsChoice::eAgain;
+        else if (id == "track") *mResult = ResultsChoice::eNewRace;
         if (*mResult != ResultsChoice::eNone && std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST results chose %s\n", id.c_str()); std::fflush(stdout); }
     }
 private:
@@ -472,12 +497,16 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
     set("opened", pInfo.opened);
     set("unlocked", pInfo.unlocked);
     if (!pInfo.online) if (Rml::Element* lobby = document->GetElementById("lobby")) lobby->SetProperty("display", "none");
-    if (pInfo.online) { set("f2what", "lobby"); }
+    if (!pInfo.again) { for (const char* id : {"again", "track"}) if (Rml::Element* e = document->GetElementById(id)) e->SetProperty("display", "none"); }
+    else if (Rml::Element* menu = document->GetElementById("menu")) menu->SetClass("quiet", true);
+    if (pInfo.online) { set("f2what", "lobby"); } else if (pInfo.again) { set("f2what", "race again"); }
 
     ResultsListener listener(&result, pInfo.sound);
-    for (const char* id : {"lobby", "menu"}) if (Rml::Element* button = document->GetElementById(id)) { button->AddEventListener("click", &listener); button->AddEventListener("mouseover", &listener); }
+    for (const char* id : {"again", "lobby", "track", "menu"}) if (Rml::Element* button = document->GetElementById(id)) { button->AddEventListener("click", &listener); button->AddEventListener("mouseover", &listener); }
     document->Show();
-    if (Rml::Element* first = document->GetElementById(pInfo.online ? "lobby" : "menu")) first->Focus();
+    const char* const order[] = {"again", "lobby", "track", "menu"};   // the order the arrow keys walk the buttons that are shown
+    auto shown = [&](const char* id) { Rml::Element* e = document->GetElementById(id); return e != nullptr && e->GetProperty<Rml::String>("display") != "none"; };
+    if (Rml::Element* first = document->GetElementById(pInfo.again ? "again" : pInfo.online ? "lobby" : "menu")) first->Focus();
 
     Rml::ElementList reveal;
     document->GetElementsByClassName(reveal, "reveal");
@@ -526,23 +555,30 @@ ResultsChoice RunResults(SDL_Window* pWindow, SDL_Renderer* pRenderer, const Res
             if (event.type == SDL_KEYDOWN) {
                 const SDL_Keycode key = event.key.keysym.sym;
                 if (key == SDLK_ESCAPE) { if (pInfo.sound) pInfo.sound(Sound::eBack); result = ResultsChoice::eMainMenu; break; }
-                if ((key == SDLK_DOWN || key == SDLK_UP) && pInfo.online) {
+                if (key == SDLK_DOWN || key == SDLK_UP) {
+                    std::vector<Rml::Element*> walk;
+                    for (const char* id : order) if (shown(id)) walk.push_back(document->GetElementById(id));
                     Rml::Element* focused = document->GetFocusLeafNode();
-                    const char* other = (focused != nullptr && focused->GetId() == "lobby") ? "menu" : "lobby";
-                    if (Rml::Element* e = document->GetElementById(other)) e->Focus();
+                    std::size_t at = 0;
+                    for (std::size_t i = 0; i < walk.size(); ++i) if (walk[i] == focused) at = i;
+                    if (!walk.empty()) walk[(at + (key == SDLK_DOWN ? 1 : walk.size() - 1)) % walk.size()]->Focus();
                     continue;
                 }
                 // F2 returns (to the lobby after an online race, otherwise the main menu). Enter and Space do nothing here: Enter is the chat key, and a chat line sent as the race ends
                 // must not choose a button.
-                if (key == SDLK_F2) { if (pInfo.sound) pInfo.sound(Sound::eClick); result = pInfo.online ? ResultsChoice::eLobby : ResultsChoice::eMainMenu; if (std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST results chose %s\n", pInfo.online ? "lobby" : "menu"); std::fflush(stdout); } break; }
+                if (key == SDLK_F2) { if (pInfo.sound) pInfo.sound(Sound::eClick); result = pInfo.online ? ResultsChoice::eLobby : pInfo.again ? ResultsChoice::eAgain : ResultsChoice::eMainMenu; if (std::getenv("HOVERNET_TEST_RML") != nullptr) { std::printf("RMLTEST results chose %s\n", pInfo.online ? "lobby" : pInfo.again ? "again" : "menu"); std::fflush(stdout); } break; }
                 if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_SPACE) continue;
             }
             if (event.type == SDL_CONTROLLERBUTTONDOWN) {
                 const int b = event.cbutton.button;
                 if (b == SDL_CONTROLLER_BUTTON_B) { result = ResultsChoice::eMainMenu; break; }
-                if ((b == SDL_CONTROLLER_BUTTON_DPAD_DOWN || b == SDL_CONTROLLER_BUTTON_DPAD_UP) && pInfo.online) {
+                if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN || b == SDL_CONTROLLER_BUTTON_DPAD_UP) {
+                    std::vector<Rml::Element*> walk;
+                    for (const char* id : order) if (shown(id)) walk.push_back(document->GetElementById(id));
                     Rml::Element* focused = document->GetFocusLeafNode();
-                    if (Rml::Element* e = document->GetElementById((focused != nullptr && focused->GetId() == "lobby") ? "menu" : "lobby")) e->Focus();
+                    std::size_t at = 0;
+                    for (std::size_t i = 0; i < walk.size(); ++i) if (walk[i] == focused) at = i;
+                    if (!walk.empty()) walk[(at + (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN ? 1 : walk.size() - 1)) % walk.size()]->Focus();
                     continue;
                 }
                 if (b == SDL_CONTROLLER_BUTTON_A) { if (Rml::Element* f = document->GetFocusLeafNode()) f->Click(); continue; }

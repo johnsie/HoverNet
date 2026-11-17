@@ -4,7 +4,7 @@
 #   scripts/test-rml-menu.sh build/HoverNetGame2Player
 set -uo pipefail
 client="${1:?usage: $0 <client>}"
-export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy HOVERNET_RML_MENU=1 HOVERNET_NO_FADE=1
+export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy HOVERNET_RML_MENU=1 HOVERNET_NO_FADE=1 HOVERNET_MENU_STYLE=classic   # these checks are for the classic menu flow; scripts/test-modern-flow.sh checks the modern one
 dir="$(mktemp -d)"; trap 'rm -rf "$dir"' EXIT
 export HOME="$dir/home"; mkdir -p "$HOME"; unset XDG_CONFIG_HOME
 fail=0

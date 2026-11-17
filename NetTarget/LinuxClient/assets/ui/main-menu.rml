@@ -17,6 +17,12 @@
 	<div id="panel">
 		<p class="coral eyebrow">READY TO RACE?</p>
 		<hr/>
+		<div id="continue" class="hide">
+			<p class="cap">CONTINUE</p>
+			<p id="ctrack" class="ctrack">ClassicH</p>
+			<p id="cdetail" class="cdetail"></p>
+			<button id="quick" class="primary hide">RACE</button>
+		</div>
 		<div class="glow"><button id="online" class="primary">RACE ONLINE</button></div>
 		<p class="pitch">Race real players. Climb the ranks.</p>
 		<button id="offline" class="quiet primary">PRACTICE OFFLINE</button>
