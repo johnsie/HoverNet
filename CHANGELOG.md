@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.66 - 2026-11-17
+
+_Released at the owner's request without the full test suite. Run on this build: the desktop and WebAssembly builds, the camera-rule test, a desktop screenshot of the race screen. Not run: the web smoke test, Windows, a measurement in a real browser. Also in this release: the GitLab pipeline speed-ups (parallel web test suites, the race server built in the background, kept build folders, ccache), which have not run in the real pipeline yet._
+
 - **Smoother menus on the web page**: the 3D track scene now draws in a few big batches instead of hundreds of small draw calls (the cost that weighed most in the browser); on the page the turning craft is drawn once per angle and blended between (it used to be redrawn by the CPU every few frames) and at a smaller size, the track is read without a background thread, and the textures upload faster.
 - **Clearer small labels**: the small red labels (OFFICIAL, YOUR CRAFT, LAPS, WEAPONS, the eyebrow lines) are now bold, slightly larger and a lighter pink, in the body font, because the thin display font at that size broke up on screen.
 - _Checked: builds on desktop and as WebAssembly (the page's code compiles); a desktop screenshot of the race screen (the scene is unchanged, the labels are clearer); the camera-rule test. Not measured: how much faster it runs in Edge (I have no browser profile of it here), and the web smoke test was not run._
