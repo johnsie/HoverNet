@@ -11301,11 +11301,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                 return rmlCraftReady ? rmlCraftTexture : nullptr;
             };
         }
-        TrackBackdropShow menuTrack;   // the modern flow: the last race's track behind the menu, as on the race screen
-        if (!info.continueTrack.empty() && !LoadReducedMotion()) {
-            const int lastIndex = LoadLocalRacePrefs().mTrackIndex;
-            info.backdropDraw = [&menuTrack, lastIndex](SDL_Renderer* renderer, int w, int h) { menuTrack.Prepare(renderer, lastIndex); menuTrack.Draw(renderer, w, h, false); };
-        }
+        // (The main menu stays the craft on the plain backdrop: the track scene is for the race screen only.)
         const HoverNetRml::Choice picked = HoverNetRml::RunMainMenu(graphics.GetWindow(), graphics.GetRenderer(), info, pFrameLimit, kWidth, kHeight);
         if (rmlCraftTexture != nullptr) SDL_DestroyTexture(rmlCraftTexture);
         switch (picked) {

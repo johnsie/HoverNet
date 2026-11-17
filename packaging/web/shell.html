@@ -67,32 +67,45 @@
   <style>
     :root { --vh: 100vh; --vt: 0px; --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px); }
     @supports (height: 100dvh) { :root { --vh: 100dvh; } }
-    html, body { width: 100%; height: var(--vh); margin: 0; background: #080c14; color: #e8eef8; font: 16px system-ui, sans-serif;
+    html, body { width: 100%; height: var(--vh); margin: 0; background: #07041a; color: #e8eef8; font: 16px system-ui, sans-serif;
       overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
       -webkit-tap-highlight-color: transparent; touch-action: none; }
     body { display: flex; align-items: center; justify-content: center; overflow: hidden; position: fixed;
       left: 0; right: 0; top: var(--vt); }
+    /* The loading screen, in the look of the game's own menus: a dusk sky with a striped sun, a glowing grid, a red progress bar. Pure CSS: no pictures, no extra files. */
     #loader { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center;
-      justify-content: center; gap: 1.1rem; padding: 2rem 1.5rem; box-sizing: border-box; text-align: center;
-      background: radial-gradient(ellipse at 50% 35%, #14213a 0%, #080c14 70%); }
-    #loader h1 { margin: 0; font: 800 clamp(2rem, 8vw, 3.4rem)/1 system-ui, sans-serif; letter-spacing: .12em; color: #eaf2ff;
-      text-shadow: 0 0 24px rgba(90, 160, 255, .55); }
-    #loader .tag { margin: 0; color: #8fa6c6; font-size: .95rem; letter-spacing: .06em; }
-    #outiva-account { margin: -.45rem 0 0; color: #8fa6c6; font-size: .8rem; }
-    #bar { width: min(420px, 80vw); height: 10px; border-radius: 999px; background: rgba(160, 200, 255, .15); overflow: hidden; }
+      justify-content: flex-start; gap: 1.05rem; padding: 40vh 1.5rem 2rem; box-sizing: border-box; text-align: center; overflow: hidden;
+      background: linear-gradient(180deg, #07041a 0%, #12082c 38%, #4a1560 62%, #2a0c3e 63%, #0a0518 100%); }
+    #loader::before { content: ''; position: absolute; left: 50%; top: 24%; width: min(36vh, 48vw); height: min(36vh, 48vw); margin: calc(min(36vh, 48vw) / -2) 0 0 calc(min(36vh, 48vw) / -2);
+      border-radius: 50%; background: linear-gradient(180deg, #ffe26e 0%, #ff4f9a 100%); z-index: -1; opacity: .9;
+      -webkit-mask-image: repeating-linear-gradient(180deg, #000 0, #000 11px, transparent 11px, transparent 14px);
+      mask-image: repeating-linear-gradient(180deg, #000 0, #000 11px, transparent 11px, transparent 14px);
+      box-shadow: 0 0 80px 10px rgba(255, 80, 150, .35); }
+    #loader::after { content: ''; position: absolute; left: -50%; right: -50%; bottom: 0; height: 37%; z-index: -1;
+      background:
+        repeating-linear-gradient(90deg, rgba(255, 90, 210, .45) 0, rgba(255, 90, 210, .45) 1px, transparent 1px, transparent 64px),
+        repeating-linear-gradient(0deg, rgba(90, 220, 255, .35) 0, rgba(90, 220, 255, .35) 1px, transparent 1px, transparent 38px),
+        linear-gradient(180deg, rgba(74, 21, 96, .9), #07031a);
+      transform: perspective(380px) rotateX(58deg); transform-origin: 50% 0; }
+    #loader h1 { margin: 0; font: 800 clamp(2.2rem, 9vw, 3.8rem)/1 "Oxanium", "Eurostile", "Bahnschrift", system-ui, sans-serif; letter-spacing: .16em; color: #ffffff;
+      text-shadow: 0 0 18px rgba(255, 70, 110, .75), 0 3px 0 rgba(0, 0, 0, .35); }
+    #loader .tag { margin: 0; color: #ff9ba3; font-size: .9rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; }
+    #outiva-account { margin: -.35rem 0 0; color: #b9b4d4; font-size: .8rem; }
+    #bar { width: min(440px, 80vw); height: 12px; border-radius: 999px; background: rgba(255, 255, 255, .12); overflow: hidden;
+      border: 1px solid rgba(255, 140, 170, .25); }
     #bar > i { display: block; height: 100%; width: 0; border-radius: inherit;
-      background: linear-gradient(90deg, #3d7bff, #7fd0ff); transition: width .2s ease-out; }
+      background: linear-gradient(90deg, #dc3546, #ff7a86); box-shadow: 0 0 14px rgba(255, 80, 110, .8); transition: width .2s ease-out; }
     #bar.indeterminate > i { width: 40%; animation: hn-slide 1.2s ease-in-out infinite; transition: none; }
     @keyframes hn-slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
     @media (prefers-reduced-motion: reduce) { #bar.indeterminate > i { animation: none; width: 100%; opacity: .5; } }
-    #status { margin: 0; min-height: 1.4em; color: #b7c6da; font-size: .95rem; }
+    #status { margin: 0; min-height: 1.4em; color: #e3e1f2; font-size: .95rem; font-weight: 600; }
     #status.error { color: #ff9b9b; }
-    #startlog { margin: 0; max-width: 90vw; max-height: 7em; overflow: hidden; color: #6f86a8; font: 11px/1.35 ui-monospace, monospace;
+    #startlog { margin: 0; max-width: 90vw; max-height: 7em; overflow: hidden; color: #9a93bd; font: 11px/1.35 ui-monospace, monospace;
       text-align: left; white-space: pre-wrap; word-break: break-all; }
     #startlog:empty { display: none; }
-    #loader .hint { margin: 0; max-width: 28em; color: #6f86a8; font-size: .8rem; }
+    #loader .hint { margin: 0; max-width: 28em; color: #a49dc4; font-size: .8rem; }
     #loader.error #bar { display: none; }
-    #retry { display: none; min-height: 44px; padding: 0 1.4rem; border-radius: 10px; border: 1px solid #9bbcf0;
+    #retry { display: none; min-height: 44px; padding: 0 1.4rem; border-radius: 10px; border: 1px solid #ff9ba3;
       background: transparent; color: inherit; font: inherit; cursor: pointer; }
     #loader.error #retry { display: inline-block; }
     body.running #loader { display: none; }
@@ -171,13 +184,13 @@
 <body>
   <div id="loader">
     <h1>HOVERNET</h1>
-    <p class="tag">Hovercraft racing in your browser</p>
+    <p class="tag">High-speed combat racing</p>
     <p id="outiva-account">Guest play — no Outiva account required</p>
     <div id="bar" class="indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Loading"><i></i></div>
     <p id="status" role="status" aria-live="polite">Loading HoverNet…</p>
     <pre id="startlog" aria-hidden="true"></pre>
     <button id="retry" type="button" onclick="location.reload()">Try again</button>
-    <p class="hint" id="hint">First visit downloads about 13&nbsp;MB of tracks and graphics; it is cached for next time.</p>
+    <p class="hint" id="hint">First visit downloads the game (about 25&nbsp;MB); it is cached for next time.</p>
   </div>
   <div id="hn-util">
     <button class="hn-btn" id="hn-toggle" type="button" aria-label="Toggle on-screen controls" aria-pressed="true">&#127918;</button>

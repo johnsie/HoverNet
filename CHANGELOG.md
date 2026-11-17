@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+- **The web loading screen matches the game**: a dusk sky with a striped sun, a glowing grid and a red progress bar, in the same look as the menus (pure CSS: no extra files). Its text said the first visit was about 13 MB; the download is about 25 MB, and it now says so.
+- **The main menu is the craft on the plain backdrop again**: the track scene behind it (added in 2.3.65) is removed (it was slow and cluttered the menu); the track scene stays on the race screen.
+- _Checked: a headless-Chrome screenshot of the loading page at desktop and phone size; the desktop build. Not checked: the loading page on a real slow connection, or how much faster the main menu is in Edge._
+
 ## 2.3.66 - 2026-11-17
 
 _Released at the owner's request without the full test suite. Run on this build: the desktop and WebAssembly builds, the camera-rule test, a desktop screenshot of the race screen. Not run: the web smoke test, Windows, a measurement in a real browser. Also in this release: the GitLab pipeline speed-ups (parallel web test suites, the race server built in the background, kept build folders, ccache), which have not run in the real pipeline yet._
