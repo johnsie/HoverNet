@@ -4943,79 +4943,47 @@ struct LocalRaceSetup
 // Built when the track changes (a fraction of a second), for tracks that are on this computer. HOVERNET_NO_BACKDROP=1 leaves it out; Reduced motion holds the first picture still.
 struct TrackBackdropShow
 {
-    std::vector<SDL_Texture*> textures;
-    HoverNetBackdrop::Flyover fly;        // the live orbiting view (a menu camera; the race camera is not involved)
+    // The live orbit is drawn on its own thread (TrackBackdrop.h), so a slow machine never slows the menu: this only copies the newest finished picture to a texture and draws it.
+    std::unique_ptr<HoverNetBackdrop::FlyoverWorker> worker;
     SDL_Texture* live = nullptr;
-    std::vector<std::uint8_t> livePixels;
-    Uint32 lastLive = 0;
-    float angle = 200.0f;
+    int liveW = 0, liveH = 0;
+    std::vector<std::uint8_t> pixels;
     int builtFor = -2;
     Uint32 since = 0;
-    void Clear() { for (SDL_Texture* t : textures) if (t != nullptr) SDL_DestroyTexture(t); textures.clear(); if (live != nullptr) { SDL_DestroyTexture(live); live = nullptr; } }
-    ~TrackBackdropShow() { Clear(); }
-    void Prepare(SDL_Renderer* renderer, int index)
+    void Clear() { if (live != nullptr) { SDL_DestroyTexture(live); live = nullptr; } liveW = liveH = 0; }
+    ~TrackBackdropShow() { worker.reset(); Clear(); }
+    void Prepare(SDL_Renderer*, int index)
     {
         if (index == builtFor) return;
-        builtFor = index; since = SDL_GetTicks(); Clear();
+        builtFor = index; since = SDL_GetTicks();
         const TrackEntry* entry = Tracks().Get(index);
-        if (entry == nullptr || !entry->mInstalled || std::getenv("HOVERNET_NO_BACKDROP") != nullptr) return;
-        if (std::getenv("HOVERNET_NO_FLYOVER") == nullptr && fly.Open(Tracks().PathFor(entry->mName), entry->mName, 512, 320)) {
-            live = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, fly.Width(), fly.Height());
-            if (const char* dump = std::getenv("HOVERNET_FLYOVER_DUMP")) {   // test switch: the orbit at four angles, to <prefix><angle>.ppm
-                std::vector<std::uint8_t> px;
-                for (int a = 0; a < 360; a += 90) if (fly.Draw(static_cast<float>(a), px)) if (std::FILE* f = std::fopen((std::string(dump) + std::to_string(a) + ".ppm").c_str(), "wb")) { std::fprintf(f, "P6\n%d %d\n255\n", fly.Width(), fly.Height()); for (std::size_t i = 0; i < px.size(); i += 4) std::fwrite(&px[i], 1, 3, f); std::fclose(f); }
-            }
-            if (live != nullptr) { SDL_SetTextureBlendMode(live, SDL_BLENDMODE_BLEND); SDL_SetTextureScaleMode(live, SDL_ScaleModeLinear); lastLive = 0; return; }
-        }
-        std::vector<HoverNetBackdrop::Picture> pictures;
-        if (HoverNetBackdrop::Render(Tracks().PathFor(entry->mName), entry->mName, 640, 480, 2, 300, pictures) <= 0) return;
-        for (const HoverNetBackdrop::Picture& p : pictures) {
-            SDL_Texture* t = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, p.width, p.height);
-            if (t == nullptr) continue;
-            SDL_UpdateTexture(t, nullptr, p.rgba.data(), p.width * 4);
-            SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
-            SDL_SetTextureScaleMode(t, SDL_ScaleModeLinear);
-            textures.push_back(t);
-        }
+        if (entry == nullptr || !entry->mInstalled || std::getenv("HOVERNET_NO_BACKDROP") != nullptr) { if (worker) worker->SetStill(true); Clear(); return; }
+        if (!worker) worker.reset(new HoverNetBackdrop::FlyoverWorker);
+        worker->SetStill(false);
+        worker->SetTrack(Tracks().PathFor(entry->mName), entry->mName);   // opened on the thread; the old picture stays until the new one is ready
     }
     void Draw(SDL_Renderer* renderer, int w, int h, bool still)
     {
-        if (live != nullptr) {   // the orbit: redrawn about twenty times a second, a few degrees a second round the track
-            const Uint32 now = SDL_GetTicks();
-            if (lastLive == 0 || now - lastLive >= 50) {
-                if (lastLive != 0 && !still) angle += 6.0f * static_cast<float>(now - lastLive) / 1000.0f;
-                lastLive = now;
-                if (fly.Draw(angle, livePixels)) SDL_UpdateTexture(live, nullptr, livePixels.data(), fly.Width() * 4);
-            }
-            const float tw = static_cast<float>(fly.Width()), th = static_cast<float>(fly.Height());
-            float dw = static_cast<float>(w), dh = dw * th / tw;
-            if (dh < h) { dh = static_cast<float>(h); dw = dh * tw / th; }
-            const SDL_FRect to = {(w - dw) * 0.5f, (h - dh) * 0.5f, dw, dh};
-            SDL_SetTextureAlphaMod(live, 255);
-            SDL_RenderCopyF(renderer, live, nullptr, &to);
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, 8, 6, 16, 140);
-            const SDL_Rect veil = {0, 0, w, h};
-            SDL_RenderFillRect(renderer, &veil);
-            return;
-        }
-        if (textures.empty()) return;
+        if (!worker) return;
         const float seconds = static_cast<float>(SDL_GetTicks() - since) / 1000.0f;
-        const float cycle = std::fmod(seconds, 14.0f * static_cast<float>(textures.size()));
-        const std::size_t shown = static_cast<std::size_t>(cycle / 14.0f) % textures.size();
-        const float into = std::fmod(cycle, 14.0f);                        // seconds into this picture
-        auto drawOne = [&](std::size_t i, float alpha, float age) {
-            int tw = 0, th = 0; SDL_QueryTexture(textures[i], nullptr, nullptr, &tw, &th);
-            const float zoom = still ? 1.06f : 1.04f + 0.06f * std::min(1.0f, age / 14.0f);
-            float dw = static_cast<float>(w) * zoom, dh = dw * th / tw;
-            if (dh < h * zoom) { dh = static_cast<float>(h) * zoom; dw = dh * tw / th; }
-            const float drift = still ? 0.0f : (age / 14.0f - 0.5f) * 0.03f * w;
-            const SDL_FRect to = {(w - dw) * 0.5f + drift, (h - dh) * 0.5f, dw, dh};
-            SDL_SetTextureAlphaMod(textures[i], static_cast<Uint8>(std::max(0.0f, std::min(1.0f, alpha)) * 255.0f));
-            SDL_RenderCopyF(renderer, textures[i], nullptr, &to);
-        };
-        drawOne(shown, 1.0f, into);
-        if (!still && textures.size() > 1 && into > 11.0f) drawOne((shown + 1) % textures.size(), (into - 11.0f) / 3.0f, 0.0f);   // the next one fades in over the last three seconds
+        worker->SetAngle(200.0f + (still ? 0.0f : 5.0f * seconds));   // a slow turn
+        if (still) worker->SetStill(true);
+        int fw = 0, fh = 0;
+        if (worker->TakeFrame(pixels, fw, fh) && fw > 0 && fh > 0) {
+            if (live == nullptr || fw != liveW || fh != liveH) {
+                Clear();
+                live = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, fw, fh);
+                if (live != nullptr) { SDL_SetTextureBlendMode(live, SDL_BLENDMODE_BLEND); SDL_SetTextureScaleMode(live, SDL_ScaleModeLinear); liveW = fw; liveH = fh; }
+            }
+            if (live != nullptr) SDL_UpdateTexture(live, nullptr, pixels.data(), fw * 4);
+        }
+        if (live == nullptr) return;
+        const float tw = static_cast<float>(liveW), th = static_cast<float>(liveH);
+        float dw = static_cast<float>(w), dh = dw * th / tw;
+        if (dh < h) { dh = static_cast<float>(h); dw = dh * tw / th; }
+        const SDL_FRect to = {(w - dw) * 0.5f, (h - dh) * 0.5f, dw, dh};
+        SDL_SetTextureAlphaMod(live, 255);
+        SDL_RenderCopyF(renderer, live, nullptr, &to);
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer, 8, 6, 16, 150);
         const SDL_Rect veil = {0, 0, w, h};
@@ -5273,7 +5241,9 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                 else { FormField l; l.type = FormField::Type::eSlider; l.id = "laps"; l.label = "Laps"; l.value = static_cast<float>(prefs.mLaps); l.min = 1.0f; l.max = 20.0f; l.step = 1.0f; l.hint = bestsText(); f.push_back(l); f.push_back(note("Suggested: " + std::to_string(guide.mSuggestedLaps))); }
                 { FormField w; w.type = FormField::Type::eToggle; w.id = "weapons"; w.label = "Weapons enabled"; w.on = prefs.mWeapons; f.push_back(w); }
                 const std::vector<TrackEntry> missing = Tracks().MissingDownloads();
+#ifndef __EMSCRIPTEN__   // not on the web page: the browser fetches one track at a time (about a thousand requests); tracks download when you pick them, and the browser lists what is installed
                 if (!missing.empty()) { FormField b; b.type = FormField::Type::eButton; b.id = "dlall"; b.quiet = true; b.label = "Download all " + std::to_string(missing.size()) + " community tracks (" + FormatMegabytes(Tracks().MissingDownloadBytes()) + ")"; f.push_back(b); }
+#endif
                 form->SetFields(f);
                 form->SetFooter(needsDownloadNow() ? "Download & Start Race" : "Start Race", "Cancel");
                 form->SetSaveEnabled(!download.Active());

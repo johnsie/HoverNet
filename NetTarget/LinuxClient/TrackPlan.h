@@ -7,8 +7,13 @@
 #include <string>
 #include <vector>
 
+#include <mutex>
+
 namespace HoverNetPlan
 {
+// Loading a level and drawing from one are not done at the same time by two threads (the menu backdrop draws on its own thread): everything that loads or draws takes this.
+std::mutex& LevelLock();
+
 struct Plan
 {
     bool ok = false;

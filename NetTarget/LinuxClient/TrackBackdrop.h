@@ -33,4 +33,24 @@ private:
     struct Impl;
     Impl* mImpl;
 };
+
+// The orbit on its own thread, so a slow machine never slows the menu: the thread opens the track, then draws the view as fast as a modest share of one core allows (it sleeps at
+// least as long as each picture took, and gives up the live orbit for a single still picture if pictures take too long), and the menu only ever copies the newest finished picture.
+class FlyoverWorker
+{
+public:
+    FlyoverWorker();
+    ~FlyoverWorker();
+    FlyoverWorker(const FlyoverWorker&) = delete;
+    FlyoverWorker& operator=(const FlyoverWorker&) = delete;
+    void SetTrack(const std::string& path, const std::string& name);   // a different track: the thread opens it (the old picture stays until the new one is ready)
+    void SetAngle(float degrees);                                       // where the eye is on the orbit
+    void SetStill(bool still);                                          // draw once and stop (Reduced motion, or a machine that is too slow)
+    // Copies the newest finished picture if there is one the caller has not had yet. Returns true and fills `rgba`, `width` and `height`.
+    bool TakeFrame(std::vector<std::uint8_t>& rgba, int& width, int& height);
+    bool Failed() const;                                                // the track could not be opened
+private:
+    struct Impl;
+    Impl* mImpl;
+};
 }

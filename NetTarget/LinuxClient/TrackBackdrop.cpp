@@ -9,7 +9,13 @@
 #include "../VideoServices/VideoBuffer.h"
 
 #include <algorithm>
+#include "TrackPlan.h"
+
 #include <array>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -31,6 +37,7 @@ std::uint16_t Drive(std::uint32_t tick)
 int Render(const std::string& path, const std::string& name, int width, int height, int frames, int ticksBetween, std::vector<Picture>& out)
 {
     out.clear();
+    std::lock_guard<std::mutex> guard(HoverNetPlan::LevelLock());
     MR_RecordFile* track = new MR_RecordFile;
     if (!track->OpenForRead(path.c_str())) { delete track; return 0; }
     MR_VideoBuffer buffer(nullptr, 1.0, 0.5, 0.5);
@@ -202,6 +209,99 @@ bool Flyover::Draw(float degrees, std::vector<std::uint8_t>& rgba)
         std::uint8_t* out = rgba.data() + static_cast<std::size_t>(y) * m.width * 4;
         for (int x = 0; x < m.width; ++x) { out[x * 4] = m.palette[row[x] * 3]; out[x * 4 + 1] = m.palette[row[x] * 3 + 1]; out[x * 4 + 2] = m.palette[row[x] * 3 + 2]; out[x * 4 + 3] = 255; }
     }
+    return true;
+}
+
+// ---- the worker thread --------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+struct FlyoverWorker::Impl
+{
+    std::mutex mutex;                 // guards everything below
+    std::condition_variable wake;
+    std::thread thread;
+    bool quit = false, still = false, failed = false, fresh = false;
+    std::string path, name;
+    bool trackChanged = false;
+    float angle = 200.0f;
+    std::vector<std::uint8_t> rgba;
+    int width = 0, height = 0;
+
+    void Run()
+    {
+        Flyover fly;
+        bool open = false, drawnStill = false;
+        double averageMs = 0.0;
+        int slowFrames = 0;
+        for (;;) {
+            std::string openPath, openName;
+            float useAngle;
+            bool wantStill;
+            {
+                std::unique_lock<std::mutex> lock(mutex);
+                if (quit) return;
+                if (trackChanged) { openPath = path; openName = name; trackChanged = false; open = false; drawnStill = false; slowFrames = 0; averageMs = 0.0; }
+                useAngle = angle; wantStill = still;
+            }
+            if (!openPath.empty()) {
+                std::lock_guard<std::mutex> level(HoverNetPlan::LevelLock());
+                const bool ok = fly.Open(openPath, openName, 320, 200);
+                std::lock_guard<std::mutex> lock(mutex);
+                failed = !ok; open = ok;
+            }
+            if (!open) {
+                std::unique_lock<std::mutex> lock(mutex);
+                wake.wait_for(lock, std::chrono::milliseconds(200), [&] { return quit || trackChanged; });
+                continue;
+            }
+            if (wantStill && drawnStill) {
+                std::unique_lock<std::mutex> lock(mutex);
+                wake.wait_for(lock, std::chrono::milliseconds(200), [&] { return quit || trackChanged || !still; });
+                continue;
+            }
+            const auto started = std::chrono::steady_clock::now();
+            std::vector<std::uint8_t> picture;
+            bool drawn;
+            {
+                std::lock_guard<std::mutex> level(HoverNetPlan::LevelLock());
+                drawn = fly.Draw(useAngle, picture);
+            }
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+            if (drawn) {
+                std::lock_guard<std::mutex> lock(mutex);
+                rgba.swap(picture); width = fly.Width(); height = fly.Height(); fresh = true;
+            }
+            drawnStill = wantStill;
+            averageMs = averageMs == 0.0 ? ms : averageMs * 0.8 + ms * 0.2;
+            if (averageMs > 150.0) { if (++slowFrames > 5) { std::lock_guard<std::mutex> lock(mutex); still = true; } } else slowFrames = 0;   // too slow to be a live view: keep the last picture
+            // at most about a third of one core, and never faster than ten pictures a second
+            const double rest = std::max(100.0 - ms, ms * 2.0);
+            std::unique_lock<std::mutex> lock(mutex);
+            wake.wait_for(lock, std::chrono::milliseconds(static_cast<int>(rest)), [&] { return quit || trackChanged; });
+        }
+    }
+};
+
+FlyoverWorker::FlyoverWorker() : mImpl(new Impl) { mImpl->thread = std::thread([this]() { mImpl->Run(); }); }
+FlyoverWorker::~FlyoverWorker()
+{
+    { std::lock_guard<std::mutex> lock(mImpl->mutex); mImpl->quit = true; }
+    mImpl->wake.notify_all();
+    if (mImpl->thread.joinable()) mImpl->thread.join();
+    delete mImpl;
+}
+void FlyoverWorker::SetTrack(const std::string& path, const std::string& name)
+{
+    { std::lock_guard<std::mutex> lock(mImpl->mutex); mImpl->path = path; mImpl->name = name; mImpl->trackChanged = true; mImpl->failed = false; }
+    mImpl->wake.notify_all();
+}
+void FlyoverWorker::SetAngle(float degrees) { std::lock_guard<std::mutex> lock(mImpl->mutex); mImpl->angle = degrees; }
+void FlyoverWorker::SetStill(bool still) { { std::lock_guard<std::mutex> lock(mImpl->mutex); mImpl->still = still; } mImpl->wake.notify_all(); }
+bool FlyoverWorker::Failed() const { std::lock_guard<std::mutex> lock(mImpl->mutex); return mImpl->failed; }
+bool FlyoverWorker::TakeFrame(std::vector<std::uint8_t>& rgba, int& width, int& height)
+{
+    std::lock_guard<std::mutex> lock(mImpl->mutex);
+    if (!mImpl->fresh) return false;
+    rgba.swap(mImpl->rgba); width = mImpl->width; height = mImpl->height; mImpl->fresh = false;
     return true;
 }
 }

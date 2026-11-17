@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+- **The orbiting track backdrop no longer slows the menu**: it is drawn on its own thread at 320x200, at most about ten pictures a second and about a third of one core, and it gives up the live view for a still picture if pictures take too long (the menu only copies the newest finished picture). Loading and drawing levels are serialised by one lock (`HoverNetPlan::LevelLock`).
+- **Faster "Download all community tracks" on desktop**: up to six tracks are fetched at once. On the web page the button is gone (the browser fetched them one at a time, about a thousand requests; tracks still download when picked). The download dialog is restyled (lit panel, red top edge, large title, rounded glowing bar).
+- _Checked: builds; the setup screen and a race start after it in a headless run; the downloader smoke test (ctest) and the camera-rule test pass. Not checked: the speed on a slow machine (I have none), a real multi-track download over the network, the web build, Windows._
+
 ## 2.3.63 - 2026-11-17
 
 _Released at the owner's request without the full test suite (see the checks listed below)._

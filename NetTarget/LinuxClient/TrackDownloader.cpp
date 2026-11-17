@@ -5,12 +5,14 @@
 #include "Gunzip.h"
 #include "Sha256.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -485,40 +487,62 @@ void TrackDownloadJob::RunBlocking()
 
 void TrackDownloadJob::Run()
 {
-    for (const TrackEntry& lTrack : mTracks) {
-        if (mCancelled.load()) {
-            break;
+    // Several tracks at once (each is a small file, so one at a time is mostly waiting for the network): a few workers take the next track from a shared counter.
+    // On the web page the browser's own fetch does the work and this runs on its single background thread, so it stays at one there.
+#ifdef __EMSCRIPTEN__
+    const int kWorkers = 1;
+#else
+    const int kWorkers = std::max(1, std::min(6, static_cast<int>(mTracks.size())));
+#endif
+    std::atomic<std::size_t> next{0};
+    std::vector<std::unique_ptr<std::atomic<long long>>> slots;
+    for (int i = 0; i < kWorkers; ++i) slots.emplace_back(new std::atomic<long long>(0));
+    std::atomic<bool> allDone{false};
+    std::thread watcher([&]() {   // the bytes of the tracks being fetched now, summed for the progress bar
+        while (!allDone.load()) {
+            long long sum = 0;
+            for (const auto& slot : slots) sum += slot->load();
+            mCurrentBytes = sum;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
-        {
-            std::lock_guard<std::mutex> lLock(mMutex);
-            mCurrentName = lTrack.mName;
-        }
-        mCurrentBytes = 0;
-        std::string lError;
-        std::atomic<long long> lBytes{0};
-        // Progress for the current track is mirrored into mCurrentBytes by polling.
-        std::atomic<bool> lDone{false};
-        std::thread lWatcher([&]() {
-            while (!lDone.load()) {
-                mCurrentBytes = lBytes.load();
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    });
+    auto worker = [&](int index) {
+        std::atomic<long long>& mine = *slots[static_cast<std::size_t>(index)];
+        for (;;) {
+            if (mCancelled.load()) return;
+            const std::size_t at = next.fetch_add(1);
+            if (at >= mTracks.size()) return;
+            const TrackEntry& lTrack = mTracks[at];
+            {
+                std::lock_guard<std::mutex> lLock(mMutex);
+                mCurrentName = lTrack.mName;
             }
-        });
-        const bool lOk = DownloadTrack(lTrack, mSettings, mCancelled, lBytes, lError);
-        lDone = true;
-        lWatcher.join();
-        if (!lOk) {
+            mine = 0;
+            std::string lError;
+            const bool lOk = DownloadTrack(lTrack, mSettings, mCancelled, mine, lError);
+            if (!lOk) {
+                {
+                    std::lock_guard<std::mutex> lLock(mMutex);
+                    if (mError.empty() && !mCancelled.load()) mError = lError;   // the first failure is the one reported; the others stop
+                }
+                mCancelled = true;
+                mine = 0;
+                return;
+            }
+            mFinishedBytes += lTrack.mDownloadBytes > 0 ? lTrack.mDownloadBytes : 1;
+            mine = 0;
+            ++mCompleted;
             std::lock_guard<std::mutex> lLock(mMutex);
-            mError = lError;
-            mCurrentBytes = 0;
-            break;
+            mInstalled.push_back(lTrack.mName);
         }
-        mFinishedBytes += lTrack.mDownloadBytes > 0 ? lTrack.mDownloadBytes : 1;
-        mCurrentBytes = 0;
-        ++mCompleted;
-        std::lock_guard<std::mutex> lLock(mMutex);
-        mInstalled.push_back(lTrack.mName);
-    }
+    };
+    std::vector<std::thread> workers;
+    for (int i = 1; i < kWorkers; ++i) workers.emplace_back(worker, i);
+    worker(0);
+    for (std::thread& w : workers) w.join();
+    allDone = true;
+    watcher.join();
+    mCurrentBytes = 0;
     mFinished = true;
 }
 

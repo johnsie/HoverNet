@@ -41,9 +41,12 @@ void FillPolygon(std::vector<float>& value, int w, int h, const std::vector<Pt>&
 
 const Colours& PadColours() { return kColours; }
 
+std::mutex& LevelLock() { static std::mutex lock; return lock; }
+
 Plan BuildPlan(const std::string& trackPath, const std::string& trackName, int maxSide)
 {
     Plan plan;
+    std::lock_guard<std::mutex> guard(LevelLock());
     MR_RecordFile* track = new MR_RecordFile;   // the session takes it over once it has loaded
     if (!track->OpenForRead(trackPath.c_str())) { delete track; return plan; }
     MR_GameSession session(FALSE);

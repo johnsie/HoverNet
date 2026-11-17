@@ -123,3 +123,12 @@ scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0dp;
 .rsub { color: #8b8fa3; font-size: 13dp; margin: 2dp 0 0 0; }
 button.rbtn { flex: 0 0 auto; width: 120dp; margin: 0 0 0 12dp; padding: 8dp; font-size: 15dp; }
 .rsub { white-space: pre-line; }
+
+/* the busy box (a download): a lit panel with a red top edge, a big title and a glowing bar */
+#busy { background-color: #05050cd0; }
+#busybox { width: 520dp; margin-left: -260dp; margin-top: -120dp; padding: 28dp 30dp 26dp 30dp; background-color: #10111a; decorator: gradient( vertical #1c1d2c #0e0f17 ); border-width: 3dp 0 0 0; border-color: #dc3546; border-radius: 14dp; }
+#busytitle { font-family: Oxanium; font-size: 26dp; font-weight: bold; color: #ffffff; margin: 0 0 8dp 0; }
+#busyline { color: #c9cde0; font-size: 15dp; margin: 4dp 0 16dp 0; height: 20dp; overflow: hidden; }
+#busybar { height: 14dp; background-color: #232638; border-radius: 7dp; }
+#busyfill { height: 14dp; border-radius: 7dp; background-color: #fa4a5c; decorator: gradient( horizontal #dc3546 #ff7a86 ); }
+#busybutton { margin-top: 22dp; }
