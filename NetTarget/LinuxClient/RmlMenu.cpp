@@ -360,7 +360,12 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
                     // a little below the middle (window units, then scaled to the large picture).
                     const float f = static_cast<float>(ss.factor), windowW = static_cast<float>(width), windowH = static_cast<float>(height);
                     const float panelW = std::min(430.0f * gUiScale * gFit, windowW * (windowW < 820.0f ? 0.5f : 0.42f));
-                    const float room = std::max(220.0f, windowW - panelW - 66.0f);
+                    float room = std::max(220.0f, windowW - panelW - 66.0f);
+                    // The panel's real left edge (it is placed by percent and clamped by the markup, so the sum above can land under it on a wide window): keep the craft clear of it.
+                    if (Rml::Element* panelBox = document->GetElementById("panel")) {
+                        const float panelLeft = panelBox->GetAbsoluteOffset(Rml::Box::BORDER).x / f;
+                        if (panelLeft > 120.0f && windowW >= 820.0f) room = std::min(room, std::max(220.0f, panelLeft - 40.0f));
+                    }
                     const float aspect = static_cast<float>(crop.w) / static_cast<float>(crop.h);
                     const float cw = std::min(room, windowH * 0.6f * aspect), ch = cw / aspect;
                     const Rml::Vector2f origin(std::max(8.0f, (room - cw) * 0.5f + 8.0f) * f, std::max(40.0f, (windowH - ch) * 0.5f + windowH * 0.06f) * f), size(cw * f, ch * f);
