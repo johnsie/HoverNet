@@ -8,7 +8,6 @@
 	<div id="header"><p id="eyebrow">HOVERNET</p><h1>RACE</h1><div id="rule"></div></div>
 	<div id="stage">
 		<div id="trackcard" class="glass">
-			<div id="planbox"></div>
 			<div id="tinfo">
 				<p id="kind" class="kind">OFFICIAL</p>
 				<h2 id="tname">ClassicH</h2>

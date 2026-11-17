@@ -4,19 +4,19 @@ p, h1, h2, div { display: block; }
 #header { position: absolute; left: 4%; right: 4%; top: 14dp; height: 70dp; }
 #eyebrow { color: #fa737a; font-size: 14dp; margin: 0; }
 h1 { font-family: Oxanium; font-size: 36dp; font-weight: bold; margin: 0; }
-h2 { font-family: Oxanium; font-size: 34dp; font-weight: bold; margin: 0 0 4dp 0; color: #ffffff; }
+h2 { font-family: Oxanium; font-size: 30dp; font-weight: bold; margin: 0 0 4dp 0; color: #ffffff; }
 #rule { position: absolute; left: 0; right: 0; top: 62dp; height: 3dp; decorator: gradient( horizontal #e02a43 #e02a4300 ); }
 
-#stage { position: absolute; left: 4%; right: 4%; top: 100dp; bottom: 150dp; }
-.glass { box-sizing: border-box; background-color: #0e0f18d8; decorator: gradient( vertical #191a2ae0 #0c0d15e0 ); border-width: 1dp; border-color: #34324e; border-radius: 16dp; padding: 18dp 20dp; animation: 0.5s cubic-out rise; }
+#stage { position: absolute; left: 3%; right: 3%; top: 96dp; bottom: 150dp; }
+.glass { box-sizing: border-box; background-color: #0b0c16c8; decorator: gradient( vertical #171828cc #0a0b13cc ); border-width: 1dp; border-color: #3a3860; border-radius: 16dp; padding: 18dp 20dp; animation: 0.5s cubic-out rise; }
 @keyframes rise { from { opacity: 0; transform: translateY(20dp); } to { opacity: 1; transform: translateY(0dp); } }
-#trackcard { position: absolute; left: 0; top: 0; bottom: 0; width: 60%; }
-#side { position: absolute; right: 0; top: 0; bottom: 0; width: 38%; }
-#craftcard { position: absolute; left: 0; right: 0; top: 0; height: 52%; }
-#optcard { position: absolute; left: 0; right: 0; bottom: 0; height: 45%; }
+/* two slim cards at the sides; the middle is left open for the 3D track */
+#trackcard { position: absolute; left: 0; top: 0; height: 310dp; width: 27%; min-width: 230dp; }
+#side { position: absolute; right: 0; top: 0; bottom: 0; width: 27%; min-width: 230dp; }
+#craftcard { position: absolute; left: 0; right: 0; top: 0; height: 50%; }
+#optcard { position: absolute; left: 0; right: 0; bottom: 0; height: 47%; }
 
-#planbox { position: absolute; left: 20dp; top: 18dp; width: 52%; bottom: 76dp; background-color: #070810a0; border-radius: 12dp; }
-#tinfo { position: absolute; left: 56%; right: 20dp; top: 18dp; bottom: 76dp; }
+#tinfo { position: absolute; left: 20dp; right: 20dp; top: 18dp; bottom: 76dp; }
 #trackbtns { position: absolute; left: 20dp; right: 20dp; bottom: 18dp; height: 48dp; }
 .kind { font-family: Oxanium; font-size: 13dp; color: #fa737a; margin: 0 0 4dp 0; }
 .meta { color: #aab0c8; font-size: 15dp; margin: 0 0 10dp 0; }
@@ -30,19 +30,19 @@ h2 { font-family: Oxanium; font-size: 34dp; font-weight: bold; margin: 0 0 4dp 0
 #craftcard h2 { position: absolute; left: 20dp; bottom: 58dp; font-size: 28dp; }
 #craftcard button { position: absolute; left: 20dp; right: 20dp; width: auto; bottom: 14dp; }
 
-.chip { display: inline-block; box-sizing: border-box; padding: 9dp 16dp; margin: 0 6dp 6dp 0; font-family: Oxanium; font-size: 17dp; font-weight: bold; color: #c9cde0; background-color: #23263a; border-width: 1dp; border-color: #343955; border-radius: 8dp; tab-index: auto; cursor: pointer; transition: background-color 0.12s cubic-out; }
+.chip { display: inline-block; box-sizing: border-box; padding: 8dp 12dp; margin: 0 5dp 6dp 0; font-family: Oxanium; font-size: 16dp; font-weight: bold; color: #c9cde0; background-color: #23263a; border-width: 1dp; border-color: #343955; border-radius: 8dp; tab-index: auto; cursor: pointer; transition: background-color 0.12s cubic-out; }
 .chip:hover, .chip:focus { background-color: #343955; color: #ffffff; border-color: #fa737a; }
 .chip.sel { background-color: #dc3546; border-color: #ff7a86; color: #ffffff; }
 
 button.ghost { display: block; box-sizing: border-box; width: 100%; padding: 12dp; text-align: center; font-family: Oxanium; font-size: 16dp; font-weight: bold; color: #e6e8f0; background-color: #23263a; decorator: gradient( vertical #2d3148 #1f2132 ); border-width: 1dp; border-color: #3d4262; border-radius: 10dp; tab-index: auto; cursor: pointer; transition: background-color 0.12s cubic-out; }
 button.ghost:hover, button.ghost:focus { background-color: #343955; border-color: #fa737a; color: #ffffff; }
 
-#startbar { position: absolute; left: 4%; right: 4%; bottom: 66dp; height: 74dp; }
+#startbar { position: absolute; left: 31%; right: 31%; bottom: 66dp; height: 74dp; }
 button.racebtn { display: block; box-sizing: border-box; width: 100%; height: 74dp; padding: 18dp 10dp; text-align: center; font-family: Oxanium; font-size: 34dp; font-weight: bold; color: #ffffff; background-color: #dc3546; decorator: gradient( vertical #ff5a6c #c91f35 ); border-width: 2dp; border-color: #ff9aa4; border-radius: 14dp; tab-index: auto; cursor: pointer; animation: 2.4s sine-in-out infinite racepulse; transition: transform 0.14s cubic-out; }
 @keyframes racepulse { from { border-color: #ff9aa4; } 50% { border-color: #ffd0d5; } to { border-color: #ff9aa4; } }
 button.racebtn:hover, button.racebtn:focus { transform: scale(1.015); background-color: #ff5a6c; }
 button.racebtn:active { transform: scale(0.98); }
-#legend { position: absolute; left: 4%; right: 4%; bottom: 52dp; text-align: center; color: #6c7086; font-size: 12dp; }
+#legend { position: absolute; left: 3%; right: 3%; bottom: 52dp; text-align: center; color: #6c7086; font-size: 12dp; }
 .dot { display: inline-block; width: 9dp; height: 9dp; border-radius: 5dp; margin: 0 4dp 0 12dp; }
 .dot.fuel { background-color: #e8322a; }
 .dot.boost { background-color: #ffa62a; }

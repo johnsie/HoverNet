@@ -30,6 +30,8 @@ struct MainMenuInfo
     bool showQuit = false;       // desktop: a Quit button under the doors (it asks "Quit HoverNet?" first); the browser has none
     // The modern flow's "Continue" card: the last track, one click to race it again (empty continueTrack = no card). offlineLabel names the practice door.
     std::string continueTrack, continueDetail, offlineLabel;
+    // A picture drawn instead of the plain backdrop (the modern flow shows the last race's track): called every frame with the supersampled drawing size; empty = the plain backdrop.
+    std::function<void(SDL_Renderer*, int, int)> backdropDraw;
     bool tutorialDone = false;   // the Tutorial button is quiet once it has been done
     // The player's own craft, turning: called every frame with the angle in degrees, it returns the picture to draw (null = none, and the stock picture in the markup
     // is shown instead) and sets cropOut to the part of it to show. The caller owns the texture. reducedMotion keeps the entrance animations of the pictures still.

@@ -863,6 +863,7 @@ add_executable(HoverNetGame2Player
     NetTarget/LinuxClient/TrackCatalog.cpp
     NetTarget/LinuxClient/TrackPlan.cpp
     NetTarget/LinuxClient/TrackBackdrop.cpp
+    NetTarget/LinuxClient/TrackScene.cpp
     NetTarget/LinuxClient/TrackDownloader.cpp
     NetTarget/LinuxClient/Gunzip.cpp
     NetTarget/LinuxClient/Sha256.cpp

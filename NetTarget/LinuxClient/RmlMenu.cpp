@@ -360,7 +360,8 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
         // Under the interface: the background (a gradient the renderer draws itself, so the craft can sit between it and the markup) and the player's craft.
         ss.Begin();
         {
-            DrawMenuBackdrop(pRenderer, ss.W(), ss.H(), ss.factor, pInfo.reducedMotion ? 0u : SDL_GetTicks() / 8u);
+            DrawMenuBackdrop(pRenderer, ss.W(), ss.H(), ss.factor, pInfo.reducedMotion ? 0u : SDL_GetTicks() / 8u);   // (the scene, once it is ready, covers this)
+            if (pInfo.backdropDraw) pInfo.backdropDraw(pRenderer, ss.W(), ss.H());
             if (pInfo.craftFrame) {
                 const Uint32 now = SDL_GetTicks();
                 const int yaw = pInfo.reducedMotion ? 28 : static_cast<int>(now / 1000.0 * 22.0) % 360 / 2 * 2;

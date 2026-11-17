@@ -41,6 +41,10 @@ shows it behind its panels. It is a separate method with its own field of view (
 calls it, and the race view, its pinned values and the golden frames are unchanged. `scripts/test-camera-rule.sh` checks that only `TrackBackdrop.cpp` calls it. Any
 other use of it, in a race or in the client's race code, is a camera change and needs the owner's request.
 
+The race setup screen's default backdrop is now a stylised scene instead (`TrackScene.*`, drawn with the graphics card from the level's floors, walls and pads: dusk sky, sun,
+glowing grid, neon rails and pads, orbiting). It has its own free camera too, for the same reason and with the same limits: menus only, never a race. The textured flyover above
+is still there, chosen with `HOVERNET_BACKDROP=textured`.
+
 ## History
 
 2.3.28 widened the field of view with speed (up to 8%), closed the vignette in with speed and adapted the exposure to the view; the owner found the craft

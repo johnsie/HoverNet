@@ -13,7 +13,10 @@
 #include "../ObjFacTools/CraftLook.h"
 #include "TrackCatalog.h"
 #include "TrackPlan.h"
+#include <cstring>
+#include <future>
 #include "TrackBackdrop.h"
+#include "TrackScene.h"
 #include "TrackDownloader.h"
 #include <atomic>
 #include <thread>
@@ -4336,16 +4339,17 @@ PauseChoice RunPauseMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer,
     std::vector<PauseOption> options = {
         {"RESUME RACE", PauseChoice::eResume},
     };
-    if (pCanRestart) options.push_back({"RESTART RACE", PauseChoice::eRestartRace});   // a local race: the same track, laps and weapons again
+    if (pCanRestart) options.push_back({ModernMenus() ? "RESTART RACE  (F5)" : "RESTART RACE", PauseChoice::eRestartRace});   // a local race: the same track, laps and weapons again
     options.push_back({pIsOnline ? "LEAVE RACE" : "NEW LOCAL RACE", PauseChoice::eLeaveRace});
     options.insert(options.end(), {
         {"ONLINE MULTIPLAYER", PauseChoice::eOnlineLobby},
     });
-    if (pOfferReplays) options.push_back({"WATCH A REPLAY", PauseChoice::eWatchReplay});
+    const bool modernPause = ModernMenus();   // the modern pause menu is shorter: Controls and Watch a replay are in Settings (the hub), one step away
+    if (pOfferReplays && !modernPause) options.push_back({"WATCH A REPLAY", PauseChoice::eWatchReplay});
     const int primaryCount = static_cast<int>(options.size());   // the race options above the "GAME & ACCESSIBILITY" heading
     if (pOfferReplays) options.push_back({"MAIN MENU", PauseChoice::eMainMenu});   // (not in the classic lobby, which has its own way out)
     options.push_back({"SETTINGS", PauseChoice::eSettings});
-    options.push_back({"CONTROLS", PauseChoice::eControls});
+    if (!modernPause) options.push_back({"CONTROLS", PauseChoice::eControls});
 #ifndef __EMSCRIPTEN__   // a browser tab has nothing to quit to; the tab is closed instead
     options.push_back({"QUIT HOVERNET", PauseChoice::eQuit});
 #endif
@@ -4986,30 +4990,110 @@ struct LocalRaceSetup
 
 // The real track in 3D behind a menu (TrackBackdrop.h): pictures of the race view of the chosen track, a slow drift and a fade between them, under a dark veil so the panels stay readable.
 // Built when the track changes (a fraction of a second), for tracks that are on this computer. HOVERNET_NO_BACKDROP=1 leaves it out; Reduced motion holds the first picture still.
+// How a level surface's picture is read for the 3D track scene (TrackPlan.h): the game stores floors and walls as bitmaps made of palette indices (and a true-colour copy once the palette is set).
+// The smallest copy that is still at least 32 pixels wide is used: a menu draws the track small.
+bool ReadSurfaceTexture(const void* pElement, HoverNetPlan::Texture& pOut)
+{
+    const MR_ResBitmap* bitmap = static_cast<const MR_ResBitmap*>(static_cast<const MR_SurfaceElement*>(pElement)->GetPicture());
+    if (bitmap == nullptr || bitmap->GetNbSubBitmap() <= 0) return false;
+    int sub = 0;
+    for (int i = 0; i < bitmap->GetNbSubBitmap(); ++i) { if (bitmap->GetXRes(i) >= 32 && bitmap->GetYRes(i) >= 16) sub = i; }
+    const int w = bitmap->GetXRes(sub), h = bitmap->GetYRes(sub);
+    if (w <= 0 || h <= 0 || w > 512 || h > 512) return false;
+    static std::array<std::uint8_t, MR_NB_COLORS * 3> palette;
+    static bool paletteReady = false;
+    if (!paletteReady) {
+        paletteReady = true;
+        palette.fill(0);
+        PALETTEENTRY* colors = MR_GetColors(0.75, 0.75, 0.05);
+        for (int index = 0; index < MR_BASIC_COLORS; ++index) {
+            const int at = MR_RESERVED_COLORS_BEGINNING + index;
+            palette[static_cast<std::size_t>(at) * 3] = colors[index].peRed; palette[static_cast<std::size_t>(at) * 3 + 1] = colors[index].peGreen; palette[static_cast<std::size_t>(at) * 3 + 2] = colors[index].peBlue;
+        }
+        delete [] colors;
+    }
+    const MR_UInt32* const* colourColumns = bitmap->GetColourColumnBufferTable(sub);   // true colour, when the game has built it
+    pOut.width = w; pOut.height = h;
+    pOut.mmW = static_cast<float>(std::max(500, bitmap->GetWidth())); pOut.mmH = static_cast<float>(std::max(500, bitmap->GetHeight()));
+    pOut.rgba.assign(static_cast<std::size_t>(w) * h * 4, 255);
+    const MR_UInt8 plain = bitmap->GetPlainColor();
+    for (int x = 0; x < w; ++x) {
+        const MR_UInt8* column = bitmap->GetColumnBuffer(sub, x);
+        const MR_UInt32* colourColumn = colourColumns != nullptr ? colourColumns[x] : nullptr;
+        for (int y = 0; y < h; ++y) {
+            std::uint8_t* out = &pOut.rgba[(static_cast<std::size_t>(y) * w + x) * 4];
+            if (colourColumn != nullptr) { const MR_UInt32 c = colourColumn[y]; out[0] = static_cast<std::uint8_t>(c >> 16); out[1] = static_cast<std::uint8_t>(c >> 8); out[2] = static_cast<std::uint8_t>(c); continue; }
+            MR_UInt8 index = column != nullptr ? column[y] : plain;
+            if (index == 0) index = plain;
+            out[0] = palette[static_cast<std::size_t>(index) * 3]; out[1] = palette[static_cast<std::size_t>(index) * 3 + 1]; out[2] = palette[static_cast<std::size_t>(index) * 3 + 2];
+        }
+    }
+    return true;
+}
+
 struct TrackBackdropShow
 {
-    // The orbit is drawn once, on its own thread, as a ring of pictures (TrackBackdrop.h); the menu then fades between them, which costs next to nothing and cannot slow a slow machine.
-    std::unique_ptr<HoverNetBackdrop::FlyoverWorker> worker;
+    // The chosen track as a lit neon scene (TrackScene.h), drawn with the graphics card and orbiting slowly. The level is read on another thread when the track changes, so choosing a track never stalls the screen.
+    // HOVERNET_BACKDROP=textured uses the game's own textured renderer instead (TrackBackdrop.h: a ring of pictures drawn once on a thread); HOVERNET_NO_BACKDROP=1 or the setting turns it off.
+    std::future<HoverNetPlan::Plan> pending;
+    HoverNetPlan::Plan plan;
+    std::vector<SDL_Texture*> pictures;   // the plan's floor and wall pictures, on the graphics card (each tiled four by four, so a surface can repeat it)
+    std::unique_ptr<HoverNetBackdrop::FlyoverWorker> worker;   // the textured style
     std::vector<SDL_Texture*> ring;
     int ready = 0, builtFor = -2, generation = -1;
+    bool textured = false;
     Uint32 since = 0;
-    void Clear() { for (SDL_Texture*& t : ring) if (t != nullptr) { SDL_DestroyTexture(t); t = nullptr; } ready = 0; }
-    ~TrackBackdropShow() { worker.reset(); Clear(); }
+    void Clear() { for (SDL_Texture*& t : ring) if (t != nullptr) { SDL_DestroyTexture(t); t = nullptr; } ring.clear(); ready = 0; for (SDL_Texture*& t : pictures) if (t != nullptr) SDL_DestroyTexture(t); pictures.clear(); }
+    ~TrackBackdropShow() { worker.reset(); Clear(); if (pending.valid()) pending.wait(); }
     void Prepare(SDL_Renderer*, int index)
     {
         if (index == builtFor) return;
         builtFor = index; since = SDL_GetTicks();
         Clear();
+        if (pending.valid()) pending.wait();   // a read that is still running finishes first (it holds the level lock)
+        plan = HoverNetPlan::Plan();
         const TrackEntry* entry = Tracks().Get(index);
         if (entry == nullptr || !entry->mInstalled || std::getenv("HOVERNET_NO_BACKDROP") != nullptr || !LoadMenuBackdrop()) return;
-        if (!worker) worker.reset(new HoverNetBackdrop::FlyoverWorker);
-        worker->SetStill(LoadReducedMotion());
-        worker->SetTrack(Tracks().PathFor(entry->mName), entry->mName);
-        generation = worker->Generation();
-        ring.assign(HoverNetBackdrop::FlyoverWorker::kRing, nullptr);
+        const char* style = std::getenv("HOVERNET_BACKDROP");
+        textured = style != nullptr && std::string(style) == "textured";
+        if (textured) {
+            if (!worker) worker.reset(new HoverNetBackdrop::FlyoverWorker);
+            worker->SetStill(LoadReducedMotion());
+            worker->SetTrack(Tracks().PathFor(entry->mName), entry->mName);
+            generation = worker->Generation();
+            ring.assign(HoverNetBackdrop::FlyoverWorker::kRing, nullptr);
+            return;
+        }
+        const std::string path = Tracks().PathFor(entry->mName), name = entry->mName;
+        HoverNetPlan::SetTextureReader(&ReadSurfaceTexture);
+        const bool real = std::getenv("HOVERNET_FLAT_TRACK") == nullptr;   // the game's own floor and wall pictures on the track; HOVERNET_FLAT_TRACK=1 for plain lit slabs
+        pending = std::async(std::launch::async, [path, name, real]() { return HoverNetPlan::BuildPlan(path, name, 8, real); });
     }
     void Draw(SDL_Renderer* renderer, int w, int h, bool still)
     {
+        if (!textured) {
+            if (pending.valid() && pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+                plan = pending.get();
+                for (const HoverNetPlan::Texture& tex : plan.textures) {   // each picture four by four, so a floor can repeat it (the card does not wrap textures)
+                    SDL_Texture* t = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, tex.width * 4, tex.height * 4);
+                    if (t != nullptr) {
+                        std::vector<std::uint8_t> tiled(static_cast<std::size_t>(tex.width) * 4 * tex.height * 4 * 4);
+                        for (int y = 0; y < tex.height * 4; ++y) for (int x = 0; x < tex.width * 4; ++x) std::memcpy(&tiled[(static_cast<std::size_t>(y) * tex.width * 4 + x) * 4], &tex.rgba[(static_cast<std::size_t>(y % tex.height) * tex.width + (x % tex.width)) * 4], 4);
+                        SDL_UpdateTexture(t, nullptr, tiled.data(), tex.width * 4 * 4);
+                        SDL_SetTextureScaleMode(t, SDL_ScaleModeLinear);
+                    }
+                    pictures.push_back(t);
+                }
+            }
+            if (!plan.ok) return;
+            const float seconds = static_cast<float>(SDL_GetTicks() - since) / 1000.0f;
+            HoverNetScene::Draw(renderer, w, h, plan, pictures, still ? 215.0f : 215.0f + 7.0f * seconds, seconds);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 6, 4, 14, 60);   // a light veil only: the track is the picture
+            const SDL_Rect veil = {0, 0, w, h};
+            SDL_RenderFillRect(renderer, &veil);
+            return;
+        }
         if (!worker || ring.empty()) return;
         std::vector<HoverNetBackdrop::FlyoverWorker::Frame> frames;
         if (worker->TakeFrames(frames) > 0 && worker->Generation() == generation) {
@@ -5027,7 +5111,6 @@ struct TrackBackdropShow
         }
         if (ready == 0) return;
         const int n = static_cast<int>(ring.size());
-        const bool complete = ready >= n;
         auto drawTexture = [&](SDL_Texture* t, Uint8 alpha) {
             int tw = 0, th = 0; SDL_QueryTexture(t, nullptr, nullptr, &tw, &th);
             float dw = static_cast<float>(w), dh = dw * th / tw;
@@ -5036,8 +5119,8 @@ struct TrackBackdropShow
             SDL_SetTextureAlphaMod(t, alpha);
             SDL_RenderCopyF(renderer, t, nullptr, &to);
         };
-        if (still || !complete) drawTexture(ring[static_cast<std::size_t>(still ? 0 : ready - 1)], 255);   // until the ring is whole, the newest picture
-        else {   // a slow turn: half a picture a second, the next one fading in over the last
+        if (still || ready < n) drawTexture(ring[static_cast<std::size_t>(still ? 0 : ready - 1)], 255);
+        else {
             const float position = std::fmod(static_cast<float>(SDL_GetTicks() - since) / 1000.0f * 0.5f, static_cast<float>(n));
             const int i = static_cast<int>(position) % n;
             drawTexture(ring[static_cast<std::size_t>(i)], 255);
@@ -10994,7 +11077,7 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
             form->SetClass("tdl", "hide", !needsDownload());
             if (needsDownload()) form->SetHtml("tdl", "Not on this computer yet: it downloads (" + HoverNetRml::FormScreen::Escape(FormatMegabytes(e->mDownloadBytes)) + ") when you start.");
             std::string laps;
-            for (int v : {1, 3, 5, 7, 10}) laps += std::string("<div class=\"chip") + (v == prefs.mLaps ? " sel" : "") + "\" data-id=\"laps\" data-index=\"" + std::to_string(v) + "\">" + std::to_string(v) + "</div>";
+            for (int v : {1, 3, 5, 10}) laps += std::string("<div class=\"chip") + (v == prefs.mLaps ? " sel" : "") + "\" data-id=\"laps\" data-index=\"" + std::to_string(v) + "\">" + std::to_string(v) + "</div>";
             form->SetHtml("laps", guide.mFreePlay ? std::string("<p class=\"note\">Free play: no laps to complete.</p>") : laps);
             form->SetHtml("lapsnote", guide.mFreePlay ? "" : "Suggested: " + std::to_string(guide.mSuggestedLaps));
             form->SetHtml("weap", std::string("<div class=\"chip") + (prefs.mWeapons ? " sel" : "") + "\" data-id=\"weapons\" data-index=\"1\">ON</div><div class=\"chip" + (prefs.mWeapons ? "" : " sel") + "\" data-id=\"weapons\" data-index=\"0\">OFF</div>");
@@ -11155,6 +11238,11 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                 crop = rmlCrop;
                 return rmlCraftReady ? rmlCraftTexture : nullptr;
             };
+        }
+        TrackBackdropShow menuTrack;   // the modern flow: the last race's track behind the menu, as on the race screen
+        if (!info.continueTrack.empty() && !LoadReducedMotion()) {
+            const int lastIndex = LoadLocalRacePrefs().mTrackIndex;
+            info.backdropDraw = [&menuTrack, lastIndex](SDL_Renderer* renderer, int w, int h) { menuTrack.Prepare(renderer, lastIndex); menuTrack.Draw(renderer, w, h, false); };
         }
         const HoverNetRml::Choice picked = HoverNetRml::RunMainMenu(graphics.GetWindow(), graphics.GetRenderer(), info, pFrameLimit, kWidth, kHeight);
         if (rmlCraftTexture != nullptr) SDL_DestroyTexture(rmlCraftTexture);
@@ -13603,6 +13691,13 @@ int RunClient(int argc, char** argv)
                 if (std::getenv("HOVERNET_TEST_WATCH") != nullptr) { std::printf("WATCHTEST camera distance %d%%\n", kChasePercents[chaseStep]); std::fflush(stdout); }
             }
 #endif
+            else if (ModernMenus() && event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F5 && event.key.repeat == 0 && playerMode && lastLocal.valid && !onlineClient.IsConnected() && !raceWasOnline && !replay.active
+#if defined(HOVERNET_AUTH)
+                     && !auth.active
+#endif
+                     ) {
+                restartLocal = true;   // F5: start this local race again at once (the modern menus; the pause menu's RESTART RACE does the same)
+            }
             else if (resultsPending && ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F2 && event.key.repeat == 0) ||   // F2, not Enter: Enter sends chat
                                         (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK))) {
                 openResults = true;

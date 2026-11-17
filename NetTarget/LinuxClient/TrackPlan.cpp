@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <typeinfo>
+#include <utility>
 
 namespace HoverNetPlan
 {
@@ -41,9 +42,12 @@ void FillPolygon(std::vector<float>& value, int w, int h, const std::vector<Pt>&
 
 const Colours& PadColours() { return kColours; }
 
+namespace { TextureReader gReader = nullptr; }
+void SetTextureReader(TextureReader reader) { gReader = reader; }
+
 std::mutex& LevelLock() { static std::mutex lock; return lock; }
 
-Plan BuildPlan(const std::string& trackPath, const std::string& trackName, int maxSide)
+Plan BuildPlan(const std::string& trackPath, const std::string& trackName, int maxSide, bool withTextures)
 {
     Plan plan;
     std::lock_guard<std::mutex> guard(LevelLock());
@@ -75,6 +79,17 @@ Plan BuildPlan(const std::string& trackPath, const std::string& trackName, int m
     auto map = [&](const MR_2DCoordinate& c) { return Pt{static_cast<float>(pad * kSS + (c.mX - x0) * scale), static_cast<float>(pad * kSS + (y1 - c.mY) * scale)}; };
 
     const double cxm = (x0 + x1) * 0.5, cym = (y0 + y1) * 0.5;
+    plan.spanMm = span; plan.cxMm = cxm; plan.cyMm = cym;
+    std::vector<std::pair<const void*, int>> seen;   // each surface's picture is read once
+    auto textureOf = [&](const void* element) -> int {
+        if (!withTextures || gReader == nullptr || element == nullptr) return -1;
+        for (const auto& s : seen) if (s.first == element) return s.second;
+        Texture tex;
+        int index = -1;
+        if (gReader(element, tex) && tex.width > 0 && tex.height > 0 && plan.textures.size() < 64) { plan.textures.push_back(std::move(tex)); index = static_cast<int>(plan.textures.size()) - 1; }
+        seen.push_back({element, index});
+        return index;
+    };
     auto norm = [&](const MR_2DCoordinate& c, float& nx, float& ny) { nx = static_cast<float>((c.mX - cxm) / span); ny = static_cast<float>((c.mY - cym) / span); };
     // rooms, lowest floor first so a bridge is drawn over the road under it
     std::vector<int> order(static_cast<std::size_t>(roomCount));
@@ -88,11 +103,19 @@ Plan BuildPlan(const std::string& trackPath, const std::string& trackName, int m
         for (int v = 0; v < n; ++v) poly.push_back(map(level->GetRoomVertex(r, v)));
         const float t = zMax > zMin ? static_cast<float>(level->GetRoomBottomLevel(r) - zMin) / static_cast<float>(zMax - zMin) : 0.0f;
         FillPolygon(height, W, H, poly, t);
-        Plan::Shape shape; shape.h = t;
+        for (int v = 0; v < n; ++v) {   // the edges with no room beyond them
+            if (level->GetNeighbor(r, v) >= 0) continue;
+            Plan::Wall wall; wall.h = t; wall.texture = textureOf(level->GetRoomWallElement(r, v));
+            norm(level->GetRoomVertex(r, v), wall.x0, wall.y0);
+            norm(level->GetRoomVertex(r, (v + 1) % n), wall.x1, wall.y1);
+            plan.walls.push_back(wall);
+        }
+        Plan::Shape shape; shape.h = t; shape.texture = textureOf(level->GetRoomBottomElement(r));
         for (int v = 0; v < n; ++v) { float nx, ny; norm(level->GetRoomVertex(r, v), nx, ny); shape.xy.push_back(nx); shape.xy.push_back(ny); }
         plan.shapes.push_back(shape);
     }
 
+    plan.relief = static_cast<float>((zMax - zMin) / span);
     // pads, from the elements in the rooms
     struct Pad { Pt at; const std::uint8_t* colour; float radius; };
     auto roomHeight = [&](int r) { return zMax > zMin ? static_cast<float>(level->GetRoomBottomLevel(r) - zMin) / static_cast<float>(zMax - zMin) : 0.0f; };
@@ -137,12 +160,26 @@ Plan BuildPlan(const std::string& trackPath, const std::string& trackName, int m
             auto at = [&](int xx, int yy) { return xx < 0 || yy < 0 || xx >= ow || yy >= oh ? 0.0f : alpha[static_cast<std::size_t>(yy) * ow + xx]; };
             const float edge = std::min(1.0f, std::max(0.0f, 1.0f - std::min(std::min(at(x - 1, y), at(x + 1, y)), std::min(at(x, y - 1), at(x, y + 1)))));
             const float t = hh[i];
-            const float r = 58 + 46 * t, g = 66 + 52 * t, b = 112 + 62 * t;   // slate-blue, lighter where the floor is higher
-            const float er = 150, eg = 220, eb = 255;
+            const float r = 44 + 48 * t, g = 40 + 44 * t, b = 108 + 68 * t;   // deep indigo, lighter where the floor is higher
+            const float er = 110, eg = 240, eb = 255;   // a neon cyan edge
             plan.rgba[i * 4] = static_cast<std::uint8_t>(r + (er - r) * edge);
             plan.rgba[i * 4 + 1] = static_cast<std::uint8_t>(g + (eg - g) * edge);
             plan.rgba[i * 4 + 2] = static_cast<std::uint8_t>(b + (eb - b) * edge);
             plan.rgba[i * 4 + 3] = static_cast<std::uint8_t>(255.0f * std::min(1.0f, a * 1.2f));
+        }
+    }
+    {   // a soft cyan glow round the road, so a small picture still reads as lit
+        std::vector<float> blur(alpha.size()), tmp(alpha.size());
+        for (int pass = 0; pass < 2; ++pass) {
+            const std::vector<float>& src = pass == 0 ? alpha : blur;
+            for (int y = 0; y < oh; ++y) for (int x = 0; x < ow; ++x) { float sum = 0; int n = 0; for (int k = -3; k <= 3; ++k) { const int xx = x + k; if (xx >= 0 && xx < ow) { sum += src[static_cast<std::size_t>(y) * ow + xx]; ++n; } } tmp[static_cast<std::size_t>(y) * ow + x] = sum / std::max(1, n); }
+            for (int y = 0; y < oh; ++y) for (int x = 0; x < ow; ++x) { float sum = 0; int n = 0; for (int k = -3; k <= 3; ++k) { const int yy = y + k; if (yy >= 0 && yy < oh) { sum += tmp[static_cast<std::size_t>(yy) * ow + x]; ++n; } } blur[static_cast<std::size_t>(y) * ow + x] = sum / std::max(1, n); }
+        }
+        for (std::size_t i = 0; i < alpha.size(); ++i) {
+            if (alpha[i] >= 0.999f) continue;
+            const float g = std::min(1.0f, blur[i] * 1.4f) * (1.0f - alpha[i]) * 0.75f;
+            if (g <= 0.01f || plan.rgba[i * 4 + 3] >= static_cast<std::uint8_t>(g * 255.0f)) continue;
+            plan.rgba[i * 4] = 70; plan.rgba[i * 4 + 1] = 205; plan.rgba[i * 4 + 2] = 255; plan.rgba[i * 4 + 3] = static_cast<std::uint8_t>(g * 255.0f);
         }
     }
     for (const Pad& p : pads) {   // a coloured dot with a dark ring so it reads on any floor

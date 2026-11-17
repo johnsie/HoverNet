@@ -5,9 +5,10 @@
 
 | Step | Modern | Classic |
 | --- | --- | --- |
-| Main menu | A **Continue** card (the last local race: track, laps, weapons, your best lap) with one big RACE button; RACE ONLINE; CHOOSE A TRACK; Leaderboards, Garage, Tutorial, Settings, Quit | RACE ONLINE; PRACTICE OFFLINE; the same four doors; Quit |
-| Choosing a race | **One race screen** (`racehub.rml`): the track as a card (plan with the pads in colour, briefing, your best), your own craft turning, laps and weapons as chips, CHANGE TRACK (the track browser), EDIT IN GARAGE (and back), one RACE button, over the live 3D track | The Local Race Setup form (track list, laps slider, weapons box, Start Race) |
+| Main menu | A **Continue** card (the last local race: track, laps, weapons, your best lap) with one big RACE button, over the last race's 3D track; RACE ONLINE; CHOOSE A TRACK; Leaderboards, Garage, Tutorial, Settings, Quit | RACE ONLINE; PRACTICE OFFLINE; the same four doors; Quit |
+| Choosing a race | **One race screen** (`racehub.rml`): slim cards at the sides (the track's briefing and your best; your own craft turning, laps and weapons as chips, EDIT IN GARAGE and back), CHANGE TRACK (the track browser), one RACE button, and in the middle the **3D track** (a neon scene, orbiting) | The Local Race Setup form (track list, laps slider, weapons box, Start Race) |
 | After an offline race | RACE AGAIN (first), CHOOSE ANOTHER TRACK, MAIN MENU; F2 = race again | MAIN MENU; F2 = main menu |
+| During a local race | The pause menu is shorter (Resume, Restart race (F5), New local race, Online multiplayer, Main menu, Settings, Quit; Controls and Watch a replay are in Settings). **F5 restarts the race at once.** | The full pause menu; no F5 |
 | After an online race | RETURN TO LOBBY, MAIN MENU (unchanged) | The same |
 | Online lobby | Unchanged so far (see the roadmap: a waiting-room lobby and "Race now" are not built) | The server lobby |
 

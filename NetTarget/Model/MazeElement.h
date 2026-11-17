@@ -121,6 +121,8 @@ class MR_DllDeclare MR_SurfaceElement: public MR_Element
       virtual void RenderWallSurface(       MR_3DViewPort* pDest, const MR_3DCoordinate& pUpperLeft, const MR_3DCoordinate& pLowerRight, MR_Int32 pLen, MR_SimulationTime pTime );
       virtual void RenderHorizontalSurface( MR_3DViewPort* pDest, int pNbVertex, const MR_2DCoordinate* pVertexList, MR_Int32 pLevel, BOOL pTop, MR_SimulationTime pTime );
 
+      // The picture this surface is drawn with, if it has one (an MR_ResBitmap*): a menu draws the track on the graphics card with it. Nothing in a race uses it.
+      virtual const void* GetPicture() const { return NULL; }
 
 };
 

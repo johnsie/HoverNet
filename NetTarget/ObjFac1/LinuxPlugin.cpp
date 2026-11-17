@@ -100,6 +100,7 @@ public:
           rotationSpeed(rotationSpeed), rotationLength(rotationLength), maximumHeight(maximumHeight) {}
 
     // The collision behaviour (every wall and floor bounces craft) is MR_SimSurface's; this class only draws.
+    const void* GetPicture() const override { return bitmap; }   // for the menu's 3D track scene
     void RenderWallSurface(MR_3DViewPort* destination, const MR_3DCoordinate& upperLeft,
                            const MR_3DCoordinate& lowerRight, MR_Int32 length,
                            MR_SimulationTime time) override
