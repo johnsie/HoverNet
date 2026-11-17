@@ -2800,6 +2800,55 @@ void MR_Observer::PlaySoundsSafe( const MR_Level* pLevel, MR_MainCharacter* pVie
    }
 }
 
+// ---- the menu flyover (see Observer.h): a view from a free eye position over the whole track, for backdrops. Nothing in a race calls it. -------------------------------------------------
+void MR_Observer::RenderFlyover( MR_VideoBuffer* pDest, const MR_ClientSession* pSession, const MR_3DCoordinate& pEye, MR_Angle pYaw, int pScroll, MR_SimulationTime pTime, const MR_UInt8* pBackImage )
+{
+   if( pDest == NULL || pSession == NULL || pSession->GetCurrentLevel() == NULL )
+   {
+      return;
+   }
+   const MR_Level* lLevel = pSession->GetCurrentLevel();
+   mShadowLevel = lLevel;
 
+   m3DView.Setup( pDest, 0, 0, pDest->GetXRes(), pDest->GetYRes(), MR_PI/2 );
+   m3DView.SetTagBuffer( NULL );
+   m3DView.SetColourBuffer( NULL, NULL );
+   m3DView.SetTextureFiltering( FALSE );
+   m3DView.SetupCameraPosition( pEye, pYaw, pScroll );
+   if( pBackImage == NULL )
+   {
+      m3DView.Clear( 0 );
+   }
+   else
+   {
+      m3DView.RenderBackground( pBackImage );
+   }
+   m3DView.ClearZ();
 
-
+   // Every floor (rooms and the features standing in them), no ceilings: from above, a ceiling would hide the track.
+   m3DView.SetSurfaceTag( HoverNetGfx::kTagFloor );
+   for( int lRoom = 0; lRoom < lLevel->GetRoomCount(); lRoom++ )
+   {
+      MR_SectionId lId;
+      lId.mType = MR_SectionId::eRoom;
+      lId.mId   = lRoom;
+      RenderFloorOrCeiling( lLevel, lId, TRUE, pTime );
+      const int lNbFeature = lLevel->GetFeatureCount( lRoom );
+      for( int lFeature = 0; lFeature < lNbFeature; lFeature++ )
+      {
+         lId.mType = MR_SectionId::eFeature;
+         lId.mId   = lLevel->GetFeature( lRoom, lFeature );
+         RenderFloorOrCeiling( lLevel, lId, TRUE, pTime );
+      }
+   }
+   m3DView.SetSurfaceTag( HoverNetGfx::kTagWall );
+   for( int lRoom = 0; lRoom < lLevel->GetRoomCount(); lRoom++ )
+   {
+      const int lNbFeature = lLevel->GetFeatureCount( lRoom );
+      for( int lFeature = 0; lFeature < lNbFeature; lFeature++ )
+      {
+         RenderFeatureWalls( lLevel, lLevel->GetFeature( lRoom, lFeature ), pTime );
+      }
+      RenderRoomWalls( lLevel, lRoom, pTime );
+   }
+}

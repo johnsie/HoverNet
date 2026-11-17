@@ -33,6 +33,14 @@ Any change to the above by graphics or other work, including: widening or narrow
 extra smoothing or less, a different chase distance or height, a lens or camera effect that moves the picture, a new call that moves the camera.
 The Modern look may only change what is drawn *in* the picture the camera makes, never the camera.
 
+## The menu flyover (not the race camera)
+
+2026-11-17: the owner said a camera for previews is fine, just not for in-game racing. `MR_Observer::RenderFlyover` (and `HoverNetBackdrop::Flyover` in
+`NetTarget/LinuxClient/TrackBackdrop.*`) draws every floor and wall of a level from a free eye position, tilted down, orbiting the track; the race setup screen
+shows it behind its panels. It is a separate method with its own field of view (90 degrees) and its own tilt. It shares nothing with the race camera above: no race
+calls it, and the race view, its pinned values and the golden frames are unchanged. `scripts/test-camera-rule.sh` checks that only `TrackBackdrop.cpp` calls it. Any
+other use of it, in a race or in the client's race code, is a camera change and needs the owner's request.
+
 ## History
 
 2.3.28 widened the field of view with speed (up to 8%), closed the vignette in with speed and adapted the exposure to the view; the owner found the craft

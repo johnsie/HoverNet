@@ -46,5 +46,9 @@ for f in "$obs" NetTarget/Game2/Observer.h NetTarget/VideoServices/ModernGraphic
 done
 # The observer must not grow a new camera-moving member (a boost, a shake, a zoom, a look-ahead).
 if grep -n -i -E "mApertureBoost|aperturebias|camerashake|shake|lookahead|look_ahead|zoombias|SetFov|SetAperture" "$obs" NetTarget/Game2/Observer.h | grep -v -E "^\S+:[0-9]+:\s*//" | head -3 | grep -q .; then echo "FAIL the observer has something that looks like a camera effect (a boost, shake, zoom or look-ahead)"; fail=1; else echo "ok   the observer has no camera effect"; fi
+# The menu flyover (owner, 2026-11-17: a camera for previews is fine, never for racing): only the menu backdrop code may call it; the race code must not.
+fly="$(grep -rn -F "RenderFlyover(" NetTarget --include=*.cpp --include=*.h | grep -v -E "^NetTarget/Game2/Observer\.(cpp|h):" | grep -v -E "^NetTarget/LinuxClient/TrackBackdrop\.cpp:" | head -3)"
+if [ -n "$fly" ]; then echo "FAIL RenderFlyover is called outside the menu backdrop (a race must not use a free camera): $fly"; fail=1; else echo "ok   the menu flyover is used only by the menu backdrop"; fi
+if grep -q -F "RenderFlyover" "$c"; then echo "FAIL $c (the race client) mentions the flyover camera"; fail=1; else echo "ok   $c does not use the flyover camera"; fi
 if [ "$fail" = 0 ]; then echo "camera rule: the camera is as it is documented in docs/camera.md"; exit 0; fi
 echo "camera rule: FAILED -- the camera view must not be changed by graphics work (CLAUDE.md rule 7). If the owner asked for a camera change, update this script, docs/camera.md and the golden frames in the same change."; exit 1

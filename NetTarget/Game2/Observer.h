@@ -230,6 +230,10 @@ class MR_Observer
       void RenderDebugDisplay( MR_VideoBuffer* pDest, const MR_ClientSession* pSession, const MR_MainCharacter* pViewingCharacter, MR_SimulationTime pTime, const MR_UInt8* pBackImage );
       void RenderNormalDisplay( MR_VideoBuffer* pDest, const MR_ClientSession* pSession, const MR_MainCharacter* pViewingCharacter, MR_SimulationTime pTime, const MR_UInt8* pBackImage );
 
+      // A free view of the whole track for menu backdrops (never a race: the race view above is the only one a race uses, and its camera is not touched by this).
+      // Draws every floor and wall of the level (no ceilings) from `pEye` looking along `pYaw`, tilted down by `pScroll` (the renderer's own look-up-and-down shift), into pDest with its own field of view.
+      void RenderFlyover( MR_VideoBuffer* pDest, const MR_ClientSession* pSession, const MR_3DCoordinate& pEye, MR_Angle pYaw, int pScroll, MR_SimulationTime pTime, const MR_UInt8* pBackImage );
+
       void PlaySounds( const MR_Level* pLevel, MR_MainCharacter* pViewingCharacter );
       void PlaySoundsSafe( const MR_Level* pLevel, MR_MainCharacter* pViewingCharacter );
 

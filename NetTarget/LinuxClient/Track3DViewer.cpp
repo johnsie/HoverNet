@@ -4944,9 +4944,14 @@ struct LocalRaceSetup
 struct TrackBackdropShow
 {
     std::vector<SDL_Texture*> textures;
+    HoverNetBackdrop::Flyover fly;        // the live orbiting view (a menu camera; the race camera is not involved)
+    SDL_Texture* live = nullptr;
+    std::vector<std::uint8_t> livePixels;
+    Uint32 lastLive = 0;
+    float angle = 200.0f;
     int builtFor = -2;
     Uint32 since = 0;
-    void Clear() { for (SDL_Texture* t : textures) if (t != nullptr) SDL_DestroyTexture(t); textures.clear(); }
+    void Clear() { for (SDL_Texture* t : textures) if (t != nullptr) SDL_DestroyTexture(t); textures.clear(); if (live != nullptr) { SDL_DestroyTexture(live); live = nullptr; } }
     ~TrackBackdropShow() { Clear(); }
     void Prepare(SDL_Renderer* renderer, int index)
     {
@@ -4954,6 +4959,14 @@ struct TrackBackdropShow
         builtFor = index; since = SDL_GetTicks(); Clear();
         const TrackEntry* entry = Tracks().Get(index);
         if (entry == nullptr || !entry->mInstalled || std::getenv("HOVERNET_NO_BACKDROP") != nullptr) return;
+        if (std::getenv("HOVERNET_NO_FLYOVER") == nullptr && fly.Open(Tracks().PathFor(entry->mName), entry->mName, 512, 320)) {
+            live = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, fly.Width(), fly.Height());
+            if (const char* dump = std::getenv("HOVERNET_FLYOVER_DUMP")) {   // test switch: the orbit at four angles, to <prefix><angle>.ppm
+                std::vector<std::uint8_t> px;
+                for (int a = 0; a < 360; a += 90) if (fly.Draw(static_cast<float>(a), px)) if (std::FILE* f = std::fopen((std::string(dump) + std::to_string(a) + ".ppm").c_str(), "wb")) { std::fprintf(f, "P6\n%d %d\n255\n", fly.Width(), fly.Height()); for (std::size_t i = 0; i < px.size(); i += 4) std::fwrite(&px[i], 1, 3, f); std::fclose(f); }
+            }
+            if (live != nullptr) { SDL_SetTextureBlendMode(live, SDL_BLENDMODE_BLEND); SDL_SetTextureScaleMode(live, SDL_ScaleModeLinear); lastLive = 0; return; }
+        }
         std::vector<HoverNetBackdrop::Picture> pictures;
         if (HoverNetBackdrop::Render(Tracks().PathFor(entry->mName), entry->mName, 640, 480, 2, 300, pictures) <= 0) return;
         for (const HoverNetBackdrop::Picture& p : pictures) {
@@ -4965,8 +4978,27 @@ struct TrackBackdropShow
             textures.push_back(t);
         }
     }
-    void Draw(SDL_Renderer* renderer, int w, int h, bool still) const
+    void Draw(SDL_Renderer* renderer, int w, int h, bool still)
     {
+        if (live != nullptr) {   // the orbit: redrawn about twenty times a second, a few degrees a second round the track
+            const Uint32 now = SDL_GetTicks();
+            if (lastLive == 0 || now - lastLive >= 50) {
+                if (lastLive != 0 && !still) angle += 6.0f * static_cast<float>(now - lastLive) / 1000.0f;
+                lastLive = now;
+                if (fly.Draw(angle, livePixels)) SDL_UpdateTexture(live, nullptr, livePixels.data(), fly.Width() * 4);
+            }
+            const float tw = static_cast<float>(fly.Width()), th = static_cast<float>(fly.Height());
+            float dw = static_cast<float>(w), dh = dw * th / tw;
+            if (dh < h) { dh = static_cast<float>(h); dw = dh * tw / th; }
+            const SDL_FRect to = {(w - dw) * 0.5f, (h - dh) * 0.5f, dw, dh};
+            SDL_SetTextureAlphaMod(live, 255);
+            SDL_RenderCopyF(renderer, live, nullptr, &to);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 8, 6, 16, 140);
+            const SDL_Rect veil = {0, 0, w, h};
+            SDL_RenderFillRect(renderer, &veil);
+            return;
+        }
         if (textures.empty()) return;
         const float seconds = static_cast<float>(SDL_GetTicks() - since) / 1000.0f;
         const float cycle = std::fmod(seconds, 14.0f * static_cast<float>(textures.size()));
@@ -5256,7 +5288,7 @@ LocalRaceSetup RunLocalRaceSetup(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
             form->SetBackdropDraw([&](SDL_Renderer* renderer, int w, int h) { backdrop.Prepare(renderer, prefs.mTrackIndex); backdrop.Draw(renderer, w, h, reducedMotion); });
             form->SetSideImage([&](SDL_Rect& crop) -> SDL_Texture* {
                 const TrackEntry* chosen = selectedEntry();
-                if (chosen != nullptr && chosen->mInstalled && std::getenv("HOVERNET_NO_SPIN") == nullptr) {
+                if (chosen != nullptr && chosen->mInstalled && std::getenv("HOVERNET_SPIN_MAP") != nullptr) {   // the turning drawing is off: the map beside the controls stays still (the 3D backdrop is what moves)
                     if (spinPlanTrack != prefs.mTrackIndex) { spinPlanTrack = prefs.mTrackIndex; spinPlan = HoverNetPlan::BuildPlan(Tracks().PathFor(chosen->mName), chosen->mName, 8); }
                     if (spinPlan.ok && !spinPlan.shapes.empty()) {
                         if (spinTexture == nullptr) {
