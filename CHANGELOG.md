@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.65 - 2026-11-17
+
+_Released at the owner's request without the full test suite. Run on this build: the render golden frames, the camera-rule test and the track-plan test; scripts/test-modern-flow.sh checks 1 to 5 passed on the build before the textured track scene (check 6, the Garage round trip, had a test bug, now fixed and not re-run). Screenshots of the race screen and the track browser. Not run: Windows, the web build, a real GPU window, the main-menu track backdrop._
+
 - **The real track, with the game's own textures, in a neon scene**: the middle of the race screen is a small zoomed-out 3D model of the chosen track drawn with the graphics card, orbiting slowly: the floors and walls use the game's own textures (read from the level's surfaces, tiled on the card), under a dusk sky with a sun and a glowing grid, with a thin neon edge, glowing pads and a beam on the finish line. `HOVERNET_FLAT_TRACK=1` draws plain lit slabs instead. (A new `MR_SurfaceElement::GetPicture()` hands the menu a surface's picture; nothing in a race calls it.) The side cards are slim so the track is not hidden. It is built from the level's real floors, walls and pads on a background thread. `HOVERNET_BACKDROP=textured` brings back the earlier textured view. The track browser's plans have the same neon look.
 - **Shorter pause menu in the modern style** (Controls and Watch a replay are one step away in Settings), and **F5 restarts a local race** at once. The main menu shows the last race's track behind it (the same neon scene).
 - _Checked (Linux, headless, screenshots of the race screen and the browser): builds; the camera-rule test. The modern-flow test was started on this build (see below if it is listed). Not run: the full suite, Windows, the web build, how it runs on a real GPU window._
