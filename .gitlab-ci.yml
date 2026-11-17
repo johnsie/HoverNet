@@ -122,10 +122,8 @@ build:authserver:linux:
       - build/authserver/HoverNetModTool
       - build/authserver/HoverNetReplay
 
-build:game:web:
-  stage: web
-  needs: []
-  tags: ["$WEB_RUNNER_TAG"]
+# The Emscripten toolchain, found or installed once per runner (shared by the web build and the web test jobs).
+.web_emsdk:
   script:
     - |
       EMSDK_BOOTSTRAP=0
@@ -157,8 +155,16 @@ build:game:web:
       . "$EMSDK/emsdk_env.sh"
       command -v emcc
       emcc --version | grep -F "$WEB_EMSDK_VERSION"
-    # Incremental build: keep the CMake tree on the runner between pipelines so only
-    # changed sources recompile. The lock serialises pipelines sharing the tree; a
+
+# The page: build, package and (on the default branch) deploy. Only the game is built here, so this job is just the compile and the link; the test programs and their suites are
+# built and run by test:web:suites, in a tree of their own and side by side with this job, so the deploy no longer waits for them.
+build:game:web:
+  stage: web
+  needs: []
+  tags: ["$WEB_RUNNER_TAG"]
+  script:
+    - !reference [.web_emsdk, script]
+    # Incremental build: keep the CMake tree on the runner between pipelines so only changed sources recompile. The lock serialises pipelines sharing the tree; a
     # configure failure (moved checkout, changed toolchain) discards it and starts clean.
     - |
       WEB_BUILD_DIR="${HOME}/.cache/hovernet-web-build"
@@ -169,34 +175,7 @@ build:game:web:
           rm -rf "$WEB_BUILD_DIR"; mkdir -p "$WEB_BUILD_DIR"
           emcmake cmake -S . -B "$WEB_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DHOVERNET_WEB_DEFERRED_MUSIC="${HOVERNET_WEB_DEFERRED_MUSIC:-OFF}"
         fi
-        # One build for the game and every test program (CMake schedules them together), then the suites run side by side: they are independent
-        # processes, and they used to run one after the other before the page was deployed.
-        cmake --build "$WEB_BUILD_DIR" --target HoverNetGame2Player HoverNetDeterminismRun HoverNetRenderGolden HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest HoverNetLobbyTest HoverNetModerationTest HoverNetCryptoTest --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
-        SUITE_PIDS=""
-        suite() { name="$1"; shift; ( "$@" ) > "$WEB_BUILD_DIR/suite-$name.log" 2>&1 & SUITE_PIDS="$SUITE_PIDS $!:$name"; }
-        # Cross-platform determinism: the WebAssembly build must replay the scripted races to the same hashes as the committed (native) golden values (docs/determinism.md).
-        suite determinism scripts/test-determinism.sh "node $WEB_BUILD_DIR/HoverNetDeterminismRun.js"
-        suite physics scripts/test-physics.sh "node $WEB_BUILD_DIR/HoverNetDeterminismRun.js"
-        # The renderer too: it must draw the fixed scenes to the committed hashes (docs/render-golden.md).
-        suite render scripts/test-render-golden.sh "node $WEB_BUILD_DIR/HoverNetRenderGolden.js"
-        # The replay, snapshot, authority, protocol and prediction suites on WebAssembly too: a replay or a snapshot made on any platform must mean the same race in the
-        # browser (docs/determinism.md, docs/authoritative-race.md).
-        suite replay scripts/test-replay.sh "node $WEB_BUILD_DIR/HoverNetReplay.js"
-        suite snapshot scripts/test-snapshot.sh "node $WEB_BUILD_DIR/HoverNetSnapshotTest.js"
-        suite framerate node "$WEB_BUILD_DIR/HoverNetFrameRateTest.js" ClassicH 1500
-        suite authority node "$WEB_BUILD_DIR/HoverNetAuthorityTest.js" ClassicH 8
-        suite protocol node "$WEB_BUILD_DIR/HoverNetProtocolTest.js" ClassicH 8
-        suite lobby node "$WEB_BUILD_DIR/HoverNetLobbyTest.js"
-        suite moderation node "$WEB_BUILD_DIR/HoverNetModerationTest.js"
-        suite crypto node "$WEB_BUILD_DIR/HoverNetCryptoTest.js"
-        suite prediction node "$WEB_BUILD_DIR/HoverNetPredictionTest.js" ClassicH 8 60
-        SUITES_FAILED=0
-        for entry in $SUITE_PIDS; do
-          pid="${entry%%:*}"; name="${entry#*:}"
-          if wait "$pid"; then echo "ok   web suite: $name"; else echo "FAIL web suite: $name"; SUITES_FAILED=1; fi
-          cat "$WEB_BUILD_DIR/suite-$name.log"
-        done
-        [ "$SUITES_FAILED" = "0" ] || exit 1
+        cmake --build "$WEB_BUILD_DIR" --target HoverNetGame2Player --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
         mkdir -p dist/web
         cp "$WEB_BUILD_DIR/HoverNet.html" dist/web/index.html
         sed -i "s/__HN_BUILD__/${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}/; s/__HN_ORDER__/$(git log -1 --format=%ct)/" dist/web/index.html   # the page checks the id against the server (packaging/web/shell.html); hovernet-web-deploy refuses a build whose commit time is older than the live one
@@ -221,6 +200,58 @@ build:game:web:
         - packaging/web/**/*
         - CMakeLists.txt
         - .gitlab-ci.yml
+    - if: '$CI_COMMIT_BRANCH == $HOVERNET_MAIN_BRANCH'
+      changes: *web_inputs
+    - if: '$CI_COMMIT_TAG'
+
+# The WebAssembly test programs and their suites, in a CMake tree of their own (so they never hold up the page's build or a later pipeline's) and at the same time as build:game:web.
+# They are not a gate on the deploy: a failure here fails the pipeline (red) but the page is already out; GitHub Actions runs the same suites before a release.
+test:web:suites:
+  stage: web
+  needs: []
+  tags: ["$WEB_RUNNER_TAG"]
+  script:
+    - !reference [.web_emsdk, script]
+    - |
+      WEB_TEST_DIR="${HOME}/.cache/hovernet-web-tests"
+      mkdir -p "$WEB_TEST_DIR"
+      (
+        flock -x 8
+        if ! emcmake cmake -S . -B "$WEB_TEST_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF; then
+          rm -rf "$WEB_TEST_DIR"; mkdir -p "$WEB_TEST_DIR"
+          emcmake cmake -S . -B "$WEB_TEST_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+        fi
+        cmake --build "$WEB_TEST_DIR" --target HoverNetDeterminismRun HoverNetRenderGolden HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest HoverNetLobbyTest HoverNetModerationTest HoverNetCryptoTest --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+        SUITE_PIDS=""
+        suite() { name="$1"; shift; ( "$@" ) > "$WEB_TEST_DIR/suite-$name.log" 2>&1 & SUITE_PIDS="$SUITE_PIDS $!:$name"; }
+        # Cross-platform determinism: the WebAssembly build must replay the scripted races to the same hashes as the committed (native) golden values (docs/determinism.md).
+        suite determinism scripts/test-determinism.sh "node $WEB_TEST_DIR/HoverNetDeterminismRun.js"
+        suite physics scripts/test-physics.sh "node $WEB_TEST_DIR/HoverNetDeterminismRun.js"
+        # The renderer too: it must draw the fixed scenes to the committed hashes (docs/render-golden.md).
+        suite render scripts/test-render-golden.sh "node $WEB_TEST_DIR/HoverNetRenderGolden.js"
+        # The replay, snapshot, authority, protocol and prediction suites on WebAssembly too: a replay or a snapshot made on any platform must mean the same race in the
+        # browser (docs/determinism.md, docs/authoritative-race.md).
+        suite replay scripts/test-replay.sh "node $WEB_TEST_DIR/HoverNetReplay.js"
+        suite snapshot scripts/test-snapshot.sh "node $WEB_TEST_DIR/HoverNetSnapshotTest.js"
+        suite framerate node "$WEB_TEST_DIR/HoverNetFrameRateTest.js" ClassicH 1500
+        suite authority node "$WEB_TEST_DIR/HoverNetAuthorityTest.js" ClassicH 8
+        suite protocol node "$WEB_TEST_DIR/HoverNetProtocolTest.js" ClassicH 8
+        suite lobby node "$WEB_TEST_DIR/HoverNetLobbyTest.js"
+        suite moderation node "$WEB_TEST_DIR/HoverNetModerationTest.js"
+        suite crypto node "$WEB_TEST_DIR/HoverNetCryptoTest.js"
+        suite prediction node "$WEB_TEST_DIR/HoverNetPredictionTest.js" ClassicH 8 60
+        SUITES_FAILED=0
+        for entry in $SUITE_PIDS; do
+          pid="${entry%%:*}"; name="${entry#*:}"
+          if wait "$pid"; then echo "ok   web suite: $name"; else echo "FAIL web suite: $name"; SUITES_FAILED=1; fi
+          cat "$WEB_TEST_DIR/suite-$name.log"
+        done
+        [ "$SUITES_FAILED" = "0" ] || exit 1
+      ) 8>"${WEB_TEST_DIR}.lock"
+  rules:
+    - !reference [.no_schedule, rules]
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *web_inputs
     - if: '$CI_COMMIT_BRANCH == $HOVERNET_MAIN_BRANCH'
       changes: *web_inputs
     - if: '$CI_COMMIT_TAG'

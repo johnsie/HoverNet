@@ -115,8 +115,11 @@ None of these jobs has run on GitLab yet.
 The slow parts of a pipeline were the web job (it built the game, built about ten test programs, then ran their suites one after another before it deployed) and the two
 Linux server jobs (each compiled from scratch in a fresh workspace, and the race-server job compiled the server twice, one build after the other). Now:
 
-- **Web job:** the game and every test program are built in one CMake run, then the independent suites (determinism, physics, render, replay, snapshot, frame rate,
-  authority, protocol, lobby, moderation, crypto, prediction) run side by side; every suite's output is still printed and any failure still fails the job before it deploys.
+- **Web job split in two (17 November 2026, second change):** `build:game:web` now builds only the game (about two minutes when little changed: the compile of the changed
+  files plus an 80-second WebAssembly link), packages it and, on the default branch, deploys it. The test programs and their suites moved to `test:web:suites`, which runs at the
+  same time in a CMake tree of its own (`~/.cache/hovernet-web-tests`) and runs the independent suites (determinism, physics, render, replay, snapshot, frame rate,
+  authority, protocol, lobby, moderation, crypto, prediction) side by side. **The tests no longer gate the deploy**: a failing suite turns the pipeline red but the page is
+  already out (a tag's `deploy:web` does not wait for them either); GitHub Actions runs the same suites before a release (CLAUDE.md rule 6).
 - **Race-server job:** the packaged server's single `g++` build runs in the background while the tests' CMake tree builds.
 - **Kept build trees:** the race-server tests' and the auth server's CMake trees live in `~/.cache/hovernet-build/` on the runner (as the web build's already did), under a
   lock, so only changed sources recompile; a configure failure discards the tree and starts clean.
