@@ -1058,6 +1058,24 @@ void Presenter::CraftShading(PassContext& c)
     const float cx = static_cast<float>(h.projCenterX), cy = static_cast<float>(h.projCenterY);
     auto position = [&](int px, int py, float& X, float& Y, float& Z) { X = DepthAt(h, px, py) * 4.0f; Y = (cx - px) * X * h.projKx; Z = (cy - py) * X * h.projKz; };
     const int sky[3] = {mSkyKnown ? mSkyR : 150, mSkyKnown ? mSkyG : 180, mSkyKnown ? mSkyB : 220};
+    // The colour of the floor around the craft (water, for one) is bounced onto the hull: the more coloured the floor, the stronger. A grey floor changes almost nothing.
+    float floorTint[3] = {0, 0, 0}, tintAmount = 0.0f;
+    if (h.craftVisible && h.craftRadius >= 4) {
+        long sum[3] = {0, 0, 0}; int count = 0;
+        const int reach = static_cast<int>(h.craftRadius * 1.3f), half = static_cast<int>(h.craftRadius * 1.9f);
+        for (int y = std::max(w.y0, h.craftGroundY - reach / 2); y < std::min(w.y1, h.craftGroundY + reach); y += 2)
+            for (int x = std::max(w.x0, h.craftX - half); x < std::min(w.x1, h.craftX + half); x += 2) {
+                if (TagAt(h, x, y) != kTagFloor) continue;
+                const std::uint8_t* q = c.rgb + y * stride + x * 3;
+                sum[0] += q[0]; sum[1] += q[1]; sum[2] += q[2]; ++count;
+            }
+        if (count >= 12) {
+            int hi = 0, lo = 255;
+            for (int k = 0; k < 3; ++k) { floorTint[k] = static_cast<float>(sum[k]) / count; hi = std::max(hi, static_cast<int>(floorTint[k])); lo = std::min(lo, static_cast<int>(floorTint[k])); }
+            const float saturation = hi > 0 ? static_cast<float>(hi - lo) / hi : 0.0f;
+            tintAmount = std::min(0.75f, saturation * 1.8f);
+        }
+    }
     for (int y = std::max(w.y0, 2); y < std::min(w.y1, c.height - 2); ++y) {
         const std::uint8_t* maskRow = c.hudMask != nullptr ? c.hudMask + static_cast<std::size_t>(y) * c.width : nullptr;
         for (int x = std::max(w.x0, 2); x < std::min(w.x1, c.width - 2); ++x) {
@@ -1108,6 +1126,11 @@ void Presenter::CraftShading(PassContext& c)
                 addR += light.r * spec * 0.7f; addG += light.g * spec * 0.7f; addB += light.b * spec * 0.7f;
             }
             std::uint8_t* p = c.rgb + y * stride + x * 3;
+            if (tintAmount > 0.0f) {   // the floor's colour on the hull: most on the parts that face down, some everywhere
+                const float down = nz < 0.0f ? (-nz > 1.0f ? 1.0f : -nz) : 0.0f;
+                const float amount = tintAmount * (0.55f + 0.45f * down);
+                for (int k = 0; k < 3; ++k) p[k] = static_cast<std::uint8_t>(p[k] + static_cast<int>((floorTint[k] * 0.9f - p[k]) * amount));
+            }
             p[0] = static_cast<std::uint8_t>(Clamp255(p[0] + static_cast<int>(addR)));
             p[1] = static_cast<std::uint8_t>(Clamp255(p[1] + static_cast<int>(addG)));
             p[2] = static_cast<std::uint8_t>(Clamp255(p[2] + static_cast<int>(addB)));
