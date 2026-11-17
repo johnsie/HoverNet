@@ -190,3 +190,17 @@ a different id makes the page reload once through `?v=<id>`, and the wasm and da
 comes back later (restored tab, resumed home-screen app) only shows an update bar. A build whose placeholder was not filled in does
 nothing, so local builds are unaffected. `scripts/web-smoke/web-stale-page.mjs` tests the script against a server that plays an old copy
 (run by `scripts/test-web-client.sh`). The server side is unchanged: HTML, js, wasm and data are already sent with `no-cache`.
+
+## Page weight and caching (17 November 2026)
+
+A measurement of the live page (a first visit: 27.3 MB on the wire, about 6 s to the first frame on a fast connection; a repeat visit in Edge: 2.3 MB, about 1.3 s) found three things, fixed here:
+
+- **`HoverNet.data` went out uncompressed** (25 MB). `hovernet.outiva.com.conf` now compresses `application/octet-stream` by type as well as the `.data` file rule (about 17 MB). After the host's site file is
+  replaced (`setup-host.sh`, then a reload of Apache) `scripts/check-web-deploy.sh` says whether it took (`HoverNet.data is compressed`).
+- **`HoverNet.wasm` and `HoverNet.js` were downloaded again on every visit.** Apache adds `-gzip` to the ETag of a compressed answer and then does not recognise it in `If-None-Match`; `DeflateAlterETag NoChange`
+  keeps the file's own ETag, so the browser's check gets a 304. The deploy check warns when it does not.
+- **The page asked for `HoverNetMusic.bin` on every load (a 404 when the music is inside `HoverNet.data`).** The build now writes `<meta name="hn-music">` (1 only when `HOVERNET_WEB_DEFERRED_MUSIC=ON`) and the page asks for the file
+  only then. A page that was not packaged (the placeholder is still there) still tries, as before. A favicon (a small inline picture of the game's hovercraft) ends the `favicon.ico` 404.
+
+Not changed: the `SERVER_USED=` cookie on every response (it comes from the HAProxy in front of Apache, not from this repository), and the audio, which still uses the browser's deprecated `ScriptProcessorNode`
+(moving it to an AudioWorklet is a larger change to the audio backend).

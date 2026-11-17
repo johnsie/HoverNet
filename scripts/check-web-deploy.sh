@@ -40,6 +40,16 @@ check_asset() { # file expected-type min-bytes
 check_asset HoverNet.js application/javascript 100000
 check_asset HoverNet.wasm application/wasm 1000000
 check_asset HoverNet.data application/octet-stream 5000000
+# Compression and revalidation (warnings, not failures: they cost download time, they do not break the page). The data file is 26 MB raw and about 17 MB compressed; a browser
+# that already has the wasm asks "unchanged?" with the file's ETag and should get a 304, not the 2 MB again (Apache's -gzip ETag suffix broke that: DeflateAlterETag NoChange).
+warn() { echo "WARN: $1"; }
+enc="$(curl -sI "${opts[@]}" --max-time 20 -H 'Accept-Encoding: gzip' "$base/HoverNet.data" | tr -d '\r' | grep -i '^content-encoding:' | head -1)"
+echo "$enc" | grep -qi gzip && ok "HoverNet.data is compressed" || warn "HoverNet.data is served uncompressed (about 25 MB on a first visit instead of about 17; see hovernet.outiva.com.conf)"
+etag="$(curl -sI "${opts[@]}" --max-time 20 -H 'Accept-Encoding: gzip' "$base/HoverNet.wasm" | tr -d '\r' | grep -i '^etag:' | head -1 | cut -d: -f2- | sed 's/^ *//')"
+if [ -n "$etag" ]; then
+  code="$(curl -s "${opts[@]}" --max-time 20 -o /dev/null -w '%{http_code}' -H 'Accept-Encoding: gzip' -H "If-None-Match: $etag" "$base/HoverNet.wasm")"
+  [ "$code" = "304" ] && ok "an unchanged HoverNet.wasm answers 304 to its ETag" || warn "HoverNet.wasm answers $code to its own ETag (it should be 304: the browser downloads it again on every visit)"
+fi
 cc="$(header "$base/HoverNet.wasm" cache-control)"
 [ -n "$cc" ] && ok "wasm cache-control: $cc" || bad "wasm has no cache-control"
 

@@ -6,6 +6,9 @@ and how to roll one back.
 
 ## Unreleased
 
+- **Web page weight and caching** (from a measurement of the live page): the server config now compresses `HoverNet.data` (about 25 MB down to about 17) by type as well as by file name, and keeps the file's ETag on compressed answers (`DeflateAlterETag NoChange`) so a repeat visit gets a 304 for `HoverNet.wasm` and `HoverNet.js` instead of downloading 2 MB again; `scripts/check-web-deploy.sh` warns when either is missing. The page no longer asks for `HoverNetMusic.bin` unless the build has the music as a separate file (`<meta name="hn-music">`), and has a favicon (no more 404). **These server changes only take effect when the host's Apache site file is replaced** (`packaging/web/setup-host.sh`, then reload Apache). The `SERVER_USED` cookie (from HAProxy) and the deprecated `ScriptProcessorNode` audio warning are not changed.
+- _Checked: the page's scripts parse; the new deploy checks warn against the live site as expected (data uncompressed, wasm ETag answers 200). Not checked: the new server config on a real Apache (nothing was deployed to the host), the page with the music meta in a full browser run._
+
 ## 2.3.68 - 2026-11-17
 
 _Released at the owner's request without the full test suite. Run on this build: the desktop and WebAssembly builds, the web build in a real windowed Edge on this machine (main menu 59 frames a second, a race 53 at the new Fast default) and in headless Chrome on the GPU, screenshots of the race screen on desktop and web, the camera-rule test. Not run: the web smoke test, Windows, Firefox, Edge with the owner's own profile, the new GitLab web-test job in the real pipeline._
