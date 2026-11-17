@@ -109,3 +109,17 @@ None of these jobs has run on GitLab yet.
 
 `workflow:` in `.gitlab-ci.yml` creates a pipeline only for a merge request, the `main` branch and a tag. A push to another branch (for example
 `gitlab-mobile`) starts nothing on GitLab: that is by design, not a failure. GitHub Actions runs on every branch.
+
+## Speed (17 November 2026)
+
+The slow parts of a pipeline were the web job (it built the game, built about ten test programs, then ran their suites one after another before it deployed) and the two
+Linux server jobs (each compiled from scratch in a fresh workspace, and the race-server job compiled the server twice, one build after the other). Now:
+
+- **Web job:** the game and every test program are built in one CMake run, then the independent suites (determinism, physics, render, replay, snapshot, frame rate,
+  authority, protocol, lobby, moderation, crypto, prediction) run side by side; every suite's output is still printed and any failure still fails the job before it deploys.
+- **Race-server job:** the packaged server's single `g++` build runs in the background while the tests' CMake tree builds.
+- **Kept build trees:** the race-server tests' and the auth server's CMake trees live in `~/.cache/hovernet-build/` on the runner (as the web build's already did), under a
+  lock, so only changed sources recompile; a configure failure discards the tree and starts clean.
+- **ccache:** used for every job when the runner has it.
+
+Not changed: which jobs run for which files (the server jobs still run on every commit, because the auth server shares sources with the client), and the web smoke test.

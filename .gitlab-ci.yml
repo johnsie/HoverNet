@@ -23,6 +23,9 @@ variables:
 
 default:
   interruptible: true
+  # Compile through ccache when the runner has it (the compiler launcher is read when CMake configures).
+  before_script:
+    - 'if command -v ccache >/dev/null 2>&1; then export CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache; fi'
 
 # Kept so old scheduled pipelines on the project do nothing (the nightly sanitizer run now lives in GitHub Actions).
 .no_schedule:
@@ -65,13 +68,26 @@ build:raceserver:linux:
   needs: []
   tags: ["$LINUX_RUNNER_TAG"]
   script:
-    - mkdir -p build/raceserver
-    - g++ -std=c++14 -O2 -pthread -I NetTarget/RaceServer -I NetTarget/RaceServer/NetworkInterface -I NetTarget/RaceServer/GameSimulation -I NetTarget/RaceServer/RaceManager -I NetTarget/RaceServer/Config -I NetTarget/RaceServer/Logging $(find NetTarget/RaceServer -path '*/build/*' -prune -o -name '*.cpp' -print) -o build/raceserver/RaceServer
-    - test -x build/raceserver/RaceServer
-    # The server's own protocol, lifecycle and fuzz tests (the client and the packages are built and tested in GitHub Actions).
-    - cmake -S . -B build/servertests -DCMAKE_BUILD_TYPE=Release
-    - cmake --build build/servertests --target RaceServer HoverNetRaceServerClientSmoke HoverNetRaceServerLifecycleSmoke --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
-    - ctest --test-dir build/servertests --output-on-failure -R 'HoverNetRaceServer(ClientSmoke|ProtocolStrictSmoke|LifecycleSmoke|ProtocolFuzz)'
+    - |
+      mkdir -p build/raceserver
+      # The packaged server is built by this one g++ command; it runs in the background while the tests' CMake tree builds (the two used to run one after the other).
+      g++ -std=c++14 -O2 -pthread -I NetTarget/RaceServer -I NetTarget/RaceServer/NetworkInterface -I NetTarget/RaceServer/GameSimulation -I NetTarget/RaceServer/RaceManager -I NetTarget/RaceServer/Config -I NetTarget/RaceServer/Logging $(find NetTarget/RaceServer -path '*/build/*' -prune -o -name '*.cpp' -print) -o build/raceserver/RaceServer &
+      GPP_PID=$!
+      # The server's own protocol, lifecycle and fuzz tests (the client and the packages are built and tested in GitHub Actions). The CMake tree is kept on the runner
+      # between pipelines (as the web build's is), so only changed sources recompile; a configure failure discards it and starts clean.
+      TEST_BUILD_DIR="${HOME}/.cache/hovernet-build/servertests"
+      mkdir -p "$TEST_BUILD_DIR"
+      (
+        flock -x 8
+        if ! cmake -S . -B "$TEST_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release; then
+          rm -rf "$TEST_BUILD_DIR"; mkdir -p "$TEST_BUILD_DIR"
+          cmake -S . -B "$TEST_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
+        fi
+        cmake --build "$TEST_BUILD_DIR" --target RaceServer HoverNetRaceServerClientSmoke HoverNetRaceServerLifecycleSmoke --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+        ctest --test-dir "$TEST_BUILD_DIR" --output-on-failure -R 'HoverNetRaceServer(ClientSmoke|ProtocolStrictSmoke|LifecycleSmoke|ProtocolFuzz)'
+      ) 8>"${TEST_BUILD_DIR}.lock"
+      wait "$GPP_PID"
+      test -x build/raceserver/RaceServer
   artifacts:
     expire_in: 7 days
     paths:
@@ -85,9 +101,20 @@ build:authserver:linux:
   needs: []
   tags: ["$LINUX_RUNNER_TAG"]
   script:
-    - cmake -S . -B build/authserver -DCMAKE_BUILD_TYPE=Release
-    - cmake --build build/authserver --target HoverNetAuthServer HoverNetModTool HoverNetReplay HoverNetLobbyTest HoverNetProtocolTest --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
-    - ctest --test-dir build/authserver --output-on-failure -R 'HoverNet(Lobby|Protocol)$'
+    - |
+      # The CMake tree is kept on the runner between pipelines, so only changed sources recompile; a configure failure discards it and starts clean.
+      AUTH_BUILD_DIR="${HOME}/.cache/hovernet-build/authserver"
+      mkdir -p "$AUTH_BUILD_DIR" build/authserver
+      (
+        flock -x 8
+        if ! cmake -S . -B "$AUTH_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release; then
+          rm -rf "$AUTH_BUILD_DIR"; mkdir -p "$AUTH_BUILD_DIR"
+          cmake -S . -B "$AUTH_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
+        fi
+        cmake --build "$AUTH_BUILD_DIR" --target HoverNetAuthServer HoverNetModTool HoverNetReplay HoverNetLobbyTest HoverNetProtocolTest --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+        ctest --test-dir "$AUTH_BUILD_DIR" --output-on-failure -R 'HoverNet(Lobby|Protocol)$'
+        cp "$AUTH_BUILD_DIR/HoverNetAuthServer" "$AUTH_BUILD_DIR/HoverNetModTool" "$AUTH_BUILD_DIR/HoverNetReplay" build/authserver/
+      ) 8>"${AUTH_BUILD_DIR}.lock"
   artifacts:
     expire_in: 7 days
     paths:
@@ -142,27 +169,34 @@ build:game:web:
           rm -rf "$WEB_BUILD_DIR"; mkdir -p "$WEB_BUILD_DIR"
           emcmake cmake -S . -B "$WEB_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DHOVERNET_WEB_DEFERRED_MUSIC="${HOVERNET_WEB_DEFERRED_MUSIC:-OFF}"
         fi
-        cmake --build "$WEB_BUILD_DIR" --target HoverNetGame2Player --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
-        # Cross-platform determinism: the WebAssembly build must replay the scripted races to the same
-        # hashes as the committed (native) golden values. See docs/determinism.md.
-        cmake --build "$WEB_BUILD_DIR" --target HoverNetDeterminismRun --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
-        scripts/test-determinism.sh "node $WEB_BUILD_DIR/HoverNetDeterminismRun.js"
-        scripts/test-physics.sh "node $WEB_BUILD_DIR/HoverNetDeterminismRun.js"
-        # The renderer too: the WebAssembly build must draw the fixed scenes to the committed hashes (docs/render-golden.md).
-        cmake --build "$WEB_BUILD_DIR" --target HoverNetRenderGolden --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
-        scripts/test-render-golden.sh "node $WEB_BUILD_DIR/HoverNetRenderGolden.js"
-        # The replay, snapshot, authority, protocol and prediction suites on WebAssembly too: a replay or a snapshot made on
-        # any platform must mean the same race in the browser (docs/determinism.md, docs/authoritative-race.md).
-        cmake --build "$WEB_BUILD_DIR" --target HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest HoverNetLobbyTest HoverNetModerationTest HoverNetCryptoTest --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
-        scripts/test-replay.sh "node $WEB_BUILD_DIR/HoverNetReplay.js"
-        scripts/test-snapshot.sh "node $WEB_BUILD_DIR/HoverNetSnapshotTest.js"
-        node "$WEB_BUILD_DIR/HoverNetFrameRateTest.js" ClassicH 1500
-        node "$WEB_BUILD_DIR/HoverNetAuthorityTest.js" ClassicH 8
-        node "$WEB_BUILD_DIR/HoverNetProtocolTest.js" ClassicH 8
-        node "$WEB_BUILD_DIR/HoverNetLobbyTest.js"
-        node "$WEB_BUILD_DIR/HoverNetModerationTest.js"
-        node "$WEB_BUILD_DIR/HoverNetCryptoTest.js"
-        node "$WEB_BUILD_DIR/HoverNetPredictionTest.js" ClassicH 8 60
+        # One build for the game and every test program (CMake schedules them together), then the suites run side by side: they are independent
+        # processes, and they used to run one after the other before the page was deployed.
+        cmake --build "$WEB_BUILD_DIR" --target HoverNetGame2Player HoverNetDeterminismRun HoverNetRenderGolden HoverNetReplay HoverNetSnapshotTest HoverNetFrameRateTest HoverNetAuthorityTest HoverNetProtocolTest HoverNetPredictionTest HoverNetLobbyTest HoverNetModerationTest HoverNetCryptoTest --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+        SUITE_PIDS=""
+        suite() { name="$1"; shift; ( "$@" ) > "$WEB_BUILD_DIR/suite-$name.log" 2>&1 & SUITE_PIDS="$SUITE_PIDS $!:$name"; }
+        # Cross-platform determinism: the WebAssembly build must replay the scripted races to the same hashes as the committed (native) golden values (docs/determinism.md).
+        suite determinism scripts/test-determinism.sh "node $WEB_BUILD_DIR/HoverNetDeterminismRun.js"
+        suite physics scripts/test-physics.sh "node $WEB_BUILD_DIR/HoverNetDeterminismRun.js"
+        # The renderer too: it must draw the fixed scenes to the committed hashes (docs/render-golden.md).
+        suite render scripts/test-render-golden.sh "node $WEB_BUILD_DIR/HoverNetRenderGolden.js"
+        # The replay, snapshot, authority, protocol and prediction suites on WebAssembly too: a replay or a snapshot made on any platform must mean the same race in the
+        # browser (docs/determinism.md, docs/authoritative-race.md).
+        suite replay scripts/test-replay.sh "node $WEB_BUILD_DIR/HoverNetReplay.js"
+        suite snapshot scripts/test-snapshot.sh "node $WEB_BUILD_DIR/HoverNetSnapshotTest.js"
+        suite framerate node "$WEB_BUILD_DIR/HoverNetFrameRateTest.js" ClassicH 1500
+        suite authority node "$WEB_BUILD_DIR/HoverNetAuthorityTest.js" ClassicH 8
+        suite protocol node "$WEB_BUILD_DIR/HoverNetProtocolTest.js" ClassicH 8
+        suite lobby node "$WEB_BUILD_DIR/HoverNetLobbyTest.js"
+        suite moderation node "$WEB_BUILD_DIR/HoverNetModerationTest.js"
+        suite crypto node "$WEB_BUILD_DIR/HoverNetCryptoTest.js"
+        suite prediction node "$WEB_BUILD_DIR/HoverNetPredictionTest.js" ClassicH 8 60
+        SUITES_FAILED=0
+        for entry in $SUITE_PIDS; do
+          pid="${entry%%:*}"; name="${entry#*:}"
+          if wait "$pid"; then echo "ok   web suite: $name"; else echo "FAIL web suite: $name"; SUITES_FAILED=1; fi
+          cat "$WEB_BUILD_DIR/suite-$name.log"
+        done
+        [ "$SUITES_FAILED" = "0" ] || exit 1
         mkdir -p dist/web
         cp "$WEB_BUILD_DIR/HoverNet.html" dist/web/index.html
         sed -i "s/__HN_BUILD__/${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}/; s/__HN_ORDER__/$(git log -1 --format=%ct)/" dist/web/index.html   # the page checks the id against the server (packaging/web/shell.html); hovernet-web-deploy refuses a build whose commit time is older than the live one
