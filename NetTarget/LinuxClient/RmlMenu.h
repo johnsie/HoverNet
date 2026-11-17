@@ -154,6 +154,7 @@ public:
     void SetHtml(const std::string& id, const std::string& rml);
     void SetClass(const std::string& id, const std::string& cls, bool on);
     void SetInput(const std::string& id, const std::string& value);
+    std::string GetInput(const std::string& id) const;                   // the text an input holds right now (a change event only comes when the input loses focus)
     void FocusElement(const std::string& id);
     void ScrollToEnd(const std::string& id);
     static std::string Escape(const std::string& text);

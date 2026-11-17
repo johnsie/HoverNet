@@ -6,6 +6,12 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.57 - 2026-11-17
+
+_Released at the owner's request without waiting for the test suite._
+
+- Fixed: on the first-run "WELCOME, RACER" screen of the RmlUi lobby, clicking ENTER THE LOBBY with a freshly typed name did nothing and showed "Type a name (1 to 32 letters, no control characters)". The text box only reports its text when it loses focus or Enter is pressed, and the button checked an older, empty copy; it now reads the box directly (`FormScreen::GetInput`). Checked: the client builds; the full ctest suite was not run (stopped after two tests, both passed); the click itself was not driven by an automated test and Windows was not run.
+
 ## 2.3.56 - 2026-11-10
 
 _Released at the owner's request without waiting for the test suite._

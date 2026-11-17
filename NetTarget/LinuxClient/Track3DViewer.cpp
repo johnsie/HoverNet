@@ -9815,7 +9815,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             }
             for (const HoverNetRml::FormEvent& e : rEvents) {
                 if (e.id == "name") { std::snprintf(nameBuffer, 33, "%s", e.text.c_str()); }
-                else if (e.id == "name#enter" || e.id == "entername") { std::snprintf(nameBuffer, 33, "%s", e.id == "name#enter" ? e.text.c_str() : nameBuffer); submitName(); }
+                else if (e.id == "name#enter" || e.id == "entername") { std::snprintf(nameBuffer, 33, "%s", e.id == "name#enter" ? e.text.c_str() : rml->GetInput("namein").c_str()); submitName(); }
                 else if (e.id == "back") { if (rConnected) lobby.Close(); running = false; }
                 else if (e.id == "retry") { showCard = false; autoPending = true; autoAttempt = false; connectingFrames = 0; problem.clear(); lobby.Close(); }
                 else if (e.id == "official") { settings = AuthServerSettings(); AuthServerSettings official; SaveAuthServerSettings(official); showCard = false; autoPending = true; autoAttempt = false; connectingFrames = 0; problem.clear(); lobby.Close(); }

@@ -1052,6 +1052,11 @@ void FormScreen::SetInput(const std::string& pId, const std::string& pValue)
     mImpl->listener.programmatic[pId] = pValue;
     control->SetValue(pValue);   // (the change it reports, now or at the next update, is matched against the entry in ProcessGeneric; an entry that is never matched only ever equals a value the player did not change)
 }
+std::string FormScreen::GetInput(const std::string& pId) const
+{
+    auto* control = dynamic_cast<Rml::ElementFormControl*>(mImpl->document->GetElementById(pId));
+    return control != nullptr ? control->GetValue() : std::string();
+}
 void FormScreen::FocusElement(const std::string& pId) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) e->Focus(); }
 void FormScreen::ScrollToEnd(const std::string& pId) { if (Rml::Element* e = mImpl->document->GetElementById(pId)) e->SetScrollTop(e->GetScrollHeight()); }
 
