@@ -157,18 +157,6 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
     const float W = static_cast<float>(w), H = static_cast<float>(h);
     Quad({0, 0}, {W, 0}, {0, horizon}, {W, horizon}, SDL_Color{7, 4, 26, 255}, SDL_Color{7, 4, 26, 255}, SDL_Color{176, 46, 124, 255}, SDL_Color{176, 46, 124, 255});
     if (horizon > 4.0f) {
-        const float sunR = std::min(H * 0.30f, horizon * 1.6f);
-        const SDL_FPoint sun = {W * 0.5f - W * 0.10f, horizon};
-        {   // the upper half of the sun
-            Painter& p = painter; p.Use(nullptr, false);
-            const int n = 20, base = static_cast<int>(p.vertices.size());
-            p.Vertex(sun, SDL_Color{255, 226, 110, 255});
-            for (int i = 0; i <= n; ++i) { const float a = 3.14159265f + static_cast<float>(i) / n * 3.14159265f; p.Vertex(SDL_FPoint{sun.x + std::cos(a) * sunR, sun.y + std::sin(a) * sunR}, SDL_Color{255, 70, 150, 255}); if (i < n) { p.indices.push_back(base); p.indices.push_back(base + i + 1); p.indices.push_back(base + i + 2); } }
-        }
-        for (int i = 0; i < 5; ++i) {   // dark slats across the lower sun, as on a retro poster
-            const float y = horizon - sunR * (0.08f + 0.15f * static_cast<float>(i)), thick = sunR * (0.012f + 0.012f * static_cast<float>(i));
-            Quad({sun.x - sunR, y}, {sun.x + sunR, y}, {sun.x - sunR, y + thick}, {sun.x + sunR, y + thick}, SDL_Color{150, 30, 110, 255}, SDL_Color{150, 30, 110, 255}, SDL_Color{150, 30, 110, 255}, SDL_Color{150, 30, 110, 255});
-        }
         for (int i = 0; i < 40; ++i) {   // a few stars
             const float sx = std::fmod(static_cast<float>(i) * 97.31f, W), sy = std::fmod(static_cast<float>(i) * 41.7f, std::max(1.0f, horizon * 0.8f));
             const SDL_Color c = {255, 240, 255, 150};
