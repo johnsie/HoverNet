@@ -6,6 +6,10 @@ and how to roll one back.
 
 ## Unreleased
 
+## 2.3.67 - 2026-11-17
+
+_Released at the owner's request without the full test suite. Run on this build: the desktop and WebAssembly builds, the web build in headless Chrome on the real GPU at 1920x1080 (main menu and race screen both 60 frames a second), headless-Chrome screenshots of the loading page, the camera-rule test. Not run: the web smoke test, Windows, Edge itself, the new GitLab web-test job in the real pipeline._
+
 - **The web loading screen matches the game**: a dusk sky, a glowing grid, the game's own hovercraft (a small inline picture, bobbing gently) and a red progress bar, in the same look as the menus (no extra files). The sun is gone from the loading screen and from the 3D track scene: it had nothing to do with the game. Its text said the first visit was about 13 MB; the download is about 25 MB, and it now says so.
 - **The web craft turns without a double image**: the page's ring of craft pictures has a picture every five degrees (it was ten, and blending two pictures ten degrees apart showed a ghost of the engine).
 - **Cheaper turning craft on the web page**: the blend between two craft pictures uses integer maths two channels at a time and runs only in eighths of a step, and the picture is uploaded only when it changed (about eighteen times a second instead of every frame).
