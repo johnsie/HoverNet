@@ -1967,7 +1967,39 @@ void RaceViewSizeForWindow(int windowWidth, int windowHeight, int& width, int& h
     height = static_cast<int>(width / aspect + 0.5) & ~1;
 }
 
-void ApplyRaceViewSetting(int& width, int& height)
+// Race detail: how large the race picture is drawn. The race is drawn by the game's own software renderer, and in the browser (where it runs as WebAssembly) that costs about
+// 24 frames a second at 1024x768 on a fast computer; a smaller picture is drawn faster and scaled up to the window. Sharp is the full size, Balanced about four fifths of it, Fast five eighths
+// (the 640x480 of the original game). Applied when the game starts. The page starts on Fast; a desktop on Sharp.
+enum class RaceDetail { eSharp, eBalanced, eFast };
+
+std::string RaceDetailPath()
+{
+    return ConfigDirPath() + "/race_detail";
+}
+
+RaceDetail LoadRaceDetail()
+{
+    std::ifstream in(RaceDetailPath());
+    std::string word;
+    if (in >> word) {
+        if (word == "sharp") return RaceDetail::eSharp;
+        if (word == "balanced") return RaceDetail::eBalanced;
+        if (word == "fast") return RaceDetail::eFast;
+    }
+#ifdef HOVERNET_WEB
+    return RaceDetail::eFast;
+#else
+    return RaceDetail::eSharp;
+#endif
+}
+
+void SaveRaceDetail(RaceDetail detail)
+{
+    std::ofstream out(RaceDetailPath());
+    out << (detail == RaceDetail::eSharp ? "sharp" : detail == RaceDetail::eBalanced ? "balanced" : "fast") << '\n';
+}
+
+void ApplyRaceViewShape(int& width, int& height)
 {
     switch (LoadRaceView()) {
     case RaceView::eClassic:
@@ -1991,6 +2023,14 @@ void ApplyRaceViewSetting(int& width, int& height)
         return;
     }
     }
+}
+
+void ApplyRaceViewSetting(int& width, int& height)
+{
+    ApplyRaceViewShape(width, height);
+    const RaceDetail detail = LoadRaceDetail();
+    const double scale = detail == RaceDetail::eFast ? 0.625 : detail == RaceDetail::eBalanced ? 0.8 : 1.0;
+    if (scale < 0.999) { width = (static_cast<int>(width * scale + 0.5) + 7) & ~7; height = static_cast<int>(height * scale + 0.5) & ~1; }
 }
 
 std::string UiScalePath()
@@ -5031,8 +5071,8 @@ bool ReadSurfaceTexture(const void* pElement, HoverNetPlan::Texture& pOut)
     return true;
 }
 
-// The turning craft for the web page: the craft is drawn by the game's software renderer, which is slow in WebAssembly, so instead of redrawing it every few frames it is drawn once for each of
-// 72 angles (as they are first reached) and the picture between two angles is a blend of the two. After one turn it costs only the blend.
+// The turning craft (the main menu): the craft is drawn by the game's software renderer, which is slow, so instead of redrawing it every few frames it is drawn once for each of 72 angles (as
+// they are first reached) and the picture between two angles is a blend of the two, a little more each frame, so the turn is smooth. After one turn it costs only the blend.
 struct CraftRing
 {
     static constexpr int kN = 72;   // a picture every five degrees: two neighbours are close enough that blending them shows no double image
@@ -5047,17 +5087,17 @@ struct CraftRing
     {
         const double pos = std::fmod(std::max(0.0, yawDegrees), 360.0) / (360.0 / kN);
         const int i = static_cast<int>(pos) % kN, j = (i + 1) % kN;
-        const int eighth = static_cast<int>((pos - std::floor(pos)) * 8.0);
+        const int weight = static_cast<int>((pos - std::floor(pos)) * 256.0);   // 0..255 of the way to the next picture, so the turn moves a little every frame
         int drawn = 0;
         for (int k : {i, j}) if (!have[k] && drawn < 1) { have[k] = render(k * (360 / kN), frames[k]); ++drawn; }   // at most one new picture a call
         changed = false;
         if (!have[i]) return mix;   // nothing drawn yet
-        const int key = (i * 8 + eighth) * 2 + (have[j] ? 1 : 0);
+        const int key = (i * 256 + weight) * 2 + (have[j] ? 1 : 0);
         if (key == lastKey) return mix;
         lastKey = key; changed = true;
-        if (!have[j] || eighth == 0) { mix = frames[i]; return mix; }
+        if (!have[j] || weight == 0) { mix = frames[i]; return mix; }
         mix.resize(frames[i].size());
-        const std::uint32_t wgt = static_cast<std::uint32_t>(eighth) * 32u, inv = 256u - wgt;   // 0..256, two channels at a time
+        const std::uint32_t wgt = static_cast<std::uint32_t>(weight), inv = 256u - wgt;   // two channels at a time
         const std::uint32_t* pa = frames[i].data(); const std::uint32_t* pb = frames[j].data(); std::uint32_t* out = mix.data();
         for (std::size_t p = 0; p < mix.size(); ++p) {
             const std::uint32_t a = pa[p], b = pb[p];
@@ -5807,6 +5847,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
     bool applyUiScale = false;
     bool largeHudText = LoadLargeHudText();
     RaceView raceView = LoadRaceView();
+    RaceDetail raceDetail = LoadRaceDetail();
     GraphicsSettings graphicsSettings = LoadGraphicsSettings();
     bool showGhost = LoadShowGhost();
     bool reducedMotion = LoadReducedMotion();
@@ -5990,6 +6031,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                     f.push_back(note("Only how the race looks: it never changes how it plays. High needs a fast processor; Light suits phones and older machines."));
                 }
                 else {
+                    f.push_back(select("racedetail", "Race detail", {"Sharp (full size)", "Balanced", "Fast (smoothest)"}, static_cast<int>(raceDetail), "How large the race picture is drawn: smaller is smoother on a slow computer or in a browser. Takes effect the next time you start HoverNet (in a browser: reload the page)."));
                     if (!HoverNetIsTouchDevice()) f.push_back(select("raceview", "Race view", {raceViewLabels[0], raceViewLabels[1], raceViewLabels[2]}, static_cast<int>(raceView), "The shape of the picture while racing. Takes effect the next time you start HoverNet."));
 #ifdef HOVERNET_WEB
                     if (!HoverNetIsTouchDevice()) {
@@ -6069,6 +6111,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
                     else if (id == "grade") graphicsSettings.grade = e.on;
                     else if (id == "brightness") graphicsSettings.brightness = e.value / 100.0f;
                     else if (id == "raceview") raceView = static_cast<RaceView>(std::max(0, std::min(2, e.index)));
+                    else if (id == "racedetail") raceDetail = static_cast<RaceDetail>(std::max(0, std::min(2, e.index)));
 #ifdef HOVERNET_WEB
                     else if (id == "gamesize") {
                         static const int sizes[][2] = {{0, 0}, {800, 600}, {1024, 768}, {1280, 720}, {1600, 900}, {1920, 1080}};
@@ -6102,7 +6145,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
 #if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
                         authAddressBuf[0] = '\0'; authKeyBuf[0] = '\0';
 #endif
-                        volumePercent = 100.0f; muted = false; uiScalePercent = 100.0f; largeHudText = false; raceView = RaceView::eClassic; showGhost = true;
+                        volumePercent = 100.0f; muted = false; uiScalePercent = 100.0f; largeHudText = false; raceView = RaceView::eClassic; raceDetail = RaceDetail::eSharp; showGhost = true;
                         reducedMotion = false; highContrast = false; selectedResolution = 0; windowWidth = resolutions[0].width; windowHeight = resolutions[0].height; fullscreen = false;
 #ifdef HOVERNET_WEB
                         hovernet_js_set_game_size(0, 0);
@@ -6606,7 +6649,7 @@ SettingsResult RunSettingsScreen(SDL2GraphicsBackend& graphics, MR_VideoBuffer& 
         }
     }
 
-    if (!cancelled) { SaveRaceView(raceView); SaveShowGhost(showGhost); SaveGraphicsSettings(graphicsSettings); }
+    if (!cancelled) { SaveRaceView(raceView); SaveRaceDetail(raceDetail); SaveShowGhost(showGhost); SaveGraphicsSettings(graphicsSettings); }
 #if defined(HOVERNET_GAME2_PLAYER) && defined(HOVERNET_AUTH)
     if (!cancelled) {
         AuthServerSettings chosen;   // the official server unless an address was typed
@@ -11031,18 +11074,19 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
     personalBests.Load(ConfigDirPath() + "/personal_bests");
     DownloadUi download;
     bool startAfterDownload = false, cancelled = false, closeRequested = false, builtOnce = false;
+    int statsFor = -1;
     TrackBackdropShow backdrop;
     std::vector<TrackPreview> plans(static_cast<std::size_t>(Tracks().Count()));
     const bool reducedMotion = LoadReducedMotion();
     const bool autoStartForTest = std::getenv("HOVERNET_TEST_AUTO_START") != nullptr;
 #ifdef __EMSCRIPTEN__
-    constexpr int kW = 420, kH = 315;   // smaller on the page: the craft is drawn by the CPU there
+    constexpr int kW = 480, kH = 360;   // smaller on the page: the craft is drawn by the CPU there
 #else
     constexpr int kW = 640, kH = 480;
 #endif
-    CraftRing webRing;
     for (bool again = true; again;) {
         again = false;
+        statsFor = -1;   // the new form shows them afresh
         bool browse = false, garage = false, running = true;
         std::unique_ptr<HoverNetRml::FormScreen> form(new HoverNetRml::FormScreen(
             graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "RACE", reducedMotion,
@@ -11057,6 +11101,7 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
         std::array<std::uint32_t, 256> palette{};
         Authority::CraftDesign design;
         bool craftReady = false;
+        SDL_Rect craftCrop = SDL_Rect{0, 0, kW, kH};   // (outside the block below: the draw callback outlives that block)
         int craftYaw = -1000;
         Uint32 craftBuilt = 0;
         if (gMenuCraftResources != nullptr && graphics.GetRenderPalette() != nullptr && std::getenv("HOVERNET_NO_MENU_CRAFT") == nullptr) {
@@ -11071,36 +11116,19 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
             design = Authority::SanitiseCraftDesign(design);
             craftTexture = SDL_CreateTexture(graphics.GetRenderer(), SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, kW, kH);
             if (craftTexture != nullptr) SDL_SetTextureBlendMode(craftTexture, SDL_BLENDMODE_BLEND);
-            SDL_Rect craftCrop = SDL_Rect{0, 0, kW, kH};
-            bool cropKnown = false;
+            // The craft stands still on this screen, turned towards the viewer (front three-quarter view): the track is the only thing that moves. It is drawn once.
+            constexpr int kFacingYaw = 135;
             form->SetImage("craftimg", [&](SDL_Rect& crop) -> SDL_Texture* {
-                const int yaw = reducedMotion ? 28 : static_cast<int>(SDL_GetTicks() / 1000.0 * 22.0) % 360 / 2 * 2;
-                const Uint32 now = SDL_GetTicks();
-                if (!cropKnown && craftTexture != nullptr) {   // the box that holds the craft at every angle it turns through, so it fills its space
-                    cropKnown = true;
-                    int x0 = kW, y0 = kH, x1 = -1, y1 = -1;
-                    for (int angle = 0; angle < 360; angle += 60) {
-                        if (!HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, design.IsPlain() ? nullptr : &design, design.craft, angle, palette.data(), kW, kH, craftPixels, true, kMenuViewRaise)) break;
+                if (!craftReady && craftTexture != nullptr) {
+                    craftReady = HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, design.IsPlain() ? nullptr : &design, design.craft, kFacingYaw, palette.data(), kW, kH, craftPixels, true, kMenuViewRaise);
+                    if (craftReady) {
+                        SDL_UpdateTexture(craftTexture, nullptr, craftPixels.data(), kW * 4);
+                        int x0 = kW, y0 = kH, x1 = -1, y1 = -1;   // the box that holds the craft, so it fills its space
                         for (int y = 0; y < kH; ++y) for (int x = 0; x < kW; ++x) if ((craftPixels[static_cast<std::size_t>(y) * kW + x] >> 24) > 8) { x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y); }
+                        if (x1 > x0 && y1 > y0) craftCrop = SDL_Rect{std::max(0, x0 - 10), std::max(0, y0 - 10), std::min(kW, x1 + 11) - std::max(0, x0 - 10), std::min(kH, y1 + 11) - std::max(0, y0 - 10)};
                     }
-                    craftYaw = -1000;
-                    if (x1 > x0 && y1 > y0) craftCrop = SDL_Rect{std::max(0, x0 - 10), std::max(0, y0 - 10), std::min(kW, x1 + 11) - std::max(0, x0 - 10), std::min(kH, y1 + 11) - std::max(0, y0 - 10)};
                 }
-#ifdef __EMSCRIPTEN__
-                if (craftTexture != nullptr) {
-                    bool changed = false;
-                    const std::vector<std::uint32_t>& px = webRing.Get(reducedMotion ? 28.0 : std::fmod(SDL_GetTicks() / 1000.0 * 22.0, 360.0), [&](int angle, std::vector<std::uint32_t>& out) {
-                        return HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, design.IsPlain() ? nullptr : &design, design.craft, angle, palette.data(), kW, kH, out, true, kMenuViewRaise); }, changed);
-                    if (!px.empty()) { if (changed) SDL_UpdateTexture(craftTexture, nullptr, px.data(), kW * 4); craftReady = true; }
-                }
-                (void)yaw; (void)now; (void)craftBuilt; (void)craftYaw;
-#else
-                if (craftTexture != nullptr && yaw != craftYaw && (now - craftBuilt >= 40 || !craftReady)) {
-                    craftReady = HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, design.IsPlain() ? nullptr : &design, design.craft, yaw, palette.data(), kW, kH, craftPixels, true, kMenuViewRaise);
-                    if (craftReady) SDL_UpdateTexture(craftTexture, nullptr, craftPixels.data(), kW * 4);
-                    craftYaw = yaw; craftBuilt = now;
-                }
-#endif
+                if (craftReady) SDL_UpdateTexture(craftTexture, nullptr, craftPixels.data(), kW * 4);   // (the card's texture is refreshed each frame from the one drawn picture: cheap, and a browser's graphics context can lose a texture that is written once)
                 crop = craftCrop;
                 return craftReady ? craftTexture : nullptr;
             });
@@ -11164,6 +11192,10 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
                     if (TrackDownloadJob* job = download.Job()) { if (!job->Finished()) job->Cancel(); else { download.Reset(); startAfterDownload = false; form->SetBusy("", "", -1.0f, ""); refresh = true; } }
                 }
             }
+            if (backdrop.builtFor == prefs.mTrackIndex && backdrop.plan.ok && statsFor != prefs.mTrackIndex) {   // what the level has on it, once the 3D scene has read it
+                statsFor = prefs.mTrackIndex;
+                form->SetHtml("tstats", std::to_string(backdrop.plan.fuelPads) + (backdrop.plan.fuelPads == 1 ? " fuel pad" : " fuel pads") + "  -  " + std::to_string(backdrop.plan.boostPads) + (backdrop.plan.boostPads == 1 ? " boost" : " boosts") + "  -  " + std::to_string(backdrop.plan.powerUps) + (backdrop.plan.powerUps == 1 ? " power-up" : " power-ups"));
+            }
             if (start && !download.Active()) {
                 const TrackEntry* e = entry();
                 if (e != nullptr && !e->mInstalled) { download.Begin({*e}, 0); startAfterDownload = true; }
@@ -11185,6 +11217,7 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
             }
             if (refresh) {
                 for (TrackPreview& preview : plans) if (preview.mTexture != nullptr && !preview.mLoaded) { SDL_DestroyTexture(preview.mTexture); preview = TrackPreview(); }
+                statsFor = -1;
                 show();
             }
         }
@@ -11247,7 +11280,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
 #ifdef __EMSCRIPTEN__
         constexpr int kCraftW = 480, kCraftH = 360;   // smaller on the page: the craft is drawn by the CPU there
 #else
-        constexpr int kCraftW = 840, kCraftH = 630;   // drawn larger than shown on most screens, so it stays sharp on a laptop's high-resolution display
+        constexpr int kCraftW = 640, kCraftH = 480;   // drawn larger than shown on most screens, so it stays sharp on a laptop's high-resolution display
 #endif
         CraftRing rmlRing;
         SDL_Texture* rmlCraftTexture = nullptr;
@@ -11275,7 +11308,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         if (rmlCraftTexture != nullptr) {
             // The part of the picture to show: the box that holds the craft at every angle it turns through (found once, by drawing it at twelve angles), with a margin. A fixed box
             // cut off the top of a craft with a tall fin or engine; this one fits whatever the player designed.
-            info.craftFrame = [&](int yaw, SDL_Rect& crop) -> SDL_Texture* {
+            info.craftFrame = [&](double yaw, SDL_Rect& crop) -> SDL_Texture* {
                 const Uint32 now = SDL_GetTicks();
                 if (!rmlCropKnown) {
                     rmlCropKnown = true;
@@ -11291,22 +11324,13 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                         rmlCrop = SDL_Rect{x0, y0, x1 - x0 + 1, y1 - y0 + 1};
                     }
                 }
-#ifdef __EMSCRIPTEN__
                 {
                     bool changed = false;
-                    const std::vector<std::uint32_t>& px = rmlRing.Get(static_cast<double>(yaw), [&](int angle, std::vector<std::uint32_t>& out) {
+                    const std::vector<std::uint32_t>& px = rmlRing.Get(yaw, [&](int angle, std::vector<std::uint32_t>& out) {
                         return HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, angle, rmlPalette.data(), kCraftW, kCraftH, out, true, kMenuViewRaise); }, changed);
                     if (!px.empty()) { if (changed) SDL_UpdateTexture(rmlCraftTexture, nullptr, px.data(), kCraftW * 4); rmlCraftReady = true; }
-                    (void)rmlCraftBuilt;
+                    (void)rmlCraftBuilt; (void)rmlCraftYaw;
                 }
-#else
-                if (yaw != rmlCraftYaw && (now - rmlCraftBuilt >= 40 || !rmlCraftReady)) {
-                    rmlCraftReady = HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, yaw,
-                                                                      rmlPalette.data(), kCraftW, kCraftH, rmlCraftPixels, true, kMenuViewRaise);
-                    if (rmlCraftReady) SDL_UpdateTexture(rmlCraftTexture, nullptr, rmlCraftPixels.data(), kCraftW * 4);
-                    rmlCraftYaw = yaw; rmlCraftBuilt = now;
-                }
-#endif
                 crop = rmlCrop;
                 return rmlCraftReady ? rmlCraftTexture : nullptr;
             };

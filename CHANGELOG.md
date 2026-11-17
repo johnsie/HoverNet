@@ -6,6 +6,11 @@ and how to roll one back.
 
 ## Unreleased
 
+- **Race screen**: your craft now stands still, turned to face you, and smaller (drawn bigger and shown smaller, so it looks less pixelated); the track is the only thing that moves. The track is bigger on a wide window, and the track card shows how many fuel pads, boosts and power-ups the level has. Fixed: on the web page the craft picture could be missing (a rectangle used by the draw callback outlived its scope).
+- **Main menu craft turns smoothly**: the angle is continuous and the blend between pictures changes a little every frame (it moved in jerks of two degrees and eighths of a step before). On the desktop it now uses the same ring of pictures (640x480, every five degrees), so it no longer redraws the craft in the middle of a frame.
+- **Race detail (Settings > Graphics)**: how large the race picture is drawn: Sharp (full size), Balanced (four fifths), Fast (five eighths, the original game's 640x480). **The web page now starts on Fast**: measured in headless Chrome on this machine's Intel GPU at 1920x1080, a race ran at about 24 frames a second at the full size and about 37 at Fast; Automatic graphics was already at its lowest level, so the cost is the game's own software renderer running as WebAssembly. Takes effect the next time the game starts (in a browser: reload the page).
+- _Measured: in a real, windowed Edge (clean profile, with and without `--enable-experimental-web-platform-features`) the main menu ran at 58 to 59 frames a second, one game frame per display refresh. Not measured: Edge with your own profile and extensions, Firefox, a race in a real Edge window (that run did not finish)._
+
 ## 2.3.67 - 2026-11-17
 
 _Released at the owner's request without the full test suite. Run on this build: the desktop and WebAssembly builds, the web build in headless Chrome on the real GPU at 1920x1080 (main menu and race screen both 60 frames a second), headless-Chrome screenshots of the loading page, the camera-rule test. Not run: the web smoke test, Windows, Edge itself, the new GitLab web-test job in the real pipeline._

@@ -21,11 +21,12 @@ h2 { font-family: Oxanium; font-size: 30dp; font-weight: bold; margin: 0 0 4dp 0
 .kind { font-family: Inter; font-weight: bold;  font-size: 14dp; color: #ff9ba3; margin: 0 0 4dp 0; }
 .meta { color: #aab0c8; font-size: 15dp; margin: 0 0 10dp 0; }
 .desc { color: #8b8fa3; font-size: 14dp; margin: 0 0 10dp 0; }
+.stats { color: #9aa0b8; font-size: 14dp; margin: 0 0 10dp 0; }
 .best { color: #ffd25a; font-size: 15dp; margin: 0; }
 .dl { font-family: Inter; font-weight: bold; color: #ff9ba3; font-size: 14dp; margin: 8dp 0 0 0; }
 .note { color: #8b8fa3; font-size: 13dp; margin: 4dp 0 10dp 0; }
 
-#craftimg { position: absolute; left: 14dp; right: 14dp; top: 8dp; height: 56%; }
+#craftimg { position: absolute; left: 30%; right: 30%; top: 14dp; height: 46%; }
 #craftcard .kind { position: absolute; left: 20dp; bottom: 96dp; }
 #craftcard h2 { position: absolute; left: 20dp; bottom: 58dp; font-size: 28dp; }
 #craftcard button { position: absolute; left: 20dp; right: 20dp; width: auto; bottom: 14dp; }

@@ -33,9 +33,9 @@ struct MainMenuInfo
     // A picture drawn instead of the plain backdrop (the modern flow shows the last race's track): called every frame with the supersampled drawing size; empty = the plain backdrop.
     std::function<void(SDL_Renderer*, int, int)> backdropDraw;
     bool tutorialDone = false;   // the Tutorial button is quiet once it has been done
-    // The player's own craft, turning: called every frame with the angle in degrees, it returns the picture to draw (null = none, and the stock picture in the markup
+    // The player's own craft, turning: called every frame with the angle in degrees (a fraction: the turn is continuous), it returns the picture to draw (null = none, and the stock picture in the markup
     // is shown instead) and sets cropOut to the part of it to show. The caller owns the texture. reducedMotion keeps the entrance animations of the pictures still.
-    std::function<SDL_Texture*(int, SDL_Rect&)> craftFrame;
+    std::function<SDL_Texture*(double, SDL_Rect&)> craftFrame;
     bool reducedMotion = false;
     std::function<void(Sound)> sound;   // the game's interface sounds (null = silent)
 };

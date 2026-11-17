@@ -20,7 +20,8 @@ struct Camera
 Camera MakeCamera(int w, int h, float yawDegrees)
 {
     const float a = yawDegrees * 3.14159265f / 180.0f;
-    const float radius = 1.62f, height = 0.60f;
+    const float aspect = static_cast<float>(w) / static_cast<float>(std::max(1, h));
+    const float radius = std::max(1.2f, std::min(1.62f, 1.62f - (aspect - 1.33f) * 0.5f)), height = radius * 0.37f;   // closer on a wide window, where the track has room to be bigger
     Camera c;
     c.ex = std::cos(a) * radius; c.ey = std::sin(a) * radius; c.ez = height;
     float fx = -c.ex, fy = -c.ey, fz = -c.ez + 0.02f;

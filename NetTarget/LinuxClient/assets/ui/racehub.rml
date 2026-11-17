@@ -13,6 +13,7 @@
 				<h2 id="tname">ClassicH</h2>
 				<p id="tmeta" class="meta"></p>
 				<p id="tdesc" class="desc"></p>
+				<p id="tstats" class="stats"></p>
 				<p id="tbest" class="best"></p>
 				<p id="tdl" class="dl hide"></p>
 			</div>

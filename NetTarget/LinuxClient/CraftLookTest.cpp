@@ -134,7 +134,7 @@ int main()
 
     // The Garage preview draws each craft, stock and designed, and the two differ.
     if (const char* dump = std::getenv("HOVERNET_CRAFT_DUMP")) if (const char* raise = std::getenv("HOVERNET_CRAFT_RAISE")) {   // look at the main menu's raised view: HOVERNET_CRAFT_RAISE=<percent>
-        for (int yaw : {25, 115, 205, 295}) {
+        for (int yaw : {25, 70, 115, 160, 205, 250, 295, 340}) {
             std::vector<std::uint32_t> img;
             if (!HoverNetCraft::RenderCraftPreview(lib, nullptr, 0, yaw, gWords.data(), 1120, 840, img, true, std::atoi(raise))) break;
             char path[256]; std::snprintf(path, sizeof path, "%s/raised%d.ppm", dump, yaw);

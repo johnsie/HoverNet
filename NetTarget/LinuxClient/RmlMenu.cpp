@@ -364,7 +364,7 @@ Choice RunMainMenu(SDL_Window* pWindow, SDL_Renderer* pRenderer, const MainMenuI
             if (pInfo.backdropDraw) pInfo.backdropDraw(pRenderer, ss.W(), ss.H());
             if (pInfo.craftFrame) {
                 const Uint32 now = SDL_GetTicks();
-                const int yaw = pInfo.reducedMotion ? 28 : static_cast<int>(now / 1000.0 * 22.0) % 360 / 2 * 2;
+                const double yaw = pInfo.reducedMotion ? 28.0 : std::fmod(static_cast<double>(now) / 1000.0 * 22.0, 360.0);
                 SDL_Rect crop = {0, 0, 0, 0};
                 SDL_Texture* craft = pInfo.craftFrame(yaw, crop);
                 Rml::Element* hero = document->GetElementById("hero");
