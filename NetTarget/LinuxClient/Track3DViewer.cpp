@@ -5039,23 +5039,31 @@ struct CraftRing
     std::vector<std::uint32_t> frames[kN];
     bool have[kN] = {};
     std::vector<std::uint32_t> mix;
+    int lastKey = -1;
+    // `changed` is set when the picture differs from the one the last call returned (the caller uploads only then). The blend moves in eighths of a step, so the picture changes
+    // about eighteen times a second at the menu's turning speed, not every frame.
     template <typename Render>
-    const std::vector<std::uint32_t>& Get(double yawDegrees, Render render)
+    const std::vector<std::uint32_t>& Get(double yawDegrees, Render render, bool& changed)
     {
         const double pos = std::fmod(std::max(0.0, yawDegrees), 360.0) / (360.0 / kN);
         const int i = static_cast<int>(pos) % kN, j = (i + 1) % kN;
-        const float f = static_cast<float>(pos - std::floor(pos));
+        const int eighth = static_cast<int>((pos - std::floor(pos)) * 8.0);
         int drawn = 0;
         for (int k : {i, j}) if (!have[k] && drawn < 1) { have[k] = render(k * (360 / kN), frames[k]); ++drawn; }   // at most one new picture a call
+        changed = false;
         if (!have[i]) return mix;   // nothing drawn yet
-        if (!have[j] || f < 0.02f) { mix = frames[i]; return mix; }
+        const int key = (i * 8 + eighth) * 2 + (have[j] ? 1 : 0);
+        if (key == lastKey) return mix;
+        lastKey = key; changed = true;
+        if (!have[j] || eighth == 0) { mix = frames[i]; return mix; }
         mix.resize(frames[i].size());
-        const int wgt = static_cast<int>(f * 256.0f);
+        const std::uint32_t wgt = static_cast<std::uint32_t>(eighth) * 32u, inv = 256u - wgt;   // 0..256, two channels at a time
+        const std::uint32_t* pa = frames[i].data(); const std::uint32_t* pb = frames[j].data(); std::uint32_t* out = mix.data();
         for (std::size_t p = 0; p < mix.size(); ++p) {
-            const std::uint32_t a = frames[i][p], b = frames[j][p];
-            std::uint32_t out = 0;
-            for (int shift = 0; shift < 32; shift += 8) { const int ca = static_cast<int>((a >> shift) & 255), cb = static_cast<int>((b >> shift) & 255); out |= static_cast<std::uint32_t>(ca + (cb - ca) * wgt / 256) << shift; }
-            mix[p] = out;
+            const std::uint32_t a = pa[p], b = pb[p];
+            const std::uint32_t rb = ((a & 0x00FF00FFu) * inv + (b & 0x00FF00FFu) * wgt) >> 8;
+            const std::uint32_t ag = (((a >> 8) & 0x00FF00FFu) * inv + ((b >> 8) & 0x00FF00FFu) * wgt);
+            out[p] = (rb & 0x00FF00FFu) | (ag & 0xFF00FF00u);
         }
         return mix;
     }
@@ -11080,9 +11088,10 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
                 }
 #ifdef __EMSCRIPTEN__
                 if (craftTexture != nullptr) {
+                    bool changed = false;
                     const std::vector<std::uint32_t>& px = webRing.Get(reducedMotion ? 28.0 : std::fmod(SDL_GetTicks() / 1000.0 * 22.0, 360.0), [&](int angle, std::vector<std::uint32_t>& out) {
-                        return HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, design.IsPlain() ? nullptr : &design, design.craft, angle, palette.data(), kW, kH, out, true, kMenuViewRaise); });
-                    if (!px.empty()) { SDL_UpdateTexture(craftTexture, nullptr, px.data(), kW * 4); craftReady = true; }
+                        return HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, design.IsPlain() ? nullptr : &design, design.craft, angle, palette.data(), kW, kH, out, true, kMenuViewRaise); }, changed);
+                    if (!px.empty()) { if (changed) SDL_UpdateTexture(craftTexture, nullptr, px.data(), kW * 4); craftReady = true; }
                 }
                 (void)yaw; (void)now; (void)craftBuilt; (void)craftYaw;
 #else
@@ -11236,7 +11245,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         };
         // The player's own craft, as on the ImGui menu: the saved design from the Garage, drawn by the Garage's preview code into a texture that is redrawn as it turns.
 #ifdef __EMSCRIPTEN__
-        constexpr int kCraftW = 560, kCraftH = 420;   // smaller on the page: the craft is drawn by the CPU there
+        constexpr int kCraftW = 480, kCraftH = 360;   // smaller on the page: the craft is drawn by the CPU there
 #else
         constexpr int kCraftW = 840, kCraftH = 630;   // drawn larger than shown on most screens, so it stays sharp on a laptop's high-resolution display
 #endif
@@ -11284,9 +11293,10 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
                 }
 #ifdef __EMSCRIPTEN__
                 {
+                    bool changed = false;
                     const std::vector<std::uint32_t>& px = rmlRing.Get(static_cast<double>(yaw), [&](int angle, std::vector<std::uint32_t>& out) {
-                        return HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, angle, rmlPalette.data(), kCraftW, kCraftH, out, true, kMenuViewRaise); });
-                    if (!px.empty()) { SDL_UpdateTexture(rmlCraftTexture, nullptr, px.data(), kCraftW * 4); rmlCraftReady = true; }
+                        return HoverNetCraft::RenderCraftPreview(*gMenuCraftResources, rmlCraftDesign.IsPlain() ? nullptr : &rmlCraftDesign, rmlCraftDesign.craft, angle, rmlPalette.data(), kCraftW, kCraftH, out, true, kMenuViewRaise); }, changed);
+                    if (!px.empty()) { if (changed) SDL_UpdateTexture(rmlCraftTexture, nullptr, px.data(), kCraftW * 4); rmlCraftReady = true; }
                     (void)rmlCraftBuilt;
                 }
 #else
