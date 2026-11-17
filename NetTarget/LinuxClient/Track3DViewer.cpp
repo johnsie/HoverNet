@@ -5032,10 +5032,10 @@ bool ReadSurfaceTexture(const void* pElement, HoverNetPlan::Texture& pOut)
 }
 
 // The turning craft for the web page: the craft is drawn by the game's software renderer, which is slow in WebAssembly, so instead of redrawing it every few frames it is drawn once for each of
-// 36 angles (as they are first reached) and the picture between two angles is a blend of the two. After one turn it costs only the blend.
+// 72 angles (as they are first reached) and the picture between two angles is a blend of the two. After one turn it costs only the blend.
 struct CraftRing
 {
-    static constexpr int kN = 36;
+    static constexpr int kN = 72;   // a picture every five degrees: two neighbours are close enough that blending them shows no double image
     std::vector<std::uint32_t> frames[kN];
     bool have[kN] = {};
     std::vector<std::uint32_t> mix;

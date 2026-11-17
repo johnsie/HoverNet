@@ -7,9 +7,10 @@ and how to roll one back.
 ## Unreleased
 
 - **The web loading screen matches the game**: a dusk sky, a glowing grid, the game's own hovercraft (a small inline picture, bobbing gently) and a red progress bar, in the same look as the menus (no extra files). The sun is gone from the loading screen and from the 3D track scene: it had nothing to do with the game. Its text said the first visit was about 13 MB; the download is about 25 MB, and it now says so.
+- **The web craft turns without a double image**: the page's ring of craft pictures has a picture every five degrees (it was ten, and blending two pictures ten degrees apart showed a ghost of the engine).
 - **Cheaper turning craft on the web page**: the blend between two craft pictures uses integer maths two channels at a time and runs only in eighths of a step, and the picture is uploaded only when it changed (about eighteen times a second instead of every frame).
 - **The main menu is the craft on the plain backdrop again**: the track scene behind it (added in 2.3.65) is removed (it was slow and cluttered the menu); the track scene stays on the race screen.
-- _Checked: a headless-Chrome screenshot of the loading page at desktop and phone size; the desktop build. Not checked: the loading page on a real slow connection, or how much faster the main menu is in Edge._
+- _Checked: a headless-Chrome screenshot of the loading page at desktop and phone size; the desktop build; the web build in headless Chrome on this machine's GPU (Intel Iris Xe, the same GPU as Edge's report) at 1920x1080: the main menu and the race screen both hold 60 frames a second. Not checked: the loading page on a real slow connection, or how much faster the main menu is in Edge._
 
 ## 2.3.66 - 2026-11-17
 
