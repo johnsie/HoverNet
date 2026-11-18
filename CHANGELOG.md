@@ -4,6 +4,13 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.71 - 2026-11-18
+
+_Released at the owner's request without the full test suite. Run on this build (desktop, headless software rendering): screenshots of the race screen, the camera-rule test. Not run: the web build (the page keeps the neon model for now), Windows, the new view on a real graphics card, the modern-flow test._
+
+- **The race screen's track is now the game's own renderer** (the real floors, walls and textures, as in a race) circling the track, over the neon sky and grid, which stay. The picture is drawn at 640x400 by the game's renderer, has no sky of its own (so the grid shows round it) and is smoothed when scaled up. **Limit, seen in the screenshots:** the game's renderer only reaches about 260 m, so a track longer than that (ClassicH is one) is circled round its start line and shown in part, not whole, and the picture is plain white floors up close. If you prefer the whole track as the lit neon model (the earlier look), set `HOVERNET_BACKDROP=neon`. The web page still uses the neon model. The online lobby uses the same view.
+- Debug: `HOVERNET_DEBUG_PLAN=1` prints how many floors and walls of the neon model have no picture.
+
 ## 2.3.70 - 2026-11-18
 
 _Released at the owner's request without the full test suite. Run on this build (desktop, headless): screenshots of the online Host screen and the old dialog, the camera-rule test, the modern-flow test (see below). Not run: the web build of this commit (the cached web tree failed to link only the websocket smoke targets, the game itself was not rebuilt), Windows, a real online race created from the new screen, a real community-track download from the new click-to-download path._

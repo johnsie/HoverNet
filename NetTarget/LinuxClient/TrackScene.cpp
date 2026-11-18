@@ -141,9 +141,9 @@ SDL_Color Fog(SDL_Color c, float depth)
 }
 }
 
-void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, const std::vector<SDL_Texture*>& pictures, float yawDegrees, float seconds)
+void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, const std::vector<SDL_Texture*>& pictures, float yawDegrees, float seconds, bool backgroundOnly)
 {
-    if (!plan.ok || plan.shapes.empty()) return;
+    if (!backgroundOnly && (!plan.ok || plan.shapes.empty())) return;
     const Camera cam = MakeCamera(w, h, yawDegrees);
     const float pulse = 0.86f + 0.14f * std::sin(seconds * 2.2f);
     const float zScale = 1.8f;   // the floors' heights, a little exaggerated so bridges and ramps read
@@ -185,6 +185,8 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
             }
         }
     }
+
+    if (backgroundOnly) { painter.Flush(); SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND); gPainter = nullptr; return; }
 
     // ---- the track ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     struct Item { int bucket; int texture; float depth; std::size_t index; };

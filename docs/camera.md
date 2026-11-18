@@ -42,7 +42,7 @@ calls it, and the race view, its pinned values and the golden frames are unchang
 other use of it, in a race or in the client's race code, is a camera change and needs the owner's request.
 
 The race setup screen's default backdrop is now a stylised scene instead (`TrackScene.*`, drawn with the graphics card from the level's floors, walls and pads: dusk sky, sun,
-glowing grid, neon rails and pads, orbiting). It has its own free camera too, for the same reason and with the same limits: menus only, never a race. The textured flyover above
+glowing grid, neon rails and pads, orbiting). It has its own free camera too, for the same reason and with the same limits: menus only, never a race. The textured flyover above (now the desktop default, over the neon grid; `HOVERNET_BACKDROP=neon` for the lit model)
 is still there, chosen with `HOVERNET_BACKDROP=textured`.
 
 ## History

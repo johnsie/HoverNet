@@ -5136,7 +5136,11 @@ struct TrackBackdropShow
         const TrackEntry* entry = Tracks().Get(index);
         if (entry == nullptr || !entry->mInstalled || std::getenv("HOVERNET_NO_BACKDROP") != nullptr || !LoadMenuBackdrop()) return;
         const char* style = std::getenv("HOVERNET_BACKDROP");
-        textured = style != nullptr && std::string(style) == "textured";
+#ifdef __EMSCRIPTEN__
+        textured = style != nullptr && std::string(style) == "textured";   // (the page keeps the neon model until the game's own renderer is checked there)
+#else
+        textured = style == nullptr || std::string(style) != "neon";   // the game's own renderer, orbiting, over the neon grid; HOVERNET_BACKDROP=neon for the lit model of the plan
+#endif
         if (textured) {
             if (!worker) worker.reset(new HoverNetBackdrop::FlyoverWorker);
             worker->SetStill(LoadReducedMotion());
@@ -5159,6 +5163,7 @@ struct TrackBackdropShow
         if (!textured) {
             if (pending.valid() && (pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready || pending.wait_for(std::chrono::seconds(0)) == std::future_status::deferred)) {
                 plan = pending.get();
+                if (std::getenv("HOVERNET_DEBUG_PLAN")) { int flat = 0; for (const auto& sh : plan.shapes) if (sh.texture < 0) ++flat; int wflat = 0; for (const auto& w2 : plan.walls) if (w2.texture < 0) ++wflat; std::fprintf(stderr, "PLAN shapes=%zu untextured=%d walls=%zu untextured=%d textures=%zu\n", plan.shapes.size(), flat, plan.walls.size(), wflat, plan.textures.size()); }
                 for (const HoverNetPlan::Texture& tex : plan.textures) {   // each picture four by four, so a floor can repeat it (the card does not wrap textures)
                     SDL_Texture* t = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, tex.width * 4, tex.height * 4);
                     if (t != nullptr) {
@@ -5194,12 +5199,16 @@ struct TrackBackdropShow
                 ready = std::max(ready, f.index + 1);
             }
         }
+        {   // the neon grid and sky behind the real track (turning at the pace the ring does)
+            const float seconds = static_cast<float>(SDL_GetTicks() - since) / 1000.0f;
+            HoverNetScene::Draw(renderer, w, h, HoverNetPlan::Plan(), pictures, still ? 215.0f : 215.0f + 5.0f * seconds, seconds, true);
+        }
         if (ready == 0) return;
         const int n = static_cast<int>(ring.size());
         auto drawTexture = [&](SDL_Texture* t, Uint8 alpha) {
             int tw = 0, th = 0; SDL_QueryTexture(t, nullptr, nullptr, &tw, &th);
-            float dw = static_cast<float>(w), dh = dw * th / tw;
-            if (dh < h) { dh = static_cast<float>(h); dw = dh * tw / th; }
+            float dw = static_cast<float>(w) * 1.05f, dh = dw * th / tw;   // the whole orbit picture, as large as the window allows (a little wider than it)
+            if (dh > h * 1.05f) { dh = static_cast<float>(h) * 1.05f; dw = dh * tw / th; }
             const SDL_FRect to = {(w - dw) * 0.5f, (h - dh) * 0.5f, dw, dh};
             SDL_SetTextureAlphaMod(t, alpha);
             SDL_RenderCopyF(renderer, t, nullptr, &to);
@@ -5212,7 +5221,7 @@ struct TrackBackdropShow
             drawTexture(ring[static_cast<std::size_t>((i + 1) % n)], static_cast<Uint8>((position - std::floor(position)) * 255.0f));
         }
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer, 8, 6, 16, 150);
+        SDL_SetRenderDrawColor(renderer, 8, 6, 16, 40);
         const SDL_Rect veil = {0, 0, w, h};
         SDL_RenderFillRect(renderer, &veil);
     }

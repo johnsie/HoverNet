@@ -199,7 +199,7 @@ bool Flyover::Draw(float degrees, std::vector<std::uint8_t>& rgba)
     const double heading = std::atan2(m.cy - eye.mY, m.cx - eye.mX);
     MR_Angle yaw = static_cast<MR_Angle>(std::lround(heading / (2.0 * 3.14159265) * 4096.0));
     yaw = MR_NORMALIZE_ANGLE(yaw);
-    m.observer->RenderFlyover(m.buffer, m.session, eye, yaw, m.scroll, 0, m.session->GetBackImage());
+    m.observer->RenderFlyover(m.buffer, m.session, eye, yaw, m.scroll, 0, nullptr);   // no sky of its own: the picture is transparent round the track, so the menu's neon grid shows behind it
     const std::size_t pixels = static_cast<std::size_t>(m.width) * m.height;
     rgba.resize(pixels * 4);
     const std::uint8_t* frame = m.buffer->GetBuffer();
@@ -239,7 +239,7 @@ struct FlyoverWorker::Impl
             bool ok;
             {
                 std::lock_guard<std::mutex> level(HoverNetPlan::LevelLock());
-                ok = fly.Open(openPath, openName, 320, 200);
+                ok = fly.Open(openPath, openName, 640, 400);   // drawn at this size and smoothed when shown
             }
             { std::lock_guard<std::mutex> lock(mutex); failed = !ok; }
             if (!ok) continue;
