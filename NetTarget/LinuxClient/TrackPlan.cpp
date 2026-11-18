@@ -1,5 +1,6 @@
 #include "TrackPlan.h"
 
+#include "../MainCharacter/StdAfx.h"   // (on Windows this is what defines CList for the Model headers below, as in TrackBackdrop.cpp)
 #include "../Model/GameSession.h"
 #include "../Model/RaceEffects.h"
 #include "../Util/DllObjectFactory.h"

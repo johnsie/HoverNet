@@ -13887,6 +13887,7 @@ int RunClient(int argc, char** argv)
                 if (std::getenv("HOVERNET_TEST_WATCH") != nullptr) { std::printf("WATCHTEST camera distance %d%%\n", kChasePercents[chaseStep]); std::fflush(stdout); }
             }
 #endif
+#ifdef HOVERNET_GAME2_PLAYER
             else if (ModernMenus() && event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F5 && event.key.repeat == 0 && playerMode && lastLocal.valid && !onlineClient.IsConnected() && !raceWasOnline && !replay.active
 #if defined(HOVERNET_AUTH)
                      && !auth.active
@@ -13894,6 +13895,7 @@ int RunClient(int argc, char** argv)
                      ) {
                 restartLocal = true;   // F5: start this local race again at once (the modern menus; the pause menu's RESTART RACE does the same)
             }
+#endif
             else if (resultsPending && ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F2 && event.key.repeat == 0) ||   // F2, not Enter: Enter sends chat
                                         (event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK))) {
                 openResults = true;

@@ -4,6 +4,12 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.72 - 2026-11-18
+
+_Released at the owner's request without the full test suite. The Linux build of every target is clean here (the Track3DViewer target, which 2.3.70 and 2.3.71 broke, and the game). Not run: the Windows build (the fix is one include, checked only by reading the error), the tests, the web build._
+
+- **Build fixes** (the GitHub Actions run of 2.3.70/2.3.71 failed): the F5 restart branch is now compiled only in the game (the Track3DViewer target has none of its variables), and `TrackPlan.cpp` includes the Windows compatibility header that defines `CList`, as `TrackBackdrop.cpp` does. No behaviour change.
+
 ## 2.3.71 - 2026-11-18
 
 _Released at the owner's request without the full test suite. Run on this build (desktop, headless software rendering): screenshots of the race screen, the camera-rule test. Not run: the web build (the page keeps the neon model for now), Windows, the new view on a real graphics card, the modern-flow test._
