@@ -4,13 +4,18 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## 2.3.73 - 2026-11-18
+## 2.3.74 - 2026-11-18
 
 _Released at the owner's request so the owner can try it. Run on this build: the WebAssembly build of the game, and the web page in headless Chrome on the GPU (Down, Down, Enter to the race screen): 60 frames a second offered over 20 s, slowest frame 17 ms, no console errors, the orbit view and the grid drawn (screenshot looked at). The Apache site file on the host was compared with the repo (identical) and the host's own deploy check passed every check. Not run: the full test suite, Windows, Firefox/Edge, the page on a slow machine._
 
 - **The web page now draws the race screen's track like the desktop**: the game's own renderer circling the track over the neon grid (480x300 on the page, 640x400 on the desktop). Same limits as the desktop (see 2.3.71): the renderer reaches about 260 m, so a long track is shown in part, and the picture is soft and shows some ghosting while it crossfades between angles. `HOVERNET_BACKDROP=neon` (desktop) gives the lit neon model back.
-- **Deploy check**: `scripts/check-web-deploy.sh` no longer fails for a missing `X-Frame-Options`; the site restricts framing with the CSP's `frame-ancestors` (it names the one site allowed to embed it), which the check now accepts. This was the only failure of the `check:web:deployed` job on 2.3.71. The compression and ETag warnings it prints remain: they need the host's Apache site file replaced (`packaging/web/setup-host.sh`, then a reload), which has not been done.
 - **`scripts/push-web-conf.sh`**: replaces only the Apache site file on the web host from a dev machine (shows the difference, backs up, tests the config, reloads).
+
+## 2.3.73 - 2026-11-18
+
+_Released at the owner's request. Run: `bash -n` on the script; the check itself runs in the pipeline's `check:web:deployed` job (not run against the host from here)._
+
+- **Deploy check**: `scripts/check-web-deploy.sh` no longer fails for a missing `X-Frame-Options`; the site restricts framing with the CSP's `frame-ancestors` (it names the one site allowed to embed it), which the check now accepts. This was the only failure of the `check:web:deployed` job on 2.3.71. The compression and ETag warnings it prints remain: they need the host's Apache site file replaced (`packaging/web/setup-host.sh`, then a reload), which has not been done.
 
 ## 2.3.72 - 2026-11-18
 
