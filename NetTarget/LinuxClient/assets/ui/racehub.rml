@@ -5,7 +5,7 @@
 	<link type="text/rcss" href="look.rcss"/>
 </head>
 <body>
-	<div id="header"><p id="eyebrow">HOVERNET</p><h1>RACE</h1><div id="rule"></div></div>
+	<div id="header"><p id="eyebrow">HOVERNET</p><h1 id="title">RACE</h1><div id="rule"></div></div>
 	<div id="stage">
 		<div id="trackcard" class="glass">
 			<div id="tinfo">
@@ -34,6 +34,7 @@
 				<p id="lapsnote" class="note"></p>
 				<p class="kind">WEAPONS</p>
 				<div id="weap"></div>
+				<div id="codecard" class="hide"><p class="kind">PRIVATE CODE</p><input type="text" class="text" id="pcode" data-id="pcode" placeholder="empty for a public race" value=""/></div>
 			</div>
 		</div>
 	</div>

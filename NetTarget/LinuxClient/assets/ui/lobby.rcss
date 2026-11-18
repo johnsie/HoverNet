@@ -84,9 +84,9 @@ input.range sliderarrowdec, input.range sliderarrowinc { width: 0dp; height: 0dp
 
 /* the dialogs (host a race, join a private race) */
 #dialog { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: #000000b8; }
-#dialogbox { position: absolute; left: 50%; top: 50%; width: 860dp; height: 580dp; margin-left: -430dp; margin-top: -290dp; padding: 18dp 22dp; box-sizing: border-box; background-color: #13131a; border-radius: 12dp; }
-#dialogbox.small { width: 520dp; height: 400dp; margin-left: -260dp; margin-top: -200dp; }
-#dleft { position: absolute; left: 22dp; top: 56dp; bottom: 74dp; width: 440dp; overflow-y: auto; padding-right: 8dp; }
+#dialogbox { position: absolute; left: 3%; top: 3%; right: 3%; bottom: 3%; padding: 18dp 22dp; box-sizing: border-box; background-color: #13131a; border-radius: 12dp; }
+#dialogbox.small { left: 50%; top: 50%; right: auto; bottom: auto; width: 520dp; height: 400dp; margin-left: -260dp; margin-top: -200dp; }
+#dleft { position: absolute; left: 22dp; top: 56dp; bottom: 74dp; right: 392dp; overflow-y: auto; padding-right: 8dp; }
 #dright { position: absolute; right: 22dp; top: 56dp; bottom: 74dp; width: 340dp; }
 #dbuttons { position: absolute; left: 22dp; right: 22dp; bottom: 18dp; height: 44dp; }
 #dbuttons button { display: inline-block; width: 190dp; margin: 0 10dp 0 0; }
@@ -109,3 +109,23 @@ scrollbarvertical sliderbar:hover { background-color: #5a6285; }
 scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0dp; height: 0dp; display: none; }
 #dside { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: #0b0c11; border-width: 1dp; border-color: #303342; border-radius: 6dp; }
 #hlapshint { margin-left: 10dp; }
+
+/* the track picker inside the Host dialog (the same cards as the offline track browser) */
+#hfilters { margin: 4dp 0 8dp 0; }
+#dleft .chip { display: inline-block; box-sizing: border-box; padding: 7dp 11dp; margin: 0 4dp 4dp 0; font-family: Oxanium; font-size: 14dp; font-weight: bold; color: #c9cde0; background-color: #23263a; border-radius: 6dp; tab-index: auto; cursor: pointer; transition: background-color 0.12s cubic-out; }
+#dleft .chip:hover, #dleft .chip:focus { background-color: #343955; color: #ffffff; }
+#dleft .chip.sel { background-color: #dc3546; color: #ffffff; }
+#hq { margin-bottom: 8dp; }
+#hgrid { margin-bottom: 4dp; }
+#dleft .card { display: inline-block; box-sizing: border-box; width: 32%; margin: 0 1% 8dp 0; padding: 6dp; vertical-align: top; background-color: #13131af0; decorator: gradient( vertical #1b1c2a #101018 ); border-width: 1dp; border-color: #2b2e44; border-radius: 8dp; tab-index: auto; cursor: pointer; transition: background-color border-color 0.12s cubic-out; }
+#dleft .card:hover, #dleft .card:focus { border-color: #fa737a; background-color: #1d1d2c; }
+#dleft .card.sel { border-color: #ffd25a; }
+#dleft .th { height: 84dp; margin-bottom: 4dp; background-color: #0a0a12; border-radius: 5dp; text-align: center; }
+#dleft .kind { font-family: Inter; font-weight: bold; font-size: 12dp; color: #ff9ba3; margin: 0; }
+#dleft .nm { font-family: Oxanium; font-size: 15dp; font-weight: bold; color: #ffffff; margin: 1dp 0 1dp 0; height: 19dp; overflow: hidden; }
+#dleft .meta { color: #9aa0b8; font-size: 12dp; margin: 0; height: 16dp; overflow: hidden; }
+#dleft .rec { color: #ffd25a; font-size: 12dp; margin: 1dp 0 0 0; height: 15dp; }
+#dleft .dl { color: #6c7086; font-size: 11dp; padding-top: 32dp; margin: 0; }
+#hpager { height: 40dp; text-align: center; margin: 2dp 0 6dp 0; }
+#hpager button { display: inline-block; width: 120dp; margin: 0 10dp; padding: 6dp; }
+#hpageinfo { display: inline-block; vertical-align: middle; color: #c9cde0; font-family: Oxanium; font-size: 14dp; }

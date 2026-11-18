@@ -61,3 +61,5 @@ button.act:hover, button.act:focus { background-color: #3a3e54; }
 #busybar { height: 14dp; background-color: #232638; border-radius: 7dp; }
 #busyfill { height: 14dp; width: 0%; border-radius: 7dp; background-color: #fa4a5c; decorator: gradient( horizontal #dc3546 #ff7a86 ); }
 #busybutton { margin-top: 22dp; }
+
+#pcode { display: block; width: 100%; box-sizing: border-box; margin-top: 4dp; }

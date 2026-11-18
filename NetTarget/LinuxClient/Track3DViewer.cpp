@@ -5026,6 +5026,9 @@ struct LocalRaceSetup
     std::string trackName = "ClassicH";
     int laps = 5;
     bool weapons = false;
+    bool online = false;                // set by the caller: the same screen hosts an online race (CREATE RACE, a private code field)
+    std::function<void()> pump;         // online: called every frame to keep the lobby connection alive while this screen is open
+    std::string code;                   // online: the private code ("" for a public race), in and out
 };
 
 // The real track in 3D behind a menu (TrackBackdrop.h): pictures of the race view of the chosen track, a slow drift and a fade between them, under a dark veil so the panels stay readable.
@@ -5270,55 +5273,41 @@ void DrawSpinningTrack(SDL_Renderer* pRenderer, SDL_Texture* pTarget, int pW, in
 }
 
 #ifdef HOVERNET_HAVE_RMLUI
-// The track browser (assets/ui/tracks.rml): cards with a plan of each track drawn from its real level (TrackPlan.h), filters, sorting, a search box and pages. Returns the
-// catalog index chosen, or -1 when the player went back. Presentation only: it changes nothing but which track the caller selects.
-int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, int pCurrent, int pFrameLimit)
+// The track picker: cards with a plan of each track drawn from its real level (TrackPlan.h), filters, sorting, a search box and pages. One implementation for every screen that chooses a track:
+// the track browser below (offline) and the online "Host a race" dialog, so they look and behave the same. It builds the markup and answers the clicks; the screen owns the form it is shown in.
+// Element ids and click ids carry a prefix (the browser uses none) so two pickers never clash. Presentation only: it changes nothing but which track the screen selects.
+class TrackPicker
 {
-    using HoverNetRml::FormField;
-    std::unique_ptr<HoverNetRml::FormScreen> form(new HoverNetRml::FormScreen(
-        graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "TRACK BROWSER", LoadReducedMotion(),
-        [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight, "tracks.rml"));
-    if (!form->Ok()) return -1;
+public:
+    explicit TrackPicker(int pPerPage) : mPerPage(pPerPage) { Rebuild(); }
     // Only the four tracks of the original HoverRace are "official" here; Switchback, Metro Spiral and Tidal Causeway ship with the game but are community tracks (owner, 2026-11-17).
-    auto isOfficial = [](const TrackEntry* e) { return e->mOfficial && (e->mName == "ClassicH" || e->mName == "Steeplechase" || e->mName == "The Alley2" || e->mName == "The River"); };
-    const int total = Tracks().Count();
-    constexpr int kPerPage = 8;
-    std::vector<TrackPreview> previews(static_cast<std::size_t>(total));
-    int filter = 0, sort = 0, page = 0, chosen = -1;
-    std::string search;
-    std::vector<int> view;
-    const char* const filterNames[] = {"All", "Official", "Community", "On this computer"};
-    const char* const sortNames[] = {"Original order", "A-Z", "Smallest first"};
-    auto lower = [](std::string text) { for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return text; };
-    auto rebuild = [&]() {
-        view.clear();
-        const std::string needle = lower(search);
-        for (int i = 0; i < total; ++i) {
-            const TrackEntry* e = Tracks().Get(i);
-            if (e == nullptr) continue;
-            if (filter == 1 && !isOfficial(e)) continue;
-            if (filter == 2 && isOfficial(e)) continue;
-            if (filter == 3 && !e->mInstalled) continue;
-            if (!needle.empty() && lower(e->mName).find(needle) == std::string::npos) continue;
-            view.push_back(i);
-        }
-        if (sort == 1) std::stable_sort(view.begin(), view.end(), [&](int a, int b) { return lower(Tracks().Get(a)->mName) < lower(Tracks().Get(b)->mName); });
-        if (sort == 2) std::stable_sort(view.begin(), view.end(), [&](int a, int b) { return Tracks().Get(a)->mRooms < Tracks().Get(b)->mRooms; });
-    };
-    auto pages = [&]() { return std::max(1, (static_cast<int>(view.size()) + kPerPage - 1) / kPerPage); };
-    auto draw = [&]() {
-        page = std::max(0, std::min(page, pages() - 1));
-        std::string chips;
-        for (int i = 0; i < 4; ++i) chips += std::string("<div class=\"chip") + (i == filter ? " sel" : "") + "\" data-id=\"filter\" data-index=\"" + std::to_string(i) + "\">" + filterNames[i] + "</div>";
-        form->SetHtml("filters", chips);
-        chips.clear();
-        for (int i = 0; i < 3; ++i) chips += std::string("<div class=\"chip") + (i == sort ? " sel" : "") + "\" data-id=\"sort\" data-index=\"" + std::to_string(i) + "\">" + sortNames[i] + "</div>";
-        form->SetHtml("sorts", chips);
+    static bool IsOfficial(const TrackEntry* e) { return e->mOfficial && (e->mName == "ClassicH" || e->mName == "Steeplechase" || e->mName == "The Alley2" || e->mName == "The River"); }
+    int PerPage() const { return mPerPage; }
+    int Shown() const { return static_cast<int>(mView.size()); }
+    int Pages() const { return std::max(1, (Shown() + mPerPage - 1) / mPerPage); }
+    int Page() const { return mPage = std::max(0, std::min(mPage, Pages() - 1)); }
+    int TrackInSlot(int pSlot) const { const std::size_t at = static_cast<std::size_t>(Page() * mPerPage + pSlot); return at < mView.size() ? mView[at] : -1; }
+    void ShowTrack(int pIndex) { for (std::size_t i = 0; i < mView.size(); ++i) if (mView[i] == pIndex) mPage = static_cast<int>(i) / mPerPage; }
+    std::string FiltersHtml(const std::string& p) const
+    {
+        static const char* const names[] = {"All", "Official", "Community", "On this computer"};
+        std::string out;
+        for (int i = 0; i < 4; ++i) out += std::string("<div class=\"chip") + (i == mFilter ? " sel" : "") + "\" data-id=\"" + p + "filter\" data-index=\"" + std::to_string(i) + "\">" + names[i] + "</div>";
+        return out;
+    }
+    std::string SortsHtml(const std::string& p) const
+    {
+        static const char* const names[] = {"Original order", "A-Z", "Smallest first"};
+        std::string out;
+        for (int i = 0; i < 3; ++i) out += std::string("<div class=\"chip") + (i == mSort ? " sel" : "") + "\" data-id=\"" + p + "sort\" data-index=\"" + std::to_string(i) + "\">" + names[i] + "</div>";
+        return out;
+    }
+    std::string CardsHtml(const std::string& p, int pCurrent, const PersonalBests& pBests) const
+    {
         std::string cards;
-        for (int slot = 0; slot < kPerPage; ++slot) {
-            const std::size_t at = static_cast<std::size_t>(page * kPerPage + slot);
-            if (at >= view.size()) break;
-            const int index = view[at];
+        for (int slot = 0; slot < mPerPage; ++slot) {
+            const int index = TrackInSlot(slot);
+            if (index < 0) break;
             const TrackEntry* e = Tracks().Get(index);
             const TrackBriefing guide = BriefingFor(index);
             std::string meta = guide.mDifficulty == "Unrated" ? guide.mCharacter : guide.mDifficulty + " - " + guide.mCharacter;
@@ -5328,31 +5317,84 @@ int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, 
                 const long long lap = pBests.LapBest(e->mName);
                 if (lap > 0) { char t[32]; FormatRaceTime(static_cast<MR_SimulationTime>(lap), t, sizeof(t)); rec = std::string("Best lap ") + t; }
             }
-            cards += std::string("<div class=\"card") + (index == pCurrent ? " sel" : "") + "\" id=\"card" + std::to_string(slot) + "\" data-id=\"pick\" data-index=\"" + std::to_string(index) + "\">" +
-                     "<div class=\"th\" id=\"th" + std::to_string(slot) + "\">" + (e->mInstalled ? "" : "<p class=\"dl\">Download to see the plan</p>") + "</div><p class=\"kind\">" + (e->mMarket ? "MARKET" : isOfficial(e) ? "OFFICIAL" : "COMMUNITY") + "</p><p class=\"nm\">" +
-                     HoverNetRml::FormScreen::Escape(e->mName) + "</p><p class=\"meta\">" + HoverNetRml::FormScreen::Escape(meta) + "</p><p class=\"rec\">" + HoverNetRml::FormScreen::Escape(rec) + "</p></div>";
+            cards += std::string("<div class=\"card") + (index == pCurrent ? " sel" : "") + "\" id=\"" + p + "card" + std::to_string(slot) + "\" data-id=\"" + p + "pick\" data-index=\"" + std::to_string(index) + "\">" +
+                     "<div class=\"th\" id=\"" + p + "th" + std::to_string(slot) + "\">" + (e->mInstalled ? "" : "<p class=\"dl\">Download to see the plan</p>") + "</div><p class=\"kind\">" +
+                     (e->mMarket ? "MARKET" : IsOfficial(e) ? "OFFICIAL" : "COMMUNITY") + "</p><p class=\"nm\">" + HoverNetRml::FormScreen::Escape(e->mName) + "</p><p class=\"meta\">" +
+                     HoverNetRml::FormScreen::Escape(meta) + "</p><p class=\"rec\">" + HoverNetRml::FormScreen::Escape(rec) + "</p></div>";
         }
-        form->SetHtml("grid", cards.empty() ? "<p class=\"meta\">No track matches.</p>" : cards);
-        form->SetHtml("count", std::to_string(view.size()) + " of " + std::to_string(total) + " tracks");
-        form->SetHtml("pageinfo", "Page " + std::to_string(page + 1) + " of " + std::to_string(pages()));
+        return cards.empty() ? std::string("<p class=\"meta\">No track matches.</p>") : cards;
+    }
+    std::string CountText() const { return std::to_string(Shown()) + " of " + std::to_string(Tracks().Count()) + " tracks"; }
+    std::string PageText() const { return "Page " + std::to_string(Page() + 1) + " of " + std::to_string(Pages()); }
+    // Returns true when the event was one of the picker's own. `redraw` is set when the lists changed; `pPicked` when a card was chosen (the catalog index).
+    bool Handle(const std::string& p, const HoverNetRml::FormEvent& e, int& pPicked, bool& pRedraw)
+    {
+        if (e.id == p + "pick") { pPicked = e.index; return true; }
+        if (e.id == p + "filter") { mFilter = std::max(0, std::min(3, e.index)); mPage = 0; Rebuild(); pRedraw = true; return true; }
+        if (e.id == p + "sort") { mSort = std::max(0, std::min(2, e.index)); mPage = 0; Rebuild(); pRedraw = true; return true; }
+        if (e.id == p + "next") { mPage = std::min(Pages() - 1, Page() + 1); pRedraw = true; return true; }
+        if (e.id == p + "prev") { mPage = std::max(0, Page() - 1); pRedraw = true; return true; }
+        if (e.id == p + "search" || e.id == p + "search#enter") { if (e.text != mSearch) { mSearch = e.text; mPage = 0; Rebuild(); pRedraw = true; } return true; }
+        return false;
+    }
+private:
+    static std::string Lower(std::string text) { for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return text; }
+    void Rebuild()
+    {
+        mView.clear();
+        const std::string needle = Lower(mSearch);
+        const int total = Tracks().Count();
+        for (int i = 0; i < total; ++i) {
+            const TrackEntry* e = Tracks().Get(i);
+            if (e == nullptr) continue;
+            if (mFilter == 1 && !IsOfficial(e)) continue;
+            if (mFilter == 2 && IsOfficial(e)) continue;
+            if (mFilter == 3 && !e->mInstalled) continue;
+            if (!needle.empty() && Lower(e->mName).find(needle) == std::string::npos) continue;
+            mView.push_back(i);
+        }
+        if (mSort == 1) std::stable_sort(mView.begin(), mView.end(), [](int a, int b) { return Lower(Tracks().Get(a)->mName) < Lower(Tracks().Get(b)->mName); });
+        if (mSort == 2) std::stable_sort(mView.begin(), mView.end(), [](int a, int b) { return Tracks().Get(a)->mRooms < Tracks().Get(b)->mRooms; });
+    }
+    int mPerPage, mFilter = 0, mSort = 0;
+    mutable int mPage = 0;
+    std::string mSearch;
+    std::vector<int> mView;
+};
+
+// The track browser (assets/ui/tracks.rml): the picker as a screen of its own. Returns the catalog index chosen, or -1 when the player went back.
+int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, int pCurrent, int pFrameLimit)
+{
+    std::unique_ptr<HoverNetRml::FormScreen> form(new HoverNetRml::FormScreen(
+        graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "TRACK BROWSER", LoadReducedMotion(),
+        [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight, "tracks.rml"));
+    if (!form->Ok()) return -1;
+    TrackPicker picker(8);
+    std::vector<TrackPreview> previews(static_cast<std::size_t>(Tracks().Count()));
+    int chosen = -1;
+    auto draw = [&]() {
+        form->SetHtml("filters", picker.FiltersHtml(""));
+        form->SetHtml("sorts", picker.SortsHtml(""));
+        form->SetHtml("grid", picker.CardsHtml("", pCurrent, pBests));
+        form->SetHtml("count", picker.CountText());
+        form->SetHtml("pageinfo", picker.PageText());
     };
     int loadBudget = 0;
-    for (int slot = 0; slot < kPerPage; ++slot) {
+    for (int slot = 0; slot < picker.PerPage(); ++slot) {
         form->SetImage("th" + std::to_string(slot), [&, slot](SDL_Rect& crop) -> SDL_Texture* {
-            const std::size_t at = static_cast<std::size_t>(page * kPerPage + slot);
-            if (at >= view.size()) return nullptr;
-            TrackPreview& preview = previews[static_cast<std::size_t>(view[at])];
-            if (!preview.mLoaded && !preview.mWaitingForDownload && loadBudget > 0) {   // a couple of plans per frame, so a page of twelve fills in without a pause
+            const int index = picker.TrackInSlot(slot);
+            if (index < 0) return nullptr;
+            TrackPreview& preview = previews[static_cast<std::size_t>(index)];
+            if (!preview.mLoaded && !preview.mWaitingForDownload && loadBudget > 0) {   // a couple of plans per frame, so a page fills in without a pause
                 --loadBudget;
-                preview = LoadTrackPreview(graphics.GetRenderer(), Tracks().Get(view[at])->mName.c_str());
+                preview = LoadTrackPreview(graphics.GetRenderer(), Tracks().Get(index)->mName.c_str());
             }
             if (preview.mTexture == nullptr) return nullptr;
             crop = SDL_Rect{0, 0, preview.mWidth, preview.mHeight};
             return preview.mTexture;
         });
     }
-    rebuild();
-    for (std::size_t i = 0; i < view.size(); ++i) if (view[i] == pCurrent) page = static_cast<int>(i) / kPerPage;
+    picker.ShowTrack(pCurrent);
     draw();
     int frame = 0;
     const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
@@ -5364,12 +5406,8 @@ int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, 
         const HoverNetRml::FormOutcome outcome = form->Frame(events, frame, limit);
         bool redraw = false;
         for (const HoverNetRml::FormEvent& e : events) {
-            if (e.id == "pick") { chosen = e.index; running = false; }
-            else if (e.id == "filter") { filter = std::max(0, std::min(3, e.index)); page = 0; rebuild(); redraw = true; }
-            else if (e.id == "sort") { sort = std::max(0, std::min(2, e.index)); page = 0; rebuild(); redraw = true; }
-            else if (e.id == "next") { page = std::min(pages() - 1, page + 1); redraw = true; }
-            else if (e.id == "prev") { page = std::max(0, page - 1); redraw = true; }
-            else if (e.id == "search" || e.id == "search#enter") { if (e.text != search) { search = e.text; page = 0; rebuild(); redraw = true; } }
+            int picked = -1;
+            if (picker.Handle("", e, picked, redraw)) { if (picked >= 0) { chosen = picked; running = false; } }
             else if (e.id == "back") running = false;
         }
         if (outcome != HoverNetRml::FormOutcome::eNone) running = false;
@@ -10078,19 +10116,47 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
     // The RmlUi version of this screen (docs/rmlui.md): the logic of the loop below is shared; only the drawing and the input differ. Not used by the tests that click the ImGui
     // widgets with real mouse events (HOVERNET_TEST_AUTH_CLICKS, HOVERNET_TEST_AUTH_STARTCLICK); if it cannot load, the ImGui screen runs.
     std::unique_ptr<HoverNetRml::FormScreen> rml;
-    if (UseRmlUi(pFrameLimit) && clickTest == nullptr && std::getenv("HOVERNET_TEST_AUTH_STARTCLICK") == nullptr) {
+    const bool rmlAllowed = UseRmlUi(pFrameLimit) && clickTest == nullptr && std::getenv("HOVERNET_TEST_AUTH_STARTCLICK") == nullptr;
+    auto createRml = [&]() {   // (made again after the race screen, which is an RmlUi screen of its own: only one runs at a time)
         rml.reset(new HoverNetRml::FormScreen(
             graphics.GetWindow(), graphics.GetRenderer(), SourcePath("NetTarget/LinuxClient/assets"), "HOVERNET LOBBY", LoadReducedMotion(),
             [](HoverNetRml::Sound sound) { PlaySfx(sound == HoverNetRml::Sound::eHover ? Sfx::eHover : sound == HoverNetRml::Sound::eClick ? Sfx::eClick : Sfx::eBack); }, kWidth, kHeight, "lobby.rml"));
         if (!rml->Ok()) rml.reset();
-    }
+    };
+    if (rmlAllowed) createRml();
     bool rHostOpen = false, rPrivOpen = false;
     std::string rHostFilter, rSigEntry, rSigTop, rSigUsers, rSigChat, rSigStatus, rSigHost;
     bool rFocusedName = false;
     char rHostLapsText[8] = {0};
+    TrackBackdropShow lobbyBackdrop; const bool lobbyReduced = LoadReducedMotion();
+    TrackPicker hostPicker(6);   // the same track picker as the offline browser (cards, filters, search, pages)
+    PersonalBests hostBests;
+    hostBests.Load(ConfigDirPath() + "/personal_bests");
+    int hostLoadBudget = 0;
     auto E = [](const std::string& text) { return HoverNetRml::FormScreen::Escape(text); };
     auto trackLabelOf = [](int index) { const TrackEntry* e = Tracks().Get(index); return e == nullptr ? std::string() : e->mName + (e->mOfficial ? "" : "  -  community") + (e->mInstalled ? "" : "  (download)"); };
+    auto setupRml = [&]() {
     if (rml) {
+        for (int slot = 0; slot < hostPicker.PerPage(); ++slot) {   // each card's plan (a couple of new ones per frame, so a page fills in without a pause)
+            rml->SetImage("hp_th" + std::to_string(slot), [&, slot](SDL_Rect& crop) -> SDL_Texture* {
+                if (!rHostOpen) return nullptr;
+                const int index = hostPicker.TrackInSlot(slot);
+                if (index < 0 || index >= static_cast<int>(previews.size())) return nullptr;
+                TrackPreview& preview = previews[static_cast<std::size_t>(index)];
+                if (!preview.mLoaded && !preview.mWaitingForDownload && hostLoadBudget > 0) { --hostLoadBudget; preview = LoadTrackPreview(graphics.GetRenderer(), TrackNameAt(index).c_str()); }
+                if (preview.mTexture == nullptr) return nullptr;
+                crop = SDL_Rect{0, 0, preview.mWidth, preview.mHeight};
+                return preview.mTexture;
+            });
+        }
+        rml->SetBackdropDraw([&](SDL_Renderer* renderer, int w, int h) {   // the same lit, slowly turning track as the offline race screen, behind the lobby
+            int index = -1;
+            if (rHostOpen) index = prefs.mTrackIndex;
+            else if (lobby.GetState() == OnlineLobby::State::eWaiting) index = FindHostableTrack(lobby.Ack().track);
+            else for (const auto& r : lobby.Races()) if (r.id == selectedRaceId) index = FindHostableTrack(r.track);
+            if (index < 0) return;
+            lobbyBackdrop.Prepare(renderer, index); lobbyBackdrop.Draw(renderer, w, h, lobbyReduced);
+        });
         rml->SetSideImage([&](SDL_Rect& crop) -> SDL_Texture* {
             int trackIndex = -1;
             if (rHostOpen) trackIndex = prefs.mTrackIndex;
@@ -10104,6 +10170,8 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
             return preview.mTexture;
         });
     }
+    };
+    setupRml();
 #endif
     while (running && (pFrameLimit < 0 || framesShown < pFrameLimit)) {
         ++framesShown;
@@ -10272,22 +10340,9 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 closeDialogs();
             };
             auto fillHostList = [&]() {
-                std::string needle = rHostFilter;
-                for (char& c : needle) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-                std::string html;
-                int shown = 0, matches = 0;
-                for (int i = 0; i < Tracks().Count(); ++i) {
-                    std::string label = trackLabelOf(i), lower = label;
-                    for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-                    if (!needle.empty() && lower.find(needle) == std::string::npos) continue;
-                    ++matches;
-                    if (shown >= 40) continue;
-                    ++shown;
-                    html += "<button class=\"item" + std::string(i == prefs.mTrackIndex ? " cur" : "") + "\" data-id=\"ht\" data-index=\"" + std::to_string(i) + "\">" + E(label) + "</button>";
-                }
-                if (matches > shown) html += "<p class=\"note\">" + std::to_string(matches - shown) + " more: keep typing to narrow the list</p>";
-                if (matches == 0) html += "<p class=\"note\">Nothing matches that</p>";
-                rml->SetHtml("hlist", html);
+                rml->SetHtml("hfilters", hostPicker.FiltersHtml("hp_"));
+                rml->SetHtml("hgrid", hostPicker.CardsHtml("hp_", prefs.mTrackIndex, hostBests));
+                rml->SetHtml("hpageinfo", hostPicker.PageText() + "  -  " + hostPicker.CountText());
             };
             auto refreshHost = [&]() {   // the parts of the Host dialog that follow the chosen track and the code
                 const TrackEntry* hostTrack = Tracks().Get(prefs.mTrackIndex);
@@ -10311,8 +10366,10 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 closeDialogs();
                 rHostOpen = true; problem.clear();
                 std::snprintf(rHostLapsText, sizeof rHostLapsText, "%d", laps);
+                hostPicker.ShowTrack(prefs.mTrackIndex);
                 std::string html = "<div id=\"dialogbox\"><p class=\"cardhead\">Host a race</p><div id=\"dleft\"><p class=\"label\">Track</p><div class=\"trackcur\" id=\"hcur\"></div>"
-                    "<input type=\"text\" class=\"text\" id=\"hq\" data-id=\"hq\" value=\"\"/><div id=\"hlist\"></div><div id=\"hbrief\"></div>"
+                    "<div id=\"hfilters\"></div><input type=\"text\" class=\"text\" id=\"hq\" data-id=\"hp_search\" placeholder=\"Search tracks\" value=\"\"/><div id=\"hgrid\"></div>"
+                    "<div id=\"hpager\"><button class=\"act quiet pg\" data-id=\"hp_prev\" tab-index=\"auto\">Previous</button><span id=\"hpageinfo\"></span><button class=\"act quiet pg\" data-id=\"hp_next\" tab-index=\"auto\">Next</button></div><div id=\"hbrief\"></div>"
                     "<p class=\"label\">Laps<span class=\"val\" id=\"hlapsval\">" + std::string(rHostLapsText) + "</span> <span class=\"note\" id=\"hlapshint\"></span></p>"
                     "<input type=\"range\" class=\"range\" id=\"hlaps\" data-id=\"hlaps\" min=\"1\" max=\"10\" step=\"1\" value=\"" + std::to_string(laps) + "\"/>"
                     "<div class=\"toggle" + std::string(weapons ? " on" : "") + "\" id=\"hweapons\" data-id=\"hweapons\"><span class=\"box\"></span><span class=\"tlabel\">Weapons enabled</span></div>"
@@ -10334,10 +10391,27 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 rml->SetClass("dialog", "hide", false);
                 raceNumber[0] = joinCode[0] = '\0';
             };
-            if (requestHostPopup) { requestHostPopup = false; openHost(); }   // (the screenshot hook asks through these two)
+            auto useHostScreen = [&]() { return rml != nullptr && ModernMenus() && std::getenv("HOVERNET_OLD_HOST_DIALOG") == nullptr; };
+            auto openHostScreen = [&]() {   // the race screen (the turning track, your craft, laps, weapons) hosts an online race too
+                    LocalRaceSetup setup;
+                    setup.online = true; setup.code = hostCode;
+                    setup.pump = [&]() { lobby.Pump(); };
+                    rml.reset();   // one RmlUi screen at a time
+                    const bool shown = RunRaceScreen(graphics, pFrameLimit, setup);
+                    if (!shown) setup.confirmed = false;
+                    createRml(); setupRml();
+                    rSigEntry.clear(); rSigTop.clear(); rSigUsers.clear(); rSigChat.clear(); rSigStatus.clear(); rSigHost.clear(); rFocusedName = false;
+                    if (!rml) { running = false; return; }
+                    if (setup.confirmed) {
+                        const int index = FindHostableTrack(setup.trackName);
+                        if (index >= 0) { prefs.mTrackIndex = index; laps = setup.laps; weapons = setup.weapons; std::snprintf(hostCode, sizeof hostCode, "%s", setup.code.c_str()); createRace(); }
+                    }
+            };
+            if (requestHostPopup) { requestHostPopup = false; if (useHostScreen()) openHostScreen(); else openHost(); }   // (the screenshot hook asks through these two)
             if (requestPrivatePopup) { requestPrivatePopup = false; openPrivate(); }
             HoverNetRml::FormOutcome rOutcome;
             std::vector<HoverNetRml::FormEvent> rEvents;
+            hostLoadBudget = 2;
             rOutcome = rml->Frame(rEvents, framesShown, std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit);
             if (rOutcome == HoverNetRml::FormOutcome::eClose) { if (ConfirmQuit(graphics)) { running = false; g_QuitConfirmed = true; } }
             else if (rOutcome == HoverNetRml::FormOutcome::eCancel || rOutcome == HoverNetRml::FormOutcome::eSave) {
@@ -10355,6 +10429,7 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                 else if (e.id == "join") { if (const Protocol3::RaceInfo* r = pickedRace()) if (!r->started && r->joined < r->players) joinListedRace(*r); }
                 else if (e.id == "watch") { if (const Protocol3::RaceInfo* r = pickedRace()) watchListedRace(*r); }
                 else if (e.id == "cancelwatch") lobby.CancelQueuedWatch();
+                else if (e.id == "host" && useHostScreen()) openHostScreen();
                 else if (e.id == "host") openHost();
                 else if (e.id == "private") openPrivate();
                 else if (e.id == "start") lobby.StartRace();
@@ -10365,8 +10440,13 @@ AuthScreenResult RunAuthServerScreen(SDL2GraphicsBackend& graphics, OnlineLobby&
                     if (chatInput[0] != '\0') { lobby.SendChat(chatInput); chatInput[0] = '\0'; rml->SetInput("chatinput", ""); }
                     rml->FocusElement("chatinput");
                 }
-                else if (e.id == "hq") { rHostFilter = e.text; fillHostList(); }
-                else if (e.id == "ht") { if (e.index >= 0 && e.index < Tracks().Count()) { prefs.mTrackIndex = e.index; fillHostList(); refreshHost(); } }
+                else if (rHostOpen && e.id.compare(0, 3, "hp_") == 0) {   // the track picker's own clicks (cards, filters, search, pages)
+                    int picked = -1; bool redraw = false;
+                    if (hostPicker.Handle("hp_", e, picked, redraw)) {
+                        if (picked >= 0 && picked < Tracks().Count()) { prefs.mTrackIndex = picked; redraw = true; refreshHost(); }
+                        if (redraw) fillHostList();
+                    }
+                }
                 else if (e.id == "hlaps") { laps = std::max(1, std::min(10, static_cast<int>(e.value + 0.5f))); rml->SetHtml("hlapsval", std::to_string(laps)); }
                 else if (e.id == "hweapons") weapons = e.on;
                 else if (e.id == "hcode") { std::snprintf(hostCode, sizeof hostCode, "%s", e.text.c_str()); refreshHost(); }
@@ -11073,7 +11153,7 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
     PersonalBests personalBests;
     personalBests.Load(ConfigDirPath() + "/personal_bests");
     DownloadUi download;
-    bool startAfterDownload = false, cancelled = false, closeRequested = false, builtOnce = false;
+    bool startAfterDownload = false, cancelled = false, closeRequested = false, builtOnce = false, autoDownload = false;   // autoDownload: a community track was just picked and is not on this computer, so it downloads now and the map shows when it arrives
     int statsFor = -1;
     TrackBackdropShow backdrop;
     std::vector<TrackPreview> plans(static_cast<std::size_t>(Tracks().Count()));
@@ -11141,6 +11221,11 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
             return preview.mTexture;
         });
         form->SetBackdropDraw([&](SDL_Renderer* renderer, int w, int h) { backdrop.Prepare(renderer, prefs.mTrackIndex); backdrop.Draw(renderer, w, h, reducedMotion); });
+        if (pOut.online) {
+            form->SetHtml("eyebrow", "ONLINE RACE"); form->SetHtml("title", "HOST A RACE");
+            form->SetClass("codecard", "hide", false);
+            form->SetInput("pcode", pOut.code);
+        }
 
         auto entry = [&]() { return Tracks().Get(prefs.mTrackIndex); };
         auto needsDownload = [&]() { const TrackEntry* e = entry(); return e != nullptr && !e->mInstalled; };
@@ -11167,22 +11252,30 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
             form->SetHtml("lapsnote", guide.mFreePlay ? "" : "Suggested: " + std::to_string(guide.mSuggestedLaps));
             form->SetHtml("weap", std::string("<div class=\"chip") + (prefs.mWeapons ? " sel" : "") + "\" data-id=\"weapons\" data-index=\"1\">ON</div><div class=\"chip" + (prefs.mWeapons ? "" : " sel") + "\" data-id=\"weapons\" data-index=\"0\">OFF</div>");
             form->SetHtml("cname", HoverNetRml::FormScreen::Escape(std::string(Authority::CraftName(design.craft)) + (design.IsPlain() ? "" : "  -  your design")));
-            form->SetHtml("start", needsDownload() ? "DOWNLOAD &amp; RACE" : "RACE");
+            if (pOut.online) form->SetHtml("start", needsDownload() ? "DOWNLOAD &amp; CREATE RACE" : (pOut.code.empty() ? "CREATE RACE" : "CREATE PRIVATE RACE"));
+            else form->SetHtml("start", needsDownload() ? "DOWNLOAD &amp; RACE" : "RACE");
         };
         if (std::getenv("HOVERNET_RACE_DEBUG")) std::fprintf(stderr, "racescreen: before show\n");
         show();
         if (std::getenv("HOVERNET_RACE_DEBUG")) std::fprintf(stderr, "racescreen: shown\n");
         form->FocusElement("start");
+        if (autoDownload) {
+            autoDownload = false;
+            const TrackEntry* e = entry();
+            if (e != nullptr && !e->mInstalled && e->mHasDownload && !download.Active()) download.Begin({*e}, 0);
+        }
         int frame = 0;
         const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
         while (running && !browse && !garage && (limit < 0 || frame < limit)) {
             ++frame;
             std::vector<HoverNetRml::FormEvent> events;
             if (std::getenv("HOVERNET_RACE_DEBUG") && (frame < 4 || frame % 10 == 0)) std::fprintf(stderr, "racescreen: frame %d at %u ms\n", frame, static_cast<unsigned>(SDL_GetTicks()));
+            if (pOut.pump) pOut.pump();
             HoverNetRml::FormOutcome outcome = form->Frame(events, frame, limit);
             bool refresh = false, start = autoStartForTest && frame == 1;
             for (const HoverNetRml::FormEvent& e : events) {
                 if (e.id == "start") start = true;
+                else if (e.id == "pcode") { pOut.code = e.text; if (!download.Active()) form->SetHtml("start", pOut.code.empty() ? "CREATE RACE" : "CREATE PRIVATE RACE"); }
                 else if (e.id == "laps") { prefs.mLaps = std::max(1, std::min(20, e.index)); refresh = true; }
                 else if (e.id == "weapons") { prefs.mWeapons = e.index != 0; refresh = true; }
                 else if (e.id == "browse") browse = true;
@@ -11196,6 +11289,7 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
                 statsFor = prefs.mTrackIndex;
                 form->SetHtml("tstats", std::to_string(backdrop.plan.fuelPads) + (backdrop.plan.fuelPads == 1 ? " fuel pad" : " fuel pads") + "  -  " + std::to_string(backdrop.plan.boostPads) + (backdrop.plan.boostPads == 1 ? " boost" : " boosts") + "  -  " + std::to_string(backdrop.plan.powerUps) + (backdrop.plan.powerUps == 1 ? " power-up" : " power-ups"));
             }
+            if (start && pOut.online && !PrivateCodeOk(pOut.code)) { start = false; form->SetHtml("lapsnote", "A private code is 6 to 16 letters or digits."); }
             if (start && !download.Active()) {
                 const TrackEntry* e = entry();
                 if (e != nullptr && !e->mInstalled) { download.Begin({*e}, 0); startAfterDownload = true; }
@@ -11218,6 +11312,7 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
             if (refresh) {
                 for (TrackPreview& preview : plans) if (preview.mTexture != nullptr && !preview.mLoaded) { SDL_DestroyTexture(preview.mTexture); preview = TrackPreview(); }
                 statsFor = -1;
+                backdrop.builtFor = -2;   // the 3D scene is read again (it was empty while the track was not here)
                 show();
             }
         }
@@ -11226,7 +11321,7 @@ bool RunRaceScreen(SDL2GraphicsBackend& graphics, int pFrameLimit, LocalRaceSetu
         if (closeRequested && ConfirmQuit(graphics)) g_QuitConfirmed = true;
         if (browse && !closeRequested) {
             const int picked = RunTrackBrowser(graphics, personalBests, prefs.mTrackIndex, pFrameLimit);
-            if (picked >= 0) prefs.mTrackIndex = picked;
+            if (picked >= 0) { prefs.mTrackIndex = picked; autoDownload = true; }
             again = true;
         }
         else if (garage && !closeRequested) { RunGarageScreen(graphics, *gMenuCraftResources, pFrameLimit); again = true; }

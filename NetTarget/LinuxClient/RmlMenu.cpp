@@ -1304,7 +1304,8 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
         const bool covered = dialog != nullptr && !dialog->IsClassSet("hide");
         for (auto& entry : m.images) {
             Rml::Element* target = m.document->GetElementById(entry.first);
-            if (covered || target == nullptr || !target->IsVisible()) continue;
+            if (target == nullptr || !target->IsVisible()) continue;
+            if (covered && target->Closest("#dialog") == nullptr) continue;   // a picture behind the dialog is hidden; one inside the dialog (the Host dialog's track cards) is drawn
             SDL_Rect crop = {0, 0, 0, 0};
             SDL_Texture* image = entry.second(crop);
             if (image == nullptr || crop.w <= 0 || crop.h <= 0) continue;

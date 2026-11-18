@@ -4,8 +4,13 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
-## Unreleased
+## 2.3.70 - 2026-11-18
 
+_Released at the owner's request without the full test suite. Run on this build (desktop, headless): screenshots of the online Host screen and the old dialog, the camera-rule test, the modern-flow test (see below). Not run: the web build of this commit (the cached web tree failed to link only the websocket smoke targets, the game itself was not rebuilt), Windows, a real online race created from the new screen, a real community-track download from the new click-to-download path._
+
+- **Hosting an online race uses the new race screen**: Race online > Host a race now opens the same screen as an offline race (the real track in 3D on the neon grid, your craft, laps, weapons) with CREATE RACE, a private-code field and the same track browser. The lobby connection is kept alive while it is open. The old dialog is still there with `HOVERNET_OLD_HOST_DIALOG=1` or in the classic menu style.
+- **One track browser everywhere**: the offline browser and the old Host dialog now share one picker (filters, search, pages, Official / Community labels; only ClassicH, Steeplechase, The Alley2 and The River are Official).
+- **Picking a community track that is not on this computer downloads it at once**, and the map and 3D track show when it arrives.
 - **`?reset` for the web page** (a saved setting from an older version made the page slow for the owner): open the page with `?reset` (for example https://hovernet.outiva.com/?reset) to remove the saved display and performance settings (graphics look, race view and race detail, UI scale, menu style, menu backdrop, window size, fullscreen, reduced motion, high contrast); your name, craft designs, records, controls and account are kept, and the address is cleaned so the next visit does not reset again. The `?perf` box now also lists the saved settings it finds.
 - _Checked: in headless Chrome on the GPU, saved `race_view` and `ui_scale` were removed by `?reset`, the saved name was kept, the address was cleaned and the result persisted across a reload._
 
