@@ -239,7 +239,11 @@ struct FlyoverWorker::Impl
             bool ok;
             {
                 std::lock_guard<std::mutex> level(HoverNetPlan::LevelLock());
+                #ifdef __EMSCRIPTEN__
+                ok = fly.Open(openPath, openName, 480, 300);   // smaller on the page (memory, and the picture is drawn by the CPU there); smoothed when shown
+#else
                 ok = fly.Open(openPath, openName, 640, 400);   // drawn at this size and smoothed when shown
+#endif
             }
             { std::lock_guard<std::mutex> lock(mutex); failed = !ok; }
             if (!ok) continue;

@@ -5136,11 +5136,7 @@ struct TrackBackdropShow
         const TrackEntry* entry = Tracks().Get(index);
         if (entry == nullptr || !entry->mInstalled || std::getenv("HOVERNET_NO_BACKDROP") != nullptr || !LoadMenuBackdrop()) return;
         const char* style = std::getenv("HOVERNET_BACKDROP");
-#ifdef __EMSCRIPTEN__
-        textured = style != nullptr && std::string(style) == "textured";   // (the page keeps the neon model until the game's own renderer is checked there)
-#else
-        textured = style == nullptr || std::string(style) != "neon";   // the game's own renderer, orbiting, over the neon grid; HOVERNET_BACKDROP=neon for the lit model of the plan
-#endif
+        textured = style == nullptr || std::string(style) != "neon";   // the game's own renderer, orbiting, over the neon grid (desktop and page); HOVERNET_BACKDROP=neon for the lit model of the plan
         if (textured) {
             if (!worker) worker.reset(new HoverNetBackdrop::FlyoverWorker);
             worker->SetStill(LoadReducedMotion());
