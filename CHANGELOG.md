@@ -9,6 +9,7 @@ and how to roll one back.
 _Released at the owner's request without the full test suite. The Linux build of every target is clean here (the Track3DViewer target, which 2.3.70 and 2.3.71 broke, and the game). Not run: the Windows build (the fix is one include, checked only by reading the error), the tests, the web build._
 
 - **Build fixes** (the GitHub Actions run of 2.3.70/2.3.71 failed): the F5 restart branch is now compiled only in the game (the Track3DViewer target has none of its variables), and `TrackPlan.cpp` includes the Windows compatibility header that defines `CList`, as `TrackBackdrop.cpp` does. No behaviour change.
+- **Deploy check**: `scripts/check-web-deploy.sh` no longer fails for a missing `X-Frame-Options`; the site restricts framing with the CSP's `frame-ancestors` (it names the one site allowed to embed it), which the check now accepts. This was the only failure of the `check:web:deployed` job on 2.3.71. The compression and ETag warnings it prints remain: they need the host's Apache site file replaced (`packaging/web/setup-host.sh`, then a reload), which has not been done.
 
 ## 2.3.71 - 2026-11-18
 

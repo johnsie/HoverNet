@@ -24,10 +24,12 @@ status() { curl -sI "${opts[@]}" --max-time 20 -o /dev/null -w '%{http_code}' "$
 html="$(curl -s "${opts[@]}" --max-time 30 "$base/")"
 echo "$html" | grep -q "HoverNet.js" && ok "landing page loads HoverNet.js" || bad "landing page does not reference HoverNet.js"
 
-for h in x-content-type-options content-security-policy cross-origin-opener-policy cross-origin-embedder-policy x-frame-options; do
+for h in x-content-type-options content-security-policy cross-origin-opener-policy cross-origin-embedder-policy; do
   [ -n "$(header "$base/" "$h")" ] && ok "header $h is set" || bad "header $h is missing"
 done
 csp="$(header "$base/" content-security-policy)"
+# Framing is controlled by the CSP's frame-ancestors (it can name the one site allowed to embed the page, which X-Frame-Options cannot); X-Frame-Options is accepted too.
+{ echo "$csp" | grep -q "frame-ancestors" || [ -n "$(header "$base/" x-frame-options)" ]; } && ok "framing is restricted (frame-ancestors or x-frame-options)" || bad "framing is not restricted: no frame-ancestors in the CSP and no x-frame-options"
 echo "$csp" | grep -q "wasm-unsafe-eval" && ok "CSP allows WebAssembly" || bad "CSP does not allow WebAssembly"
 echo "$csp" | grep -q "'unsafe-eval'" && bad "CSP allows eval" || ok "CSP forbids eval (the client does not use it)"
 
