@@ -5136,7 +5136,7 @@ struct TrackBackdropShow
         const TrackEntry* entry = Tracks().Get(index);
         if (entry == nullptr || !entry->mInstalled || std::getenv("HOVERNET_NO_BACKDROP") != nullptr || !LoadMenuBackdrop()) return;
         const char* style = std::getenv("HOVERNET_BACKDROP");
-        textured = style == nullptr || std::string(style) != "neon";   // the game's own renderer, orbiting, over the neon grid (desktop and page); HOVERNET_BACKDROP=neon for the lit model of the plan
+        textured = style != nullptr && std::string(style) == "textured";   // the lit model of the whole track (GPU, zoomed out) is the default; HOVERNET_BACKDROP=textured is the game's own renderer orbiting close to the start line (slower, shows part of a long track)
         if (textured) {
             if (!worker) worker.reset(new HoverNetBackdrop::FlyoverWorker);
             worker->SetStill(LoadReducedMotion());

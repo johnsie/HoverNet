@@ -137,7 +137,7 @@ void TexturedFan(SDL_Texture* picture, const std::vector<SDL_FPoint>& poly, cons
 SDL_Color Fog(SDL_Color c, float depth)
 {
     const SDL_Color fog = {58, 18, 86, 255};
-    return Mix(c, fog, (depth - 1.1f) / 3.2f);
+    return Mix(c, fog, std::min(0.6f, std::max(0.0f, (depth - 1.1f) / 5.0f)));   // a light haze only: the track keeps its own colours
 }
 }
 
@@ -219,7 +219,7 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
         SDL_FPoint a, b, ga, gb; float da, db, d1, d2;
         const float z = wall.h * plan.relief * zScale;
         if (!Project(cam, wall.x0, wall.y0, z, a, da) || !Project(cam, wall.x1, wall.y1, z, b, db) || !Project(cam, wall.x0, wall.y0, -0.004f, ga, d1) || !Project(cam, wall.x1, wall.y1, -0.004f, gb, d2)) continue;
-        const SDL_Color c = Fog(SDL_Color{12, 10, 36, 255}, e.depth);
+        const SDL_Color c = Fog(SDL_Color{120, 122, 134, 255}, e.depth);   // the side of a floor slab
         Quad(a, b, ga, gb, c, c, c, c);
     }
     // floors
@@ -238,9 +238,9 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
             const HoverNetPlan::Texture& tex = plan.textures[static_cast<std::size_t>(item.texture)];
             std::vector<SDL_FPoint> repeats;
             for (std::size_t k = 0; k + 1 < s.xy.size(); k += 2) repeats.push_back(SDL_FPoint{static_cast<float>((s.xy[k] * plan.spanMm + plan.cxMm) / tex.mmW), static_cast<float>((s.xy[k + 1] * plan.spanMm + plan.cyMm) / tex.mmH)});
-            TexturedFan(picture, poly, repeats, Fog(SDL_Color{236, 226, 255, 255}, item.depth));
+            TexturedFan(picture, poly, repeats, Fog(SDL_Color{255, 255, 255, 255}, item.depth));
         }
-        else Fan(poly, Fog(Mix(SDL_Color{46, 42, 112, 255}, SDL_Color{104, 92, 200, 255}, s.h), item.depth));
+        else Fan(poly, Fog(Mix(SDL_Color{168, 170, 180, 255}, SDL_Color{214, 216, 224, 255}, s.h), item.depth));   // no picture for this floor: the light grey of the game's plain floors
     }
     // the game's own wall textures standing on the floor edges, grouped by picture
     std::vector<Edge> walled;
@@ -254,7 +254,7 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
         const HoverNetPlan::Texture& tex = plan.textures[static_cast<std::size_t>(wall.texture)];
         const float len = std::sqrt((wall.x1 - wall.x0) * (wall.x1 - wall.x0) + (wall.y1 - wall.y0) * (wall.y1 - wall.y0)) * static_cast<float>(plan.spanMm) / tex.mmW;
         const float ur = std::min(3.6f, len) / 4.0f;
-        const SDL_Color c = Fog(SDL_Color{240, 232, 255, 255}, e.depth);
+        const SDL_Color c = Fog(SDL_Color{255, 255, 255, 255}, e.depth);
         Painter& p = painter; p.Use(pictureOf(wall.texture), false);
         const int base = static_cast<int>(p.vertices.size());
         p.Vertex(ta, c, {0.0f, 0.0f}); p.Vertex(tb, c, {ur, 0.0f}); p.Vertex(a, c, {0.0f, 0.22f}); p.Vertex(b, c, {ur, 0.22f});
@@ -288,7 +288,7 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
             SDL_Color g = neon; g.a = static_cast<Uint8>((realWall ? 18 : 34) * pulse * (0.4f + near)); Thick(ta, tb, 8.0f, g, true);
             g.a = static_cast<Uint8>((realWall ? 40 : 70) * pulse * (0.4f + near)); Thick(ta, tb, 3.5f, g, true);
         }
-        SDL_Color core = neon; core.a = static_cast<Uint8>(255 * pulse * (0.5f + 0.5f * near));
+        SDL_Color core = neon; core.a = static_cast<Uint8>(150 * pulse * (0.5f + 0.5f * near));   // a thin edge light, not a wall of colour
         Thick(ta, tb, 1.6f, core, true);
     }
 

@@ -4,6 +4,13 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.75 - 2026-11-18
+
+_Released at the owner's request (the 2.3.74 view was slow and too close). Run on this build: desktop screenshot (headless software rendering), the WebAssembly build and the web page in headless Chrome on the GPU (race screen: 60 frames a second offered over 20 s, slowest frame 17 ms, no console errors, screenshot looked at). Not run: the full test suite, Windows, Firefox/Edge, a slow machine._
+
+- **The race screen's track is the whole track again, zoomed out, drawn by the graphics card** (the neon-grid model of 2.3.67 to 2.3.70) on desktop and web; the game's own renderer orbit of 2.3.71 to 2.3.74 is back to being the option `HOVERNET_BACKDROP=textured`: it is slower and shows only part of a long track (its depth range is about 260 m). The model now looks more like the real track: no purple tint on the floors and walls, light grey where a floor has no picture, a much lighter haze with distance, neutral side slabs and a thinner edge light.
+- Not done: a camera that flies along the track's centre line (as HoverRace Neo's menu does); the game has no ready route through a track, so it needs one to be worked out.
+
 ## 2.3.74 - 2026-11-18
 
 _Released at the owner's request so the owner can try it. Run on this build: the WebAssembly build of the game, and the web page in headless Chrome on the GPU (Down, Down, Enter to the race screen): 60 frames a second offered over 20 s, slowest frame 17 ms, no console errors, the orbit view and the grid drawn (screenshot looked at). The Apache site file on the host was compared with the repo (identical) and the host's own deploy check passed every check. Not run: the full test suite, Windows, Firefox/Edge, the page on a slow machine._
