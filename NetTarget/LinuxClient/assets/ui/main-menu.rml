@@ -32,6 +32,7 @@
 			<button id="tutorial">Tutorial</button>
 			<button id="settings" class="quiet">Settings</button>
 		</div>
+		<button id="replays" class="quiet">Watch a Replay</button>
 		<button id="quit" class="quit hide">Quit</button>
 	</div>
 	<p id="footer"><span id="version"></span></p>

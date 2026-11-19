@@ -1205,6 +1205,16 @@ void MR_Observer::Render3DView( const MR_ClientSession* pSession, const MR_MainC
             m3DView.SetSurfaceTag( HoverNetGfx::kTagCraft );
             const_cast<MR_MainCharacter*>(mGhost)->Render( &m3DView, pTime );
          }
+         for( size_t lGhostIndex = 0; lGhostIndex < mExtraGhosts.size(); lGhostIndex++ )
+         {
+            const MR_MainCharacter* lExtra = mExtraGhosts[ lGhostIndex ];
+            if( lExtra != NULL && lExtra != pViewingCharacter && lExtra->mRoom == lRoomId )
+            {
+               DrawCraftShadow( lExtra );
+               m3DView.SetSurfaceTag( HoverNetGfx::kTagCraft );
+               const_cast<MR_MainCharacter*>(lExtra)->Render( &m3DView, pTime );
+            }
+         }
       }
    }
    __except(EXCEPTION_EXECUTE_HANDLER) {

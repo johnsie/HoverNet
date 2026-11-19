@@ -23,3 +23,19 @@ saves a ghost on a new best, shows it in the next race, does not replace it with
 
 Not yet: a ghost taken from a server replay or a friend's run, several ghosts, and a ghost in the web client's
 real-browser test (it builds and shares the code; the headless browser test does not finish a race).
+
+## Racing against a saved race
+
+**Watch a Replay** (now on the main menu; also reached from Leaderboards) has a mode button at the top: **MODE: WATCH** or **MODE: RACE AGAINST THE REPLAY**. In race mode the button on each row
+says RACE, and choosing a replay starts an ordinary local race on that replay's track, lap count and weapons setting in which **every player of the saved race is a ghost** (the same
+drawn-only craft as your own best-run ghost). Nothing is asked about whose craft to follow.
+
+- **How the ghosts are made.** The replay is run once through the headless race with its recorded inputs (`BuildReplayGhosts`, `ReplayGhosts.cpp`), which gives each player's position, heading
+  and room every 48 ms from the start of the countdown to their finish. The new race is not influenced by it: the ghosts are not in the level, cannot hit or be hit, do not change the state hash and
+  are not sent anywhere, so racing a replay changes no replay or simulation rule (no rules version bump).
+- **Where you start.** On the first grid place the replay's players do not use (the same place as the first of them if the track has no more).
+- **The HUD** shows `Ghost +1.2s` / `Ghost -0.4s`: your gap to the replay's winner.
+- **Restart (F5) keeps the ghosts**; going back to the main menu, or choosing another race, drops them. They are never shown in an online race or a replay.
+- A replay recorded under other rules or on a different version of the track is refused with a message, as when watching.
+- Test: `HoverNetReplayGhostsTest` (run from the repository root) checks every ghost sample equals the headless race's craft at that time; `HOVERNET_TEST_GHOST=1` prints
+  `GHOSTTEST field N of M ghosts shown`.

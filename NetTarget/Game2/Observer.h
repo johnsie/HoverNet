@@ -75,6 +75,7 @@ class MR_Observer
       BOOL            mReuseCamera; // VR second eye: reuse the first eye's smoothed camera
       BOOL            mCockpitView;
       const MR_MainCharacter* mGhost;   // a craft that is only drawn (a recorded run shown beside the race); never part of the level
+      std::vector<const MR_MainCharacter*> mExtraGhosts;   // more crafts that are only drawn (the other players of a replay being raced)
       char            mGhostGapText[16];   // the time behind (+) or ahead of (-) the ghost for the HUD; empty when there is none
       int             mChaseScale;  // chase camera distance and height as a percentage of the classic view (100 = as 2.0)
       // -2 local race, -1 online but awaiting a sample, -3 connection lost,
@@ -201,6 +202,7 @@ class MR_Observer
 
       void SetCockpitView( BOOL pOn );
       void SetGhost( const MR_MainCharacter* pGhost ) { mGhost = pGhost; }
+      void SetExtraGhosts( const std::vector<const MR_MainCharacter*>& pGhosts ) { mExtraGhosts = pGhosts; }
       void SetGhostGapText( const char* pText );
       // Modern look. pEnable turns the hints and shadows on (the camera and the field of view are never touched); pLut maps a palette index to a darker one (256 entries,
       // copied) for the shadows; pReducedMotion keeps the impact flash and the mine's pulse still.

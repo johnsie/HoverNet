@@ -26,6 +26,7 @@
 #include <random>
 #include "../Authority/CraftNames.h"
 #include "GhostRun.h"
+#include "ReplayGhosts.h"
 #include "ReplayLibrary.h"
 #include "ReplayRecorder.h"
 #include "../Authority/ReplayFormat.h"
@@ -94,6 +95,9 @@
 
 // Who drove each slot of the replay about to be shown (set where the names are known, taken by startReplayFile): the "Following ..." message and the craft cycling name the racer.
 static std::vector<std::string> g_nextReplayNames;
+static bool g_raceAgainstReplay = false;                 // set by the replay browser for the replay it is about to start: race against its players (as ghosts) instead of watching
+static ReplayGhostField g_replayField;                   // the players of the replay being raced; empty in every other race
+static std::vector<MR_MainCharacter*> g_fieldCrafts;     // their crafts, made on first use (only drawn, never part of the level)
 
 #ifdef HOVERNET_WEB
 void HoverNetInitializeWebFactory();
@@ -8888,6 +8892,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
             auto button = [](const std::string& id, const std::string& label, bool quiet) { FormField f; f.type = FormField::Type::eButton; f.id = id; f.label = label; f.quiet = quiet; return f; };
             std::string shown;
             int frame = 0;
+            bool raceMode = false;   // choosing a replay races against its players instead of watching it
             const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
             while (running && !started && (limit < 0 || frame < limit)) {
                 ++frame;
@@ -8920,6 +8925,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                 bool refresh = false;
                 for (const HoverNetRml::FormEvent& e : events) {
                     if (e.id == "tab") { tab = e.index; form->SetTabs(tabNames, tab); refresh = true; craftChoice.active = false; }
+                    else if (e.id == "racemode") { raceMode = !raceMode; refresh = true; }
                     else if (e.id == "cancelcraft") { craftChoice.active = false; refresh = true; }
                     else if (e.id.compare(0, 5, "craft") == 0 && craftChoice.active) {   // "Follow which craft?": the slot chosen
                         const int chosen = std::atoi(e.id.c_str() + 5);
@@ -8944,6 +8950,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                                 if (confirmDelete == index) { library.Remove(entry.name); entries = library.List(); confirmDelete = -1; }
                                 else confirmDelete = index;
                             }
+                            else if (raceMode) { g_nextReplayNames = entry.names; startPath = entry.path; startSlot = 0; startNote = "race"; }
                             else if (entry.players > 1) { craftChoice = CraftChoice(); craftChoice.active = true; craftChoice.path = entry.path; craftChoice.title = entry.track; craftChoice.players = entry.players; craftChoice.mySlot = entry.mySlot; craftChoice.slotNames = entry.names; }
                             else { g_nextReplayNames = entry.names; startPath = entry.path; startSlot = 0; }
                             refresh = true;
@@ -8957,14 +8964,14 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                         if (n < server.Replays().size()) {
                             const Protocol3::ReplayInfo& r = server.Replays()[n];
                             message.clear();
-                            if (r.players > 1) askCraftFor(r);
+                            if (r.players > 1 && !raceMode) askCraftFor(r);
                             else { downloadSlotId = r.id; downloadSlot = 0; downloadNote.clear(); server.FetchReplay(r.id); }
                             refresh = true;
                         }
                     }
 #endif
                 }
-                std::string signature = std::to_string(tab) + "|" + std::to_string(entries.size()) + "|" + std::to_string(confirmDelete) + "|" + message + "|" + std::to_string(craftChoice.active);
+                std::string signature = std::to_string(tab) + "|" + std::to_string(entries.size()) + "|" + std::to_string(confirmDelete) + "|" + message + "|" + std::to_string(craftChoice.active) + "|" + std::to_string(raceMode);
 #if defined(HOVERNET_AUTH)
                 signature += "|" + std::to_string(static_cast<int>(server.GetState())) + server.Message() + "|" + std::to_string(serverTrack) + "|" + std::to_string(server.ReplaysLoaded()) + std::to_string(server.ReplaysLoaded() ? server.Replays().size() : 0) + "|" +
                              std::to_string(downloadSlotId) + "/" + std::to_string(downloadSlotId != 0 ? server.DownloadPercent() : 0);
@@ -8985,6 +8992,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                         f.push_back(button("cancelcraft", "CANCEL", true));
                     }
                     else if (tab == 0) {
+                        f.push_back(button("racemode", raceMode ? "MODE: RACE AGAINST THE REPLAY  (click to watch instead)" : "MODE: WATCH  (click to race against a replay instead)", !raceMode));
                         if (entries.empty()) {
                             f.push_back(note("No saved races yet."));
                             f.push_back(note("A race on a HoverNet server that you take part in, or watch from its first moment, is saved here when it ends (the newest " + std::to_string(ReplayLibrary::kKeep) + " are kept). Nothing is sent anywhere: the files stay on this device. The Server replays tab has everyone's races."));
@@ -8993,7 +9001,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                             const ReplayLibrary::Entry& e = entries[static_cast<std::size_t>(index)];
                             if (e.valid) {
                                 const long long seconds = e.durationMs() / 1000;
-                                FormField r = row("m:" + std::to_string(index), e.track, e.when + "   " + std::to_string(e.players) + " player" + (e.players == 1 ? "" : "s") + ", " + std::to_string(e.laps) + " lap" + (e.laps == 1 ? "" : "s") + ", " + std::to_string(seconds / 60) + ":" + (seconds % 60 < 10 ? "0" : "") + std::to_string(seconds % 60), "WATCH");
+                                FormField r = row("m:" + std::to_string(index), e.track, e.when + "   " + std::to_string(e.players) + " player" + (e.players == 1 ? "" : "s") + ", " + std::to_string(e.laps) + " lap" + (e.laps == 1 ? "" : "s") + ", " + std::to_string(seconds / 60) + ":" + (seconds % 60 < 10 ? "0" : "") + std::to_string(seconds % 60), raceMode ? "RACE" : "WATCH");
                                 r.suffix = confirmDelete == index ? "SURE? DELETE" : "DELETE";
                                 f.push_back(r);
                             }
@@ -9020,7 +9028,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                                     if (fin.ms > 0) formatMs(fin.ms, time, sizeof time);
                                     sub += "\n" + std::to_string(k + 1) + ". " + (fin.name.empty() ? "Player " + std::to_string(fin.slot + 1) : fin.name) + (fin.craft < Authority::kCraftCount ? std::string(" (") + Authority::CraftName(fin.craft) + ")" : std::string()) + "   " + time;
                                 }
-                                f.push_back(row("s:" + std::to_string(i), r.track, sub, downloadSlotId == r.id ? "DOWNLOADING " + std::to_string(server.DownloadPercent()) + "%" : std::string("WATCH")));
+                                f.push_back(row("s:" + std::to_string(i), r.track, sub, downloadSlotId == r.id ? "DOWNLOADING " + std::to_string(server.DownloadPercent()) + "%" : raceMode ? std::string("RACE") : std::string("WATCH")));
                             }
                         }
                     }
@@ -9030,7 +9038,9 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                 }
                 if (!startPath.empty()) {
                     bool fatal = false;
+                    g_raceAgainstReplay = raceMode;
                     message = start(startPath, startSlot, startNote, fatal);
+                    g_raceAgainstReplay = false;
                     if (message.empty()) started = true;
                     else if (fatal) { g_QuitConfirmed = true; running = false; }
                     confirmDelete = -1;
@@ -9383,6 +9393,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
             auto row = [](const std::string& id, const std::string& title, const std::string& sub, const std::string& button) { FormField f; f.type = FormField::Type::eRow; f.id = id; f.label = title; f.hint = sub; f.text = button; return f; };
             const char* unreadable = "The server answered in a form this version of the game cannot read: the game needs updating.";
             std::vector<std::function<void()>> watchers;   // a row's button n starts watchers[n]
+            bool raceMode = false;                          // a row's button races against the replay's players (as ghosts) instead of watching it
             std::string shown;                              // what the fields were last built from; they are rebuilt only when it changes (a rebuild puts the list back at the top)
             int frame = 0;
             const int limit = std::getenv("HOVERNET_TEST_RML") != nullptr ? -1 : pFrameLimit;
@@ -9417,6 +9428,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                 bool refresh = false;
                 for (const HoverNetRml::FormEvent& e : events) {
                     if (e.id == "tab") { tab = e.index; form->SetTabs(tabNames, tab); refresh = true; }
+                    else if (e.id == "racemode") { raceMode = !raceMode; refresh = true; }
                     else if (e.id == "track") { track = std::max(0, std::min(Tracks().Count() - 1, e.index)); need = true; laps = 0; }
                     else if (e.id == "kind") {
                         laps = 0;
@@ -9448,9 +9460,10 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                     shown = signature;
                     watchers.clear();
                     std::vector<FormField> f;
+                    { FormField b; b.type = FormField::Type::eButton; b.id = "racemode"; b.quiet = !raceMode; b.label = raceMode ? "MODE: RACE AGAINST THE REPLAY  (click to watch instead)" : "MODE: WATCH  (click to race against a replay instead)"; f.push_back(b); }
                     auto watchButton = [&](const std::string& title, std::uint64_t replayId, int slot, const std::string& noteText, const std::string& trackName, const std::string& racer, const std::string& sub, const std::string& label) {
                         watchers.push_back([&, replayId, slot, noteText, trackName, racer]() { watchReplay(replayId, slot, noteText, trackName, racer); });
-                        f.push_back(row("w:" + std::to_string(watchers.size() - 1), title, sub, downloadId == replayId ? "DOWNLOADING..." : label));
+                        f.push_back(row("w:" + std::to_string(watchers.size() - 1), title, sub, downloadId == replayId ? "DOWNLOADING..." : (raceMode ? std::string("RACE") : label)));
                     };
                     if (server.GetState() == OnlineLobby::State::eFailed) {
                         f.push_back(note(server.Message().empty() ? "Could not reach the server." : server.Message()));
@@ -9555,7 +9568,9 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                 }
                 if (!startPath.empty()) {
                     bool fatal = false;
+                    g_raceAgainstReplay = raceMode;
                     message = start(startPath, startSlot, startNote, fatal);
+                    g_raceAgainstReplay = false;
                     startPath.clear();
                     if (message.empty()) started = true;
                     else if (fatal) { g_QuitConfirmed = true; running = false; }
@@ -11471,6 +11486,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
         case HoverNetRml::Choice::eQuickRace: return MenuChoice::eQuickRace;
         case HoverNetRml::Choice::eLeaderboards: return MenuChoice::eLeaderboards;
         case HoverNetRml::Choice::eGarage: return MenuChoice::eGarage;
+        case HoverNetRml::Choice::eReplays: return MenuChoice::eWatchReplay;
         case HoverNetRml::Choice::eTutorial: return MenuChoice::eTutorial;
         case HoverNetRml::Choice::eSettings: return MenuChoice::eSettings;
         case HoverNetRml::Choice::eBack: return MenuChoice::eLocalPlay;   // as the ImGui menu: Esc / B leave with the default choice
@@ -11854,6 +11870,7 @@ MenuChoice RunMainMenu(SDL2GraphicsBackend& graphics, MR_VideoBuffer& buffer, MR
             if (tutorialClicked) { choice = MenuChoice::eTutorial; running = false; }
             ImGui::SameLine();
             if (HoverNetQuietButton("Settings", ImVec2(cell, secondaryHeight))) { choice = MenuChoice::eSettings; running = false; }
+            if (HoverNetQuietButton("Watch a Replay", ImVec2(cell * 2.0f + ImGui::GetStyle().ItemSpacing.x, secondaryHeight))) { choice = MenuChoice::eWatchReplay; running = false; }
         }
         if (showHint) {
             ImGui::PushTextWrapPos(0.0f);
@@ -12750,6 +12767,7 @@ int RunClient(int argc, char** argv)
             tutorial.Stop();
             ShutdownTutorialOverlay();
         }
+        if (!(g_replayField.Active() && newTrackName == g_replayField.track && newLaps == g_replayField.laps)) g_replayField.Clear();   // (a restart of the same race keeps its ghosts)
         ShowLoadingScreen(graphics, newTrackName);
         session.SetElementCreationBroadcastHook(nullptr, nullptr);
         onlineClient.Disconnect();
@@ -13069,6 +13087,38 @@ int RunClient(int argc, char** argv)
         if (trackPath.empty() || Sha256::HashFile(trackPath) != next.data.trackSha256) {
             return "The track '" + next.data.track + "' on this computer is not the one the replay was recorded on.";
         }
+        if (g_raceAgainstReplay) {
+            // Racing against the replay: its players become ghosts in an ordinary local race on the same track, laps and weapons setting. The replay is run once, here, to get their paths.
+            g_raceAgainstReplay = false;
+            ReplayGhostField field;
+            std::string ghostError;
+            ShowLoadingScreen(graphics, next.data.track);
+            if (!BuildReplayGhosts(next.data, trackPath, field, ghostError)) return "The replay could not be prepared: " + ghostError;
+            field.names = std::move(g_nextReplayNames);
+            g_nextReplayNames.clear();
+            fatal = true;
+            rememberLocal = true;
+            g_replayField.Clear();
+            const bool raceLoaded = loadLocalRace(field.track, field.laps, field.weapons);
+            if (!raceLoaded) return "Could not load the replay's track.";
+            // the player starts on the first grid place the replay's players do not use (the same place as the first of them if the track has no more)
+            MR_Level* raceLevel = session.Level();
+            const int mySlot = field.runs.size() < static_cast<std::size_t>(raceLevel->GetPlayerCount()) ? static_cast<int>(field.runs.size()) : 0;
+            const int myRoom = raceLevel->GetStartingRoom(mySlot);
+            if (myRoom >= 0 && myRoom < raceLevel->GetRoomCount() && mainCharacter != nullptr) {
+                mainCharacter->mPosition = raceLevel->GetStartingPos(mySlot);
+                mainCharacter->SetOrientation(raceLevel->GetStartingOrientation(mySlot));
+                mainCharacter->mRoom = myRoom;
+                for (int roomIndex = 0; roomIndex < raceLevel->GetRoomCount(); ++roomIndex)
+                    for (MR_FreeElementHandle handle = raceLevel->GetFirstFreeElement(roomIndex); handle != nullptr; handle = MR_Level::GetNextFreeElement(handle))
+                        if (MR_Level::GetFreeElement(handle) == mainCharacter) { raceLevel->MoveElement(handle, myRoom); break; }
+            }
+            const int count = static_cast<int>(field.runs.size());
+            g_replayField = std::move(field);
+            session.AddMessage(("Racing the " + std::to_string(count) + (count == 1 ? " player" : " players") + " of a saved race: they are ghosts, and you cannot touch them").c_str());
+            fatal = false;
+            return std::string();
+        }
         next.watch = (watch < 0 || watch >= next.data.players) ? 0 : watch;
         next.path = path;
         next.names = std::move(g_nextReplayNames);
@@ -13110,6 +13160,7 @@ int RunClient(int argc, char** argv)
         tutorial.Stop();   // back at the menu: the lesson card goes, and its ImGui context with it (the menus make their own)
         ShutdownTutorialOverlay();
         replay.active = false;
+        g_replayField.Clear();
         if (playtestPending) {
             // the editor's Playtest: no menus the first time, straight into a race on the track just compiled (--laps N, weapons on); the menus follow afterwards
             playtestPending = false;
@@ -13217,7 +13268,7 @@ int RunClient(int argc, char** argv)
                 startingPlayerPosition = mainCharacter->mPosition;
             }
             else {
-                const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
+                g_replayField.Clear(); const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
                                                                 *menuFontHandle->GetSprite(), frameLimit);
                 if (setup.confirmed) {
                     if (!loadLocalRace(setup.trackName, setup.laps, setup.weapons)) {
@@ -13453,7 +13504,7 @@ int RunClient(int argc, char** argv)
     GhostRun ghostRecording, ghostBest;
     std::string ghostKey;                 // "track/laps" the ghostBest belongs to
     MR_MainCharacter* ghostCraft = nullptr;
-    struct GhostCraftGuard { MR_MainCharacter*& c; ~GhostCraftGuard() { delete c; } } ghostCraftGuard{ghostCraft};   // the ghost's craft is made on first use and freed on every way out
+    struct GhostCraftGuard { MR_MainCharacter*& c; ~GhostCraftGuard() { delete c; for (MR_MainCharacter* f : g_fieldCrafts) delete f; g_fieldCrafts.clear(); } } ghostCraftGuard{ghostCraft};   // the ghost's craft is made on first use and freed on every way out
     MR_SimulationTime ghostLastTime = 0;  // a time that goes back means the race was restarted
     bool ghostShownReported = false;      // test hook: say once that the ghost was on screen
     bool ghostGapReported = false;        // test hook: say once that the HUD had a gap to the ghost
@@ -14112,7 +14163,7 @@ int RunClient(int argc, char** argv)
         }
         if (startNewLocalRace) {
             replay.active = false;
-            const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
+            g_replayField.Clear(); const LocalRaceSetup setup = RunLocalRaceSetup(graphics, buffer, viewport,
                                                             *menuFontHandle->GetSprite(), frameLimit);
             if (setup.confirmed) {
                 missileSeen = false;
@@ -14714,7 +14765,7 @@ int RunClient(int argc, char** argv)
                     continue;
                 }
                 if (resultChoice == PostRaceChoice::eNewLocalRace) {
-                    const LocalRaceSetup setup = RunLocalRaceSetup(
+                    g_replayField.Clear(); const LocalRaceSetup setup = RunLocalRaceSetup(
                         graphics, buffer, viewport, *menuFontHandle->GetSprite(), frameLimit);
                     if (setup.confirmed) {
                         missileSeen = false;
@@ -14953,8 +15004,48 @@ int RunClient(int argc, char** argv)
                             ghostRecording.Record(ghostTime, mainCharacter->mPosition.mX, mainCharacter->mPosition.mY, mainCharacter->mPosition.mZ,
                                                   mainCharacter->GetCabinOrientation(), mainCharacter->mRoom);
                         }
+                        // Racing against a saved race: its players, each a ghost, in an ordinary race on the same track and laps (never in an online race or a replay).
+                        bool fieldShown = false;
+                        {
+                            bool online = raceWasOnline;
+#if defined(HOVERNET_AUTH)
+                            online = online || auth.active;
+#endif
+                            std::vector<const MR_MainCharacter*> visible;
+                            if (!watching && !online && g_replayField.Active() && g_replayField.track == ghostTrack && g_replayField.laps == ghostLaps) {
+                                fieldShown = true;
+                                const std::size_t count = g_replayField.runs.size();
+                                while (g_fieldCrafts.size() < count) {
+                                    MR_MainCharacter* craft = MR_MainCharacter::New(ghostLaps, FALSE);
+                                    if (craft != nullptr) { craft->AddRenderer(); craft->SetHoverId(static_cast<int>(g_fieldCrafts.size()) % 8); }
+                                    g_fieldCrafts.push_back(craft);
+                                }
+                                for (std::size_t i = 0; i < count; ++i) {
+                                    GhostRun::Sample where;
+                                    if (g_fieldCrafts[i] == nullptr || !g_replayField.runs[i].At(ghostTime, where)) continue;
+                                    g_fieldCrafts[i]->SetHoverModel(mainCharacter->GetHoverModel());
+                                    g_fieldCrafts[i]->mPosition = MR_3DCoordinate(where.x, where.y, where.z);
+                                    g_fieldCrafts[i]->SetOrientation(where.orientation);
+                                    g_fieldCrafts[i]->mRoom = where.room;
+                                    visible.push_back(g_fieldCrafts[i]);
+                                }
+                                // the gap on the HUD is to the replay's winner
+                                std::int64_t fieldGap = 0;
+                                if (g_replayField.winner >= 0 && g_replayField.runs[static_cast<std::size_t>(g_replayField.winner)].GapMs(ghostTime, mainCharacter->mPosition.mX, mainCharacter->mPosition.mY, mainCharacter->mPosition.mZ, mainCharacter->mRoom, fieldGap))
+                                    observer->SetGhostGapText(GhostRun::FormatGap(fieldGap).c_str());
+                                else observer->SetGhostGapText(nullptr);
+                                observer->SetGhost(nullptr);
+                                if (!ghostShownReported && std::getenv("HOVERNET_TEST_GHOST") != nullptr && !visible.empty()) {
+                                    ghostShownReported = true;
+                                    std::printf("GHOSTTEST field %zu of %zu ghosts shown at %d ms\n", visible.size(), count, static_cast<int>(ghostTime));
+                                    std::fflush(stdout);
+                                }
+                            }
+                            observer->SetExtraGhosts(visible);
+                        }
                         GhostRun::Sample at;
-                        if (!watching && !ghostBest.Empty() && LoadShowGhost() && ghostBest.At(ghostTime, at)) {
+                        if (fieldShown) {}
+                        else if (!watching && !ghostBest.Empty() && LoadShowGhost() && ghostBest.At(ghostTime, at)) {
                             if (ghostCraft == nullptr) {
                                 ghostCraft = MR_MainCharacter::New(ghostLaps, FALSE);
                                 if (ghostCraft != nullptr) { ghostCraft->AddRenderer(); ghostCraft->SetHoverId(7); }

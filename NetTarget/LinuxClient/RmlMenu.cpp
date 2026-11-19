@@ -36,6 +36,7 @@ public:
         else if (id == "offline") *mResult = Choice::eOffline;
         else if (id == "leaderboards") *mResult = Choice::eLeaderboards;
         else if (id == "garage") *mResult = Choice::eGarage;
+        else if (id == "replays") *mResult = Choice::eReplays;
         else if (id == "tutorial") *mResult = Choice::eTutorial;
         else if (id == "settings") *mResult = Choice::eSettings;
         else if (id == "quit") *mResult = Choice::eQuitRequested;

@@ -4,6 +4,13 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.83 - 2026-11-19
+
+_Not released yet. Run on this build (Linux, headless): the replay ghosts test (every ghost sample equals the race's craft at that time), a scripted run from the main menu through Watch a Replay in race mode into a race with both ghosts drawn (screenshot looked at), the main menu screenshot, and the main-menu, RmlUi menu, replay viewer, leaderboards, online menu, ghost, render golden and camera-rule tests (all passed). Not run: racing a replay from Leaderboards or a server replay (needs a server; compiled only), the web build, Windows, a real laptop._
+
+- **Race against a replay**: in Watch a Replay (and Leaderboards) a mode button switches the rows from WATCH to RACE. Racing a replay starts a normal local race on its track, laps and weapons with every player of the saved race as a ghost (a drawn-only craft: it cannot be hit or hit anything, and the race itself is unchanged, so no rules version bump). You start on a free grid place; the HUD shows your gap to the winner. See docs/ghosts.md.
+- **Watch a Replay is on the main menu** (it was under Settings).
+
 ## 2.3.82 - 2026-11-19
 
 _Released at the owner's request. Run on this build (Linux, headless): the scrolling list opens, shows a styled scrollbar (screenshot), a real mouse click (move, press, release) on a row picks that track, also after scrolling with the wheel. Not run: a real laptop or touchpad, Windows, the web build, the test suite._

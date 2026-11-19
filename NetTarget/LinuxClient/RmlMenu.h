@@ -40,7 +40,7 @@ struct MainMenuInfo
     std::function<void(Sound)> sound;   // the game's interface sounds (null = silent)
 };
 
-enum class Choice { eNone, eOnline, eOffline, eLeaderboards, eGarage, eTutorial, eSettings, eBack, eQuitRequested, eQuickRace };
+enum class Choice { eNone, eOnline, eOffline, eLeaderboards, eGarage, eTutorial, eSettings, eBack, eQuitRequested, eQuickRace, eReplays };
 
 // Shows the menu until a door is chosen (or, with frameLimit >= 0, for that many frames and then eNone). The caller keeps its own event loop out of the way:
 // this one polls SDL events itself. The renderer's logical size is set to the window's own while it runs and put back to restoreW x restoreH.

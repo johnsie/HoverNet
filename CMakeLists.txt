@@ -492,6 +492,13 @@ else()
     add_executable(HoverNetGhostRunTest NetTarget/LinuxClient/GhostRunTest.cpp)
     add_test(NAME HoverNetGhostRun COMMAND HoverNetGhostRunTest)
 
+    add_executable(HoverNetReplayGhostsTest
+        NetTarget/LinuxClient/ReplayGhostsTest.cpp
+        NetTarget/LinuxClient/ReplayGhosts.cpp
+    )
+    target_link_libraries(HoverNetReplayGhostsTest PRIVATE HoverNetSim)
+    add_test(NAME HoverNetReplayGhosts COMMAND HoverNetReplayGhostsTest WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
     add_executable(HoverNetPredictionTest
         NetTarget/LinuxClient/PredictionTest.cpp
     )
@@ -864,6 +871,7 @@ add_executable(HoverNetGame2Player
     NetTarget/LinuxClient/TrackPlan.cpp
     NetTarget/LinuxClient/TrackBackdrop.cpp
     NetTarget/LinuxClient/TrackScene.cpp
+    NetTarget/LinuxClient/ReplayGhosts.cpp
     NetTarget/LinuxClient/TrackDownloader.cpp
     NetTarget/LinuxClient/Gunzip.cpp
     NetTarget/LinuxClient/Sha256.cpp
