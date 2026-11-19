@@ -104,7 +104,8 @@ struct Flyover::Impl
     MR_ClientSession* session = nullptr;
     MR_Observer* observer = nullptr;
     std::array<std::uint8_t, MR_NB_COLORS * 3> palette{};
-    int width = 0, height = 0, scroll = 0;
+    int width = 0, height = 0, scroll = 0;   // the drawing's size
+    int supersample = 1, outW = 0, outH = 0;   // the kept picture is outW x outH, averaged down from supersample times that
     double cx = 0, cy = 0, radius = 0, eyeZ = 0, lookZ = 0;
     int cropX = 0, cropY = 0, cropW = 0, cropH = 0;   // the part of the picture kept: the middle, where the track is at any angle of its turn (the rest is empty)
     int scaleDown = 1;   // the level is shrunk by this factor for the picture (see Open)
@@ -121,14 +122,17 @@ struct Flyover::Impl
 Flyover::Flyover() : mImpl(new Impl) {}
 Flyover::~Flyover() { mImpl->Close(); delete mImpl; }
 bool Flyover::Ready() const { return mImpl->ready; }
-int Flyover::Width() const { return mImpl->cropW; }
-int Flyover::Height() const { return mImpl->cropH; }
+int Flyover::Width() const { return mImpl->outW; }
+int Flyover::Height() const { return mImpl->outH; }
 
 constexpr double kCropLeft = 0.10, kCropRight = 0.90, kCropTop = 0.06, kCropBottom = 0.97;   // (the track is framed so that it stays inside this at every angle)
 
-bool Flyover::Open(const std::string& path, const std::string& name, int width, int height)
+bool Flyover::Open(const std::string& path, const std::string& name, int pOutputWidth, int pSupersample)
 {
     Impl& m = *mImpl;
+    const int supersample = std::max(1, pSupersample);
+    const int width = std::max(64, static_cast<int>(std::ceil(pOutputWidth * supersample / (kCropRight - kCropLeft))));   // the whole drawing, so that the kept middle is the output width times the supersampling
+    const int height = width * 5 / 8;
     m.Close();
     MR_RecordFile* track = new MR_RecordFile;
     if (!track->OpenForRead(path.c_str())) { delete track; return false; }
@@ -198,8 +202,10 @@ bool Flyover::Open(const std::string& path, const std::string& name, int width, 
     m.observer = MR_Observer::New();
     if (m.observer == nullptr) { m.Close(); return false; }
     m.width = width; m.height = height;
-    m.cropX = static_cast<int>(width * kCropLeft); m.cropW = static_cast<int>(width * (kCropRight - kCropLeft));
-    m.cropY = static_cast<int>(height * kCropTop); m.cropH = static_cast<int>(height * (kCropBottom - kCropTop));
+    m.supersample = supersample;
+    m.cropX = static_cast<int>(width * kCropLeft) / supersample * supersample; m.cropW = static_cast<int>(width * (kCropRight - kCropLeft)) / supersample * supersample;
+    m.cropY = static_cast<int>(height * kCropTop) / supersample * supersample; m.cropH = static_cast<int>(height * (kCropBottom - kCropTop)) / supersample * supersample;
+    m.outW = m.cropW / supersample; m.outH = m.cropH / supersample;
     m.ready = true;
     return true;
 }
@@ -219,16 +225,31 @@ bool Flyover::Draw(float degrees, std::vector<std::uint8_t>& rgba)
     yaw = MR_NORMALIZE_ANGLE(yaw);
     m.observer->RenderFlyover(m.buffer, m.session, eye, yaw, m.scroll, 0, nullptr);
     // (no sky of its own: the picture is transparent round the track, so the menu's grid shows behind it)
-    const std::size_t pixels = static_cast<std::size_t>(m.cropW) * m.cropH;
+    const std::size_t pixels = static_cast<std::size_t>(m.outW) * m.outH;
     rgba.resize(pixels * 4);
     const std::uint8_t* frame = m.buffer->GetBuffer();
     const std::size_t lineLen = static_cast<std::size_t>(m.buffer->GetLineLen());
-    for (int y = 0; y < m.cropH; ++y) {
-        const std::uint8_t* row = frame + static_cast<std::size_t>(y + m.cropY) * lineLen + m.cropX;
-        std::uint8_t* out = rgba.data() + static_cast<std::size_t>(y) * m.cropW * 4;
-        for (int x = 0; x < m.cropW; ++x) { out[x * 4] = m.palette[row[x] * 3]; out[x * 4 + 1] = m.palette[row[x] * 3 + 1]; out[x * 4 + 2] = m.palette[row[x] * 3 + 2]; out[x * 4 + 3] = row[x] == 0 ? 0 : 255; }   // colour 0 is never a surface: where nothing was drawn it is left see-through, so the menu's own backdrop shows instead of a black hole
+    const int ss = m.supersample;
+    for (int oy = 0; oy < m.outH; ++oy) {
+        std::uint8_t* out = rgba.data() + static_cast<std::size_t>(oy) * m.outW * 4;
+        for (int ox = 0; ox < m.outW; ++ox) {
+            // the average of the ss x ss drawn pixels: colour over the pixels that were drawn (colour 0 is never a surface: where nothing was drawn it is see-through, so the menu's own backdrop
+            // shows), and the share that was drawn as the opacity
+            int r = 0, g = 0, b = 0, n = 0;
+            for (int sy = 0; sy < ss; ++sy) {
+                const std::uint8_t* row = frame + static_cast<std::size_t>(m.cropY + oy * ss + sy) * lineLen + m.cropX + ox * ss;
+                for (int sx = 0; sx < ss; ++sx) {
+                    const int index = row[sx];
+                    if (index == 0) continue;
+                    r += m.palette[index * 3]; g += m.palette[index * 3 + 1]; b += m.palette[index * 3 + 2]; ++n;
+                }
+            }
+            if (n == 0) { out[ox * 4] = out[ox * 4 + 1] = out[ox * 4 + 2] = out[ox * 4 + 3] = 0; continue; }
+            out[ox * 4] = static_cast<std::uint8_t>(r / n); out[ox * 4 + 1] = static_cast<std::uint8_t>(g / n); out[ox * 4 + 2] = static_cast<std::uint8_t>(b / n);
+            out[ox * 4 + 3] = static_cast<std::uint8_t>(n * 255 / (ss * ss));
+        }
     }
-    if (const char* dump = std::getenv("HOVERNET_FLYOVER_DUMP")) { static bool once = false; if (!once) { once = true; if (FILE* f = std::fopen(dump, "wb")) { std::fprintf(f, "P6 %d %d 255\n", m.cropW, m.cropH); for (std::size_t i = 0; i < pixels; ++i) { const std::uint8_t px[3] = {rgba[i * 4 + 3] ? rgba[i * 4] : std::uint8_t(40), rgba[i * 4 + 3] ? rgba[i * 4 + 1] : std::uint8_t(0), rgba[i * 4 + 3] ? rgba[i * 4 + 2] : std::uint8_t(60)}; std::fwrite(px, 1, 3, f); } std::fclose(f); } } }   // test switch: the first picture, as a PPM
+    if (const char* dump = std::getenv("HOVERNET_FLYOVER_DUMP")) { static bool once = false; if (!once) { once = true; if (FILE* f = std::fopen(dump, "wb")) { std::fprintf(f, "P6 %d %d 255\n", m.outW, m.outH); for (std::size_t i = 0; i < pixels; ++i) { const std::uint8_t px[3] = {rgba[i * 4 + 3] ? rgba[i * 4] : std::uint8_t(40), rgba[i * 4 + 3] ? rgba[i * 4 + 1] : std::uint8_t(0), rgba[i * 4 + 3] ? rgba[i * 4 + 2] : std::uint8_t(60)}; std::fwrite(px, 1, 3, f); } std::fclose(f); } } }   // test switch: the first picture, as a PPM
     if (std::getenv("HOVERNET_FLYOVER_DEBUG")) { std::size_t drawn = 0; for (std::size_t i = 3; i < rgba.size(); i += 4) if (rgba[i] != 0) ++drawn; std::fprintf(stderr, "flyover: %zu of %zu pixels drawn (shrunk %dx)\n", drawn, pixels, m.scaleDown); }
     return true;
 }
@@ -242,6 +263,7 @@ struct FlyoverWorker::Impl
     std::thread thread;
     bool quit = false, still = false, failed = false, trackChanged = false;
     int generation = 0;
+    int outputWidth = 768;           // the width each picture is kept at (SetOutputWidth)
     std::string path, name;
     std::vector<Frame> done;          // finished pictures not yet taken
     std::chrono::steady_clock::time_point startedAt = std::chrono::steady_clock::now();   // when the current track was asked for: the clock of the turn
@@ -259,13 +281,20 @@ struct FlyoverWorker::Impl
                 openPath = path; openName = name; trackChanged = false; gen = generation;
             }
             bool ok;
+            int outWidth;
+            { std::lock_guard<std::mutex> lock(mutex); outWidth = outputWidth; }
+            if (const char* forced = std::getenv("HOVERNET_FLYOVER_W")) outWidth = std::atoi(forced);   // test switch
+            // The renderer draws correctly up to about 2400 pixels across (checked: 2400 works, 2800 draws nothing), so the drawing is the output width times the largest whole number that keeps it
+            // within that (3 at most; 2 at most on the page, which draws with the CPU).
+#ifdef __EMSCRIPTEN__
+            constexpr int kMostSupersample = 2;
+#else
+            constexpr int kMostSupersample = 3;
+#endif
+            const int supersample = std::max(1, std::min(kMostSupersample, static_cast<int>(1920 / std::max(1, outWidth))));
             {
                 std::lock_guard<std::mutex> level(HoverNetPlan::LevelLock());
-                #ifdef __EMSCRIPTEN__
-                ok = fly.Open(openPath, openName, 640, 400);   // smaller on the page (memory, and the picture is drawn by the CPU there); smoothed when shown
-#else
-                ok = fly.Open(openPath, openName, 960, 600);   // drawn at this size, the middle kept, and smoothed when shown
-#endif
+                ok = fly.Open(openPath, openName, outWidth, supersample);
             }
             { std::lock_guard<std::mutex> lock(mutex); failed = !ok; }
             if (!ok) continue;
@@ -293,6 +322,7 @@ struct FlyoverWorker::Impl
                 }
                 const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
                 lastMs = ms;
+                if (std::getenv("HOVERNET_FLYOVER_DEBUG")) std::fprintf(stderr, "flyover: picture %d took %.0f ms (%dx%d kept)\n", count, ms, fly.Width(), fly.Height());
                 if (drawn) {
                     frame.width = fly.Width(); frame.height = fly.Height();
                     std::lock_guard<std::mutex> lock(mutex);
@@ -328,6 +358,7 @@ void FlyoverWorker::SetTrack(const std::string& path, const std::string& name)
     }
     mImpl->wake.notify_all();
 }
+void FlyoverWorker::SetOutputWidth(int pixels) { std::lock_guard<std::mutex> lock(mImpl->mutex); mImpl->outputWidth = std::max(256, std::min(1400, pixels)); }
 void FlyoverWorker::SetStill(bool still) { std::lock_guard<std::mutex> lock(mImpl->mutex); mImpl->still = still; }
 double FlyoverWorker::Seconds() const { return mImpl->Seconds(); }
 int FlyoverWorker::Generation() const { std::lock_guard<std::mutex> lock(mImpl->mutex); return mImpl->generation; }

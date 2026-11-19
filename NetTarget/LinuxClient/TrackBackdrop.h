@@ -23,7 +23,8 @@ public:
     ~Flyover();
     Flyover(const Flyover&) = delete;
     Flyover& operator=(const Flyover&) = delete;
-    bool Open(const std::string& path, const std::string& name, int width, int height);   // false: the track would not load
+    // pOutputWidth: the width in pixels of the picture that is kept (the middle of the drawing); it is drawn pSupersample times larger across and averaged down, which smooths the edges and the coarse textures.
+    bool Open(const std::string& path, const std::string& name, int pOutputWidth, int pSupersample);   // false: the track would not load
     bool Ready() const;
     // Draws the view with the eye `degrees` round the orbit into `rgba` (width * height * 4). Returns false when not open.
     bool Draw(float degrees, std::vector<std::uint8_t>& rgba);
@@ -51,6 +52,7 @@ public:
     FlyoverWorker(const FlyoverWorker&) = delete;
     FlyoverWorker& operator=(const FlyoverWorker&) = delete;
     void SetTrack(const std::string& path, const std::string& name);   // a different track: the ring is drawn again (pictures of the old one stop arriving)
+    void SetOutputWidth(int pixels);                                    // the width of each picture (set before SetTrack): about the width it is shown at on the screen
     void SetStill(bool still);                                          // draw only the first picture (Reduced motion)
     int Generation() const;                                             // counts up each time SetTrack starts a new ring, so the caller can drop the pictures it holds
     // Moves the pictures finished since the last call into `out` (in order). Returns how many.

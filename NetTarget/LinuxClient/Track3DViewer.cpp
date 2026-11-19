@@ -5127,7 +5127,7 @@ struct TrackBackdropShow
     Uint32 since = 0;
     void Clear() { if (texA != nullptr) SDL_DestroyTexture(texA); if (texB != nullptr) SDL_DestroyTexture(texB); texA = texB = nullptr; for (SDL_Texture*& t : pictures) if (t != nullptr) SDL_DestroyTexture(t); pictures.clear(); }
     ~TrackBackdropShow() { worker.reset(); Clear(); if (pending.valid()) pending.wait(); }
-    void Prepare(SDL_Renderer*, int index)
+    void Prepare(SDL_Renderer* renderer, int index)
     {
         if (index == builtFor) return;
         builtFor = index; since = SDL_GetTicks();
@@ -5140,6 +5140,11 @@ struct TrackBackdropShow
         textured = style == nullptr || (std::string(style) != "neon" && std::string(style) != "scene");   // the default: the game's own renderer (the real track), from far enough away to see all of it; HOVERNET_BACKDROP=neon or =scene for the GPU models (neon look / plain look)
         if (textured) {
             if (!worker) worker.reset(new HoverNetBackdrop::FlyoverWorker);
+            {   // each picture is made at about the width it is shown at (the picture is drawn at 0.73 of the window's width), so it is not stretched
+                int outW = 0, outH = 0;
+                SDL_GetRendererOutputSize(renderer, &outW, &outH);
+                worker->SetOutputWidth(static_cast<int>(outW * 0.73f));
+            }
             worker->SetStill(LoadReducedMotion());
             worker->SetTrack(Tracks().PathFor(entry->mName), entry->mName);
             generation = worker->Generation();
