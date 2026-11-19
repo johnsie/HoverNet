@@ -5326,7 +5326,7 @@ public:
                 const TrackBriefing guide = BriefingFor(index);
                 std::string meta = guide.mDifficulty == "Unrated" ? guide.mCharacter : guide.mDifficulty + " - " + guide.mCharacter;
                 if (!e->mInstalled) meta += "  -  " + FormatMegabytes(e->mDownloadBytes) + " to download";
-                cards += std::string("<div class=\"trow") + (index == pCurrent ? " sel" : "") + "\" data-id=\"" + p + "pick\" data-index=\"" + std::to_string(index) + "\"><span class=\"rk\">" +
+                cards += std::string("<div class=\"trow") + (index == pCurrent ? " sel" : "") + "\" id=\"" + p + "row" + std::to_string(index) + "\" data-id=\"" + p + "pick\" data-index=\"" + std::to_string(index) + "\"><span class=\"rk\">" +
                          (e->mMarket ? "MARKET" : IsOfficial(e) ? "OFFICIAL" : "COMMUNITY") + "</span><span class=\"rn\">" + HoverNetRml::FormScreen::Escape(e->mName) + "</span><span class=\"rm\">" + HoverNetRml::FormScreen::Escape(meta) + "</span></div>";
             }
             return cards.empty() ? std::string("<p class=\"meta\">No track matches.</p>") : cards;
@@ -5402,7 +5402,7 @@ int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, 
     int chosen = -1;
     auto draw = [&]() {
         form->SetHtml("filters", picker.FiltersHtml(""));
-        form->SetHtml("sorts", picker.SortsHtml("") + picker.ViewHtml(""));
+        form->SetHtml("sorts", picker.SortsHtml(""));
         form->SetHtml("grid", picker.CardsHtml("", pCurrent, pBests));
         form->SetClass("grid", "tall", picker.List());
         form->SetClass("pager", "hide", picker.List());
@@ -5425,7 +5425,8 @@ int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, 
             return preview.mTexture;
         });
     }
-    if (std::getenv("HOVERNET_TEST_BROWSER_LIST") != nullptr) picker.SetList(true);   // test switch: start in the scrolling list
+    // (The scrolling list mode of TrackPicker is not offered: clicking a row did not work on the owner's laptop and could not be reproduced here. HOVERNET_TEST_BROWSER_LIST=1 still opens it, for testing.)
+    if (std::getenv("HOVERNET_TEST_BROWSER_LIST") != nullptr) picker.SetList(true);
     picker.ShowTrack(pCurrent);
     draw();
     int frame = 0;

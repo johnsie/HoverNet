@@ -48,3 +48,9 @@ button.act.quiet:hover, button.act.quiet:focus { background-color: #3a3e54; }
 input.text { display: block; box-sizing: border-box; color: #ffffff; background-color: #0b0c11; border-width: 1dp; border-color: #303342; border-radius: 6dp; font-size: 16dp; cursor: text; }
 input.text:focus { border-color: #fa737a; }
 input.text selection { background-color: #dc3546; color: #ffffff; }
+
+scrollbarvertical { width: 14dp; }
+scrollbarvertical slidertrack { width: 14dp; background-color: #1b1e2a; border-radius: 7dp; }
+scrollbarvertical sliderbar { width: 14dp; min-height: 48dp; background-color: #5a6285; border-radius: 7dp; }
+scrollbarvertical sliderbar:hover, scrollbarvertical sliderbar:active { background-color: #8a93bd; }
+scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0dp; height: 0dp; display: none; }

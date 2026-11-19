@@ -4,6 +4,13 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.81 - 2026-11-19
+
+_Not released yet. Run on this build (Linux): desktop screenshots of the race screen and of the track browser (cards). Not run: the test suite for this change, Windows, the web build, a real laptop._
+
+- **The track browser is back to cards only.** The scrolling list of 2.3.80 is taken out of the screen: on the owner's laptop a row could not be selected, and that could not be reproduced here (a scripted click on a row works). The list code stays in `TrackPicker`, reachable only with `HOVERNET_TEST_BROWSER_LIST=1`, and the browser's scrollbar is styled.
+- **The spinning track sits another 10% higher** on the race screen (30% of the height down), the grid with it.
+
 ## 2.3.80 - 2026-11-19
 
 _Released at the owner's request. Run on this build (Linux): desktop screenshots of the race screen and of the track browser in both modes; the render golden, camera-rule and track-plan tests (passed). Not run: the full suite, Windows, the web build, Firefox/Edge. The mouse-wheel scroll of the list and the objects' animation over time were not watched live._
