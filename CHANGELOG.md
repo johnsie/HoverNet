@@ -4,6 +4,14 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.79 - 2026-11-19
+
+_Released at the owner's request. Run on this build (Linux): a desktop screenshot of the race screen with the grid and the track (community track ZRT's Nightmare) and a dump of the track picture; the render golden test and the camera-rule test (both passed, with every target rebuilt). Not run: the full test suite, Windows, the web build, Firefox/Edge, a slow machine; the smooth turn was not watched live, and the grid's turn direction was checked by reasoning about the two coordinate conventions, not by eye._
+
+- **The track turns smoothly**: the pictures of the turn were drawn every third of a second, a degree apart, and the game faded between two of them (a blur while it moved), and a late picture froze the turn and then jumped it. They are now drawn every 70 ms (a fifth of a degree apart), a few ahead of the eye, so the fade between two is too small to see and a late one does not stall the turn.
+- **The walls on the near side of the track are drawn**: the renderer draws a wall from one side only, so the walls facing the viewer from outside were missing. The menu's flyover now draws walls from both sides (`SetTwoSidedWalls`, off for racing; the race picture is unchanged, the render golden test passes).
+- **The track sits on the grid**: the grid behind the track is now seen by the same camera as the track's picture (level, the same field of view, the horizon in the same place, the eye at the same height over the track's centre), so the track and the grid share a ground and a perspective.
+
 ## 2.3.78 - 2026-11-19
 
 _Released at the owner's request. Run on this build: desktop screenshots (Switchback, ClassicH) and the web page in headless Chrome on the GPU (60 frames a second offered, no console errors, screenshot looked at); the camera-rule test. Not run: the full test suite, the render golden test (no renderer file changed), Windows, Firefox/Edge, a slow machine._

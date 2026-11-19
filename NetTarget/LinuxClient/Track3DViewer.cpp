@@ -5120,12 +5120,11 @@ struct TrackBackdropShow
     HoverNetPlan::Plan plan;
     std::vector<SDL_Texture*> pictures;   // the plan's floor and wall pictures, on the graphics card (each tiled four by four, so a surface can repeat it)
     std::unique_ptr<HoverNetBackdrop::FlyoverWorker> worker;   // the textured style
-    SDL_Texture* texA = nullptr; SDL_Texture* texB = nullptr;   // the real track's last two pictures (A older), blended by the eye's real angle
-    float degA = 0, degB = 0;
+    std::vector<std::pair<float, SDL_Texture*>> ring;   // the real track's pictures not yet passed (angle, picture), oldest first; the two either side of the eye's real angle are blended
     int builtFor = -2, generation = -1;
     bool textured = false;
     Uint32 since = 0;
-    void Clear() { if (texA != nullptr) SDL_DestroyTexture(texA); if (texB != nullptr) SDL_DestroyTexture(texB); texA = texB = nullptr; for (SDL_Texture*& t : pictures) if (t != nullptr) SDL_DestroyTexture(t); pictures.clear(); }
+    void Clear() { for (auto& r : ring) SDL_DestroyTexture(r.second); ring.clear(); for (SDL_Texture*& t : pictures) if (t != nullptr) SDL_DestroyTexture(t); pictures.clear(); }
     ~TrackBackdropShow() { worker.reset(); Clear(); if (pending.valid()) pending.wait(); }
     void Prepare(SDL_Renderer* renderer, int index)
     {
@@ -5196,16 +5195,16 @@ struct TrackBackdropShow
                 SDL_UpdateTexture(t, nullptr, f.rgba.data(), f.width * 4);
                 SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
                 SDL_SetTextureScaleMode(t, SDL_ScaleModeLinear);
-                if (texA != nullptr) SDL_DestroyTexture(texA);
-                texA = texB; degA = degB;   // the newest picture is B, the one before it A
-                texB = t; degB = f.degrees;
+                ring.emplace_back(f.degrees, t);
             }
         }
         // The grid and the track turn together: both follow the worker's clock (3 degrees a second), so the track sits on the grid. (Reduced motion holds both still.)
         const float seconds = still ? 0.0f : static_cast<float>(worker->Seconds());
         const float now = HoverNetBackdrop::FlyoverWorker::Degrees(seconds);
         HoverNetScene::Draw(renderer, w, h, HoverNetPlan::Plan(), pictures, now, seconds, true);
-        if (texB == nullptr) return;
+        // Pictures arrive ahead of the eye (see TrackBackdrop.cpp), so a late one does not stall the turn: pictures the eye has passed (all but the last of them) are dropped.
+        while (ring.size() > 2 && ring[1].first <= now) { SDL_DestroyTexture(ring.front().second); ring.erase(ring.begin()); }
+        if (ring.empty()) return;
         auto drawTexture = [&](SDL_Texture* t, Uint8 alpha) {
             int tw = 0, th = 0; SDL_QueryTexture(t, nullptr, nullptr, &tw, &th);
             // The picture's own margin is see-through and the track takes about half of its width (see TrackBackdrop.cpp), so the picture is drawn wider than the free space between the race
@@ -5216,8 +5215,9 @@ struct TrackBackdropShow
             SDL_SetTextureAlphaMod(t, alpha);
             SDL_RenderCopyF(renderer, t, nullptr, &to);
         };
-        if (still || texA == nullptr || degB <= degA) drawTexture(texB, 255);
-        else {   // the two pictures were drawn about a degree apart: the eye's real angle says how much of each to show, so the turn is smooth and keeps pace with the grid
+        if (still || ring.size() < 2 || ring[1].first <= ring[0].first) drawTexture(ring.back().second, 255);
+        else {
+            SDL_Texture* texA = ring[0].second; SDL_Texture* texB = ring[1].second; const float degA = ring[0].first, degB = ring[1].first;   // the two pictures were drawn a fraction of a degree apart: the eye's real angle says how much of each to show, so the turn is smooth and keeps pace with the grid
             drawTexture(texA, 255);
             const float blend = std::max(0.0f, std::min(1.0f, (now - degA) / (degB - degA)));
             if (blend > 0.0f) drawTexture(texB, static_cast<Uint8>(blend * 255.0f));

@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-08.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-19.
 // See repository history for authorship and detailed changes.
 // Observer.cpp
 //
@@ -2841,6 +2841,7 @@ void MR_Observer::RenderFlyover( MR_VideoBuffer* pDest, const MR_ClientSession* 
          RenderFloorOrCeiling( lLevel, lId, TRUE, pTime );
       }
    }
+   m3DView.SetTwoSidedWalls( true );   // the track is seen from outside: walls show their backs too
    m3DView.SetSurfaceTag( HoverNetGfx::kTagWall );
    for( int lRoom = 0; lRoom < lLevel->GetRoomCount(); lRoom++ )
    {
@@ -2851,4 +2852,5 @@ void MR_Observer::RenderFlyover( MR_VideoBuffer* pDest, const MR_ClientSession* 
       }
       RenderRoomWalls( lLevel, lRoom, pTime );
    }
+   m3DView.SetTwoSidedWalls( false );
 }

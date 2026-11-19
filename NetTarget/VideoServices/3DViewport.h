@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-19.
 // See repository history for authorship and detailed changes.
 // 3DViewport.h
 //
@@ -96,6 +96,7 @@ class MR_3DViewPort: public MR_2DViewPort
       MR_UInt32*       mRgbBase;              // optional true-colour output: one 0x00RRGGBB word per pixel, at the same pixel offsets as the video buffer
       const MR_UInt32* mPalette;              // 256 words: what a texel's palette index means in true colour
       BOOL            mFilter;                // filter textures bilinearly (needs the colour buffer)
+      bool            mTwoSidedWalls;         // draw walls from their back too (the menu's flyover only; off for racing)
 
       MR_UInt16*  mZBuffer;
       int         mZLineLen;
@@ -160,6 +161,7 @@ class MR_3DViewPort: public MR_2DViewPort
       // rasteriser does not draw (the background) are left alone: the caller fills them. Pass NULL to switch it off (the default).
       MR_DllDeclare void SetColourBuffer( MR_UInt32* pRgbBase, const MR_UInt32* pPalette256 );
       MR_DllDeclare void SetTextureFiltering( BOOL pOn ) { mFilter = pOn; }
+      void SetTwoSidedWalls( bool pOn ) { mTwoSidedWalls = pOn; }
       MR_DllDeclare const MR_UInt32* GetColourLine( int pY ) const;   // the colour words of row pY of the viewport, or NULL when there is no colour buffer
 
       MR_DllDeclare BOOL ComputePositionMatrix( MR_PositionMatrix& pMatrix, const MR_3DCoordinate& pPosition, MR_Angle pOrientation, MR_Int32 pMaxObjRay );

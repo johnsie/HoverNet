@@ -298,8 +298,8 @@ struct FlyoverWorker::Impl
             }
             { std::lock_guard<std::mutex> lock(mutex); failed = !ok; }
             if (!ok) continue;
-            // Pictures are drawn one after another for where the eye will be when each is shown (one every degree or so), the menu blends between the last two by the real angle, and the turn is
-            // continuous: the track turns at exactly the pace of the grid behind it. A modest share of one core: the pause between pictures is what is left of a third of a second.
+            // Pictures are drawn one after another for where the eye will be when each is shown (one every fifth of a degree or so), the menu blends between the last two by the real angle, and the turn is
+            // continuous: the track turns at exactly the pace of the grid behind it. The pause between pictures is what is left of 70 ms (a picture takes a few ms).
             double lastMs = 100.0;
             for (int count = 0;; ++count) {
                 {
@@ -313,7 +313,7 @@ struct FlyoverWorker::Impl
                 }
                 const auto started = std::chrono::steady_clock::now();
                 Frame frame; frame.index = count;
-                frame.degrees = still ? Degrees(0.0) : Degrees(Seconds() + lastMs / 1000.0 + 0.33);
+                frame.degrees = still ? Degrees(0.0) : Degrees(Seconds() + lastMs / 1000.0 + 0.4);
                 if (const char* start = std::getenv("HOVERNET_FLYOVER_START")) frame.degrees = static_cast<float>(std::atof(start)) + (frame.degrees - Degrees(0.0));   // test switch
                 bool drawn;
                 {
@@ -328,7 +328,7 @@ struct FlyoverWorker::Impl
                     std::lock_guard<std::mutex> lock(mutex);
                     if (generation == gen) done.push_back(std::move(frame));
                 }
-                const double rest = std::max(20.0, 330.0 - ms);
+                const double rest = std::max(15.0, 70.0 - ms);
                 std::unique_lock<std::mutex> lock(mutex);
                 wake.wait_for(lock, std::chrono::milliseconds(static_cast<int>(rest)), [&] { return quit || trackChanged; });
             }

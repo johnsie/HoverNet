@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-19.
 // See repository history for authorship and detailed changes.
 // 3DViewport.cpp
 //
@@ -46,6 +46,7 @@ MR_3DViewPort::MR_3DViewPort()
    mRgbBase     = NULL;
    mPalette     = NULL;
    mFilter      = FALSE;
+   mTwoSidedWalls = false;
 
 
 }

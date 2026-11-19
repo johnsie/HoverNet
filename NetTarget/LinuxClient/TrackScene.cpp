@@ -17,6 +17,23 @@ struct Camera
     float focal, cx, cy;     // focal length in pixels, the screen centre
 };
 
+// The grid behind the game's own picture of the track (matchTrack): the picture is made by a camera whose horizon is shifted up from the picture's centre by 0.625 of its focal length and whose
+// focal length shows the picture's width in 90 degrees (TrackBackdrop.cpp), drawn here 0.38/0.52 of the window wide and cropped to 0.8 of its width. The grid's camera is the same one: level, its horizon
+// that far above the track's centre on the screen (0.445 of the height), the same focal length, the eye 0.625 of its distance high, so the track sits on the grid's ground.
+Camera MakeMatchedCamera(int w, int h, float yawDegrees)
+{
+    const float a = yawDegrees * 3.14159265f / 180.0f;
+    const float radius = 1.1f;
+    Camera c;
+    c.focal = 0.5f * (static_cast<float>(w) * 0.38f / 0.52f) / 0.8f;
+    c.ex = std::cos(a) * radius; c.ey = std::sin(a) * radius; c.ez = 0.625f * radius;
+    c.fx = -std::cos(a); c.fy = -std::sin(a); c.fz = 0.0f;
+    c.rx = c.fy; c.ry = -c.fx; c.rz = 0.0f;
+    c.ux = 0.0f; c.uy = 0.0f; c.uz = 1.0f;
+    c.cx = w * 0.5f; c.cy = h * 0.445f - 0.625f * c.focal;
+    return c;
+}
+
 Camera MakeCamera(int w, int h, float yawDegrees, float farther, float fixedRadius)
 {
     const float a = yawDegrees * 3.14159265f / 180.0f;
@@ -158,7 +175,7 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
         fixedRadius = std::max(1.0f, distance / 1.077f);           // (the eye is a little above the ground: its distance is 1.077 times its radius round the track)
         farther = fixedRadius / 1.62f;
     }
-    const Camera cam = MakeCamera(w, h, yawDegrees, farther, fixedRadius);
+    const Camera cam = (backgroundOnly && !real) ? MakeMatchedCamera(w, h, yawDegrees) : MakeCamera(w, h, yawDegrees, farther, fixedRadius);
     gDepthScale = farther;
     const float pulse = 0.86f + 0.14f * std::sin(seconds * 2.2f);
     const float zScale = 1.8f;   // the floors' heights, a little exaggerated so bridges and ramps read

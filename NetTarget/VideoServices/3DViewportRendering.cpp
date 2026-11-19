@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-19.
 // See repository history for authorship and detailed changes.
 // 3DViewportRendering.cpp
 //
@@ -191,8 +191,10 @@ void MR_3DViewPort::RenderWallSurface( const MR_3DCoordinate& pUpperLeft, const 
    RenderAlternateWallSurface( pUpperLeft, pLowerRight, pLen, pBitmap, pBitmap, 1, 0 );
 }
 
-void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLeft, const MR_3DCoordinate& pLowerRight, MR_Int32 pLen, const MR_Bitmap* pBitmap, const MR_Bitmap* pBitmap2, int pSerialLen, int pSerialStart )
+void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLeftIn, const MR_3DCoordinate& pLowerRightIn, MR_Int32 pLen, const MR_Bitmap* pBitmap, const MR_Bitmap* pBitmap2, int pSerialLen, int pSerialStart )
 {
+   MR_3DCoordinate pUpperLeft = pUpperLeftIn;
+   MR_3DCoordinate pLowerRight = pLowerRightIn;
    if( mSink != NULL )
    {
       EmitWall( pUpperLeft, pLowerRight, pLen, pBitmap );
@@ -258,8 +260,11 @@ void MR_3DViewPort::RenderAlternateWallSurface( const MR_3DCoordinate& pUpperLef
    if(  Int32x32To64( pLowerRight.mY-pUpperLeft.mY, pUpperLeft.mX-mPosition.mX )
        +Int32x32To64(-pLowerRight.mX+pUpperLeft.mX, pUpperLeft.mY-mPosition.mY )  >= 0 )
    {    
-      // Wrong side
-      return;
+      // Wrong side (HoverNet: unless two-sided walls are on, which only the menu's flyover turns on, to see the walls of a track from outside: the ends swap in the plane, the heights stay)
+      if( !mTwoSidedWalls )
+         return;
+      std::swap( pUpperLeft.mX, pLowerRight.mX );
+      std::swap( pUpperLeft.mY, pLowerRight.mY );
    }
 
 
