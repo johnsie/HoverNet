@@ -30,7 +30,7 @@ Camera MakeMatchedCamera(int w, int h, float yawDegrees)
     c.fx = -std::cos(a); c.fy = -std::sin(a); c.fz = 0.0f;
     c.rx = c.fy; c.ry = -c.fx; c.rz = 0.0f;
     c.ux = 0.0f; c.uy = 0.0f; c.uz = 1.0f;
-    c.cx = w * 0.5f; c.cy = h * 0.445f - 0.625f * c.focal;
+    c.cx = w * 0.5f; c.cy = h * kTrackCentre - 0.625f * c.focal;
     return c;
 }
 

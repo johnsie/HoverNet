@@ -7,12 +7,19 @@ h1 { font-family: Oxanium; font-size: 32dp; font-weight: bold; margin: 0; }
 #count { position: absolute; right: 0; top: 22dp; color: #8b8fa3; font-size: 15dp; margin: 0; }
 #rule { position: absolute; left: 0; right: 0; top: 62dp; height: 3dp; decorator: gradient( horizontal #e02a43 #e02a4300 ); }
 #bar { position: absolute; left: 3%; right: 3%; top: 90dp; height: 44dp; }
-#filters, #sorts { display: inline-block; vertical-align: middle; margin-right: 18dp; }
-#bar input.text { display: inline-block; width: 200dp; vertical-align: middle; padding: 8dp 10dp; }
+#filters, #sorts { display: inline-block; vertical-align: middle; margin-right: 12dp; }
+#bar input.text { display: inline-block; width: 150dp; vertical-align: middle; padding: 8dp 10dp; }
 .chip { display: inline-block; box-sizing: border-box; padding: 8dp 12dp; margin: 0 4dp 0 0; font-family: Oxanium; font-size: 14dp; font-weight: bold; color: #c9cde0; background-color: #23263a; border-radius: 6dp; tab-index: auto; cursor: pointer; transition: background-color 0.12s cubic-out; }
 .chip:hover, .chip:focus { background-color: #343955; color: #ffffff; }
 .chip.sel { background-color: #dc3546; color: #ffffff; }
-#grid { position: absolute; left: 3%; right: 3%; top: 144dp; bottom: 118dp; }
+#grid { position: absolute; left: 3%; width: 94%; top: 144dp; bottom: 118dp; overflow-y: auto; }
+#grid.tall { bottom: 62dp; }
+.trow { display: block; box-sizing: border-box; width: 88vw; height: 42dp; padding: 10dp 14dp; margin: 0 10dp 6dp 0; background-color: #15161f; border-width: 1dp; border-color: #2b2e44; border-radius: 8dp; overflow: hidden; tab-index: auto; cursor: pointer; transition: background-color border-color 0.12s cubic-out; }
+.trow:hover, .trow:focus { border-color: #fa737a; background-color: #1d1d2c; }
+.trow.sel { border-color: #ffd25a; }
+.rk { display: inline-block; width: 110dp; height: 20dp; vertical-align: top; font-weight: bold; font-size: 13dp; color: #ff9ba3; }
+.rn { display: inline-block; width: 40%; height: 22dp; vertical-align: top; font-family: Oxanium; font-size: 17dp; font-weight: bold; color: #ffffff; overflow: hidden; white-space: nowrap; }
+.rm { display: inline-block; width: 40%; height: 20dp; vertical-align: top; color: #9aa0b8; font-size: 13dp; overflow: hidden; white-space: nowrap; }
 .card { display: inline-block; box-sizing: border-box; width: 24%; margin: 0 1% 12dp 0; padding: 8dp; vertical-align: top; background-color: #13131af0; decorator: gradient( vertical #1b1c2a #101018 ); border-width: 1dp; border-color: #2b2e44; border-radius: 10dp; tab-index: auto; cursor: pointer; transition: background-color border-color 0.12s cubic-out; }
 .card:hover, .card:focus { border-color: #fa737a; background-color: #1d1d2c; }
 .card.sel { border-color: #ffd25a; }

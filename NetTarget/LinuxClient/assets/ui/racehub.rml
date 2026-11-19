@@ -39,7 +39,6 @@
 		</div>
 	</div>
 	<div id="startbar"><button id="start" class="racebtn" data-id="start" tab-index="auto">RACE</button></div>
-	<div id="legend"><span class="dot fuel"></span> fuel <span class="dot boost"></span> boost <span class="dot finish"></span> finish line <span class="dot power"></span> power-up</div>
 	<div id="footer"><button class="act quiet back" data-id="back" tab-index="auto">Back</button></div>
 	<div id="busy"><div id="busybox"><p id="busytitle"></p><p id="busyline"></p><div id="busybar"><div id="busyfill"></div></div><button id="busybutton" class="act quiet">Cancel</button></div></div>
 </body>

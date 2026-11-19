@@ -223,7 +223,8 @@ bool Flyover::Draw(float degrees, std::vector<std::uint8_t>& rgba)
     const double heading = std::atan2(m.cy - eye.mY, m.cx - eye.mX);
     MR_Angle yaw = static_cast<MR_Angle>(std::lround(heading / (2.0 * 3.14159265) * 4096.0));
     yaw = MR_NORMALIZE_ANGLE(yaw);
-    m.observer->RenderFlyover(m.buffer, m.session, eye, yaw, m.scroll, 0, nullptr);
+    const MR_SimulationTime clock = static_cast<MR_SimulationTime>(std::max(0.0, (degrees - FlyoverWorker::Degrees(0.0)) / (FlyoverWorker::Degrees(1.0) - FlyoverWorker::Degrees(0.0)) * 1000.0));   // the picture is of this moment in the track's life: its animations run
+    m.observer->RenderFlyover(m.buffer, m.session, eye, yaw, m.scroll, clock, nullptr);
     // (no sky of its own: the picture is transparent round the track, so the menu's grid shows behind it)
     const std::size_t pixels = static_cast<std::size_t>(m.outW) * m.outH;
     rgba.resize(pixels * 4);

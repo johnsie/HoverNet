@@ -12,5 +12,6 @@ namespace HoverNetScene
 {
 // Draws into the current render target, w x h pixels. `yawDegrees` is where the eye is on its orbit; `seconds` drives the slow pulse of the neon.
 // `pictures` are the plan's floor and wall pictures on the card, each tiled four by four (null where one could not be made): the track is drawn with the game's own textures where it has them.
+constexpr float kTrackCentre = 0.40f;   // where the real track's centre sits on the race screen, as a fraction of its height (the picture and the grid's camera both use it)
 void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, const std::vector<SDL_Texture*>& pictures, float yawDegrees, float seconds, bool backgroundOnly = false, bool real = false);   // real: the track as the game has it (its own textures, plain lighting, no neon edges or glows), seen from far away; the grid and sky stay behind it   // backgroundOnly: the sky and the grid, no track (the game's own renderer draws the track on top of it)
 }

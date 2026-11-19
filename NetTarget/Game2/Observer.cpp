@@ -2853,4 +2853,27 @@ void MR_Observer::RenderFlyover( MR_VideoBuffer* pDest, const MR_ClientSession* 
       RenderRoomWalls( lLevel, lRoom, pTime );
    }
    m3DView.SetTwoSidedWalls( false );
+
+   // The things the level has on the track (power-ups, mines, scenery), drawn as in a race, at the given time so that their animations run.
+   m3DView.SetSurfaceTag( HoverNetGfx::kTagObject );
+   int lDrawn = 0;
+   for( int lRoom = -1; lRoom < lLevel->GetRoomCount(); lRoom++ )
+   {
+      MR_FreeElementHandle lHandle = lLevel->GetFirstFreeElement( lRoom == -1 ? MR_Level::eNonClassified : lRoom );
+      while( lHandle != NULL )
+      {
+         MR_FreeElement* lElement = MR_Level::GetFreeElement( lHandle );
+         if( lElement != NULL )
+         {
+            lElement->Render( &m3DView, pTime );
+            lDrawn++;
+            if( getenv( "HOVERNET_FLYOVER_DEBUG" ) != NULL )
+            {
+               static int lShown = 0;
+               if( lShown++ < 40 ) fprintf( stderr, "flyover: element class %d at %d,%d,%d\n", (int)lElement->GetTypeId().mClassId, (int)lElement->mPosition.mX, (int)lElement->mPosition.mY, (int)lElement->mPosition.mZ );
+            }
+         }
+         lHandle = MR_Level::GetNextFreeElement( lHandle );
+      }
+   }
 }

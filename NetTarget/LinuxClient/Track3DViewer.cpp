@@ -5211,7 +5211,7 @@ struct TrackBackdropShow
             // screen's two panels (about 38% of the width, kept clear of the panels), behind them, and the track fills that space.
             float dw = static_cast<float>(w) * 0.38f / 0.52f, dh = dw * th / tw;
             if (dh > h * 1.0f) { dh = static_cast<float>(h) * 1.0f; dw = dh * tw / th; }
-            const SDL_FRect to = {(w - dw) * 0.5f, h * 0.45f - dh * 0.5f, dw, dh};
+            const SDL_FRect to = {(w - dw) * 0.5f, h * HoverNetScene::kTrackCentre - dh * 0.5f, dw, dh};
             SDL_SetTextureAlphaMod(t, alpha);
             SDL_RenderCopyF(renderer, t, nullptr, &to);
         };
@@ -5313,9 +5313,24 @@ public:
         for (int i = 0; i < 3; ++i) out += std::string("<div class=\"chip") + (i == mSort ? " sel" : "") + "\" data-id=\"" + p + "sort\" data-index=\"" + std::to_string(i) + "\">" + names[i] + "</div>";
         return out;
     }
+    // The browser's second way of looking: one scrolling list of every track that matches (no pictures), instead of pages of cards. Pages stay the default.
+    bool List() const { return mList; }
+    void SetList(bool pOn) { mList = pOn; mPage = 0; }
+    std::string ViewHtml(const std::string& p) const { return std::string("<div class=\"chip") + (mList ? " sel" : "") + "\" data-id=\"" + p + "view\">" + "Scroll list" + "</div>"; }
     std::string CardsHtml(const std::string& p, int pCurrent, const PersonalBests& pBests) const
     {
         std::string cards;
+        if (mList) {
+            for (const int index : mView) {
+                const TrackEntry* e = Tracks().Get(index);
+                const TrackBriefing guide = BriefingFor(index);
+                std::string meta = guide.mDifficulty == "Unrated" ? guide.mCharacter : guide.mDifficulty + " - " + guide.mCharacter;
+                if (!e->mInstalled) meta += "  -  " + FormatMegabytes(e->mDownloadBytes) + " to download";
+                cards += std::string("<div class=\"trow") + (index == pCurrent ? " sel" : "") + "\" data-id=\"" + p + "pick\" data-index=\"" + std::to_string(index) + "\"><span class=\"rk\">" +
+                         (e->mMarket ? "MARKET" : IsOfficial(e) ? "OFFICIAL" : "COMMUNITY") + "</span><span class=\"rn\">" + HoverNetRml::FormScreen::Escape(e->mName) + "</span><span class=\"rm\">" + HoverNetRml::FormScreen::Escape(meta) + "</span></div>";
+            }
+            return cards.empty() ? std::string("<p class=\"meta\">No track matches.</p>") : cards;
+        }
         for (int slot = 0; slot < mPerPage; ++slot) {
             const int index = TrackInSlot(slot);
             if (index < 0) break;
@@ -5341,6 +5356,7 @@ public:
     bool Handle(const std::string& p, const HoverNetRml::FormEvent& e, int& pPicked, bool& pRedraw)
     {
         if (e.id == p + "pick") { pPicked = e.index; return true; }
+        if (e.id == p + "view") { mList = !mList; mPage = 0; pRedraw = true; return true; }
         if (e.id == p + "filter") { mFilter = std::max(0, std::min(3, e.index)); mPage = 0; Rebuild(); pRedraw = true; return true; }
         if (e.id == p + "sort") { mSort = std::max(0, std::min(2, e.index)); mPage = 0; Rebuild(); pRedraw = true; return true; }
         if (e.id == p + "next") { mPage = std::min(Pages() - 1, Page() + 1); pRedraw = true; return true; }
@@ -5368,6 +5384,7 @@ private:
         if (mSort == 2) std::stable_sort(mView.begin(), mView.end(), [](int a, int b) { return Tracks().Get(a)->mRooms < Tracks().Get(b)->mRooms; });
     }
     int mPerPage, mFilter = 0, mSort = 0;
+    bool mList = false;   // the scrolling list instead of pages
     mutable int mPage = 0;
     std::string mSearch;
     std::vector<int> mView;
@@ -5385,8 +5402,11 @@ int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, 
     int chosen = -1;
     auto draw = [&]() {
         form->SetHtml("filters", picker.FiltersHtml(""));
-        form->SetHtml("sorts", picker.SortsHtml(""));
+        form->SetHtml("sorts", picker.SortsHtml("") + picker.ViewHtml(""));
         form->SetHtml("grid", picker.CardsHtml("", pCurrent, pBests));
+        form->SetClass("grid", "tall", picker.List());
+        form->SetClass("pager", "hide", picker.List());
+        form->SetClass("legend", "hide", picker.List());
         form->SetHtml("count", picker.CountText());
         form->SetHtml("pageinfo", picker.PageText());
     };
@@ -5405,6 +5425,7 @@ int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, 
             return preview.mTexture;
         });
     }
+    if (std::getenv("HOVERNET_TEST_BROWSER_LIST") != nullptr) picker.SetList(true);   // test switch: start in the scrolling list
     picker.ShowTrack(pCurrent);
     draw();
     int frame = 0;

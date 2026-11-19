@@ -1313,4 +1313,22 @@ void MR_Level::ScaleGeometryDown( int pDivisor )
    {
       lScale( mFeatureList[ lFeature ] );
    }
+   // the things standing on the track (power-ups, mines, scenery) move with it
+   auto lScaleList = [pDivisor]( FreeElement* pFirst )
+   {
+      for( FreeElement* lElement = pFirst; lElement != NULL; lElement = lElement->mNext )
+      {
+         if( lElement->mElement != NULL )
+         {
+            lElement->mElement->mPosition.mX /= pDivisor;
+            lElement->mElement->mPosition.mY /= pDivisor;
+            lElement->mElement->mPosition.mZ /= pDivisor;
+         }
+      }
+   };
+   for( int lRoom = 0; lRoom < mNbRoom; lRoom++ )
+   {
+      lScaleList( mFreeElementClassifiedByRoomList[ lRoom ] );
+   }
+   lScaleList( mFreeElementNonClassifiedList );
 }

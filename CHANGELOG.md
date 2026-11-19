@@ -4,6 +4,15 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.80 - 2026-11-19
+
+_Not released yet (waiting for the owner's word). Run on this build (Linux): desktop screenshots of the race screen and of the track browser in both modes; the render golden, camera-rule and track-plan tests (passed). Not run: the full suite, Windows, the web build, Firefox/Edge. The mouse-wheel scroll of the list and the objects' animation over time were not watched live._
+
+- **Things on the track are drawn in the spinning view**: the power-ups, mines and scenery the level file places are drawn by the game's own renderer, moved with the shrunk track, and the picture is drawn for a moment in the track's life so animated walls, floors and sprites run (the clock is the same as the turn's).
+- **The key under the race screen is gone** (fuel, boost, finish line, power-up): it described the old made-up model.
+- **The track sits nearer the top of the race screen** (40% down instead of 45%), the grid with it.
+- **Track browser: a scrolling list** ("Scroll list" chip beside the sorts): every matching track in one list, scrolled instead of paged. Pages stay the default.
+
 ## 2.3.79 - 2026-11-19
 
 _Released at the owner's request. Run on this build (Linux): a desktop screenshot of the race screen with the grid and the track (community track ZRT's Nightmare) and a dump of the track picture; the render golden test and the camera-rule test (both passed, with every target rebuilt). Not run: the full test suite, Windows, the web build, Firefox/Edge, a slow machine; the smooth turn was not watched live, and the grid's turn direction was checked by reasoning about the two coordinate conventions, not by eye._
