@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-09.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-19.
 // See repository history for authorship and detailed changes.
 // Observer.h// MR_Observer object interface
 //
