@@ -41,7 +41,11 @@ class FlyoverWorker
 {
 public:
     static constexpr int kRing = 36;       // pictures round the track, one every ten degrees
-    struct Frame { int index = 0, width = 0, height = 0; std::vector<std::uint8_t> rgba; };
+    struct Frame { int index = 0, width = 0, height = 0; float degrees = 0; std::vector<std::uint8_t> rgba; };   // degrees: where the eye is on its orbit in this picture (see Degrees)
+    // The turn is continuous and shared: the eye's angle at `seconds` after SetTrack, 3 degrees a second. The menu's grid uses the same function, so the track and the grid turn together.
+    static constexpr float kDegreesPerSecond = 3.0f;
+    static float Degrees(double pSeconds) { return 200.0f + kDegreesPerSecond * static_cast<float>(pSeconds); }
+    double Seconds() const;                                            // seconds since SetTrack (the clock both the pictures and the grid follow)
     FlyoverWorker();
     ~FlyoverWorker();
     FlyoverWorker(const FlyoverWorker&) = delete;

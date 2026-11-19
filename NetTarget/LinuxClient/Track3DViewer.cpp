@@ -5120,11 +5120,12 @@ struct TrackBackdropShow
     HoverNetPlan::Plan plan;
     std::vector<SDL_Texture*> pictures;   // the plan's floor and wall pictures, on the graphics card (each tiled four by four, so a surface can repeat it)
     std::unique_ptr<HoverNetBackdrop::FlyoverWorker> worker;   // the textured style
-    std::vector<SDL_Texture*> ring;
-    int ready = 0, builtFor = -2, generation = -1;
+    SDL_Texture* texA = nullptr; SDL_Texture* texB = nullptr;   // the real track's last two pictures (A older), blended by the eye's real angle
+    float degA = 0, degB = 0;
+    int builtFor = -2, generation = -1;
     bool textured = false;
     Uint32 since = 0;
-    void Clear() { for (SDL_Texture*& t : ring) if (t != nullptr) { SDL_DestroyTexture(t); t = nullptr; } ring.clear(); ready = 0; for (SDL_Texture*& t : pictures) if (t != nullptr) SDL_DestroyTexture(t); pictures.clear(); }
+    void Clear() { if (texA != nullptr) SDL_DestroyTexture(texA); if (texB != nullptr) SDL_DestroyTexture(texB); texA = texB = nullptr; for (SDL_Texture*& t : pictures) if (t != nullptr) SDL_DestroyTexture(t); pictures.clear(); }
     ~TrackBackdropShow() { worker.reset(); Clear(); if (pending.valid()) pending.wait(); }
     void Prepare(SDL_Renderer*, int index)
     {
@@ -5142,7 +5143,6 @@ struct TrackBackdropShow
             worker->SetStill(LoadReducedMotion());
             worker->SetTrack(Tracks().PathFor(entry->mName), entry->mName);
             generation = worker->Generation();
-            ring.assign(HoverNetBackdrop::FlyoverWorker::kRing, nullptr);
             return;
         }
         const std::string path = Tracks().PathFor(entry->mName), name = entry->mName;
@@ -5181,44 +5181,41 @@ struct TrackBackdropShow
             SDL_RenderFillRect(renderer, &veil);
             return;
         }
-        if (!worker || ring.empty()) return;
+        if (!worker) return;
         std::vector<HoverNetBackdrop::FlyoverWorker::Frame> frames;
         if (worker->TakeFrames(frames) > 0 && worker->Generation() == generation) {
             for (HoverNetBackdrop::FlyoverWorker::Frame& f : frames) {
-                if (f.index < 0 || f.index >= static_cast<int>(ring.size()) || f.width <= 0) continue;
+                if (f.width <= 0) continue;
                 SDL_Texture* t = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, f.width, f.height);
                 if (t == nullptr) continue;
                 SDL_UpdateTexture(t, nullptr, f.rgba.data(), f.width * 4);
                 SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
                 SDL_SetTextureScaleMode(t, SDL_ScaleModeLinear);
-                if (ring[static_cast<std::size_t>(f.index)] != nullptr) SDL_DestroyTexture(ring[static_cast<std::size_t>(f.index)]);
-                ring[static_cast<std::size_t>(f.index)] = t;
-                ready = std::max(ready, f.index + 1);
+                if (texA != nullptr) SDL_DestroyTexture(texA);
+                texA = texB; degA = degB;   // the newest picture is B, the one before it A
+                texB = t; degB = f.degrees;
             }
         }
-        {   // the neon grid and sky behind the real track (turning at the pace the ring does)
-            const float seconds = static_cast<float>(SDL_GetTicks() - since) / 1000.0f;
-            HoverNetScene::Draw(renderer, w, h, HoverNetPlan::Plan(), pictures, still ? 215.0f : 215.0f + 5.0f * seconds, seconds, true);
-        }
-        if (ready == 0) return;
-        const int n = static_cast<int>(ring.size());
+        // The grid and the track turn together: both follow the worker's clock (3 degrees a second), so the track sits on the grid. (Reduced motion holds both still.)
+        const float seconds = still ? 0.0f : static_cast<float>(worker->Seconds());
+        const float now = HoverNetBackdrop::FlyoverWorker::Degrees(seconds);
+        HoverNetScene::Draw(renderer, w, h, HoverNetPlan::Plan(), pictures, now, seconds, true);
+        if (texB == nullptr) return;
         auto drawTexture = [&](SDL_Texture* t, Uint8 alpha) {
             int tw = 0, th = 0; SDL_QueryTexture(t, nullptr, nullptr, &tw, &th);
-            // the picture fits the free space between the race screen's two panels (about 43% of the width) and between its title and its button (about 68% of the height)
-            // The picture's own margin is see-through and the track takes about half of its width (see TrackBackdrop.cpp), so the picture is drawn wider than that space, behind the panels, and the track fills it.
+            // The picture's own margin is see-through and the track takes about half of its width (see TrackBackdrop.cpp), so the picture is drawn wider than the free space between the race
+            // screen's two panels (about 38% of the width, kept clear of the panels), behind them, and the track fills that space.
             float dw = static_cast<float>(w) * 0.38f / 0.52f, dh = dw * th / tw;
             if (dh > h * 1.0f) { dh = static_cast<float>(h) * 1.0f; dw = dh * tw / th; }
             const SDL_FRect to = {(w - dw) * 0.5f, h * 0.45f - dh * 0.5f, dw, dh};
             SDL_SetTextureAlphaMod(t, alpha);
             SDL_RenderCopyF(renderer, t, nullptr, &to);
         };
-        if (still || ready < n) drawTexture(ring[static_cast<std::size_t>(still ? 0 : ready - 1)], 255);
-        else {
-            const float position = std::fmod(static_cast<float>(SDL_GetTicks() - since) / 1000.0f * 0.3f, static_cast<float>(n));   // 0.3 pictures a second: a slow turn (3 degrees a second)
-            const int i = static_cast<int>(position) % n;
-            drawTexture(ring[static_cast<std::size_t>(i)], 255);
-            const float blend = std::max(0.0f, std::min(1.0f, ((position - std::floor(position)) - 0.9f) / 0.1f));   // the next picture is faded in over the last tenth of each step (a third of a second), so each picture stays sharp and never shows as a double image for long
-            if (blend > 0.0f) drawTexture(ring[static_cast<std::size_t>((i + 1) % n)], static_cast<Uint8>(blend * 255.0f));
+        if (still || texA == nullptr || degB <= degA) drawTexture(texB, 255);
+        else {   // the two pictures were drawn about a degree apart: the eye's real angle says how much of each to show, so the turn is smooth and keeps pace with the grid
+            drawTexture(texA, 255);
+            const float blend = std::max(0.0f, std::min(1.0f, (now - degA) / (degB - degA)));
+            if (blend > 0.0f) drawTexture(texB, static_cast<Uint8>(blend * 255.0f));
         }
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer, 8, 6, 16, 40);

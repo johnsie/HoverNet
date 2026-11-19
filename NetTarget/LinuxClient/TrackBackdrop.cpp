@@ -244,6 +244,7 @@ struct FlyoverWorker::Impl
     int generation = 0;
     std::string path, name;
     std::vector<Frame> done;          // finished pictures not yet taken
+    std::chrono::steady_clock::time_point startedAt = std::chrono::steady_clock::now();   // when the current track was asked for: the clock of the turn
 
     void Run()
     {
@@ -268,32 +269,45 @@ struct FlyoverWorker::Impl
             }
             { std::lock_guard<std::mutex> lock(mutex); failed = !ok; }
             if (!ok) continue;
-            for (int i = 0; i < kRing; ++i) {
+            // Pictures are drawn one after another for where the eye will be when each is shown (one every degree or so), the menu blends between the last two by the real angle, and the turn is
+            // continuous: the track turns at exactly the pace of the grid behind it. A modest share of one core: the pause between pictures is what is left of a third of a second.
+            double lastMs = 100.0;
+            for (int count = 0;; ++count) {
                 {
-                    std::lock_guard<std::mutex> lock(mutex);
+                    std::unique_lock<std::mutex> lock(mutex);
                     if (quit) return;
                     if (trackChanged) break;                       // another track was asked for: start that one
-                    if (still && i > 0) break;                     // Reduced motion: the first picture only
+                    if (still && count > 0) {                      // Reduced motion: the first picture only; wait for another track
+                        wake.wait(lock, [&] { return quit || trackChanged; });
+                        break;
+                    }
                 }
                 const auto started = std::chrono::steady_clock::now();
-                Frame frame; frame.index = i;
+                Frame frame; frame.index = count;
+                frame.degrees = still ? Degrees(0.0) : Degrees(Seconds() + lastMs / 1000.0 + 0.33);
+                if (const char* start = std::getenv("HOVERNET_FLYOVER_START")) frame.degrees = static_cast<float>(std::atof(start)) + (frame.degrees - Degrees(0.0));   // test switch
                 bool drawn;
                 {
                     std::lock_guard<std::mutex> level(HoverNetPlan::LevelLock());
-                    drawn = fly.Draw((std::getenv("HOVERNET_FLYOVER_START") ? static_cast<float>(std::atof(std::getenv("HOVERNET_FLYOVER_START"))) : 200.0f) + i * (360.0f / kRing), frame.rgba);
+                    drawn = fly.Draw(frame.degrees, frame.rgba);
                 }
                 const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+                lastMs = ms;
                 if (drawn) {
                     frame.width = fly.Width(); frame.height = fly.Height();
                     std::lock_guard<std::mutex> lock(mutex);
                     if (generation == gen) done.push_back(std::move(frame));
                 }
-                // a modest share of one core: never faster than about ten pictures a second, and resting as long as each picture took
-                const double rest = std::max(100.0 - ms, ms);
+                const double rest = std::max(20.0, 330.0 - ms);
                 std::unique_lock<std::mutex> lock(mutex);
                 wake.wait_for(lock, std::chrono::milliseconds(static_cast<int>(rest)), [&] { return quit || trackChanged; });
             }
         }
+    }
+    double Seconds()
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count();
     }
 };
 
@@ -309,12 +323,13 @@ void FlyoverWorker::SetTrack(const std::string& path, const std::string& name)
 {
     {
         std::lock_guard<std::mutex> lock(mImpl->mutex);
-        mImpl->path = path; mImpl->name = name; mImpl->trackChanged = true; mImpl->failed = false;
+        mImpl->path = path; mImpl->name = name; mImpl->trackChanged = true; mImpl->failed = false; mImpl->startedAt = std::chrono::steady_clock::now();
         ++mImpl->generation; mImpl->done.clear();
     }
     mImpl->wake.notify_all();
 }
 void FlyoverWorker::SetStill(bool still) { std::lock_guard<std::mutex> lock(mImpl->mutex); mImpl->still = still; }
+double FlyoverWorker::Seconds() const { return mImpl->Seconds(); }
 int FlyoverWorker::Generation() const { std::lock_guard<std::mutex> lock(mImpl->mutex); return mImpl->generation; }
 bool FlyoverWorker::Failed() const { std::lock_guard<std::mutex> lock(mImpl->mutex); return mImpl->failed; }
 int FlyoverWorker::TakeFrames(std::vector<Frame>& out)
