@@ -8925,7 +8925,6 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                 bool refresh = false;
                 for (const HoverNetRml::FormEvent& e : events) {
                     if (e.id == "tab") { tab = e.index; form->SetTabs(tabNames, tab); refresh = true; craftChoice.active = false; }
-                    else if (e.id == "racemode") { raceMode = !raceMode; refresh = true; }
                     else if (e.id == "cancelcraft") { craftChoice.active = false; refresh = true; }
                     else if (e.id.compare(0, 5, "craft") == 0 && craftChoice.active) {   // "Follow which craft?": the slot chosen
                         const int chosen = std::atoi(e.id.c_str() + 5);
@@ -8941,8 +8940,9 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                         craftChoice.active = false;
                         refresh = true;
                     }
-                    else if (e.id.compare(0, 2, "m:") == 0) {   // my races: m:<n> watch, m:<n>_2 delete
-                        const bool del = e.id.size() > 2 && e.id.find("_2") != std::string::npos;
+                    else if (e.id.compare(0, 2, "m:") == 0) {   // my races: m:<n> watch, m:<n>_2 race against it, m:<n>_3 delete
+                        const bool del = e.id.size() > 2 && e.id.find("_3") != std::string::npos;
+                        if (!del) raceMode = e.id.find("_2") != std::string::npos;
                         const int index = std::atoi(e.id.c_str() + 2);
                         if (index >= 0 && index < static_cast<int>(entries.size())) {
                             const ReplayLibrary::Entry& entry = entries[static_cast<std::size_t>(index)];
@@ -8964,6 +8964,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                         if (n < server.Replays().size()) {
                             const Protocol3::ReplayInfo& r = server.Replays()[n];
                             message.clear();
+                            raceMode = e.id.find("_2") != std::string::npos;
                             if (r.players > 1 && !raceMode) askCraftFor(r);
                             else { downloadSlotId = r.id; downloadSlot = 0; downloadNote.clear(); server.FetchReplay(r.id); }
                             refresh = true;
@@ -8992,7 +8993,6 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                         f.push_back(button("cancelcraft", "CANCEL", true));
                     }
                     else if (tab == 0) {
-                        f.push_back(button("racemode", raceMode ? "MODE: RACE AGAINST THE REPLAY  (click to watch instead)" : "MODE: WATCH  (click to race against a replay instead)", !raceMode));
                         if (entries.empty()) {
                             f.push_back(note("No saved races yet."));
                             f.push_back(note("A race on a HoverNet server that you take part in, or watch from its first moment, is saved here when it ends (the newest " + std::to_string(ReplayLibrary::kKeep) + " are kept). Nothing is sent anywhere: the files stay on this device. The Server replays tab has everyone's races."));
@@ -9001,11 +9001,12 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                             const ReplayLibrary::Entry& e = entries[static_cast<std::size_t>(index)];
                             if (e.valid) {
                                 const long long seconds = e.durationMs() / 1000;
-                                FormField r = row("m:" + std::to_string(index), e.track, e.when + "   " + std::to_string(e.players) + " player" + (e.players == 1 ? "" : "s") + ", " + std::to_string(e.laps) + " lap" + (e.laps == 1 ? "" : "s") + ", " + std::to_string(seconds / 60) + ":" + (seconds % 60 < 10 ? "0" : "") + std::to_string(seconds % 60), raceMode ? "RACE" : "WATCH");
-                                r.suffix = confirmDelete == index ? "SURE? DELETE" : "DELETE";
+                                FormField r = row("m:" + std::to_string(index), e.track, e.when + "   " + std::to_string(e.players) + " player" + (e.players == 1 ? "" : "s") + ", " + std::to_string(e.laps) + " lap" + (e.laps == 1 ? "" : "s") + ", " + std::to_string(seconds / 60) + ":" + (seconds % 60 < 10 ? "0" : "") + std::to_string(seconds % 60), "WATCH");
+                                r.suffix = "RACE";
+                                r.extra = confirmDelete == index ? "SURE? DELETE" : "DELETE";
                                 f.push_back(r);
                             }
-                            else { FormField r = row("m:" + std::to_string(index), "Damaged file", e.name, ""); r.suffix = confirmDelete == index ? "SURE? DELETE" : "DELETE"; f.push_back(r); }
+                            else { FormField r = row("m:" + std::to_string(index), "Damaged file", e.name, ""); r.extra = confirmDelete == index ? "SURE? DELETE" : "DELETE"; f.push_back(r); }
                         }
                     }
 #if defined(HOVERNET_AUTH)
@@ -9028,7 +9029,7 @@ bool RunReplayBrowser(SDL2GraphicsBackend& graphics, int pFrameLimit, const std:
                                     if (fin.ms > 0) formatMs(fin.ms, time, sizeof time);
                                     sub += "\n" + std::to_string(k + 1) + ". " + (fin.name.empty() ? "Player " + std::to_string(fin.slot + 1) : fin.name) + (fin.craft < Authority::kCraftCount ? std::string(" (") + Authority::CraftName(fin.craft) + ")" : std::string()) + "   " + time;
                                 }
-                                f.push_back(row("s:" + std::to_string(i), r.track, sub, downloadSlotId == r.id ? "DOWNLOADING " + std::to_string(server.DownloadPercent()) + "%" : raceMode ? std::string("RACE") : std::string("WATCH")));
+                                { FormField sr = row("s:" + std::to_string(i), r.track, sub, downloadSlotId == r.id ? "DOWNLOADING " + std::to_string(server.DownloadPercent()) + "%" : std::string("WATCH")); if (downloadSlotId != r.id) sr.suffix = "RACE"; f.push_back(sr); }
                             }
                         }
                     }
@@ -9428,7 +9429,6 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                 bool refresh = false;
                 for (const HoverNetRml::FormEvent& e : events) {
                     if (e.id == "tab") { tab = e.index; form->SetTabs(tabNames, tab); refresh = true; }
-                    else if (e.id == "racemode") { raceMode = !raceMode; refresh = true; }
                     else if (e.id == "track") { track = std::max(0, std::min(Tracks().Count() - 1, e.index)); need = true; laps = 0; }
                     else if (e.id == "kind") {
                         laps = 0;
@@ -9445,6 +9445,7 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                     else if (e.id == "retry") { serverTried = false; need = needWinners = needLeague = needBreaks = true; server.Close(); message.clear(); }
                     else if (e.id.size() > 2 && e.id[0] == 'w' && e.id[1] == ':' && downloadId == 0 && !trackDownload.Active()) {
                         const std::size_t n = static_cast<std::size_t>(std::atoi(e.id.c_str() + 2));
+                        raceMode = e.id.find("_2") != std::string::npos;   // w:<n> watch, w:<n>_2 race against it
                         if (n < watchers.size()) watchers[n]();
                         refresh = true;
                     }
@@ -9460,10 +9461,9 @@ bool RunLeaderboards(SDL2GraphicsBackend& graphics, int pFrameLimit, const std::
                     shown = signature;
                     watchers.clear();
                     std::vector<FormField> f;
-                    { FormField b; b.type = FormField::Type::eButton; b.id = "racemode"; b.quiet = !raceMode; b.label = raceMode ? "MODE: RACE AGAINST THE REPLAY  (click to watch instead)" : "MODE: WATCH  (click to race against a replay instead)"; f.push_back(b); }
                     auto watchButton = [&](const std::string& title, std::uint64_t replayId, int slot, const std::string& noteText, const std::string& trackName, const std::string& racer, const std::string& sub, const std::string& label) {
                         watchers.push_back([&, replayId, slot, noteText, trackName, racer]() { watchReplay(replayId, slot, noteText, trackName, racer); });
-                        f.push_back(row("w:" + std::to_string(watchers.size() - 1), title, sub, downloadId == replayId ? "DOWNLOADING..." : (raceMode ? std::string("RACE") : label)));
+                        { FormField wr = row("w:" + std::to_string(watchers.size() - 1), title, sub, downloadId == replayId ? "DOWNLOADING..." : label); if (downloadId != replayId) wr.suffix = "RACE"; f.push_back(wr); }
                     };
                     if (server.GetState() == OnlineLobby::State::eFailed) {
                         f.push_back(note(server.Message().empty() ? "Could not reach the server." : server.Message()));

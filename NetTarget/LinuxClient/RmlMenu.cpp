@@ -239,7 +239,7 @@ void DrawResultsBackdrop(SDL_Renderer* pRenderer, int pWidth, int pHeight, int p
 
 Rml::String Escaped(const std::string& pText);   // defined below
 
-const char* const kButtons[] = {"quick", "online", "offline", "leaderboards", "garage", "tutorial", "settings", "quit"};   // in the order the arrow keys walk them (quit only where it is shown)
+const char* const kButtons[] = {"quick", "online", "offline", "leaderboards", "garage", "tutorial", "settings", "replays", "quit"};   // in the order the arrow keys walk them (quit only where it is shown)
 
 void MoveFocus(Rml::ElementDocument* pDocument, int pStep, const std::function<void(Sound)>& pSound)
 {
@@ -1054,7 +1054,8 @@ void FormScreen::SetFields(const std::vector<FormField>& pFields)
         case FormField::Type::eRow:
             html += "<div class=\"row\"><div class=\"rtext\"><p class=\"rmain\">" + Escaped(f.label) + "</p>" + (f.hint.empty() ? Rml::String() : "<p class=\"rsub\">" + Escaped(f.hint) + "</p>") + "</div>" +
                     (f.text.empty() ? Rml::String() : "<button class=\"act quiet rbtn\" id=\"f_" + id + "\">" + Escaped(f.text) + "</button>") +
-                    (f.suffix.empty() ? Rml::String() : "<button class=\"act quiet rbtn\" id=\"f_" + id + "_2\">" + Escaped(f.suffix) + "</button>") + "</div>";
+                    (f.suffix.empty() ? Rml::String() : "<button class=\"act quiet rbtn\" id=\"f_" + id + "_2\">" + Escaped(f.suffix) + "</button>") +
+                    (f.extra.empty() ? Rml::String() : "<button class=\"act quiet rbtn\" id=\"f_" + id + "_3\">" + Escaped(f.extra) + "</button>") + "</div>";
             break;
         case FormField::Type::eChooser: {
             FormListener::Chooser chooser; chooser.items = f.items; chooser.selected = f.selected;
@@ -1069,6 +1070,7 @@ void FormScreen::SetFields(const std::vector<FormField>& pFields)
     host->SetInnerRML(html);
     for (const FormField& f : pFields) {
         if (f.type == FormField::Type::eRow && !f.suffix.empty()) if (Rml::Element* second = m.document->GetElementById("f_" + f.id + "_2")) { second->AddEventListener("click", &m.listener); second->AddEventListener("mouseover", &m.listener); }
+        if (f.type == FormField::Type::eRow && !f.extra.empty()) if (Rml::Element* third = m.document->GetElementById("f_" + f.id + "_3")) { third->AddEventListener("click", &m.listener); third->AddEventListener("mouseover", &m.listener); }
         Rml::Element* e = m.document->GetElementById("f_" + f.id);
         if (e == nullptr) continue;
         switch (f.type) {

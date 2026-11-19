@@ -26,9 +26,9 @@ real-browser test (it builds and shares the code; the headless browser test does
 
 ## Racing against a saved race
 
-**Watch a Replay** (now on the main menu; also reached from Leaderboards) has a mode button at the top: **MODE: WATCH** or **MODE: RACE AGAINST THE REPLAY**. In race mode the button on each row
-says RACE, and choosing a replay starts an ordinary local race on that replay's track, lap count and weapons setting in which **every player of the saved race is a ghost** (the same
-drawn-only craft as your own best-run ghost). Nothing is asked about whose craft to follow.
+**Watch a Replay** (on the main menu; the Leaderboards rows too) puts a **RACE** button beside **WATCH** on every replay (My races, Server replays, and each leaderboard row). RACE starts an
+ordinary local race on that replay's track, lap count and weapons setting in which **every player of the saved race is a ghost** (the same drawn-only craft as your own best-run ghost).
+Nothing is asked about whose craft to follow.
 
 - **How the ghosts are made.** The replay is run once through the headless race with its recorded inputs (`BuildReplayGhosts`, `ReplayGhosts.cpp`), which gives each player's position, heading
   and room every 48 ms from the start of the countdown to their finish. The new race is not influenced by it: the ghosts are not in the level, cannot hit or be hit, do not change the state hash and

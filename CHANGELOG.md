@@ -4,6 +4,13 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.84 - 2026-11-19
+
+_Released at the owner's request. Run on this build (Linux, headless): the real Watch a Replay button on the main menu opens the replay screen; a RACE button on a saved race starts a race with both ghosts on the grid; screenshot of the screen looked at; the main-menu test script updated for the new button (its first 7 checks passed; the rest of it was stopped at the owner's request and not finished, so the Settings and controls steps it changed are unverified). Not run: the RACE buttons on server replays and Leaderboards (need a server; compiled only), the web build, Windows, a real laptop._
+
+- **Watch a Replay on the main menu now works.** In 2.3.83 the button was drawn but not connected to a click (the menu's list of buttons did not include it).
+- **A RACE button beside WATCH** on every replay (My races, Server replays, Leaderboards), instead of the mode switch of 2.3.83, which was easy to miss. The row's third button, DELETE, is on My races only.
+
 ## 2.3.83 - 2026-11-19
 
 _Released at the owner's request. Run on this build (Linux, headless): the replay ghosts test (every ghost sample equals the race's craft at that time), a scripted run from the main menu through Watch a Replay in race mode into a race with both ghosts drawn (screenshot looked at), the main menu screenshot, and the main-menu, RmlUi menu, replay viewer, leaderboards, online menu, ghost, render golden and camera-rule tests (all passed). Not run: racing a replay from Leaderboards or a server replay (needs a server; compiled only), the web build, Windows, a real laptop._
