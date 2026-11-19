@@ -17,11 +17,11 @@ struct Camera
     float focal, cx, cy;     // focal length in pixels, the screen centre
 };
 
-Camera MakeCamera(int w, int h, float yawDegrees)
+Camera MakeCamera(int w, int h, float yawDegrees, float farther, float fixedRadius)
 {
     const float a = yawDegrees * 3.14159265f / 180.0f;
     const float aspect = static_cast<float>(w) / static_cast<float>(std::max(1, h));
-    const float radius = std::max(1.2f, std::min(1.62f, 1.62f - (aspect - 1.33f) * 0.5f)), height = radius * 0.37f;   // closer on a wide window, where the track has room to be bigger
+    const float radius = fixedRadius > 0.0f ? fixedRadius : std::max(1.2f, std::min(1.62f, 1.62f - (aspect - 1.33f) * 0.5f)) * farther, height = radius * (farther > 1.0f ? 0.40f : 0.37f);   // closer on a wide window, where the track has room to be bigger
     Camera c;
     c.ex = std::cos(a) * radius; c.ey = std::sin(a) * radius; c.ez = height;
     float fx = -c.ex, fy = -c.ey, fz = -c.ez + 0.02f;
@@ -134,17 +134,32 @@ void TexturedFan(SDL_Texture* picture, const std::vector<SDL_FPoint>& poly, cons
     for (std::size_t i = 1; i + 1 < poly.size(); ++i) { p.indices.push_back(base); p.indices.push_back(base + static_cast<int>(i)); p.indices.push_back(base + static_cast<int>(i) + 1); }
 }
 
+float gDepthScale = 1.0f;   // the camera's distance relative to the close view, so the haze and the grid fade over the same part of the picture
 SDL_Color Fog(SDL_Color c, float depth)
 {
+    depth /= gDepthScale;
     const SDL_Color fog = {58, 18, 86, 255};
     return Mix(c, fog, std::min(0.6f, std::max(0.0f, (depth - 1.1f) / 5.0f)));   // a light haze only: the track keeps its own colours
 }
 }
 
-void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, const std::vector<SDL_Texture*>& pictures, float yawDegrees, float seconds, bool backgroundOnly)
+void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, const std::vector<SDL_Texture*>& pictures, float yawDegrees, float seconds, bool backgroundOnly, bool real)
 {
     if (!backgroundOnly && (!plan.ok || plan.shapes.empty())) return;
-    const Camera cam = MakeCamera(w, h, yawDegrees);
+    // The real look: the camera is placed so the whole track, at any angle of its turn, spans the free width between the race screen's two side panels (about 40% of the window), however
+    // long the track is: the distance follows the track's own reach from its centre, so a long track is seen from further away.
+    float fixedRadius = 0.0f, farther = 1.0f;
+    if (real) {
+        float reach = 0.05f;
+        for (const HoverNetPlan::Plan::Shape& sh : plan.shapes) for (std::size_t k = 0; k + 1 < sh.xy.size(); k += 2) reach = std::max(reach, std::sqrt(sh.xy[k] * sh.xy[k] + sh.xy[k + 1] * sh.xy[k + 1]));
+        const float focal = (static_cast<float>(h) * 0.5f) / std::tan(27.5f * 3.14159265f / 180.0f);
+        const float freeWidth = 0.40f * static_cast<float>(w);
+        const float distance = 2.0f * reach * focal / freeWidth;   // the eye's distance from the track's centre that makes its full width this wide
+        fixedRadius = std::max(1.0f, distance / 1.077f);           // (the eye is a little above the ground: its distance is 1.077 times its radius round the track)
+        farther = fixedRadius / 1.62f;
+    }
+    const Camera cam = MakeCamera(w, h, yawDegrees, farther, fixedRadius);
+    gDepthScale = farther;
     const float pulse = 0.86f + 0.14f * std::sin(seconds * 2.2f);
     const float zScale = 1.8f;   // the floors' heights, a little exaggerated so bridges and ramps read
     static thread_local Painter painter;   // kept between frames, so its buffers are not allocated every time
@@ -169,16 +184,17 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
     // ---- the grid on the ground (thin quads, all in the same run) -----------------------------------------------------------------------------------------------------------
     {
         auto lineEnd = [&](int axis, float v, float s, SDL_FPoint& p, float& d) { return axis == 0 ? Project(cam, v, s, -0.004f, p, d) : Project(cam, s, v, -0.004f, p, d); };
+        const float gridStep = real ? 0.2f * farther : 0.125f;
         for (int i = -24; i <= 24; ++i) {
             for (int axis = 0; axis < 2; ++axis) {
-                const float v = static_cast<float>(i) * 0.125f;
-                float s0 = -3.0f, s1 = 3.0f;
+                const float v = static_cast<float>(i) * gridStep;
+                float s0 = real ? -4.8f * farther : -3.0f, s1 = -s0;
                 SDL_FPoint p0, p1; float d0, d1;
                 // cut the line where it comes in front of the eye: walk the end that is behind it forward along the line
                 if (!lineEnd(axis, v, s0, p0, d0)) { float lo = s0, hi = s1; for (int it = 0; it < 16; ++it) { const float mid = (lo + hi) * 0.5f; SDL_FPoint q; float dd; if (lineEnd(axis, v, mid, q, dd)) hi = mid; else lo = mid; } s0 = hi; if (!lineEnd(axis, v, s0, p0, d0)) continue; }
                 if (!lineEnd(axis, v, s1, p1, d1)) { float lo = s0, hi = s1; for (int it = 0; it < 16; ++it) { const float mid = (lo + hi) * 0.5f; SDL_FPoint q; float dd; if (lineEnd(axis, v, mid, q, dd)) lo = mid; else hi = mid; } s1 = lo; if (!lineEnd(axis, v, s1, p1, d1)) continue; }
                 const float depth = std::min(d0, d1);
-                const float a = std::max(0.04f, std::min(1.0f, 1.25f - depth / 3.6f));
+                const float a = (real ? 0.55f : 1.0f) * std::max(0.04f, std::min(1.0f, 1.25f - depth / (3.6f * gDepthScale)));   // (the grid is quieter when the track is the real one)
                 const bool major = (i % 4) == 0;
                 const SDL_Color c = major ? SDL_Color{90, 220, 255, static_cast<Uint8>(120 * a)} : SDL_Color{220, 70, 230, static_cast<Uint8>(86 * a)};
                 Thick(p0, p1, major ? 1.6f : 1.2f, c, false);
@@ -254,7 +270,12 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
         const HoverNetPlan::Texture& tex = plan.textures[static_cast<std::size_t>(wall.texture)];
         const float len = std::sqrt((wall.x1 - wall.x0) * (wall.x1 - wall.x0) + (wall.y1 - wall.y0) * (wall.y1 - wall.y0)) * static_cast<float>(plan.spanMm) / tex.mmW;
         const float ur = std::min(3.6f, len) / 4.0f;
-        const SDL_Color c = Fog(SDL_Color{255, 255, 255, 255}, e.depth);
+        SDL_Color c = Fog(SDL_Color{255, 255, 255, 255}, e.depth);
+        if (real) {   // plain lighting: a wall is lighter or darker by the way it faces, as in the game's own pictures
+            const float nx = -(wall.y1 - wall.y0), ny = wall.x1 - wall.x0, nl = std::max(1e-6f, std::sqrt(nx * nx + ny * ny));
+            const float lit = 0.72f + 0.28f * std::fabs((nx * 0.55f + ny * 0.83f) / nl);
+            c.r = static_cast<Uint8>(c.r * lit); c.g = static_cast<Uint8>(c.g * lit); c.b = static_cast<Uint8>(c.b * lit);
+        }
         Painter& p = painter; p.Use(pictureOf(wall.texture), false);
         const int base = static_cast<int>(p.vertices.size());
         p.Vertex(ta, c, {0.0f, 0.0f}); p.Vertex(tb, c, {ur, 0.0f}); p.Vertex(a, c, {0.0f, 0.22f}); p.Vertex(b, c, {ur, 0.22f});
@@ -267,7 +288,7 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
         const float t = 0.5f + 0.5f * std::sin(std::atan2(my, mx) * 1.0f + seconds * 0.35f);
         return Mix(SDL_Color{60, 226, 255, 255}, SDL_Color{255, 70, 206, 255}, t);
     };
-    for (const Edge& e : walls) {
+    if (!real) for (const Edge& e : walls) {
         const HoverNetPlan::Plan::Wall& wall = plan.walls[e.index];
         if (pictureOf(wall.texture) != nullptr) continue;
         const float z = wall.h * plan.relief * zScale, railTop = z + 0.014f;
@@ -276,7 +297,7 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
         SDL_Color faint = neonOf(wall); faint.a = static_cast<Uint8>(54 * std::max(0.0f, 1.0f - (e.depth - 1.0f) / 3.6f) + 12);
         Quad(a, b, ta, tb, faint, faint, faint, faint);
     }
-    for (const Edge& e : walls) {
+    if (!real) for (const Edge& e : walls) {
         const HoverNetPlan::Plan::Wall& wall = plan.walls[e.index];
         const bool realWall = pictureOf(wall.texture) != nullptr;
         const float railTop = wall.h * plan.relief * zScale + 0.014f;
@@ -300,6 +321,7 @@ void Draw(SDL_Renderer* renderer, int w, int h, const HoverNetPlan::Plan& plan, 
         if (!Project(cam, m.x, m.y, m.h * plan.relief * zScale + 0.003f, p, d)) continue;
         const float px = cam.focal / d;
         const float core = (m.kind == 2 ? 0.020f : m.kind == 3 ? 0.010f : 0.014f) * px, tilt = 0.55f;
+        if (real) { Disc(p, core * 0.8f, core * 0.8f * tilt, SDL_Color{c[0], c[1], c[2], 255}, SDL_Color{c[0], c[1], c[2], 255}, false); continue; }   // a flat coloured spot (the legend names them): no glow, no beam
         Disc(p, core * 3.2f, core * 3.2f * tilt, SDL_Color{c[0], c[1], c[2], static_cast<Uint8>(90 * pulse)}, SDL_Color{c[0], c[1], c[2], 0}, true);
         Disc(p, core, core * tilt, SDL_Color{255, 255, 255, 255}, SDL_Color{c[0], c[1], c[2], 255}, true);
         if (m.kind == 2) {   // the finish line: a beam of light straight up

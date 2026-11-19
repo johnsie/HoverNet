@@ -4,6 +4,14 @@ All notable changes to HoverNet. Versions are the `vX.Y.Z` git tags the release
 pipelines build from. See [Releasing](docs/releasing.md) for how a release is made
 and how to roll one back.
 
+## 2.3.76 - 2026-11-19
+
+_Released at the owner's request. Run on this build: desktop screenshots of the race screen for ClassicH, The Alley2, Steeplechase and Switchback, and of the picture at four angles of its turn for The Alley2 and Switchback (nothing cut off); the render golden test (all 28 frames match: the classic renderer's output for a race is unchanged); the camera-rule test; the WebAssembly build and the page in headless Chrome (see the web line below). Not run: the full test suite, the modern-flow test, Windows, Firefox/Edge, a slow machine._
+
+- **The race screen shows the real track, drawn by the game's own renderer** (the real floors, walls and textures), turning slowly (3 degrees a second) over the grid, sized to fill the space between the two panels whatever the track's length. This replaces the lit model of 2.3.67 to 2.3.75, which was not the real track. How it gets past the renderer's limits: the renderer's fixed-point arithmetic cannot hold a scene more than about 260 m deep, so a long track (The Alley2 is 489 m, Switchback 556 m, some community tracks several km) could not be seen whole. The menu's picture is drawn from a throwaway copy of the level with every coordinate divided by one number (`MR_Level::ScaleGeometryDown`), so the track is about 140 m across and sits well inside what the renderer handles. The race and its camera are not touched (the render golden test and the camera-rule test pass; the copy is never raced). The pictures keep their own size, so on a long track the floor tiles look larger.
+- The picture is drawn at 960x600 (640x400 on the page), the middle is kept, and it is smoothed when scaled; each picture is shown sharp and blended into the next only for the last tenth of each step. The old lit model is still there with `HOVERNET_BACKDROP=neon` (or `=scene`).
+- Debug switches: `HOVERNET_FLYOVER_DEBUG=1`, `HOVERNET_FLYOVER_DUMP=<file>` (the first picture as a PPM), `HOVERNET_FLYOVER_START=<degrees>`, `HOVERNET_FLYOVER_SCALE=<n>`, `HOVERNET_FLYOVER_ZOOM=<factor>`.
+
 ## 2.3.75 - 2026-11-18
 
 _Released at the owner's request (the 2.3.74 view was slow and too close). Run on this build: desktop screenshot (headless software rendering), the WebAssembly build and the web page in headless Chrome on the GPU (race screen: 60 frames a second offered over 20 s, slowest frame 17 ms, no console errors, screenshot looked at). Not run: the full test suite, Windows, Firefox/Edge, a slow machine._

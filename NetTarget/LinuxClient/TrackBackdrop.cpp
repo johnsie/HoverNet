@@ -106,6 +106,8 @@ struct Flyover::Impl
     std::array<std::uint8_t, MR_NB_COLORS * 3> palette{};
     int width = 0, height = 0, scroll = 0;
     double cx = 0, cy = 0, radius = 0, eyeZ = 0, lookZ = 0;
+    int cropX = 0, cropY = 0, cropW = 0, cropH = 0;   // the part of the picture kept: the middle, where the track is at any angle of its turn (the rest is empty)
+    int scaleDown = 1;   // the level is shrunk by this factor for the picture (see Open)
     bool ready = false;
     void Close()
     {
@@ -119,8 +121,10 @@ struct Flyover::Impl
 Flyover::Flyover() : mImpl(new Impl) {}
 Flyover::~Flyover() { mImpl->Close(); delete mImpl; }
 bool Flyover::Ready() const { return mImpl->ready; }
-int Flyover::Width() const { return mImpl->width; }
-int Flyover::Height() const { return mImpl->height; }
+int Flyover::Width() const { return mImpl->cropW; }
+int Flyover::Height() const { return mImpl->cropH; }
+
+constexpr double kCropLeft = 0.10, kCropRight = 0.90, kCropTop = 0.06, kCropBottom = 0.97;   // (the track is framed so that it stays inside this at every angle)
 
 bool Flyover::Open(const std::string& path, const std::string& name, int width, int height)
 {
@@ -132,38 +136,49 @@ bool Flyover::Open(const std::string& path, const std::string& name, int width, 
     if (!m.buffer->SetVideoMode(width, height) || !m.buffer->Lock()) { delete track; m.Close(); return false; }
     m.session = new MR_ClientSession;
     if (!m.session->LoadNew(name.c_str(), track, 1, FALSE, m.buffer) || m.session->GetCurrentLevel() == nullptr) { m.Close(); return false; }
-    const MR_Level* level = m.session->GetCurrentLevel();
-    // the track's extent and floor height, to place the orbit
-    double x0 = 1e18, x1 = -1e18, y0 = 1e18, y1 = -1e18, zLow = 1e18, zHigh = -1e18;
-    for (int r = 0; r < level->GetRoomCount(); ++r) {
-        for (int v = 0; v < level->GetRoomVertexCount(r); ++v) {
-            const MR_2DCoordinate& c = level->GetRoomVertex(r, v);
-            x0 = std::min<double>(x0, c.mX); x1 = std::max<double>(x1, c.mX); y0 = std::min<double>(y0, c.mY); y1 = std::max<double>(y1, c.mY);
+    MR_Level* level = const_cast<MR_Level*>(m.session->GetCurrentLevel());   // (this session is a throwaway of ours: it is only drawn, never raced)
+    // The renderer's arithmetic (32-bit fixed point) is safe for a scene up to about 260 m deep and 130 m of eye height, which cannot hold a whole track that is 500 m or several kilometres across. So the
+    // level in this session is shrunk (all its coordinates divided by one number) until the track is about 140 m across, and drawn from a normal distance: the real floors, walls and textures drawn
+    // by the game's own renderer, at a smaller scale. (The pictures keep their own size, so on a big track they look larger; at this distance that is what reads best.)
+    auto extent = [&](double& x0, double& x1, double& y0, double& y1, double& zLow, double& zHigh) {
+        x0 = y0 = zLow = 1e18; x1 = y1 = zHigh = -1e18;
+        for (int r = 0; r < level->GetRoomCount(); ++r) {
+            for (int v = 0; v < level->GetRoomVertexCount(r); ++v) {
+                const MR_2DCoordinate& c = level->GetRoomVertex(r, v);
+                x0 = std::min<double>(x0, c.mX); x1 = std::max<double>(x1, c.mX); y0 = std::min<double>(y0, c.mY); y1 = std::max<double>(y1, c.mY);
+            }
+            zLow = std::min<double>(zLow, level->GetRoomBottomLevel(r)); zHigh = std::max<double>(zHigh, level->GetRoomBottomLevel(r));
         }
-        zLow = std::min<double>(zLow, level->GetRoomBottomLevel(r)); zHigh = std::max<double>(zHigh, level->GetRoomBottomLevel(r));
-    }
+    };
+    double x0, x1, y0, y1, zLow, zHigh;
+    extent(x0, x1, y0, y1, zLow, zHigh);
     if (!(x1 > x0) || !(y1 > y0)) { m.Close(); return false; }
+    constexpr double kTargetSpan = 140000.0;
+    m.scaleDown = std::max(1, static_cast<int>(std::ceil(std::max(x1 - x0, y1 - y0) / kTargetSpan)));
+    if (const char* forced = std::getenv("HOVERNET_FLYOVER_SCALE")) m.scaleDown = std::max(1, std::atoi(forced));   // test switch
+    if (m.scaleDown > 1) { level->ScaleGeometryDown(m.scaleDown); extent(x0, x1, y0, y1, zLow, zHigh); }
     m.cx = (x0 + x1) * 0.5; m.cy = (y0 + y1) * 0.5;
-    double span = std::max(x1 - x0, y1 - y0);
-    // The renderer's depth buffer reaches about 260 m: a small track is seen whole, a big one (a few kilometres) is circled around its start line from as far as the buffer allows.
-    const double kReach = 125000.0;
-    if (span > kReach) {
-        const MR_3DCoordinate start = level->GetStartingPos(0);
-        m.cx = start.mX; m.cy = start.mY; zLow = zHigh = start.mZ; span = kReach;
-    }
+    const double span = std::max(x1 - x0, y1 - y0);
     // The renderer tilts by shifting its horizon (a shear), in steps of an eighth of the picture's height: here half the picture. The eye is placed so the window it shows on the ground
     // holds the whole extent: at height H the picture's middle row meets the ground at H * focal / shift, the bottom row at 0.8 * H and the top row far out.
     const double aperture = 90.0 * 3.14159265 / 180.0;
     const double focal = (width * 0.5) / std::tan(aperture * 0.5);
     m.scroll = -4;
     const double shift = static_cast<double>(-m.scroll) * height / 8.0;
-    const double eyeHeight = 0.8 * span;
+    // How far the track reaches from its centre (so it stays in the picture whichever way it faces as it turns): the eye is placed so that circle is about 0.52 of the width that is kept (the near edge is magnified by the perspective).
+    double reach = 1.0;
+    for (int r = 0; r < level->GetRoomCount(); ++r) for (int v = 0; v < level->GetRoomVertexCount(r); ++v) {
+        const MR_2DCoordinate& c = level->GetRoomVertex(r, v);
+        reach = std::max(reach, std::hypot(static_cast<double>(c.mX) - m.cx, static_cast<double>(c.mY) - m.cy));
+    }
+    const double keptWidth = width * (kCropRight - kCropLeft);
+    const double eyeHeight = std::min(0.8 * span, 2.0 * reach * focal / (0.52 * keptWidth) * std::sin(std::atan(shift / focal))) * (std::getenv("HOVERNET_FLYOVER_ZOOM") ? std::atof(std::getenv("HOVERNET_FLYOVER_ZOOM")) : 1.0);   // (the zoom is a test switch)
     const double tilt = std::atan(shift / focal);
     const double slant = eyeHeight / std::sin(tilt);
     m.radius = eyeHeight * focal / shift;
     m.lookZ = (zLow + zHigh) * 0.5;
     m.eyeZ = m.lookZ + eyeHeight;
-    if (std::getenv("HOVERNET_FLYOVER_DEBUG")) std::fprintf(stderr, "flyover: span %.0f mm, centre %.0f,%.0f, slant %.0f, radius %.0f, eyeZ %.0f, lookZ %.0f, tilt %.1f deg\n", span, m.cx, m.cy, slant, m.radius, m.eyeZ, m.lookZ, tilt * 57.2958);
+    if (std::getenv("HOVERNET_FLYOVER_DEBUG")) std::fprintf(stderr, "flyover: shrunk %dx, span %.0f mm, centre %.0f,%.0f, slant %.0f, radius %.0f, eyeZ %.0f, lookZ %.0f, tilt %.1f deg\n", m.scaleDown, span, m.cx, m.cy, slant, m.radius, m.eyeZ, m.lookZ, tilt * 180.0 / 3.14159265);
     m.palette.fill(0);
     {
         PALETTEENTRY* colors = MR_GetColors(0.75, 0.75, 0.05);
@@ -182,7 +197,10 @@ bool Flyover::Open(const std::string& path, const std::string& name, int width, 
     }
     m.observer = MR_Observer::New();
     if (m.observer == nullptr) { m.Close(); return false; }
-    m.width = width; m.height = height; m.ready = true;
+    m.width = width; m.height = height;
+    m.cropX = static_cast<int>(width * kCropLeft); m.cropW = static_cast<int>(width * (kCropRight - kCropLeft));
+    m.cropY = static_cast<int>(height * kCropTop); m.cropH = static_cast<int>(height * (kCropBottom - kCropTop));
+    m.ready = true;
     return true;
 }
 
@@ -199,16 +217,19 @@ bool Flyover::Draw(float degrees, std::vector<std::uint8_t>& rgba)
     const double heading = std::atan2(m.cy - eye.mY, m.cx - eye.mX);
     MR_Angle yaw = static_cast<MR_Angle>(std::lround(heading / (2.0 * 3.14159265) * 4096.0));
     yaw = MR_NORMALIZE_ANGLE(yaw);
-    m.observer->RenderFlyover(m.buffer, m.session, eye, yaw, m.scroll, 0, nullptr);   // no sky of its own: the picture is transparent round the track, so the menu's neon grid shows behind it
-    const std::size_t pixels = static_cast<std::size_t>(m.width) * m.height;
+    m.observer->RenderFlyover(m.buffer, m.session, eye, yaw, m.scroll, 0, nullptr);
+    // (no sky of its own: the picture is transparent round the track, so the menu's grid shows behind it)
+    const std::size_t pixels = static_cast<std::size_t>(m.cropW) * m.cropH;
     rgba.resize(pixels * 4);
     const std::uint8_t* frame = m.buffer->GetBuffer();
     const std::size_t lineLen = static_cast<std::size_t>(m.buffer->GetLineLen());
-    for (int y = 0; y < m.height; ++y) {
-        const std::uint8_t* row = frame + static_cast<std::size_t>(y) * lineLen;
-        std::uint8_t* out = rgba.data() + static_cast<std::size_t>(y) * m.width * 4;
-        for (int x = 0; x < m.width; ++x) { out[x * 4] = m.palette[row[x] * 3]; out[x * 4 + 1] = m.palette[row[x] * 3 + 1]; out[x * 4 + 2] = m.palette[row[x] * 3 + 2]; out[x * 4 + 3] = row[x] == 0 ? 0 : 255; }   // colour 0 is never a surface: where nothing was drawn it is left see-through, so the menu's own backdrop shows instead of a black hole
+    for (int y = 0; y < m.cropH; ++y) {
+        const std::uint8_t* row = frame + static_cast<std::size_t>(y + m.cropY) * lineLen + m.cropX;
+        std::uint8_t* out = rgba.data() + static_cast<std::size_t>(y) * m.cropW * 4;
+        for (int x = 0; x < m.cropW; ++x) { out[x * 4] = m.palette[row[x] * 3]; out[x * 4 + 1] = m.palette[row[x] * 3 + 1]; out[x * 4 + 2] = m.palette[row[x] * 3 + 2]; out[x * 4 + 3] = row[x] == 0 ? 0 : 255; }   // colour 0 is never a surface: where nothing was drawn it is left see-through, so the menu's own backdrop shows instead of a black hole
     }
+    if (const char* dump = std::getenv("HOVERNET_FLYOVER_DUMP")) { static bool once = false; if (!once) { once = true; if (FILE* f = std::fopen(dump, "wb")) { std::fprintf(f, "P6 %d %d 255\n", m.cropW, m.cropH); for (std::size_t i = 0; i < pixels; ++i) { const std::uint8_t px[3] = {rgba[i * 4 + 3] ? rgba[i * 4] : std::uint8_t(40), rgba[i * 4 + 3] ? rgba[i * 4 + 1] : std::uint8_t(0), rgba[i * 4 + 3] ? rgba[i * 4 + 2] : std::uint8_t(60)}; std::fwrite(px, 1, 3, f); } std::fclose(f); } } }   // test switch: the first picture, as a PPM
+    if (std::getenv("HOVERNET_FLYOVER_DEBUG")) { std::size_t drawn = 0; for (std::size_t i = 3; i < rgba.size(); i += 4) if (rgba[i] != 0) ++drawn; std::fprintf(stderr, "flyover: %zu of %zu pixels drawn (shrunk %dx)\n", drawn, pixels, m.scaleDown); }
     return true;
 }
 
@@ -240,9 +261,9 @@ struct FlyoverWorker::Impl
             {
                 std::lock_guard<std::mutex> level(HoverNetPlan::LevelLock());
                 #ifdef __EMSCRIPTEN__
-                ok = fly.Open(openPath, openName, 480, 300);   // smaller on the page (memory, and the picture is drawn by the CPU there); smoothed when shown
+                ok = fly.Open(openPath, openName, 640, 400);   // smaller on the page (memory, and the picture is drawn by the CPU there); smoothed when shown
 #else
-                ok = fly.Open(openPath, openName, 640, 400);   // drawn at this size and smoothed when shown
+                ok = fly.Open(openPath, openName, 960, 600);   // drawn at this size, the middle kept, and smoothed when shown
 #endif
             }
             { std::lock_guard<std::mutex> lock(mutex); failed = !ok; }
@@ -259,7 +280,7 @@ struct FlyoverWorker::Impl
                 bool drawn;
                 {
                     std::lock_guard<std::mutex> level(HoverNetPlan::LevelLock());
-                    drawn = fly.Draw(200.0f + i * (360.0f / kRing), frame.rgba);
+                    drawn = fly.Draw((std::getenv("HOVERNET_FLYOVER_START") ? static_cast<float>(std::atof(std::getenv("HOVERNET_FLYOVER_START"))) : 200.0f) + i * (360.0f / kRing), frame.rgba);
                 }
                 const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
                 if (drawn) {

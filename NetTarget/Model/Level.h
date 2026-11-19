@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-10-17.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-19.
 // See repository history for authorship and detailed changes.
 // Level.h
 //
@@ -286,6 +286,9 @@ class MR_DllDeclare  MR_Level
       MR_Int32               GetRoomBottomLevel( int pRoomId )const;
       MR_Int32               GetRoomTopLevel(    int pRoomId )const;
       const MR_2DCoordinate& GetRoomVertex(      int pRoomId, int pVertex )const;
+      // Divides every coordinate and height of the level's rooms and features by pDivisor (for a throwaway copy that is only drawn, such as a menu's picture of a whole track: the renderer's
+      // arithmetic cannot hold a scene several hundred metres across). Not for a level that is raced: collisions, effects and elements keep their own sizes.
+      void ScaleGeometryDown( int pDivisor );
       int                    GetRoomVertexCount( int pRoomId )const;
 
       MR_PolygonShape*       GetFeatureShape(       int pFeatureId )const;

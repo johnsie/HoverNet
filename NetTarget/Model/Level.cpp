@@ -1,4 +1,4 @@
-// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-10-17.
+// HoverNet modification notice: Modified for HoverNet; latest recorded change 2026-11-19.
 // See repository history for authorship and detailed changes.
 // Level.cpp
 //
@@ -1279,3 +1279,38 @@ void MR_SectionId::Serialize(  CArchive& pArchive )
 }
 
 
+
+
+void MR_Level::ScaleGeometryDown( int pDivisor )
+{
+   if( pDivisor <= 1 )
+   {
+      return;
+   }
+   auto lScale = [pDivisor]( Section& pSection )
+   {
+      pSection.mFloorLevel   /= pDivisor;
+      pSection.mCeilingLevel /= pDivisor;
+      for( int lVertex = 0; lVertex < pSection.mNbVertex; lVertex++ )
+      {
+         pSection.mVertexList[ lVertex ].mX /= pDivisor;
+         pSection.mVertexList[ lVertex ].mY /= pDivisor;
+         if( pSection.mWallLen != NULL )
+         {
+            pSection.mWallLen[ lVertex ] /= pDivisor;
+         }
+      }
+      pSection.mMin.mX /= pDivisor;
+      pSection.mMin.mY /= pDivisor;
+      pSection.mMax.mX /= pDivisor;
+      pSection.mMax.mY /= pDivisor;
+   };
+   for( int lRoom = 0; lRoom < mNbRoom; lRoom++ )
+   {
+      lScale( mRoomList[ lRoom ] );
+   }
+   for( int lFeature = 0; lFeature < mNbFeature; lFeature++ )
+   {
+      lScale( mFeatureList[ lFeature ] );
+   }
+}

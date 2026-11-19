@@ -5136,7 +5136,7 @@ struct TrackBackdropShow
         const TrackEntry* entry = Tracks().Get(index);
         if (entry == nullptr || !entry->mInstalled || std::getenv("HOVERNET_NO_BACKDROP") != nullptr || !LoadMenuBackdrop()) return;
         const char* style = std::getenv("HOVERNET_BACKDROP");
-        textured = style != nullptr && std::string(style) == "textured";   // the lit model of the whole track (GPU, zoomed out) is the default; HOVERNET_BACKDROP=textured is the game's own renderer orbiting close to the start line (slower, shows part of a long track)
+        textured = style == nullptr || (std::string(style) != "neon" && std::string(style) != "scene");   // the default: the game's own renderer (the real track), from far enough away to see all of it; HOVERNET_BACKDROP=neon or =scene for the GPU models (neon look / plain look)
         if (textured) {
             if (!worker) worker.reset(new HoverNetBackdrop::FlyoverWorker);
             worker->SetStill(LoadReducedMotion());
@@ -5159,7 +5159,7 @@ struct TrackBackdropShow
         if (!textured) {
             if (pending.valid() && (pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready || pending.wait_for(std::chrono::seconds(0)) == std::future_status::deferred)) {
                 plan = pending.get();
-                if (std::getenv("HOVERNET_DEBUG_PLAN")) { int flat = 0; for (const auto& sh : plan.shapes) if (sh.texture < 0) ++flat; int wflat = 0; for (const auto& w2 : plan.walls) if (w2.texture < 0) ++wflat; std::fprintf(stderr, "PLAN shapes=%zu untextured=%d walls=%zu untextured=%d textures=%zu\n", plan.shapes.size(), flat, plan.walls.size(), wflat, plan.textures.size()); }
+                if (std::getenv("HOVERNET_DEBUG_PLAN")) { int flat = 0; for (const auto& sh : plan.shapes) if (sh.texture < 0) ++flat; int wflat = 0; for (const auto& w2 : plan.walls) if (w2.texture < 0) ++wflat; std::fprintf(stderr, "PLAN span_m=%.0f shapes=%zu untextured=%d walls=%zu untextured=%d textures=%zu\n", plan.spanMm / 1000.0, plan.shapes.size(), flat, plan.walls.size(), wflat, plan.textures.size()); }
                 for (const HoverNetPlan::Texture& tex : plan.textures) {   // each picture four by four, so a floor can repeat it (the card does not wrap textures)
                     SDL_Texture* t = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, tex.width * 4, tex.height * 4);
                     if (t != nullptr) {
@@ -5173,7 +5173,8 @@ struct TrackBackdropShow
             }
             if (!plan.ok) return;
             const float seconds = static_cast<float>(SDL_GetTicks() - since) / 1000.0f;
-            HoverNetScene::Draw(renderer, w, h, plan, pictures, still ? 215.0f : 215.0f + 7.0f * seconds, seconds);
+            const bool realLook = std::getenv("HOVERNET_BACKDROP") != nullptr && std::string(std::getenv("HOVERNET_BACKDROP")) == "scene";   // =scene: the plain GPU model; =neon: the neon one
+            HoverNetScene::Draw(renderer, w, h, plan, pictures, still ? 215.0f : 215.0f + (realLook ? 3.0f : 7.0f) * seconds, seconds, false, realLook);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(renderer, 6, 4, 14, 60);   // a light veil only: the track is the picture
             const SDL_Rect veil = {0, 0, w, h};
@@ -5203,18 +5204,21 @@ struct TrackBackdropShow
         const int n = static_cast<int>(ring.size());
         auto drawTexture = [&](SDL_Texture* t, Uint8 alpha) {
             int tw = 0, th = 0; SDL_QueryTexture(t, nullptr, nullptr, &tw, &th);
-            float dw = static_cast<float>(w) * 1.05f, dh = dw * th / tw;   // the whole orbit picture, as large as the window allows (a little wider than it)
-            if (dh > h * 1.05f) { dh = static_cast<float>(h) * 1.05f; dw = dh * tw / th; }
-            const SDL_FRect to = {(w - dw) * 0.5f, (h - dh) * 0.5f, dw, dh};
+            // the picture fits the free space between the race screen's two panels (about 43% of the width) and between its title and its button (about 68% of the height)
+            // The picture's own margin is see-through and the track takes about half of its width (see TrackBackdrop.cpp), so the picture is drawn wider than that space, behind the panels, and the track fills it.
+            float dw = static_cast<float>(w) * 0.38f / 0.52f, dh = dw * th / tw;
+            if (dh > h * 1.0f) { dh = static_cast<float>(h) * 1.0f; dw = dh * tw / th; }
+            const SDL_FRect to = {(w - dw) * 0.5f, h * 0.45f - dh * 0.5f, dw, dh};
             SDL_SetTextureAlphaMod(t, alpha);
             SDL_RenderCopyF(renderer, t, nullptr, &to);
         };
         if (still || ready < n) drawTexture(ring[static_cast<std::size_t>(still ? 0 : ready - 1)], 255);
         else {
-            const float position = std::fmod(static_cast<float>(SDL_GetTicks() - since) / 1000.0f * 0.5f, static_cast<float>(n));
+            const float position = std::fmod(static_cast<float>(SDL_GetTicks() - since) / 1000.0f * 0.3f, static_cast<float>(n));   // 0.3 pictures a second: a slow turn (3 degrees a second)
             const int i = static_cast<int>(position) % n;
             drawTexture(ring[static_cast<std::size_t>(i)], 255);
-            drawTexture(ring[static_cast<std::size_t>((i + 1) % n)], static_cast<Uint8>((position - std::floor(position)) * 255.0f));
+            const float blend = std::max(0.0f, std::min(1.0f, ((position - std::floor(position)) - 0.9f) / 0.1f));   // the next picture is faded in over the last tenth of each step (a third of a second), so each picture stays sharp and never shows as a double image for long
+            if (blend > 0.0f) drawTexture(ring[static_cast<std::size_t>((i + 1) % n)], static_cast<Uint8>(blend * 255.0f));
         }
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer, 8, 6, 16, 40);
