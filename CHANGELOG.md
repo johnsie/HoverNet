@@ -6,7 +6,7 @@ and how to roll one back.
 
 ## 2.3.80 - 2026-11-19
 
-_Not released yet (waiting for the owner's word). Run on this build (Linux): desktop screenshots of the race screen and of the track browser in both modes; the render golden, camera-rule and track-plan tests (passed). Not run: the full suite, Windows, the web build, Firefox/Edge. The mouse-wheel scroll of the list and the objects' animation over time were not watched live._
+_Released at the owner's request. Run on this build (Linux): desktop screenshots of the race screen and of the track browser in both modes; the render golden, camera-rule and track-plan tests (passed). Not run: the full suite, Windows, the web build, Firefox/Edge. The mouse-wheel scroll of the list and the objects' animation over time were not watched live._
 
 - **Things on the track are drawn in the spinning view**: the power-ups, mines and scenery the level file places are drawn by the game's own renderer, moved with the shrunk track, and the picture is drawn for a moment in the track's life so animated walls, floors and sprites run (the clock is the same as the turn's).
 - **The key under the race screen is gone** (fuel, boost, finish line, power-up): it described the old made-up model.
