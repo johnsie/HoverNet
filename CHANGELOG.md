@@ -6,7 +6,7 @@ and how to roll one back.
 
 ## 2.3.77 - 2026-11-19
 
-_Not released yet. Run on this build: desktop (software rendering: a new picture of the track arrives about 3.4 times a second) and the web page in headless Chrome on the GPU (a picture every 6 seconds for 18 seconds, looked at: the track turns with the grid, no console errors); the camera-rule test. The render golden test was not re-run (no renderer file changed since 2.3.76). Not run: the full test suite, Windows, Firefox/Edge, a slow machine._
+_Released at the owner's request. Run on this build: desktop (software rendering: a new picture of the track arrives about 3.4 times a second) and the web page in headless Chrome on the GPU (a picture every 6 seconds for 18 seconds, looked at: the track turns with the grid, no console errors); the camera-rule test. The render golden test was not re-run (no renderer file changed since 2.3.76). Not run: the full test suite, Windows, Firefox/Edge, a slow machine._
 
 - **The track and the grid turn together, so the track sits on the grid.** Before, the grid turned smoothly while the track stepped through 36 pictures about three seconds apart, so the track slid against the grid. Now the game's own renderer draws a new picture of the track about every degree, for where the eye will be when it is shown, and the two newest pictures are blended by the real angle; the track's angle and the grid's angle come from the same clock, 3 degrees a second. This also drops the 36-picture memory (two pictures are kept) and costs a background thread about a third of a core. Reduced motion holds both still.
 
