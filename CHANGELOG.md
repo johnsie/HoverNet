@@ -6,7 +6,7 @@ and how to roll one back.
 
 ## 2.3.82 - 2026-11-19
 
-_Not released yet. Run on this build (Linux, headless): the scrolling list opens, shows a styled scrollbar (screenshot), a real mouse click (move, press, release) on a row picks that track, also after scrolling with the wheel. Not run: a real laptop or touchpad, Windows, the web build, the test suite._
+_Released at the owner's request. Run on this build (Linux, headless): the scrolling list opens, shows a styled scrollbar (screenshot), a real mouse click (move, press, release) on a row picks that track, also after scrolling with the wheel. Not run: a real laptop or touchpad, Windows, the web build, the test suite._
 
 - **The scrolling list is back** ("Scroll list" chip), with a visible scrollbar (in 2.3.80 it had none). The cause of "nothing happens when I click a row" on the owner's laptop is not known: it works in the headless run.
 - New test steps for the scripted menus: `tap:<id>` (a real click at the middle of an element) and `wheel:<n>`.
