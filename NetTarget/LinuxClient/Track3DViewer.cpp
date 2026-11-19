@@ -5402,7 +5402,7 @@ int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, 
     int chosen = -1;
     auto draw = [&]() {
         form->SetHtml("filters", picker.FiltersHtml(""));
-        form->SetHtml("sorts", picker.SortsHtml(""));
+        form->SetHtml("sorts", picker.SortsHtml("") + picker.ViewHtml(""));
         form->SetHtml("grid", picker.CardsHtml("", pCurrent, pBests));
         form->SetClass("grid", "tall", picker.List());
         form->SetClass("pager", "hide", picker.List());
@@ -5425,7 +5425,6 @@ int RunTrackBrowser(SDL2GraphicsBackend& graphics, const PersonalBests& pBests, 
             return preview.mTexture;
         });
     }
-    // (The scrolling list mode of TrackPicker is not offered: clicking a row did not work on the owner's laptop and could not be reproduced here. HOVERNET_TEST_BROWSER_LIST=1 still opens it, for testing.)
     if (std::getenv("HOVERNET_TEST_BROWSER_LIST") != nullptr) picker.SetList(true);
     picker.ShowTrack(pCurrent);
     draw();

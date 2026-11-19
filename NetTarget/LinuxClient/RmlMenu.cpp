@@ -1205,6 +1205,19 @@ FormOutcome FormScreen::Frame(std::vector<FormEvent>& pEvents, int pFrame, int p
         SDL_Event scripted; SDL_zero(scripted);
         if (step.compare(0, 4, "tab:") == 0) { if (Rml::Element* e = m.document->GetElementById("tab" + step.substr(4))) e->Click(); }
         else if (step.compare(0, 6, "click:") == 0) { if (Rml::Element* e = m.document->GetElementById(step.substr(6))) e->Click(); }
+        else if (step.compare(0, 4, "tap:") == 0) {   // a real mouse click (move, press, release) at the middle of the element: tests that it can be hit where it is drawn
+            if (Rml::Element* e = m.document->GetElementById(step.substr(4))) {
+                const Rml::Vector2f at(e->GetAbsoluteLeft() + e->GetOffsetWidth() * 0.5f, e->GetAbsoluteTop() + e->GetOffsetHeight() * 0.5f);
+                const int x = static_cast<int>(at.x / static_cast<float>(m.ss->factor)), y = static_cast<int>(at.y / static_cast<float>(m.ss->factor));
+                scripted.type = SDL_MOUSEMOTION; scripted.motion.x = x; scripted.motion.y = y; SDL_PushEvent(&scripted);
+                SDL_zero(scripted); scripted.type = SDL_MOUSEBUTTONDOWN; scripted.button.button = SDL_BUTTON_LEFT; scripted.button.state = SDL_PRESSED; scripted.button.clicks = 1; scripted.button.x = x; scripted.button.y = y; SDL_PushEvent(&scripted);
+                SDL_zero(scripted); scripted.type = SDL_MOUSEBUTTONUP; scripted.button.button = SDL_BUTTON_LEFT; scripted.button.state = SDL_RELEASED; scripted.button.clicks = 1; scripted.button.x = x; scripted.button.y = y; SDL_PushEvent(&scripted);
+            }
+        }
+        else if (step.compare(0, 6, "wheel:") == 0) {   // the mouse wheel over the middle of the screen, by this many notches (negative: down)
+            scripted.type = SDL_MOUSEMOTION; scripted.motion.x = m.width / 2 / m.ss->factor; scripted.motion.y = m.height / 2 / m.ss->factor; SDL_PushEvent(&scripted);
+            SDL_zero(scripted); scripted.type = SDL_MOUSEWHEEL; scripted.wheel.y = std::atoi(step.c_str() + 6); SDL_PushEvent(&scripted);
+        }
         else if (step.compare(0, 6, "press:") == 0) {   // a key by SDL's name ("press:J", "press:Left Shift")
             const SDL_Scancode code = SDL_GetScancodeFromName(step.substr(6).c_str());
             scripted.type = SDL_KEYDOWN; scripted.key.state = SDL_PRESSED; scripted.key.repeat = 0;
