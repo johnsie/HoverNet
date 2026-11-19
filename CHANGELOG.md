@@ -6,7 +6,7 @@ and how to roll one back.
 
 ## 2.3.78 - 2026-11-19
 
-_Not released yet. Run on this build: desktop screenshots (Switchback, ClassicH) and the web page in headless Chrome on the GPU (60 frames a second offered, no console errors, screenshot looked at); the camera-rule test. Not run: the full test suite, the render golden test (no renderer file changed), Windows, Firefox/Edge, a slow machine._
+_Released at the owner's request. Run on this build: desktop screenshots (Switchback, ClassicH) and the web page in headless Chrome on the GPU (60 frames a second offered, no console errors, screenshot looked at); the camera-rule test. Not run: the full test suite, the render golden test (no renderer file changed), Windows, Firefox/Edge, a slow machine._
 
 - **The real track is sharp**: it was drawn small by the game's renderer and stretched, so it looked blurry and pixelated. Each picture is now drawn 3 times larger across (2 times on the page, which draws with the CPU) and averaged down to the size it is shown at, which gives clean edges and smooth floor and wall textures. The picture's size follows the window. The renderer draws nothing beyond about 2400 pixels across (checked: 2400 works, 2800 draws nothing), so the amount of supersampling is chosen to stay within that.
 
